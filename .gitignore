@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+.env
+.DS_Store
+coverage/
+.vscode/
+npm-debug.log
+# Pastas de uploads (se forem locais e não S3)
+public/uploads/
+storage/
