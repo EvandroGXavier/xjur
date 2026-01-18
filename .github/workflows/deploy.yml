@@ -1,15 +1,13 @@
-name: Deploy DR.X Production
+name: Deploy Production
 
-on:
-  push:
-    branches:
-      - main
+on: [push]
 
 jobs:
   deploy:
+    name: Deploy to VPS
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      - name: Connect and Update
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -17,20 +15,19 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           script: |
-            # 1. Entrar na pasta do projeto
             cd /www/wwwroot/DrX
-            
-            # 2. Garantir que temos a versão mais recente
+            echo "1. Baixando codigo..."
             git fetch --all
             git reset --hard origin/main
             
-            # 3. Instalar dependências e atualizar o banco
+            echo "2. Instalando..."
             npm install
+            
+            echo "3. Gerando Banco..."
             npx turbo run db:generate
             
-            # 4. Construir o projeto (Build)
+            echo "4. Build..."
             npm run build
             
-            # 5. Reiniciar o sistema
+            echo "5. Reiniciando..."
             pm2 restart all
-            echo "✅ Deploy Automatizado com Sucesso!"
