@@ -11,35 +11,49 @@ interface ChatMessage {
 }
 
 export const ChatPage: React.FC = () => {
-  // @ts-ignore
   const [socket, setSocket] = useState<Socket | null>(null);
   const [status, setStatus] = useState<string>('DISCONNECTED');
   const [qrCode, setQrCode] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [targetNumber, setTargetNumber] = useState(''); // Simple input for now
+  const [targetNumber, setTargetNumber] = useState(''); 
+
+  // URL dinâmica para funcionar tanto local quanto na VPS
+  const getSocketUrl = () => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      // Se estiver rodando local, usa localhost, senão usa o IP/Domínio da VPS
+      return hostname === 'localhost' ? 'http://localhost:3000' : `http://${hostname}:3000`;
+    }
+    return 'http://localhost:3000';
+  };
+
+  const API_URL = getSocketUrl();
 
   useEffect(() => {
-    const newSocket = io('http://localhost:3000');
+    const newSocket = io(API_URL);
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      console.log('Connected to WS');
+      console.log('Connected to WS at', API_URL);
     });
 
-    newSocket.on('qr_code', (data) => {
+    // CORREÇÃO 1: Adicionado tipagem 'any' para evitar erro de build
+    newSocket.on('qr_code', (data: any) => {
       setQrCode(data.qr);
       setStatus('QR_READY');
     });
 
-    newSocket.on('whatsapp_status', (data) => {
+    // CORREÇÃO 2: Adicionado tipagem 'any'
+    newSocket.on('whatsapp_status', (data: any) => {
       setStatus(data.status);
       if (data.status === 'CONNECTED') {
         setQrCode('');
       }
     });
 
-    newSocket.on('new_message', (msg) => {
+    // CORREÇÃO 3: Adicionado tipagem 'any'
+    newSocket.on('new_message', (msg: any) => {
       setMessages((prev) => [...prev, { ...msg, timestamp: new Date() }]);
     });
 
@@ -51,10 +65,9 @@ export const ChatPage: React.FC = () => {
   const handleSend = async () => {
     if (!inputText || !targetNumber) return;
 
-    // Send via API (or socket if implemented)
-    // For now using API as per plan/controller
     try {
-      await fetch('http://localhost:3000/whatsapp/send', {
+      // Usa a URL dinâmica definida acima
+      await fetch(`${API_URL}/whatsapp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: targetNumber, message: inputText }),
@@ -104,7 +117,9 @@ export const ChatPage: React.FC = () => {
       <div className="flex-1 flex flex-col">
           {status !== 'CONNECTED' ? (
               <div className="flex-1 flex items-center justify-center p-8">
-                  <ConnectionQR qrCode={qrCode} />
+                  {/* Verifica se qrCode existe antes de renderizar para evitar erro */}
+                  {qrCode && <ConnectionQR qrCode={qrCode} />}
+                  {!qrCode && status !== 'CONNECTED' && <p className="text-gray-400">Aguardando QR Code...</p>}
               </div>
           ) : (
               <>
