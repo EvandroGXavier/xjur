@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@dr-x/database';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
+import { CreateAddressDto } from './dto/create-address.dto';
+import { UpdateAddressDto } from './dto/update-address.dto';
 
 @Injectable()
 export class ContactsService {
@@ -41,4 +43,34 @@ export class ContactsService {
       where: { id },
     });
   }
+
+  // Address management methods
+  addAddress(contactId: string, createAddressDto: CreateAddressDto) {
+    return this.prisma.address.create({
+      data: {
+        ...createAddressDto,
+        contactId,
+      },
+    });
+  }
+
+  updateAddress(contactId: string, addressId: string, updateAddressDto: UpdateAddressDto) {
+    return this.prisma.address.update({
+      where: { 
+        id: addressId,
+        contactId, // Ensure the address belongs to the contact
+      },
+      data: updateAddressDto,
+    });
+  }
+
+  removeAddress(contactId: string, addressId: string) {
+    return this.prisma.address.delete({
+      where: { 
+        id: addressId,
+        contactId, // Ensure the address belongs to the contact
+      },
+    });
+  }
 }
+

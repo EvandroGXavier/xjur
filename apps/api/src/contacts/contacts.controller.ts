@@ -2,6 +2,8 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { ContactsService } from './contacts.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
+import { CreateAddressDto } from './dto/create-address.dto';
+import { UpdateAddressDto } from './dto/update-address.dto';
 
 @Controller('contacts')
 export class ContactsController {
@@ -31,4 +33,25 @@ export class ContactsController {
   remove(@Param('id') id: string) {
     return this.contactsService.remove(id);
   }
+
+  // Address management endpoints
+  @Post(':id/addresses')
+  addAddress(@Param('id') id: string, @Body() createAddressDto: CreateAddressDto) {
+    return this.contactsService.addAddress(id, createAddressDto);
+  }
+
+  @Patch(':id/addresses/:addressId')
+  updateAddress(
+    @Param('id') id: string,
+    @Param('addressId') addressId: string,
+    @Body() updateAddressDto: UpdateAddressDto
+  ) {
+    return this.contactsService.updateAddress(id, addressId, updateAddressDto);
+  }
+
+  @Delete(':id/addresses/:addressId')
+  removeAddress(@Param('id') id: string, @Param('addressId') addressId: string) {
+    return this.contactsService.removeAddress(id, addressId);
+  }
 }
+
