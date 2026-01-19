@@ -33,7 +33,7 @@ const TABS = [
   { id: 'financial', label: 'Financeiro', icon: DollarSign },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
   { id: 'assets', label: 'Patrimônio', icon: Briefcase },
-  { id: 'agenda', label: 'Agenda', icon: Calendar },
+  { id: 'agenda', label: 'Agenda', icon: Calendar },XJUR
   { id: 'processes', label: 'Processos', icon: Settings },
   { id: 'attachments', label: 'Anexos', icon: Paperclip },
   { id: 'contracts', label: 'Contratos', icon: FileText },
