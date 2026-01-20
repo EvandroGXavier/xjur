@@ -9,12 +9,14 @@ import makeWASocket, {
 import * as path from 'path';
 import * as fs from 'fs';
 import { WhatsappGateway } from './whatsapp.gateway';
-import pino from 'pino';
+
+// FIX: Usamos require para garantir que o Pino carregue corretamente na versão 10
+const pino = require('pino');
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
   private socket: WASocket;
-  private readonly logger = new Logger(WhatsappService.name); // Logger do Nest (para nós)
+  private readonly logger = new Logger(WhatsappService.name); // Logger do Nest (para o nosso terminal)
   private authState: any;
   private saveCreds: any;
 
@@ -27,10 +29,8 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async connectToWhatsapp() {
-    // Define o caminho para salvar a sessão (Credenciais)
     const authPath = path.resolve(__dirname, '../../../../storage/auth_info_baileys');
     
-    // Garante que a pasta existe
     if (!fs.existsSync(authPath)) {
       fs.mkdirSync(authPath, { recursive: true });
     }
@@ -39,49 +39,44 @@ export class WhatsappService implements OnModuleInit {
     this.authState = state;
     this.saveCreds = saveCreds;
 
-    // CONFIGURAÇÃO DO SOCKET (AQUI ESTAVA O ERRO)
+    // --- A MÁGICA ACONTECE AQUI ---
+    // Criamos o logger explicitamente antes de passar para o Baileys
+    const baileysLogger = pino({ level: 'error' }); // 'error' para limpar o terminal, 'debug' se quiser ver tudo
+
     this.socket = makeWASocket({
       auth: state,
-      printQRInTerminal: false, // Desligamos isso pois usamos o Socket.io
+      printQRInTerminal: false,
       browser: Browsers.macOS('Desktop'),
-      // Fix: Usamos o pino logger que o Baileys exige, em nível 'warn' para limpar o log
-      logger: pino({ level: 'warn' }) as any,
+      logger: baileysLogger, // Agora passamos o objeto instanciado corretamente
     });
 
-    // Escuta eventos de atualização de credenciais (Login salvo)
     this.socket.ev.on('creds.update', saveCreds);
 
-    // Gerenciamento de Conexão e QR Code
     this.socket.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      // Se gerou QR Code, envia para o Frontend
       if (qr) {
-        this.logger.log('QR Code recebido - Enviando para o Frontend');
+        this.logger.log('?? QR CODE GERADO! Enviando para o Frontend...');
         this.gateway.emitQrCode(qr);
       }
 
-      // Se a conexão caiu
       if (connection === 'close') {
         const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
-        
-        this.logger.warn(\Conexão fechada. Motivo: \\);
+        this.logger.warn(\Conexão fechada. Reconectar: \\);
         
         if (shouldReconnect) {
-          this.logger.log('Tentando reconectar automaticamente...');
-          this.connectToWhatsapp();
+          setTimeout(() => this.connectToWhatsapp(), 3000); // Espera 3s antes de tentar de novo
         } else {
-            this.logger.error('Desconectado permanentemente (Logout). É necessário escanear novamente.');
             this.gateway.emitStatus('DISCONNECTED');
-            // Opcional: Apagar a pasta authPath aqui se quiser forçar logout limpo
+            // Se foi logout, limpamos a pasta para evitar loop
+            try { fs.rmSync(authPath, { recursive: true, force: true }); } catch (e) {}
         }
       } else if (connection === 'open') {
-        this.logger.log('? Conexão com WhatsApp estabelecida com sucesso!');
+        this.logger.log('? CONECTADO AO WHATSAPP!');
         this.gateway.emitStatus('CONNECTED');
       }
     });
 
-    // Escuta novas mensagens
     this.socket.ev.on('messages.upsert', async (m) => {
       if (m.type === 'notify') {
           for (const msg of m.messages) {
@@ -94,29 +89,20 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private async handleIncomingMessage(msg: proto.IWebMessageInfo) {
-      // Log limpo apenas com quem mandou
-      // this.logger.log(\Mensagem recebida de \\);
-
       const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
-      
       if (text) {
-          // Envia para o Frontend em tempo real
+          this.logger.log(\Mensagem de \: \...\);
           this.gateway.emitNewMessage({
               from: msg.key.remoteJid,
               text: text,
               name: msg.pushName
           });
-          
-          // TODO: Aqui entraremos com o Prisma para salvar no Banco de Dados depois
       }
   }
 
   async sendText(to: string, text: string) {
       if (!this.socket) throw new Error('Socket não inicializado');
-      
-      // Formata o número para o padrão do WhatsApp (sempre com @s.whatsapp.net)
       const jid = to.includes('@s.whatsapp.net') ? to : \\@s.whatsapp.net\;
-      
       await this.socket.sendMessage(jid, { text });
   }
 }
