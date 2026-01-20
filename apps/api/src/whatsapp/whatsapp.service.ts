@@ -13,7 +13,7 @@ import { WhatsappGateway } from './whatsapp.gateway';
 @Injectable()
 export class WhatsappService implements OnModuleInit {
   private socket: WASocket;
-  private readonly logger = new Logger(WhatsappService.name); // Logger do Nest
+  private readonly logger = new Logger(WhatsappService.name);
   private authState: any;
   private saveCreds: any;
 
@@ -28,6 +28,7 @@ export class WhatsappService implements OnModuleInit {
   async connectToWhatsapp() {
     const authPath = path.resolve(__dirname, '../../../../storage/auth_info_baileys');
     
+    // Garante que a pasta existe
     if (!fs.existsSync(authPath)) {
       fs.mkdirSync(authPath, { recursive: true });
     }
@@ -36,8 +37,8 @@ export class WhatsappService implements OnModuleInit {
     this.authState = state;
     this.saveCreds = saveCreds;
 
-    // --- CORREÇÃO DEFINITIVA (LOGGER MANUAL) ---
-    // Criamos um objeto que imita o Pino perfeitamente, mas sem dependências.
+    // --- MOCK LOGGER (SOLUÃ‡ÃƒO BLINDADA) ---
+    // Objeto simples que satisfaz o Baileys sem precisar do Pino
     const loggerMock: any = {
         level: 'warn',
         trace: () => {},
@@ -45,14 +46,14 @@ export class WhatsappService implements OnModuleInit {
         info: () => {},
         warn: () => {},
         error: () => {},
-        child: () => loggerMock, // A chave mágica: ele retorna a si mesmo
+        child: () => loggerMock, // O segredo: retorna a si mesmo, evitando o erro
     };
 
     this.socket = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       browser: Browsers.macOS('Desktop'),
-      logger: loggerMock, // Usamos o nosso mock blindado
+      logger: loggerMock,
     });
 
     this.socket.ev.on('creds.update', saveCreds);
@@ -61,23 +62,23 @@ export class WhatsappService implements OnModuleInit {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        this.logger.log('?? QR CODE NOVO GERADO! (Frontend deve atualizar)');
+        this.logger.log('ðŸ“¢ QR CODE NOVO GERADO! Enviando para o Frontend...');
         this.gateway.emitQrCode(qr);
       }
 
       if (connection === 'close') {
         const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
-        this.logger.warn(\Conexão fechada. Reconectar: \\);
+        this.logger.warn(`ConexÃ£o fechada. Reconectar: ${shouldReconnect}`);
         
         if (shouldReconnect) {
           setTimeout(() => this.connectToWhatsapp(), 3000);
         } else {
             this.gateway.emitStatus('DISCONNECTED');
-            // Limpeza de segurança se houver logout
+            // Limpeza de seguranÃ§a no logout
             try { fs.rmSync(authPath, { recursive: true, force: true }); } catch (e) {}
         }
       } else if (connection === 'open') {
-        this.logger.log('? CONECTADO E PRONTO!');
+        this.logger.log('âœ… CONECTADO AO WHATSAPP!');
         this.gateway.emitStatus('CONNECTED');
       }
     });
@@ -96,7 +97,7 @@ export class WhatsappService implements OnModuleInit {
   private async handleIncomingMessage(msg: proto.IWebMessageInfo) {
       const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
       if (text) {
-          this.logger.log(\Mensagem recebida de \\);
+          this.logger.log(`Mensagem recebida de ${msg.key.remoteJid}`);
           this.gateway.emitNewMessage({
               from: msg.key.remoteJid,
               text: text,
@@ -106,8 +107,8 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async sendText(to: string, text: string) {
-      if (!this.socket) throw new Error('Socket não inicializado');
-      const jid = to.includes('@s.whatsapp.net') ? to : \\@s.whatsapp.net\;
+      if (!this.socket) throw new Error('Socket nÃ£o inicializado');
+      const jid = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
       await this.socket.sendMessage(jid, { text });
   }
 }
