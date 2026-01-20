@@ -1,0 +1,12 @@
+
+> web@0.0.0 build
+> tsc && vite build
+
+src/pages/contacts/ContactForm.tsx(37,3): error TS1005: ',' expected.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path C:\.Sistemas\Dr.X\apps\web
+npm error workspace web@0.0.0
+npm error location C:\.Sistemas\Dr.X\apps\web
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c tsc && vite build
