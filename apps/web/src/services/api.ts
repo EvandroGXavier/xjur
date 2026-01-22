@@ -1,13 +1,10 @@
-import axios from 'axios';
+import axios, { AxiosResponse, AxiosError } from 'axios';
 
-const getApiUrl = () => {
-  // Se estiver rodando no seu computador (localhost) ou no Google IDX
+// Adicionamos o "export" aqui para que as outras telas possam ler esta função
+export const getApiUrl = () => {
   if (window.location.hostname === 'localhost' || window.location.hostname.includes('idx.google.com')) {
     return `http://${window.location.hostname}:3000`;
   }
-  
-  // Se estiver na produção (VPS), usa o "Recepcionista" (Proxy do Nginx)
-  // Isso resolve o erro de "Mixed Content" e SSL
   return '/api';
 };
 
@@ -18,10 +15,9 @@ export const api = axios.create({
   },
 });
 
-// Interceptor para ajudar no diagnóstico se houver erro
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response: AxiosResponse) => response,
+  (error: AxiosError) => {
     console.error('Erro na chamada da API:', {
       url: error.config?.url,
       method: error.config?.method,
