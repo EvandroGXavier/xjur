@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { ContactsModule } from './contacts/contacts.module';
-import { WhatsappModule } from './whatsapp/whatsapp.module';
-import { TemplatesModule } from './templates/templates.module';
-import { DocumentsModule } from './documents/documents.module';
+import { PrismaModule } from '@dr-x/database'; // Caminho do seu pacote de banco
+// ... outros imports
 
 @Module({
-  imports: [ContactsModule, WhatsappModule, TemplatesModule, DocumentsModule],
-  controllers: [AppController],
-  providers: [],
+  imports: [
+    PrismaModule, // 👈 Carregado aqui, ele se torna global para todos os outros
+    TemplatesModule,
+    DocumentsModule,
+    // Note que agora não precisaremos mais importar PrismaModule dentro deles!
+  ],
 })
 export class AppModule {}
