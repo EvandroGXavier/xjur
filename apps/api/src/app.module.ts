@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '@dr-x/database';
 import { TemplatesModule } from './templates/templates.module';
 import { DocumentsModule } from './documents/documents.module';
-import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module'; // 'a' minúsculo corrigido
 import { ContactsModule } from './contacts/contacts.module';
 
 @Module({
@@ -10,7 +10,7 @@ import { ContactsModule } from './contacts/contacts.module';
     PrismaModule, 
     TemplatesModule,
     DocumentsModule,
-    WhatsAppModule,
+    WhatsappModule, // 'a' minúsculo corrigido
     ContactsModule,
   ],
 })
