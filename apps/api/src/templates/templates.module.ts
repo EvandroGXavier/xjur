@@ -3,7 +3,7 @@ import { TemplatesService } from './templates.service';
 import { TemplatesController } from './templates.controller';
 
 @Module({
-  imports: [], // Vazio porque o PrismaModule agora é @Global()
+  imports: [], 
   controllers: [TemplatesController],
   providers: [TemplatesService],
   exports: [TemplatesService],
