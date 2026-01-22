@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.0.0"
+    "axios": "^1.6.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
