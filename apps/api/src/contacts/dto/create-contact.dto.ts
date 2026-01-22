@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsEmail, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateContactDto {
   @IsString()
@@ -7,10 +8,12 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
   document?: string; // CPF/CNPJ (Opcional)
 
   @IsOptional()
   @IsEmail({}, { message: 'E-mail inválido' })
+  @Transform(({ value }) => value === "" ? null : value)
   email?: string;
 
   @IsString()
@@ -19,9 +22,11 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
   whatsapp?: string;
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
   notes?: string;
 }

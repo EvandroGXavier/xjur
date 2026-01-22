@@ -121,3 +121,61 @@ model CommunicationLog {
   
   @@map("communication_logs")
 }
+
+// 4. MÓDULO DE MODELOS DE DOCUMENTOS (DR.X MODELS)
+
+model DocumentCategory {
+  id          String   @id @default(uuid())
+  name        String
+  parentId    String?
+  
+  parent      DocumentCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    DocumentCategory[] @relation("CategoryHierarchy")
+  templates   DocumentTemplate[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_categories")
+}
+
+model DocumentTemplate {
+  id          String   @id @default(uuid())
+  title       String
+  content     String   @db.Text
+  categoryId  String?
+  
+  category    DocumentCategory? @relation(fields: [categoryId], references: [id])
+  history     DocumentHistory[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_templates")
+}
+
+model DocumentHistory {
+  id          String   @id @default(uuid())
+  templateId  String?
+  title       String
+  content     String   @db.Text
+  snapshot    Json?    // Stores the variables values at time of creation
+  status      String   // DRAFT, FINALIZED
+  
+  template    DocumentTemplate? @relation(fields: [templateId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_history")
+}
+
+model DocumentSettings {
+  id          String   @id @default(uuid())
+  key         String   @unique // HEADER, FOOTER, FONT_FAMILY
+  value       String?
+  
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_settings")
+}

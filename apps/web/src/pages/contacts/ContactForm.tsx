@@ -97,10 +97,17 @@ export function ContactForm() {
             
         const method = id && id !== 'new' ? 'PATCH' : 'POST';
 
+        const payload = Object.fromEntries(
+          Object.entries(formData).map(([key, value]) => [
+            key,
+            value === '' ? null : value
+          ])
+        );
+
         const response = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData)
+            body: JSON.stringify(payload)
         });
 
         if (response.ok) {

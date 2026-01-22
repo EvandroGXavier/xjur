@@ -1,14 +1,11 @@
 import { Injectable } from '@nestjs/common';
-mport { PrismaClient } from '@drx/database';
+import { PrismaClient } from '@dr-x/database';
 
 @Injectable()
 export class TriagemService {
   private prisma: PrismaClient;
 
-  constructor(
-      // In a real NestJS app these would be injected via constructor, but we're instantiating for the "scratchpad" mode
-      // private financialService: FinancialService
-  ) {
+  constructor() {
     this.prisma = new PrismaClient();
   }
 
@@ -16,13 +13,11 @@ export class TriagemService {
    * 3.2 Atendimento Proativo via IA e Onboarding
    */
   async handleIncomingMessage(phone: string, content: string, mediaUrl?: string) {
-    // 1. Identify Contact
+    // 1. Identifica o Contato
     let contact = await this.prisma.contact.findFirst({ where: { whatsapp: phone } });
 
     if (!contact) {
-      // New Lead Flow (Case "Carlos")
-      // Logic: AI takes over, asks for CPF/DOC.
-      // We return a flag for the frontend/bot engine to trigger AI mode.
+      // Fluxo de Novo Lead (Caso "Carlos")
       return {
         action: 'AI_HANDOFF',
         context: 'NEW_LEAD',
@@ -30,7 +25,7 @@ export class TriagemService {
       };
     }
 
-    // 2. Log Communication
+    // 2. Registra a Comunicação
     const log = await this.prisma.communicationLog.create({
       data: {
         contactId: contact.id,
@@ -42,8 +37,7 @@ export class TriagemService {
       },
     });
 
-    // 3. Contextual Memory Check
-    // "Após 45 dias, Carlos retorna..."
+    // 3. Verificação de Memória Contextual
     const lastInteraction = await this.prisma.communicationLog.findFirst({
         where: { contactId: contact.id, id: { not: log.id } },
         orderBy: { createdAt: 'desc' }
@@ -51,7 +45,6 @@ export class TriagemService {
 
     let aiContext = "Saudação Padrão";
     if (lastInteraction) {
-       // Simple RAG simulation
        aiContext = `Cliente retornando. Último assunto: ${lastInteraction.content}`; 
     }
 
@@ -59,26 +52,23 @@ export class TriagemService {
       action: 'NOTIFY_AGENT',
       logId: log.id,
       contact: contact.name,
-      suggestion: aiContext,
-      // engagementScore: await this.financialService.calculateEngagementScore(contact.id) 
+      suggestion: aiContext
     };
   }
 
   /**
    * 3.1 Triagem de Mídia e Texto (Organização em 1 Clique)
-   * Link a received message/file to a specific Process Timeline.
    */
   async linkToProcess(messageId: string, processId: string) {
     const log = await this.prisma.communicationLog.findUnique({ where: { id: messageId } });
     if (!log) throw new Error('Message not found');
 
-    // Inject into Process Timeline (The "Xavier" Timeline)
     const timelineEntry = await this.prisma.processTimeline.create({
       data: {
         processId,
         title: log.mediaUrl ? 'Nova Prova (Midia)' : 'Mensagem do Cliente',
         description: log.content,
-        date: new Date(), // Timeline sorts by this
+        date: new Date(),
         type: log.mediaUrl ? 'FILE' : 'MESSAGE',
         metadata: { 
             originalLogId: log.id, 
@@ -88,7 +78,7 @@ export class TriagemService {
       }
     });
 
-    // Mark as Triaged
+    // Marca como Triado
     await this.prisma.communicationLog.update({
       where: { id: messageId },
       data: { status: 'TRIAGED' }
