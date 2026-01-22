@@ -1,6 +1,8 @@
-name: Deploy Production
+name: Deploy DR.X Production
 
-on: [push]
+on:
+  push:
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -16,18 +18,30 @@ jobs:
           port: 22
           script: |
             cd /www/wwwroot/DrX
-            echo "1. Baixando codigo..."
+            echo "🚀 1. Sincronizando código com o GitHub..."
             git fetch --all
             git reset --hard origin/main
             
-            echo "2. Instalando..."
+            echo "📦 2. Instalando dependências do Monorepo..."
             npm install
             
-            echo "3. Gerando Banco..."
+            echo "🗄️ 3. Sincronizando Banco de Dados (Prisma)..."
             npx turbo run db:generate
+            # O comando abaixo garante que as tabelas existam na VPS
+            cd packages/database && npx prisma db push && cd ../..
             
-            echo "4. Build..."
-            npm run build
+            echo "🏗️ 4. Build focado na API (Otimizado)..."
+            npx turbo run build --filter=api
             
-            echo "5. Reiniciando..."
-            pm2 restart all
+            echo "⚡ 5. Protocolo de Ignição DR.X (PM2)..."
+            # Entramos na pasta da API para garantir o contexto correto
+            cd apps/api
+            # Removemos o processo antigo para evitar conflito de caminho
+            pm2 delete drx-api 2>/dev/null || true
+            # Iniciamos usando o caminho exato que o seu 'find' localizou
+            pm2 start dist/apps/api/src/main.js --name drx-api
+            # Reiniciamos o web e o studio por garantia
+            pm2 restart drx-web drx-studio 2>/dev/null || true
+            pm2 save
+            
+            echo "✅ DEPLOY CONCLUÍDO COM SUCESSO!"
