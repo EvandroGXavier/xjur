@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '@dr-x/database'; // Caminho do seu pacote de banco
-// ... outros imports
+import { PrismaModule } from '@dr-x/database';
+import { TemplatesModule } from './templates/templates.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
-    PrismaModule, // 👈 Carregado aqui, ele se torna global para todos os outros
+    PrismaModule, // O banco Global que você sugeriu
     TemplatesModule,
     DocumentsModule,
-    // Note que agora não precisaremos mais importar PrismaModule dentro deles!
   ],
 })
 export class AppModule {}
