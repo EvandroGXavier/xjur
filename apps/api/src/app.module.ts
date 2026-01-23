@@ -14,4 +14,3 @@ import { ContactsModule } from './contacts/contacts.module';
   ],
 })
 export class AppModule {}
-
