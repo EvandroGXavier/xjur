@@ -1,13 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaClient } from '@dr-x/database';
+import { PrismaService } from '@dr-x/database';
 
 @Injectable()
 export class TriagemService {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 3.2 Atendimento Proativo via IA e Onboarding

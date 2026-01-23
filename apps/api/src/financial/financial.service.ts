@@ -1,12 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaClient } from '@drx/database';
+import { PrismaService } from '@dr-x/database';
+
 @Injectable()
 export class FinancialService {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * 2.2 Módulos Jurídicos e Financeiros - Financeiro
