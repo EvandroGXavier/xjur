@@ -18,7 +18,7 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
-      "@dr-x/database": ["../../packages/database/src/index.ts"]
+      "@dr-x/database": ["../../packages/database/dist/index.js"]
     }
   }
 }
