@@ -1,47 +1,26 @@
-name: Deploy DR.X Production
+﻿name: Deploy DR.X to VPS
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   deploy:
-    name: Deploy to VPS
     runs-on: ubuntu-latest
     steps:
-      - name: Connect and Update
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /www/wwwroot/DrX
-            echo "🚀 1. Sincronizando código com o GitHub..."
-            git fetch --all
-            git reset --hard origin/main
-            
-            echo "📦 2. Instalando dependências do Monorepo..."
+            cd /home/Dr.X
+            git pull origin main
             npm install
-            
-            echo "🗄️ 3. Sincronizando Banco de Dados (Prisma)..."
-            npx turbo run db:generate
-            # O comando abaixo garante que as tabelas existam na VPS
-            cd packages/database && npx prisma db push && cd ../..
-            
-            echo "🏗️ 4. Build focado na API (Otimizado)..."
-            npx turbo run build --filter=api
-            
-            echo "⚡ 5. Protocolo de Ignição DR.X (PM2)..."
-            # Entramos na pasta da API para garantir o contexto correto
-            cd apps/api
-            # Removemos o processo antigo para evitar conflito de caminho
-            pm2 delete drx-api 2>/dev/null || true
-            # Iniciamos usando o caminho exato que o seu 'find' localizou
-            pm2 start dist/apps/api/src/main.js --name drx-api
-            # Reiniciamos o web e o studio por garantia
-            pm2 restart drx-web drx-studio 2>/dev/null || true
-            pm2 save
-            
-            echo "✅ DEPLOY CONCLUÍDO COM SUCESSO!"
+            npx turbo run build
+            pm2 restart all || pm2 start ecosystem.config.js
