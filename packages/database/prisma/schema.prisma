@@ -21,6 +21,7 @@ model Contact {
   email     String?
   phone     String?
   notes     String?
+  password  String?   // Senha para acesso ao sistema
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
