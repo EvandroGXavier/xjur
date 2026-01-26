@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { PrismaModule } from '../../../packages/database/dist/index.js'; // Ajuste conforme imports dos outros módulos
+import { PrismaModule } from '@drx/database';
 
 @Module({
   imports: [PrismaModule],

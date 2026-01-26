@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../packages/database/dist/index.js'; // Ajustar import se necessário
+import { PrismaService } from '@drx/database';
 
 @Injectable()
 export class AuthService {
