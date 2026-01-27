@@ -1,8 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm } from './pages';
+import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login } from './pages';
 // Simularemos uma verificação de autenticação simples
-const isAuthenticated = true; 
+const PrivateRoute = ({ children }: { children: JSX.Element }) => {
+  const token = localStorage.getItem('token'); // Simplificação. Ideal: Validar token.
+  return token ? children : <Navigate to="/login" />;
+};
 
 function App() {
   return (
@@ -11,7 +14,9 @@ function App() {
         {/* Futura rota de Login apareceria aqui */}
         {/* <Route path="/login" element={<LoginPage />} /> */}
         
-        <Route path="/" element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}>
+        <Route path="/login" element={<Login />} />
+        
+        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Dashboard />} />
           <Route path="chat" element={<Chat />} />
           <Route path="processes" element={<Processes />} />
