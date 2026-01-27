@@ -5,7 +5,8 @@ import {
   Scale, 
   DollarSign, 
   Users, 
-  Bot 
+  Bot,
+  Settings
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -16,6 +17,7 @@ const menuItems = [
   { icon: DollarSign, label: 'Financeiro', to: '/financial' },
   { icon: Users, label: 'Contatos', to: '/contacts' },
   { icon: Bot, label: 'Inteligência Artificial', to: '/ai' },
+  { icon: Settings, label: 'Configuração', to: '/settings' },
 ];
 
 export function Sidebar() {
