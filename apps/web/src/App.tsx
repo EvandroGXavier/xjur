@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login } from './pages';
+import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings } from './pages';
 // Simularemos uma verificação de autenticação simples
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
   const token = localStorage.getItem('token'); // Simplificação. Ideal: Validar token.
@@ -15,6 +15,7 @@ function App() {
         {/* <Route path="/login" element={<LoginPage />} /> */}
         
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Dashboard />} />
@@ -25,6 +26,7 @@ function App() {
           <Route path="contacts/new" element={<ContactForm />} />
           <Route path="contacts/:id" element={<ContactForm />} />
           <Route path="ai" element={<AI />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
