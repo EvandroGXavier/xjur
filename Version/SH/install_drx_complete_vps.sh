@@ -1,5 +1,5 @@
 #!/bin/bash
-# Versão Sincronizada 1.0.1.
+# Versão Sincronizada 1.0.1.x
 set -e
 
 # DR.X - COMPLETE VPS INSTALLER
