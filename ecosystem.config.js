@@ -20,15 +20,6 @@ module.exports = {
       instances: 1,
       autorestart: true,
       watch: false
-    },
-    {
-      name: 'drx-studio',
-      script: 'npx',
-      args: 'prisma studio --port 5555',
-      cwd: '/www/wwwroot/DrX/packages/database',
-      instances: 1,
-      autorestart: true,
-      watch: false
     }
   ]
 };
