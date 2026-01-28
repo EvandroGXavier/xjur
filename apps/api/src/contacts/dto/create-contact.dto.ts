@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEmail, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsEmail, MinLength, IsIn, IsDateString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateContactDto {
@@ -8,8 +8,46 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['PF', 'PJ'], { message: 'Tipo de pessoa deve ser PF ou PJ' })
+  personType?: string;
+
+  // Campos Pessoa Física
+  @IsOptional()
+  @IsString()
   @Transform(({ value }) => value === "" ? null : value)
-  document?: string; // CPF/CNPJ (Opcional)
+  cpf?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  rg?: string;
+
+  @IsOptional()
+  @IsDateString()
+  @Transform(({ value }) => value === "" ? null : value)
+  birthDate?: string;
+
+  // Campos Pessoa Jurídica
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  cnpj?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  companyName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  stateRegistration?: string;
+
+  // Campos Gerais
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  document?: string; // CPF/CNPJ (Mantido para compatibilidade)
 
   @IsOptional()
   @IsEmail({}, { message: 'E-mail inválido' })
@@ -29,4 +67,9 @@ export class CreateContactDto {
   @IsString()
   @Transform(({ value }) => value === "" ? null : value)
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  category?: string; // Cliente, Fornecedor, Parte Contrária, etc.
 }

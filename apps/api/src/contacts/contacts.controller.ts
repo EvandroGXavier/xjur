@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { ContactsService } from './contacts.service';
+import { EnrichmentService } from './enrichment.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -7,7 +8,10 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 
 @Controller('contacts')
 export class ContactsController {
-  constructor(private readonly contactsService: ContactsService) {}
+  constructor(
+    private readonly contactsService: ContactsService,
+    private readonly enrichmentService: EnrichmentService,
+  ) {}
 
   @Post()
   create(@Body() createContactDto: CreateContactDto) {
@@ -52,6 +56,17 @@ export class ContactsController {
   @Delete(':id/addresses/:addressId')
   removeAddress(@Param('id') id: string, @Param('addressId') addressId: string) {
     return this.contactsService.removeAddress(id, addressId);
+  }
+
+  // Enrichment endpoints
+  @Get('enrich/cnpj')
+  async enrichCNPJ(@Query('cnpj') cnpj: string) {
+    return this.enrichmentService.consultCNPJ(cnpj);
+  }
+
+  @Get('enrich/cep')
+  async enrichCEP(@Query('cep') cep: string) {
+    return this.enrichmentService.consultCEP(cep);
   }
 }
 

@@ -62,17 +62,32 @@ model User {
 
 // 2.1 ENTIDADE ÂNCORA: CONTACT
 model Contact {
-  id        String   @id @default(uuid())
-  tenantId  String
-  name      String
-  document  String?   @unique // CPF/CNPJ - Chave Primária Lógica (Opcional)
-  whatsapp  String?
-  email     String?
-  phone     String?
-  notes     String?
-  password  String?   // Senha para acesso ao sistema
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(uuid())
+  tenantId          String
+  name              String
+  personType        String    @default("PF") // PF ou PJ
+  
+  // Campos Pessoa Física
+  cpf               String?
+  rg                String?
+  birthDate         DateTime?
+  
+  // Campos Pessoa Jurídica
+  cnpj              String?
+  companyName       String?   // Razão Social
+  stateRegistration String?   // Inscrição Estadual
+  
+  // Campos Gerais
+  document          String?   // CPF/CNPJ (Mantido para compatibilidade)
+  whatsapp          String?
+  email             String?
+  phone             String?
+  notes             String?
+  category          String?   // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
+  password          String?   // Senha para acesso ao sistema
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   
   // Relacionamentos
   addresses          Address[]
@@ -81,6 +96,10 @@ model Contact {
   communications     CommunicationLog[]
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
 
+  @@index([cpf])
+  @@index([cnpj])
+  @@index([personType])
+  @@index([category])
   @@map("contacts")
 }
 

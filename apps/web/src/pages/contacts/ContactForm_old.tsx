@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search } from 'lucide-react';
+import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { getApiUrl } from '../../services/api';
@@ -8,25 +8,11 @@ import { getApiUrl } from '../../services/api';
 interface ContactData {
   id?: string;
   name: string;
-  personType: string;
-  
-  // Pessoa Física
-  cpf?: string;
-  rg?: string;
-  birthDate?: string;
-  
-  // Pessoa Jurídica
-  cnpj?: string;
-  companyName?: string;
-  stateRegistration?: string;
-  
-  // Campos Gerais
-  document?: string;
-  email?: string;
+  document: string;
+  email: string;
   phone: string;
-  whatsapp?: string;
-  notes?: string;
-  category?: string;
+  whatsapp: string;
+  notes: string;
   addresses?: Address[];
 }
 
@@ -54,30 +40,20 @@ const TABS = [
   { id: 'adm', label: 'ADM', icon: Settings }
 ];
 
-const CATEGORIES = [
-  'Cliente',
-  'Fornecedor',
-  'Parte Contrária',
-  'Perito',
-  'Funcionário',
-  'Advogado',
-  'Juiz',
-  'Testemunha',
-  'Outro'
-];
-
 export function ContactForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('contact');
   const [formData, setFormData] = useState<ContactData>({
     name: '',
-    personType: 'PF',
+    document: '',
+    email: '',
     phone: '',
+    whatsapp: '',
+    notes: '',
     addresses: []
   });
   const [loading, setLoading] = useState(false);
-  const [enriching, setEnriching] = useState(false);
   
   // Address form states
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -137,77 +113,13 @@ export function ContactForm() {
         if (response.ok) {
             navigate('/contacts');
         } else {
-            const error = await response.json();
-            alert(`Erro ao salvar contato: ${error.message || 'Erro desconhecido'}`);
+            alert('Erro ao salvar contato');
         }
     } catch (err) {
         console.error(err);
         alert('Erro ao conectar com servidor');
     } finally {
         setLoading(false);
-    }
-  };
-
-  // Enriquecimento de CNPJ
-  const handleEnrichCNPJ = async () => {
-    if (!formData.cnpj) {
-      alert('Digite um CNPJ para consultar');
-      return;
-    }
-
-    setEnriching(true);
-    try {
-      const response = await fetch(`${getApiUrl()}/contacts/enrich/cnpj?cnpj=${formData.cnpj}`);
-      if (response.ok) {
-        const data = await response.json();
-        setFormData({
-          ...formData,
-          companyName: data.razao_social || formData.companyName,
-          name: data.nome_fantasia || data.razao_social || formData.name,
-          email: data.email || formData.email,
-          phone: data.ddd_telefone_1 || formData.phone,
-        });
-        alert('Dados do CNPJ carregados com sucesso!');
-      } else {
-        const error = await response.json();
-        alert(`Erro: ${error.message || 'CNPJ não encontrado'}`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao consultar CNPJ');
-    } finally {
-      setEnriching(false);
-    }
-  };
-
-  // Enriquecimento de CEP
-  const handleEnrichCEP = async () => {
-    if (!addressForm.zipCode) {
-      alert('Digite um CEP para consultar');
-      return;
-    }
-
-    setEnriching(true);
-    try {
-      const response = await fetch(`${getApiUrl()}/contacts/enrich/cep?cep=${addressForm.zipCode}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAddressForm({
-          ...addressForm,
-          street: data.logradouro || addressForm.street,
-          city: data.localidade || addressForm.city,
-          state: data.uf || addressForm.state,
-        });
-        alert('Endereço carregado com sucesso!');
-      } else {
-        const error = await response.json();
-        alert(`Erro: ${error.message || 'CEP não encontrado'}`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao consultar CEP');
-    } finally {
-      setEnriching(false);
     }
   };
 
@@ -352,160 +264,33 @@ export function ContactForm() {
         <div className="p-8">
             {activeTab === 'contact' ? (
                 <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
-                     {/* Tipo de Pessoa */}
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                             <Users size={20} className="text-indigo-400" /> Tipo de Pessoa
-                         </h3>
-                         
-                         <div className="flex gap-4">
-                             <label className="flex items-center gap-2 cursor-pointer">
-                                 <input
-                                     type="radio"
-                                     name="personType"
-                                     value="PF"
-                                     checked={formData.personType === 'PF'}
-                                     onChange={e => setFormData({...formData, personType: e.target.value})}
-                                     className="w-4 h-4 text-indigo-600"
-                                 />
-                                 <span className="text-white">Pessoa Física (PF)</span>
-                             </label>
-                             <label className="flex items-center gap-2 cursor-pointer">
-                                 <input
-                                     type="radio"
-                                     name="personType"
-                                     value="PJ"
-                                     checked={formData.personType === 'PJ'}
-                                     onChange={e => setFormData({...formData, personType: e.target.value})}
-                                     className="w-4 h-4 text-indigo-600"
-                                 />
-                                 <span className="text-white">Pessoa Jurídica (PJ)</span>
-                             </label>
-                         </div>
-                     </div>
-
-                     {/* Campos Condicionais - Pessoa Física */}
-                     {formData.personType === 'PF' && (
-                         <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
-                             <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                                 <Users size={20} className="text-indigo-400" /> Dados Pessoais
-                             </h3>
-                             
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                 <div className="space-y-2 md:col-span-2">
-                                     <label className="text-sm font-medium text-slate-400">Nome Completo *</label>
-                                     <input 
-                                        required
-                                        value={formData.name}
-                                        onChange={e => setFormData({...formData, name: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="Ex: João da Silva"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">CPF</label>
-                                     <input 
-                                        value={formData.cpf || ''}
-                                        onChange={e => setFormData({...formData, cpf: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="000.000.000-00"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">RG</label>
-                                     <input 
-                                        value={formData.rg || ''}
-                                        onChange={e => setFormData({...formData, rg: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="00.000.000-0"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">Data de Nascimento</label>
-                                     <input 
-                                        type="date"
-                                        value={formData.birthDate || ''}
-                                        onChange={e => setFormData({...formData, birthDate: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                     />
-                                 </div>
-                             </div>
-                         </div>
-                     )}
-
-                     {/* Campos Condicionais - Pessoa Jurídica */}
-                     {formData.personType === 'PJ' && (
-                         <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
-                             <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                                 <Briefcase size={20} className="text-indigo-400" /> Dados da Empresa
-                             </h3>
-                             
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                 <div className="space-y-2 md:col-span-2">
-                                     <label className="text-sm font-medium text-slate-400">Nome Fantasia *</label>
-                                     <input 
-                                        required
-                                        value={formData.name}
-                                        onChange={e => setFormData({...formData, name: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="Ex: Empresa XYZ"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2 md:col-span-2">
-                                     <label className="text-sm font-medium text-slate-400">Razão Social</label>
-                                     <input 
-                                        value={formData.companyName || ''}
-                                        onChange={e => setFormData({...formData, companyName: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="Razão Social da Empresa"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">CNPJ</label>
-                                     <div className="flex gap-2">
-                                         <input 
-                                            value={formData.cnpj || ''}
-                                            onChange={e => setFormData({...formData, cnpj: e.target.value})}
-                                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                            placeholder="00.000.000/0000-00"
-                                         />
-                                         <button
-                                             type="button"
-                                             onClick={handleEnrichCNPJ}
-                                             disabled={enriching || !formData.cnpj}
-                                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 flex items-center gap-2"
-                                         >
-                                             <Search size={16} />
-                                             {enriching ? 'Consultando...' : 'Consultar'}
-                                         </button>
-                                     </div>
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">Inscrição Estadual</label>
-                                     <input 
-                                        value={formData.stateRegistration || ''}
-                                        onChange={e => setFormData({...formData, stateRegistration: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="000.000.000.000"
-                                     />
-                                 </div>
-                             </div>
-                         </div>
-                     )}
-
-                     {/* Campos Gerais */}
-                     <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
-                         <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                             <Phone size={20} className="text-indigo-400" /> Informações de Contato
+                             <Users size={20} className="text-indigo-400" /> Informações do Contato
                          </h3>
                          
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">Nome Fantasia *</label>
+                                 <input 
+                                    required
+                                    value={formData.name}
+                                    onChange={e => setFormData({...formData, name: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="Ex: João da Silva"
+                                 />
+                             </div>
+
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">CPF/CNPJ</label>
+                                 <input 
+                                    value={formData.document}
+                                    onChange={e => setFormData({...formData, document: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="000.000.000-00"
+                                 />
+                             </div>
+
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400">Celular *</label>
                                  <input 
@@ -520,7 +305,7 @@ export function ContactForm() {
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400">WhatsApp</label>
                                  <input 
-                                    value={formData.whatsapp || ''}
+                                    value={formData.whatsapp}
                                     onChange={e => setFormData({...formData, whatsapp: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="(00) 00000-0000"
@@ -531,32 +316,18 @@ export function ContactForm() {
                                  <label className="text-sm font-medium text-slate-400">E-mail</label>
                                  <input 
                                     type="email"
-                                    value={formData.email || ''}
+                                    value={formData.email}
                                     onChange={e => setFormData({...formData, email: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="email@exemplo.com"
                                  />
                              </div>
 
-                             <div className="space-y-2">
-                                 <label className="text-sm font-medium text-slate-400">Categoria</label>
-                                 <select
-                                    value={formData.category || ''}
-                                    onChange={e => setFormData({...formData, category: e.target.value})}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                 >
-                                     <option value="">Selecione uma categoria</option>
-                                     {CATEGORIES.map(cat => (
-                                         <option key={cat} value={cat}>{cat}</option>
-                                     ))}
-                                 </select>
-                             </div>
-
                              <div className="space-y-2 md:col-span-2">
                                  <label className="text-sm font-medium text-slate-400">Observações</label>
                                  <textarea 
                                     rows={4}
-                                    value={formData.notes || ''}
+                                    value={formData.notes}
                                     onChange={e => setFormData({...formData, notes: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="Observações sobre o contato..."
@@ -605,23 +376,12 @@ export function ContactForm() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-2 md:col-span-2">
                                             <label className="text-sm font-medium text-slate-400">CEP</label>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    value={addressForm.zipCode}
-                                                    onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})}
-                                                    className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                                    placeholder="00000-000"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={handleEnrichCEP}
-                                                    disabled={enriching || !addressForm.zipCode}
-                                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 flex items-center gap-2"
-                                                >
-                                                    <Search size={16} />
-                                                    {enriching ? 'Consultando...' : 'Consultar'}
-                                                </button>
-                                            </div>
+                                            <input
+                                                value={addressForm.zipCode}
+                                                onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="00000-000"
+                                            />
                                         </div>
                                         <div className="space-y-2 md:col-span-2">
                                             <label className="text-sm font-medium text-slate-400">Logradouro</label>
