@@ -34,27 +34,27 @@ const StatusBar = () => {
   if (!user) return null;
 
   return (
-    <div className="h-8 bg-slate-900 border-b border-slate-800 flex items-center justify-end px-6 text-xs text-slate-400 gap-6 fixed top-0 right-0 left-64 z-10 shadow-sm">
+    <div className="h-8 bg-emerald-950/30 border-b border-emerald-500/30 flex items-center justify-end px-6 text-xs text-emerald-100/80 gap-6 fixed top-0 right-0 left-64 z-10 shadow-sm backdrop-blur-sm">
         <div className="flex items-center gap-2">
-            <Building2 size={12} className="text-indigo-400" />
-            <span className="font-medium text-slate-300">{user.tenant?.name || user.tenantId || 'Empresa ???'}</span>
+            <Building2 size={12} className="text-emerald-400" />
+            <span className="font-medium text-emerald-100">{user.tenant?.name || user.tenantId || 'Empresa ???'}</span>
         </div>
-        <div className="w-px h-3 bg-slate-800"></div>
+        <div className="w-px h-3 bg-emerald-800/50"></div>
         <div className="flex items-center gap-2">
             <User size={12} className="text-emerald-400" />
             <span>{user.name || user.email}</span>
         </div>
-        <div className="w-px h-3 bg-slate-800"></div>
+        <div className="w-px h-3 bg-emerald-800/50"></div>
         <div className="flex items-center gap-2 min-w-[125px]">
-            <Clock size={12} className="text-slate-500" />
+            <Clock size={12} className="text-emerald-500" />
             <span>
                 {time.toLocaleDateString('pt-BR')} - {time.toLocaleTimeString('pt-BR')}
             </span>
         </div>
-        <div className="w-px h-3 bg-slate-800"></div>
+        <div className="w-px h-3 bg-emerald-800/50"></div>
         <button 
             onClick={handleLogout}
-            className="flex items-center gap-1.5 text-slate-400 hover:text-red-400 transition-colors"
+            className="flex items-center gap-1.5 text-red-500 hover:text-red-400 transition-colors font-medium bg-red-500/10 px-2 py-0.5 rounded hover:bg-red-500/20"
             title="Sair do sistema"
         >
             <LogOut size={12} />
