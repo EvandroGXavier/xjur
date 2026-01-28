@@ -13,7 +13,12 @@ export class WhatsappController {
 
   @Get('status')
   getStatus() {
-      // Simple status check, could be expanded
-      return { status: 'Endpoint Active' };
+      return this.whatsappService.getConnectionStatus();
+  }
+
+  @Post('disconnect')
+  async disconnect() {
+      await this.whatsappService.disconnect();
+      return { success: true, message: 'Desconectado com sucesso' };
   }
 }

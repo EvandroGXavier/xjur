@@ -1,65 +1,22 @@
-// apps/web/src/pages/ChatPage.tsx
-import React, { useEffect, useState, useRef } from 'react';
-import { io, Socket } from 'socket.io-client'; // Certifique-se de ter: npm install socket.io-client
-import { ConnectionQR } from '../components/chat/ConnectionQR';
-import { getApiUrl } from '../services/api';
+import React, { useState } from 'react';
+import { WhatsAppConnection } from '../components/chat/WhatsAppConnection';
 
 export const ChatPage: React.FC = () => {
-  const [qrCode, setQrCode] = useState<string>('');
-  const [status, setStatus] = useState<string>('DISCONNECTED');
-  const socketRef = useRef<Socket | null>(null);
-
-  useEffect(() => {
-    // DR.X: Conexão resiliente
-    const socketUrl = getApiUrl();
-    console.log('🔌 DR.X Connecting to:', socketUrl);
-
-    socketRef.current = io(socketUrl, {
-      transports: ['websocket'], // Força WebSocket para performance
-      reconnection: true,
-      reconnectionAttempts: 10,
-    });
-
-    const socket = socketRef.current;
-
-    socket.on('connect', () => {
-      console.log('✅ Connected to DR.X Core');
-      // Solicita status atual assim que conecta
-      socket.emit('request_status'); 
-    });
-
-    socket.on('qr_code', (data: { qr: string }) => {
-      console.log('📸 New QR Code Received');
-      setQrCode(data.qr);
-      setStatus('SCANNING');
-    });
-
-    socket.on('whatsapp_status', (data: { status: string }) => {
-      console.log('📶 Status Update:', data.status);
-      setStatus(data.status);
-      if (data.status === 'CONNECTED') {
-        setQrCode('');
-      }
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
+  const [isConnected, setIsConnected] = useState(false);
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
-      {status === 'CONNECTED' ? (
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+      {isConnected ? (
         <div className="flex items-center justify-center h-full">
-            <h1 className="text-2xl font-bold text-blue-900">Dr.X Conectado e Operante ⚖️</h1>
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-indigo-900 mb-4">Dr.X Conectado e Operante ⚖️</h1>
+            <p className="text-gray-600">Sistema de triagem inteligente ativo</p>
             {/* Aqui virá o componente de Triagem Futuramente */}
+          </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center">
-            <ConnectionQR qrCode={qrCode} />
-            <div className="fixed bottom-4 right-4 text-xs text-gray-400">
-                Status: {status}
-            </div>
+        <div className="flex-1 flex items-center justify-center p-8">
+          <WhatsAppConnection onConnected={() => setIsConnected(true)} />
         </div>
       )}
     </div>
