@@ -8,12 +8,13 @@
   "scripts": {
     "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
     "build": "turbo run build",
-    "db:generate": "npx prisma generate --schema=packages/database/prisma/schema.prisma",
+    "db:generate": "npx prisma@5.20.0 generate --schema=packages/database/prisma/schema.prisma",
     "test": "turbo run test",
     "lint": "turbo run lint"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
-    "turbo": "^1.10.0"
+    "turbo": "^1.10.0",
+    "prisma": "5.20.0"
   }
 }

@@ -16,26 +16,29 @@ jobs:
           port: 22
           script: |
             cd /www/wwwroot/DrX
-            echo "1. Sincronizando código..."
+            echo "1. Sincronizando código com GitHub..."
             git fetch origin main
             git reset --hard origin/main
             
-            echo "2. Limpando builds antigos..."
+            echo "2. Removendo vestígios de builds antigos..."
             rm -rf apps/web/dist apps/api/dist
             
-            echo "3. Instalando dependências..."
-            npm install
+            echo "3. Instalando dependências (Modo Silencioso)..."
+            npm install --quiet
             
-            echo "4. Gerando Prisma Client..."
-            # Comando direto para evitar erro de PATH
-            npx prisma generate --schema=packages/database/prisma/schema.prisma
+            echo "4. Gerando Prisma Client (Versão Segura 5.20.0)..."
+            # Forçamos a versão 5.20 para evitar o erro P1012 da versão 7
+            npx prisma@5.20.0 generate --schema=packages/database/prisma/schema.prisma
             
-            echo "5. Executando Build..."
+            echo "5. Executando Build via TurboRepo..."
+            # O build compila o frontend e o backend na ordem correta
             npx turbo run build
             
-            echo "6. Reiniciando Processos..."
+            echo "6. Reiniciando ecossistema PM2..."
+            # Deletamos para limpar a RAM e subimos via arquivo de configuração
             pm2 delete drx-api drx-web || true
             pm2 start ecosystem.config.js
             pm2 save
             
-            echo "✅ DEPLOY CONCLUÍDO COM SUCESSO!"
+            echo "✅ DEPLOY DO DR.X CONCLUÍDO COM SUCESSO!"
+            pm2 status
