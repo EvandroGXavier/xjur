@@ -1,12 +1,15 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
 import { ContactsService } from './contacts.service';
 import { EnrichmentService } from './enrichment.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
 @Controller('contacts')
+@UseGuards(JwtAuthGuard)
 export class ContactsController {
   constructor(
     private readonly contactsService: ContactsService,
@@ -14,13 +17,13 @@ export class ContactsController {
   ) {}
 
   @Post()
-  create(@Body() createContactDto: CreateContactDto) {
-    return this.contactsService.create(createContactDto);
+  create(@Body() createContactDto: CreateContactDto, @CurrentUser() user: CurrentUserData) {
+    return this.contactsService.create(createContactDto, user.tenantId);
   }
 
   @Get()
-  findAll() {
-    return this.contactsService.findAll();
+  findAll(@CurrentUser() user: CurrentUserData) {
+    return this.contactsService.findAll(user.tenantId);
   }
 
   @Get(':id')
