@@ -75,7 +75,7 @@ export function Register() {
       // Backend espera: { name, document, email, password, mobile }
       // User name será igual Tenant name no backend atual. Paciência.
       
-      const response = await api.post('/saas/register', payload);
+      await api.post('/saas/register', payload);
       
       // Sucesso!
       // Poderíamos logar direto, mas vamos mandar pro login.

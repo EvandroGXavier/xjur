@@ -9,9 +9,7 @@ import {
   Palette,
   Search,
   Plus,
-  MoreVertical,
-  CheckCircle,
-  XCircle
+  MoreVertical
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
