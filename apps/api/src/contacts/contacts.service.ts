@@ -9,9 +9,19 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(createContactDto: CreateContactDto) {
+  async create(createContactDto: CreateContactDto) {
+    // Buscar o primeiro tenant disponível (tenant padrão)
+    const defaultTenant = await this.prisma.tenant.findFirst();
+    
+    if (!defaultTenant) {
+      throw new Error('Nenhum tenant encontrado. Configure um tenant antes de criar contatos.');
+    }
+
     return this.prisma.contact.create({
-      data: createContactDto,
+      data: {
+        ...createContactDto,
+        tenantId: defaultTenant.id,
+      },
     });
   }
 
