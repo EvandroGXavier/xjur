@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
     "build": "turbo run build",
+    "db:generate": "npx prisma generate --schema=packages/database/prisma/schema.prisma",
     "test": "turbo run test",
     "lint": "turbo run lint"
   },

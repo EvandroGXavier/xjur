@@ -1,19 +1,14 @@
-﻿name: Deploy DR.X to VPS
+﻿name: Deploy Production
 
-on:
-  push:
-    branches:
-      - main
+on: [push]
 
 jobs:
   deploy:
+    name: Deploy to VPS
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@master
+      - name: Connect and Update
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
@@ -21,7 +16,26 @@ jobs:
           port: 22
           script: |
             cd /www/wwwroot/DrX
-            git pull origin main
+            echo "1. Sincronizando código..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "2. Limpando builds antigos..."
+            rm -rf apps/web/dist apps/api/dist
+            
+            echo "3. Instalando dependências..."
             npm install
+            
+            echo "4. Gerando Prisma Client..."
+            # Comando direto para evitar erro de PATH
+            npx prisma generate --schema=packages/database/prisma/schema.prisma
+            
+            echo "5. Executando Build..."
             npx turbo run build
-            pm2 restart all || pm2 start ecosystem.config.js
+            
+            echo "6. Reiniciando Processos..."
+            pm2 delete drx-api drx-web || true
+            pm2 start ecosystem.config.js
+            pm2 save
+            
+            echo "✅ DEPLOY CONCLUÍDO COM SUCESSO!"
