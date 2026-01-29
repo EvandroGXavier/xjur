@@ -15,19 +15,23 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContactsController = void 0;
 const common_1 = require("@nestjs/common");
 const contacts_service_1 = require("./contacts.service");
+const enrichment_service_1 = require("./enrichment.service");
 const create_contact_dto_1 = require("./dto/create-contact.dto");
 const update_contact_dto_1 = require("./dto/update-contact.dto");
 const create_address_dto_1 = require("./dto/create-address.dto");
 const update_address_dto_1 = require("./dto/update-address.dto");
+const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 let ContactsController = class ContactsController {
-    constructor(contactsService) {
+    constructor(contactsService, enrichmentService) {
         this.contactsService = contactsService;
+        this.enrichmentService = enrichmentService;
     }
-    create(createContactDto) {
-        return this.contactsService.create(createContactDto);
+    create(createContactDto, user) {
+        return this.contactsService.create(createContactDto, user.tenantId);
     }
-    findAll() {
-        return this.contactsService.findAll();
+    findAll(user) {
+        return this.contactsService.findAll(user.tenantId);
     }
     findOne(id) {
         return this.contactsService.findOne(id);
@@ -47,19 +51,27 @@ let ContactsController = class ContactsController {
     removeAddress(id, addressId) {
         return this.contactsService.removeAddress(id, addressId);
     }
+    async enrichCNPJ(cnpj) {
+        return this.enrichmentService.consultCNPJ(cnpj);
+    }
+    async enrichCEP(cep) {
+        return this.enrichmentService.consultCEP(cep);
+    }
 };
 exports.ContactsController = ContactsController;
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_contact_dto_1.CreateContactDto]),
+    __metadata("design:paramtypes", [create_contact_dto_1.CreateContactDto, Object]),
     __metadata("design:returntype", void 0)
 ], ContactsController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], ContactsController.prototype, "findAll", null);
 __decorate([
@@ -109,8 +121,24 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], ContactsController.prototype, "removeAddress", null);
+__decorate([
+    (0, common_1.Get)('enrich/cnpj'),
+    __param(0, (0, common_1.Query)('cnpj')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ContactsController.prototype, "enrichCNPJ", null);
+__decorate([
+    (0, common_1.Get)('enrich/cep'),
+    __param(0, (0, common_1.Query)('cep')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ContactsController.prototype, "enrichCEP", null);
 exports.ContactsController = ContactsController = __decorate([
     (0, common_1.Controller)('contacts'),
-    __metadata("design:paramtypes", [contacts_service_1.ContactsService])
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __metadata("design:paramtypes", [contacts_service_1.ContactsService,
+        enrichment_service_1.EnrichmentService])
 ], ContactsController);
 //# sourceMappingURL=contacts.controller.js.map

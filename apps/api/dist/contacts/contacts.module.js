@@ -9,8 +9,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContactsModule = void 0;
 const common_1 = require("@nestjs/common");
 const contacts_service_1 = require("./contacts.service");
+const enrichment_service_1 = require("./enrichment.service");
 const contacts_controller_1 = require("./contacts.controller");
-const database_1 = require("@dr-x/database");
+const database_1 = require("../../../../packages/database/dist/index.js");
 let ContactsModule = class ContactsModule {
 };
 exports.ContactsModule = ContactsModule;
@@ -18,7 +19,7 @@ exports.ContactsModule = ContactsModule = __decorate([
     (0, common_1.Module)({
         imports: [database_1.PrismaModule],
         controllers: [contacts_controller_1.ContactsController],
-        providers: [contacts_service_1.ContactsService],
+        providers: [contacts_service_1.ContactsService, enrichment_service_1.EnrichmentService],
     })
 ], ContactsModule);
 //# sourceMappingURL=contacts.module.js.map

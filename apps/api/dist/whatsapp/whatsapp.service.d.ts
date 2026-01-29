@@ -11,4 +11,10 @@ export declare class WhatsappService implements OnModuleInit {
     connectToWhatsapp(): Promise<void>;
     private handleIncomingMessage;
     sendText(to: string, text: string): Promise<void>;
+    getConnectionStatus(): {
+        status: string;
+        user: import("@whiskeysockets/baileys").Contact;
+        timestamp: string;
+    };
+    disconnect(): Promise<void>;
 }

@@ -10,5 +10,11 @@ export declare class WhatsappController {
     }>;
     getStatus(): {
         status: string;
+        user: import("@whiskeysockets/baileys").Contact;
+        timestamp: string;
     };
+    disconnect(): Promise<{
+        success: boolean;
+        message: string;
+    }>;
 }

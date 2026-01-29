@@ -12,18 +12,19 @@ var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContactsService = void 0;
 const common_1 = require("@nestjs/common");
-const database_1 = require("@dr-x/database");
+const database_1 = require("../../../../packages/database/dist/index.js");
 let ContactsService = class ContactsService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    create(createContactDto) {
+    async create(createContactDto, tenantId) {
         return this.prisma.contact.create({
-            data: createContactDto,
+            data: Object.assign(Object.assign({}, createContactDto), { tenantId }),
         });
     }
-    findAll() {
+    findAll(tenantId) {
         return this.prisma.contact.findMany({
+            where: { tenantId },
             orderBy: { createdAt: 'desc' },
         });
     }

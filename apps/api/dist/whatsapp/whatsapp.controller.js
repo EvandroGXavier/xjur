@@ -24,7 +24,11 @@ let WhatsappController = class WhatsappController {
         return { success: true };
     }
     getStatus() {
-        return { status: 'Endpoint Active' };
+        return this.whatsappService.getConnectionStatus();
+    }
+    async disconnect() {
+        await this.whatsappService.disconnect();
+        return { success: true, message: 'Desconectado com sucesso' };
     }
 };
 exports.WhatsappController = WhatsappController;
@@ -41,6 +45,12 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], WhatsappController.prototype, "getStatus", null);
+__decorate([
+    (0, common_1.Post)('disconnect'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], WhatsappController.prototype, "disconnect", null);
 exports.WhatsappController = WhatsappController = __decorate([
     (0, common_1.Controller)('whatsapp'),
     __metadata("design:paramtypes", [whatsapp_service_1.WhatsappService])

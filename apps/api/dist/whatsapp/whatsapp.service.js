@@ -102,6 +102,20 @@ let WhatsappService = WhatsappService_1 = class WhatsappService {
         const jid = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
         await this.socket.sendMessage(jid, { text });
     }
+    getConnectionStatus() {
+        const isConnected = this.socket && this.socket.user;
+        return {
+            status: isConnected ? 'CONNECTED' : 'DISCONNECTED',
+            user: isConnected ? this.socket.user : null,
+            timestamp: new Date().toISOString()
+        };
+    }
+    async disconnect() {
+        if (this.socket) {
+            await this.socket.logout();
+            this.logger.log('WhatsApp desconectado manualmente');
+        }
+    }
 };
 exports.WhatsappService = WhatsappService;
 exports.WhatsappService = WhatsappService = WhatsappService_1 = __decorate([

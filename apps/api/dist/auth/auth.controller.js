@@ -24,7 +24,7 @@ let AuthController = class AuthController {
         if (!user) {
             throw new common_1.UnauthorizedException('Credenciais inválidas');
         }
-        return user;
+        return this.authService.login(user);
     }
 };
 exports.AuthController = AuthController;

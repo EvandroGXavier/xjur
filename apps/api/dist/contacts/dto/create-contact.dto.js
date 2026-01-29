@@ -23,6 +23,48 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsIn)(['PF', 'PJ'], { message: 'Tipo de pessoa deve ser PF ou PJ' }),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "personType", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "cpf", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "rg", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsDateString)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "birthDate", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "cnpj", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "companyName", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "stateRegistration", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
     __metadata("design:type", String)
 ], CreateContactDto.prototype, "document", void 0);
@@ -49,4 +91,10 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
     __metadata("design:type", String)
 ], CreateContactDto.prototype, "notes", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
+    __metadata("design:type", String)
+], CreateContactDto.prototype, "category", void 0);
 //# sourceMappingURL=create-contact.dto.js.map

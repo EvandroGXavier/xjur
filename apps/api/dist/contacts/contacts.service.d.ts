@@ -6,8 +6,8 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 export declare class ContactsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
-    create(createContactDto: CreateContactDto): any;
-    findAll(): any;
+    create(createContactDto: CreateContactDto, tenantId: string): Promise<any>;
+    findAll(tenantId: string): any;
     findOne(id: string): any;
     update(id: string, updateContactDto: UpdateContactDto): any;
     remove(id: string): any;
