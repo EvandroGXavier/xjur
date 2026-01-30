@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { Bot, AlertCircle } from 'lucide-react';
+import { Bot, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export function Login() {
   const navigate = useNavigate();
@@ -11,6 +11,7 @@ export function Login() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     // Check for success message from redirect
@@ -92,14 +93,23 @@ export function Login() {
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
                 Senha
                 </label>
-                <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                placeholder="••••••••"
-                required
-                />
+                <div className="relative">
+                    <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors pr-12"
+                    placeholder="••••••••"
+                    required
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-400 transition-colors"
+                    >
+                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                </div>
             </div>
 
             <button
