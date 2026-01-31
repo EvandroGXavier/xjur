@@ -12,9 +12,13 @@ export class ContactsService {
   async create(createContactDto: CreateContactDto, tenantId: string) {
     try {
       console.log('Creating contact:', { ...createContactDto, tenantId });
+      
+      // Remove addresses do payload pois devem ser criados separadamente
+      const { addresses, ...contactData } = createContactDto as any;
+      
       return await this.prisma.contact.create({
         data: {
-          ...createContactDto,
+          ...contactData,
           tenantId,
         },
       });
