@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../../services/api'; // Importando cliente autenticado
+import { toast } from 'sonner';
 
 interface Contact {
   id: string;
@@ -21,13 +23,12 @@ export function ContactList() {
 
   const fetchContacts = async () => {
     try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://api.dr-x.xtd.com.br'}/contacts`);
-        if (response.ok) {
-            const data = await response.json();
-            setContacts(data);
-        }
+        setLoading(true);
+        const response = await api.get('/contacts');
+        setContacts(response.data);
     } catch (err) {
         console.error(err);
+        toast.error('Erro ao carregar contatos');
     } finally {
         setLoading(false);
     }
@@ -35,12 +36,18 @@ export function ContactList() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      if(confirm('Tem certeza que deseja excluir este contato?')) {
+      // Usar toast customizado para confirmação seria ideal, mas para rapidez manteremos confirm nativo por enquanto ou mudaremos
+      // Vamos manter o padrão simples pedido
+      
+      const confirmDelete = window.confirm('Tem certeza que deseja excluir este contato?');
+      if(confirmDelete) {
           try {
-              await fetch(`${import.meta.env.VITE_API_URL || 'http://api.dr-x.xtd.com.br'}/contacts/${id}`, { method: 'DELETE' });
+              await api.delete(`/contacts/${id}`);
+              toast.success('Contato excluído com sucesso');
               fetchContacts();
           } catch(err) {
-              alert('Erro ao excluir');
+              console.error(err);
+              toast.error('Erro ao excluir contato');
           }
       }
   };
