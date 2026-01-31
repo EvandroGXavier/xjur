@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
 
@@ -121,15 +122,19 @@ export function ContactForm() {
 
         if (id && id !== 'new') {
             await api.patch(`/contacts/${id}`, payload);
+            toast.success('Contato atualizado com sucesso!');
         } else {
             await api.post('/contacts', payload);
+            toast.success('Contato criado com sucesso!');
         }
 
-        navigate('/contacts');
+        setTimeout(() => {
+          navigate('/contacts');
+        }, 1000);
     } catch (err: any) {
         console.error(err);
         const message = err.response?.data?.message || err.message || 'Erro ao conectar com servidor';
-        alert(`Erro ao salvar contato: ${message}`);
+        toast.error(`Erro ao salvar contato: ${message}`);
     } finally {
         setLoading(false);
     }
@@ -138,7 +143,7 @@ export function ContactForm() {
   // Enriquecimento de CNPJ
   const handleEnrichCNPJ = async () => {
     if (!formData.cnpj) {
-      alert('Digite um CNPJ para consultar');
+      toast.warning('Digite um CNPJ para consultar');
       return;
     }
 
@@ -154,11 +159,11 @@ export function ContactForm() {
           email: data.email || formData.email,
           phone: data.ddd_telefone_1 || formData.phone,
         });
-        alert('Dados do CNPJ carregados com sucesso!');
+        toast.success('Dados do CNPJ carregados com sucesso!');
     } catch (err: any) {
       console.error(err);
       const message = err.response?.data?.message || 'CNPJ não encontrado';
-      alert(`Erro: ${message}`);
+      toast.error(`Erro: ${message}`);
     } finally {
       setEnriching(false);
     }
@@ -167,7 +172,7 @@ export function ContactForm() {
   // Enriquecimento de CEP
   const handleEnrichCEP = async () => {
     if (!addressForm.zipCode) {
-      alert('Digite um CEP para consultar');
+      toast.warning('Digite um CEP para consultar');
       return;
     }
 
@@ -182,11 +187,11 @@ export function ContactForm() {
           city: data.localidade || addressForm.city,
           state: data.uf || addressForm.state,
         });
-        alert('Endereço carregado com sucesso!');
+        toast.success('Endereço carregado com sucesso!');
     } catch (err: any) {
       console.error(err);
       const message = err.response?.data?.message || 'CEP não encontrado';
-      alert(`Erro: ${message}`);
+      toast.error(`Erro: ${message}`);
     } finally {
       setEnriching(false);
     }
@@ -195,7 +200,7 @@ export function ContactForm() {
   // Address management functions
   const handleAddAddress = async () => {
     if (!id || id === 'new') {
-      alert('Salve o contato antes de adicionar endereços');
+      toast.warning('Salve o contato antes de adicionar endereços');
       return;
     }
 
@@ -206,9 +211,10 @@ export function ContactForm() {
       await fetchContact();
       setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
       setShowAddressForm(false);
+      toast.success('Endereço adicionado!');
     } catch (err) {
       console.error(err);
-      alert('Erro ao adicionar endereço');
+      toast.error('Erro ao adicionar endereço');
     } finally {
       setLoading(false);
     }
@@ -225,9 +231,10 @@ export function ContactForm() {
       setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
       setEditingAddress(null);
       setShowAddressForm(false);
+      toast.success('Endereço atualizado!');
     } catch (err) {
       console.error(err);
-      alert('Erro ao atualizar endereço');
+      toast.error('Erro ao atualizar endereço');
     } finally {
       setLoading(false);
     }
@@ -242,9 +249,10 @@ export function ContactForm() {
       await api.delete(`/contacts/${id}/addresses/${addressId}`);
 
       await fetchContact();
+      toast.success('Endereço removido!');
     } catch (err) {
       console.error(err);
-      alert('Erro ao excluir endereço');
+      toast.error('Erro ao excluir endereço');
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
 import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings } from './pages';
+
 // Simularemos uma verificação de autenticação simples
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
   const token = localStorage.getItem('token'); // Simplificação. Ideal: Validar token.
@@ -10,6 +12,7 @@ const PrivateRoute = ({ children }: { children: JSX.Element }) => {
 function App() {
   return (
     <BrowserRouter>
+      <Toaster richColors position="top-right" />
       <Routes>
         {/* Futura rota de Login apareceria aqui */}
         {/* <Route path="/login" element={<LoginPage />} /> */}
