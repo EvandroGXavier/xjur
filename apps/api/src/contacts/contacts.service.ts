@@ -10,12 +10,18 @@ export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createContactDto: CreateContactDto, tenantId: string) {
-    return this.prisma.contact.create({
-      data: {
-        ...createContactDto,
-        tenantId,
-      },
-    });
+    try {
+      console.log('Creating contact:', { ...createContactDto, tenantId });
+      return await this.prisma.contact.create({
+        data: {
+          ...createContactDto,
+          tenantId,
+        },
+      });
+    } catch (error) {
+      console.error('Error creating contact:', error);
+      throw error;
+    }
   }
 
   findAll(tenantId: string) {
