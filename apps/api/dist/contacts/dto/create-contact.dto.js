@@ -75,8 +75,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateContactDto.prototype, "email", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MinLength)(10, { message: 'Telefone deve ter pelo menos 10 dígitos' }),
+    (0, class_transformer_1.Transform)(({ value }) => value === "" ? null : value),
     __metadata("design:type", String)
 ], CreateContactDto.prototype, "phone", void 0);
 __decorate([

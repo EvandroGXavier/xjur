@@ -9,7 +9,7 @@ export declare class CreateContactDto {
     stateRegistration?: string;
     document?: string;
     email?: string;
-    phone: string;
+    phone?: string;
     whatsapp?: string;
     notes?: string;
     category?: string;

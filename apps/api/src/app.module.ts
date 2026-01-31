@@ -1,21 +1,20 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '@drx/database';
-import { TemplatesModule } from './templates/templates.module';
-import { DocumentsModule } from './documents/documents.module';
-import { WhatsappModule } from './whatsapp/whatsapp.module';
-import { ContactsModule } from './contacts/contacts.module';
+import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
+import { ContactsModule } from './contacts/contacts.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { FinancialModule } from './financial/financial.module';
 import { SaasModule } from './saas/saas.module';
 
 @Module({
   imports: [
-    PrismaModule,     // Carrega primeiro para ser global
-    AuthModule,
-    SaasModule,
-    TemplatesModule,
-    DocumentsModule,
-    WhatsappModule,
-    ContactsModule,
+    AuthModule,      // Reativa o sistema de Login
+    ContactsModule,  // Gestão de Clientes
+    WhatsappModule,  // Conexão Baileys
+    FinancialModule, // Módulo Financeiro
+    SaasModule       // Controle de Assinaturas
   ],
+  controllers: [AppController],
+  providers: [],
 })
 export class AppModule {}

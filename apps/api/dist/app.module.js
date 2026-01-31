@@ -8,12 +8,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
-const database_1 = require("@drx/database");
-const templates_module_1 = require("./templates/templates.module");
-const documents_module_1 = require("./documents/documents.module");
-const whatsapp_module_1 = require("./whatsapp/whatsapp.module");
-const contacts_module_1 = require("./contacts/contacts.module");
+const app_controller_1 = require("./app.controller");
 const auth_module_1 = require("./auth/auth.module");
+const contacts_module_1 = require("./contacts/contacts.module");
+const whatsapp_module_1 = require("./whatsapp/whatsapp.module");
+const financial_module_1 = require("./financial/financial.module");
 const saas_module_1 = require("./saas/saas.module");
 let AppModule = class AppModule {
 };
@@ -21,14 +20,14 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            database_1.PrismaModule,
             auth_module_1.AuthModule,
-            saas_module_1.SaasModule,
-            templates_module_1.TemplatesModule,
-            documents_module_1.DocumentsModule,
-            whatsapp_module_1.WhatsappModule,
             contacts_module_1.ContactsModule,
+            whatsapp_module_1.WhatsappModule,
+            financial_module_1.FinancialModule,
+            saas_module_1.SaasModule
         ],
+        controllers: [app_controller_1.AppController],
+        providers: [],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

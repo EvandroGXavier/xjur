@@ -28,6 +28,11 @@ let ContactsController = class ContactsController {
         this.enrichmentService = enrichmentService;
     }
     create(createContactDto, user) {
+        console.log('Controller User:', user);
+        if (!user || !user.tenantId) {
+            console.error('User or tenantId missing in controller!');
+            throw new Error('User context invalid');
+        }
         return this.contactsService.create(createContactDto, user.tenantId);
     }
     findAll(user) {
