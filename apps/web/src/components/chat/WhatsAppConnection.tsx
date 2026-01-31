@@ -25,8 +25,12 @@ export const WhatsAppConnection: React.FC<WhatsAppConnectionProps> = ({ onConnec
   }, []);
 
   const connectSocket = () => {
-    const socketUrl = getApiUrl();
-    console.log('🔌 Conectando ao DR.X:', socketUrl);
+    // Socket deve conectar na raiz, não em /api
+    const socketUrl = window.location.hostname === 'localhost' || window.location.hostname.includes('idx.google.com')
+      ? `http://${window.location.hostname}:3000`
+      : '/'; // Produção conecta no mesmo domínio
+
+    console.log('🔌 Conectando ao DR.X (Socket):', socketUrl);
 
     socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling'],

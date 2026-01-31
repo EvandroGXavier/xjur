@@ -18,6 +18,11 @@ export class ContactsController {
 
   @Post()
   create(@Body() createContactDto: CreateContactDto, @CurrentUser() user: CurrentUserData) {
+    console.log('Controller User:', user);
+    if (!user || !user.tenantId) {
+       console.error('User or tenantId missing in controller!');
+       throw new Error('User context invalid');
+    }
     return this.contactsService.create(createContactDto, user.tenantId);
   }
 
