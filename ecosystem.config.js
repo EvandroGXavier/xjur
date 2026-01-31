@@ -11,15 +11,6 @@ module.exports = {
       env: {
         NODE_ENV: 'production'
       }
-    },
-    {
-      name: 'drx-web',
-      script: 'http-server',
-      args: 'dist -p 8080 -a 0.0.0.0',
-      cwd: '/www/wwwroot/DrX/apps/web',
-      instances: 1,
-      autorestart: true,
-      watch: false
     }
   ]
 };

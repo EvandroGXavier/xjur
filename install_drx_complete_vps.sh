@@ -118,10 +118,11 @@ pm2 start dist/main.js --name drx-api
 cd ../..
 
 # Iniciar Web
-echo "Iniciando Web SPA..."
-cd apps/web
-pm2 serve dist 8080 --name drx-web --spa
-cd ../..
+echo "Iniciando Web..."
+echo "APP Web será servido pelo Nginx (Porta 80/443). Processo Node.js desnecessário."
+# cd apps/web
+# pm2 serve dist 8080 --name drx-web --spa
+# cd ../..
 
 # Iniciar Prisma Studio
 echo "Iniciando Prisma Studio..."

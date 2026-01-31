@@ -30,14 +30,18 @@ jobs:
             # Forçamos a versão 5.20 para evitar o erro P1012 da versão 7
             npx prisma@5.20.0 generate --schema=packages/database/prisma/schema.prisma
             
-            echo "5. Executando Build via TurboRepo..."
+            echo "5. Atualizando Banco de Dados..."
+            npx turbo run db:push
+            
+            echo "6. Executando Build via TurboRepo..."
             # O build compila o frontend e o backend na ordem correta
             npx turbo run build
             
-            echo "6. Reiniciando ecossistema PM2..."
-            # Deletamos para limpar a RAM e subimos via arquivo de configuração
-            pm2 delete drx-api drx-web || true
-            pm2 start ecosystem.config.js
+            echo "7. Reiniciando ecossistema PM2..."
+            # Limpamos processos antigos e recarregamos com base no novo ecosystem.config.js
+            # Como removemos drx-web do arquivo, ele não será iniciado.
+            pm2 delete drx-web 2>/dev/null || true
+            pm2 startOrReload ecosystem.config.js
             pm2 save
             
             echo "✅ DEPLOY DO DR.X CONCLUÍDO COM SUCESSO!"
