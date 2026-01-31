@@ -29,6 +29,10 @@ model Tenant {
   communicationLogs CommunicationLog[]
   documentHistory   DocumentHistory[]
   financialRecords  FinancialRecord[]
+  relationTypes     RelationType[]
+  contactRelations  ContactRelation[]
+  assetTypes        AssetType[]
+  contactAssets     ContactAsset[]
 
   @@map("tenants")
 }
@@ -94,6 +98,9 @@ model Contact {
   additionalContacts AdditionalContact[]
   processes          Process[]
   communications     CommunicationLog[]
+  relationsFrom      ContactRelation[] @relation("RelationsFrom")
+  relationsTo        ContactRelation[] @relation("RelationsTo")
+  assets             ContactAsset[]
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([cpf])
@@ -101,6 +108,69 @@ model Contact {
   @@index([personType])
   @@index([category])
   @@map("contacts")
+}
+
+model RelationType {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String   // Ex: Pai, Sócio
+  reverseName String?  // Ex: Filho (opcional, se null usa name)
+  isBilateral Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  relations   ContactRelation[]
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("relation_types")
+}
+
+model ContactRelation {
+  id             String   @id @default(uuid())
+  tenantId       String
+  fromContactId  String
+  toContactId    String
+  relationTypeId String
+  
+  fromContact    Contact      @relation("RelationsFrom", fields: [fromContactId], references: [id], onDelete: Cascade)
+  toContact      Contact      @relation("RelationsTo", fields: [toContactId], references: [id], onDelete: Cascade)
+  relationType   RelationType @relation(fields: [relationTypeId], references: [id])
+  
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([fromContactId, toContactId, relationTypeId]) // Evitar duplicatas exatas
+  @@map("contact_relations")
+}
+
+model AssetType {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  createdAt   DateTime @default(now())
+
+  assets      ContactAsset[]
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("asset_types")
+}
+
+model ContactAsset {
+  id              String   @id @default(uuid())
+  tenantId        String
+  contactId       String
+  assetTypeId     String
+  description     String
+  acquisitionDate DateTime?
+  value           Decimal? @db.Decimal(10, 2)
+  writeOffDate    DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contact         Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assetType       AssetType  @relation(fields: [assetTypeId], references: [id])
+  tenant          Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@map("contact_assets")
 }
 
 model Address {

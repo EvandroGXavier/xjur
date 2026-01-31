@@ -19,4 +19,15 @@ export declare class ContactsService {
     addAdditionalContact(contactId: string, createAdditionalContactDto: CreateAdditionalContactDto): any;
     updateAdditionalContact(contactId: string, additionalContactId: string, updateAdditionalContactDto: UpdateAdditionalContactDto): any;
     removeAdditionalContact(contactId: string, additionalContactId: string): any;
+    getRelationTypes(tenantId: string): Promise<any>;
+    createRelationType(tenantId: string, data: any): Promise<any>;
+    getContactRelations(contactId: string): Promise<any[]>;
+    createContactRelation(tenantId: string, fromContactId: string, data: any): Promise<any>;
+    removeContactRelation(tenantId: string, relationId: string): Promise<any>;
+    getAssetTypes(tenantId: string): Promise<any>;
+    createAssetType(tenantId: string, data: any): Promise<any>;
+    getContactAssets(contactId: string): Promise<any>;
+    createContactAsset(tenantId: string, contactId: string, data: any): Promise<any>;
+    updateContactAsset(tenantId: string, assetId: string, data: any): Promise<any>;
+    removeContactAsset(tenantId: string, assetId: string): Promise<any>;
 }

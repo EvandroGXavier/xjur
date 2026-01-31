@@ -1,5 +1,3 @@
-
-"teste de DEPLOY"
 import { ArrowRight, Bell, Calendar, TrendingUp } from 'lucide-react';
 
 export function Dashboard() {

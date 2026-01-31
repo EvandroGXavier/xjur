@@ -47,6 +47,39 @@ interface AdditionalContact {
   value: string;
 }
 
+interface RelationType {
+  id: string;
+  name: string;
+  reverseName?: string;
+  isBilateral: boolean;
+}
+
+interface ContactRelation {
+  id: string;
+  relatedContact: {
+    id: string;
+    name: string;
+    personType: string;
+  };
+  type: string;
+  isInverse: boolean;
+}
+
+interface AssetType {
+  id: string;
+  name: string;
+}
+
+interface ContactAsset {
+  id: string;
+  assetType: AssetType;
+  description: string;
+  acquisitionDate: string;
+  value: number;
+  writeOffDate?: string;
+  notes?: string;
+}
+
 const TABS = [
   { id: 'contact', label: 'Contato', icon: Users },
   { id: 'addresses', label: 'Endereços', icon: Home },
@@ -98,11 +131,236 @@ export function ContactForm() {
     zipCode: ''
   });
 
-  useEffect(() => {
-    if (id && id !== 'new') {
-      fetchContact();
-    }
-  }, [id]);
+  // Relations state
+  const [relations, setRelations] = useState<ContactRelation[]>([]);
+  const [relationTypes, setRelationTypes] = useState<RelationType[]>([]);
+  const [availableContacts, setAvailableContacts] = useState<ContactData[]>([]);
+  const [showRelationForm, setShowRelationForm] = useState(false);
+  const [relationForm, setRelationForm] = useState({
+      toContactId: '',
+      relationTypeId: '',
+      newTypeName: '',
+      isBilateral: false
+  });
+  const [creatingType, setCreatingType] = useState(false);
+
+  // Assets state
+  const [assets, setAssets] = useState<ContactAsset[]>([]);
+  const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
+  const [showAssetForm, setShowAssetForm] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<ContactAsset | null>(null);
+  const [assetForm, setAssetForm] = useState({
+      assetTypeId: '',
+      newTypeName: '',
+      description: '',
+      acquisitionDate: '',
+      value: '',
+      writeOffDate: '',
+      notes: ''
+  });
+  const [creatingAssetType, setCreatingAssetType] = useState(false);
+
+  const fetchRelations = async () => {
+      try {
+          const response = await api.get(`/contacts/${id}/relations`);
+          setRelations(response.data);
+      } catch (err) {
+          console.error("Failed to fetch relations", err);
+      }
+  };
+
+  const fetchAssets = async () => {
+      try {
+          const response = await api.get(`/contacts/${id}/assets`);
+          setAssets(response.data);
+      } catch (err) {
+          console.error("Failed to fetch assets", err);
+      }
+  };
+
+  const fetchAssetTypes = async () => {
+      try {
+          const response = await api.get('/contacts/assets/types');
+          setAssetTypes(response.data);
+      } catch (err) {
+          console.error("Failed to fetch asset types", err);
+      }
+  };
+
+  const fetchRelationTypes = async () => {
+      try {
+          const response = await api.get('/contacts/relations/types');
+          setRelationTypes(response.data);
+      } catch (err) {
+          console.error("Failed to fetch relation types", err);
+      }
+  };
+
+  const fetchAvailableContacts = async () => {
+      try {
+          const response = await api.get('/contacts');
+          setAvailableContacts(response.data.filter((c: any) => c.id !== id));
+      } catch (err) {
+          console.error("Failed to fetch contacts", err);
+      }
+  };
+
+  const handleCreateRelation = async () => {
+      try {
+          setLoading(true);
+          let typeId = relationForm.relationTypeId;
+
+          // Se estiver criando um novo tipo
+          if (creatingType && relationForm.newTypeName) {
+              const typeResponse = await api.post('/contacts/relations/types', {
+                  name: relationForm.newTypeName,
+                  isBilateral: relationForm.isBilateral
+              });
+              typeId = typeResponse.data.id;
+              await fetchRelationTypes(); // Atualiza lista
+          }
+
+          if (!typeId) {
+              toast.warning('Selecione ou crie um tipo de vínculo');
+              setLoading(false);
+              return;
+          }
+
+          if (!relationForm.toContactId) {
+             toast.warning('Selecione o contato vinculado');
+             setLoading(false);
+             return;
+          }
+
+          await api.post(`/contacts/${id}/relations`, {
+              toContactId: relationForm.toContactId,
+              relationTypeId: typeId
+          });
+
+          await fetchRelations();
+          setShowRelationForm(false);
+          setRelationForm({ toContactId: '', relationTypeId: '', newTypeName: '', isBilateral: false });
+          setCreatingType(false);
+          toast.success('Vínculo criado com sucesso!');
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao criar vínculo');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const  handleDeleteRelation = async (relationId: string) => {
+      if(!confirm('Deseja remover este vínculo?')) return;
+      try {
+          setLoading(true);
+          await api.delete(`/contacts/${id}/relations/${relationId}`);
+          await fetchRelations();
+          toast.success('Vínculo removido!');
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao remover vínculo');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleCreateAsset = async () => {
+      try {
+          setLoading(true);
+          let typeId = assetForm.assetTypeId;
+
+          if (creatingAssetType && assetForm.newTypeName) {
+              const typeResponse = await api.post('/contacts/assets/types', {
+                  name: assetForm.newTypeName
+              });
+              typeId = typeResponse.data.id;
+              await fetchAssetTypes();
+          }
+
+          if (!typeId) {
+              toast.warning('Selecione ou crie um tipo de patrimônio');
+              setLoading(false);
+              return;
+          }
+
+          if (!assetForm.description || !assetForm.acquisitionDate || !assetForm.value) {
+              toast.warning('Preencha os campos obrigatórios (Descrição, Data Aquisição, Valor)');
+              setLoading(false);
+              return;
+          }
+
+          const payload = {
+              assetTypeId: typeId,
+              description: assetForm.description,
+              acquisitionDate: new Date(assetForm.acquisitionDate).toISOString(),
+              value: parseFloat(assetForm.value.replace(',', '.')), // Basic parse
+              writeOffDate: assetForm.writeOffDate ? new Date(assetForm.writeOffDate).toISOString() : undefined,
+              notes: assetForm.notes
+          };
+
+          if (editingAsset) {
+              await api.patch(`/contacts/${id}/assets/${editingAsset.id}`, payload);
+              toast.success('Patrimônio atualizado!');
+          } else {
+              await api.post(`/contacts/${id}/assets`, payload);
+              toast.success('Patrimônio adicionado!');
+          }
+
+          await fetchAssets();
+          cancelAssetForm();
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao salvar patrimônio');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleDeleteAsset = async (assetId: string) => {
+      if(!confirm('Deseja remover este item do patrimônio?')) return;
+      try {
+          setLoading(true);
+          await api.delete(`/contacts/${id}/assets/${assetId}`);
+          await fetchAssets();
+          toast.success('Patrimônio removido!');
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao remover patrimônio');
+      } finally {
+          setLoading(false);
+      }
+  };
+  
+  const startEditAsset = (asset: ContactAsset) => {
+      setEditingAsset(asset);
+      setAssetForm({
+          assetTypeId: asset.assetType.id,
+          newTypeName: '',
+          description: asset.description,
+          acquisitionDate: asset.acquisitionDate ? asset.acquisitionDate.split('T')[0] : '',
+          value: asset.value.toString(),
+          writeOffDate: asset.writeOffDate ? asset.writeOffDate.split('T')[0] : '',
+          notes: asset.notes || ''
+      });
+      setShowAssetForm(true);
+      setCreatingAssetType(false);
+  };
+
+  const cancelAssetForm = () => {
+      setShowAssetForm(false);
+      setEditingAsset(null);
+      setAssetForm({
+          assetTypeId: '',
+          newTypeName: '',
+          description: '',
+          acquisitionDate: '',
+          value: '',
+          writeOffDate: '',
+          notes: ''
+      });
+      setCreatingAssetType(false);
+  };
 
   const fetchContact = async () => {
     try {
@@ -115,6 +373,17 @@ export function ContactForm() {
         setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (id && id !== 'new') {
+      fetchContact();
+      fetchRelations();
+      fetchAssets();
+    }
+    fetchRelationTypes();
+    fetchAssetTypes();
+    fetchAvailableContacts();
+  }, [id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -768,6 +1037,167 @@ export function ContactForm() {
                         </>
                     )}
                 </div>
+            ) : activeTab === 'relations' ? (
+                <div className="space-y-6 max-w-4xl">
+                     <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <Lock size={20} className="text-indigo-400" /> Vínculos e Relacionamentos
+                        </h3>
+                        <button
+                            onClick={() => setShowRelationForm(true)}
+                            disabled={!id || id === 'new'}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus size={16} /> Adicionar Vínculo
+                        </button>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato antes de adicionar vínculos</p>
+                        </div>
+                    ) : (
+                        <>
+                            {showRelationForm && (
+                                <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800 animate-fadeIn">
+                                    <h4 className="text-md font-semibold text-white mb-4">Novo Vínculo</h4>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2 md:col-span-2">
+                                            <label className="text-sm font-medium text-slate-400">Vincular com quem?</label>
+                                            <select
+                                                value={relationForm.toContactId}
+                                                onChange={e => setRelationForm({...relationForm, toContactId: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="">Selecione um contato...</option>
+                                                {availableContacts.map(c => (
+                                                    <option key={c.id} value={c.id || ''}>{c.name} ({c.document || 'Sem doc'})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Tipo de Vínculo</label>
+                                            <div className="flex gap-2">
+                                                {!creatingType ? (
+                                                    <select
+                                                        value={relationForm.relationTypeId}
+                                                        onChange={e => {
+                                                            if (e.target.value === 'NEW') setCreatingType(true);
+                                                            else setRelationForm({...relationForm, relationTypeId: e.target.value});
+                                                        }}
+                                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                    >
+                                                        <option value="">Selecione...</option>
+                                                        {relationTypes.map(t => (
+                                                            <option key={t.id} value={t.id}>{t.name}</option>
+                                                        ))}
+                                                        <option value="NEW">+ Novo Tipo Simplificado</option>
+                                                    </select>
+                                                ) : (
+                                                    <div className="flex-1 flex gap-2">
+                                                        <input 
+                                                            autoFocus
+                                                            placeholder="Nome do novo vínculo"
+                                                            value={relationForm.newTypeName}
+                                                            onChange={e => setRelationForm({...relationForm, newTypeName: e.target.value})}
+                                                            className="flex-1 bg-slate-950 border border-indigo-500 rounded px-3 py-2 text-white focus:outline-none"
+                                                        />
+                                                        <button 
+                                                            onClick={() => setCreatingType(false)}
+                                                            className="px-2 text-slate-400 hover:text-white"
+                                                            title="Cancelar novo tipo"
+                                                        >
+                                                            X
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {creatingType && (
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium text-slate-400">Opções do Tipo</label>
+                                                <div className="flex items-center gap-2 h-10">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={relationForm.isBilateral}
+                                                            onChange={e => setRelationForm({...relationForm, isBilateral: e.target.checked})}
+                                                            className="w-4 h-4 text-indigo-600 rounded"
+                                                        />
+                                                        <span className="text-white text-sm">É Bilateral? (Recíproco)</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex gap-2 mt-6">
+                                        <button
+                                            onClick={handleCreateRelation}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
+                                        >
+                                            {loading ? 'Salvando...' : 'Criar Vínculo'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowRelationForm(false); setCreatingType(false); }}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                {relations.map(rel => (
+                                    <div key={rel.id} className="bg-slate-800/30 border border-slate-700 rounded-lg p-4 flex items-center justify-between hover:bg-slate-800/50 transition">
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-indigo-500/10 p-2 rounded-full">
+                                                <Users size={20} className="text-indigo-400" />
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-400 text-sm block">
+                                                    {rel.isInverse ? 'É vinculado como:' : 'Tem como vínculo:'}
+                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-semibold text-white text-lg">
+                                                        {rel.relatedContact.name}
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-full bg-slate-700 text-xs text-slate-300 border border-slate-600">
+                                                        {rel.type}
+                                                    </span>
+                                                </div>
+                                                <span className="text-xs text-slate-500">
+                                                    {rel.relatedContact.personType}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        <button 
+                                            onClick={() => handleDeleteRelation(rel.id)}
+                                            className="p-2 text-slate-500 hover:text-red-400 hover:bg-slate-700/50 rounded transition"
+                                            title="Remover vínculo"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+                                ))}
+
+                                {relations.length === 0 && !showRelationForm && (
+                                    <div className="text-center py-12 text-slate-500">
+                                        <Lock size={48} className="mx-auto mb-4 opacity-20" />
+                                        <p>Nenhum vínculo cadastrado para este contato.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
             ) : activeTab === 'contacts' ? (
                 <div className="space-y-6 max-w-4xl">
                     <div className="flex items-center justify-between">
@@ -880,6 +1310,209 @@ export function ContactForm() {
                                     </div>
                                 )}
                             </div>
+                        </>
+                    )}
+                </div>
+            ) : activeTab === 'assets' ? (
+                <div className="space-y-6 max-w-5xl">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <Briefcase size={20} className="text-indigo-400" /> Gestão de Patrimônio
+                        </h3>
+                        <button
+                            onClick={() => setShowAssetForm(true)}
+                            disabled={!id || id === 'new'}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus size={16} /> Adicionar Patrimônio
+                        </button>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato antes de adicionar patrimônios</p>
+                        </div>
+                    ) : (
+                        <>
+                             {showAssetForm && (
+                                <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800 animate-fadeIn mb-6">
+                                    <h4 className="text-md font-semibold text-white mb-4">
+                                        {editingAsset ? 'Editar Patrimônio' : 'Novo Item de Patrimônio'}
+                                    </h4>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Tipo de Patrimônio</label>
+                                            <div className="flex gap-2">
+                                                {!creatingAssetType ? (
+                                                    <select
+                                                        value={assetForm.assetTypeId}
+                                                        onChange={e => {
+                                                            if (e.target.value === 'NEW') setCreatingAssetType(true);
+                                                            else setAssetForm({...assetForm, assetTypeId: e.target.value});
+                                                        }}
+                                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                    >
+                                                        <option value="">Selecione...</option>
+                                                        {assetTypes.map(t => (
+                                                            <option key={t.id} value={t.id}>{t.name}</option>
+                                                        ))}
+                                                        <option value="NEW">+ Novo Tipo Simplificado</option>
+                                                    </select>
+                                                ) : (
+                                                    <div className="flex-1 flex gap-2">
+                                                        <input 
+                                                            autoFocus
+                                                            placeholder="Nome do novo tipo"
+                                                            value={assetForm.newTypeName}
+                                                            onChange={e => setAssetForm({...assetForm, newTypeName: e.target.value})}
+                                                            className="flex-1 bg-slate-950 border border-indigo-500 rounded px-3 py-2 text-white focus:outline-none"
+                                                        />
+                                                        <button 
+                                                            onClick={() => setCreatingAssetType(false)}
+                                                            className="px-2 text-slate-400 hover:text-white"
+                                                            title="Cancelar"
+                                                        >
+                                                            X
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2 md:col-span-2">
+                                            <label className="text-sm font-medium text-slate-400">Descrição</label>
+                                            <input 
+                                                value={assetForm.description}
+                                                onChange={e => setAssetForm({...assetForm, description: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Ex: Apartamento Centro, Carro Honda Civic..."
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Valor Estimado (R$)</label>
+                                            <input 
+                                                type="number"
+                                                value={assetForm.value}
+                                                onChange={e => setAssetForm({...assetForm, value: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="0.00"
+                                                step="0.01"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Data de Aquisição</label>
+                                            <input 
+                                                type="date"
+                                                value={assetForm.acquisitionDate}
+                                                onChange={e => setAssetForm({...assetForm, acquisitionDate: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Data de Baixa (Venda/Perda)</label>
+                                            <input 
+                                                type="date"
+                                                value={assetForm.writeOffDate}
+                                                onChange={e => setAssetForm({...assetForm, writeOffDate: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2 md:col-span-3">
+                                            <label className="text-sm font-medium text-slate-400">Observações</label>
+                                            <textarea 
+                                                rows={3}
+                                                value={assetForm.notes}
+                                                onChange={e => setAssetForm({...assetForm, notes: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Detalhes adicionais..."
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 mt-6">
+                                        <button
+                                            onClick={handleCreateAsset}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
+                                        >
+                                            {loading ? 'Salvando...' : editingAsset ? 'Atualizar Patrimônio' : 'Salvar Patrimônio'}
+                                        </button>
+                                        <button
+                                            onClick={cancelAssetForm}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                             {/* Assets List Table */}
+                             <div className="bg-slate-800/30 border border-slate-700 rounded-lg overflow-hidden">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-800/50 border-b border-slate-700 text-slate-400 text-sm">
+                                            <th className="p-4 font-medium">Tipo</th>
+                                            <th className="p-4 font-medium">Descrição</th>
+                                            <th className="p-4 font-medium">Data Aquisição</th>
+                                            <th className="p-4 font-medium">Valor</th>
+                                            <th className="p-4 font-medium">Status</th>
+                                            <th className="p-4 font-medium text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800">
+                                        {assets.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={6} className="p-8 text-center text-slate-500">
+                                                    Nenhum patrimônio cadastrado.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            assets.map(asset => (
+                                                <tr key={asset.id} className="hover:bg-slate-800/50 transition">
+                                                    <td className="p-4 text-white font-medium">{asset.assetType.name}</td>
+                                                    <td className="p-4 text-slate-300">{asset.description}</td>
+                                                    <td className="p-4 text-slate-400">
+                                                        {asset.acquisitionDate ? new Date(asset.acquisitionDate).toLocaleDateString('pt-BR') : '-'}
+                                                    </td>
+                                                    <td className="p-4 text-emerald-400 font-medium">
+                                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(asset.value))}
+                                                    </td>
+                                                    <td className="p-4">
+                                                        {asset.writeOffDate ? (
+                                                            <span className="px-2 py-1 rounded-full bg-red-500/10 text-red-400 text-xs border border-red-500/20">Baixado</span>
+                                                        ) : (
+                                                            <span className="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs border border-emerald-500/20">Ativo</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button 
+                                                                onClick={() => startEditAsset(asset)}
+                                                                className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded transition"
+                                                            >
+                                                                <Edit size={16} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteAsset(asset.id)}
+                                                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                             </div>
                         </>
                     )}
                 </div>

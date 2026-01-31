@@ -22,6 +22,8 @@ const create_address_dto_1 = require("./dto/create-address.dto");
 const update_address_dto_1 = require("./dto/update-address.dto");
 const create_additional_contact_dto_1 = require("./dto/create-additional-contact.dto");
 const update_additional_contact_dto_1 = require("./dto/update-additional-contact.dto");
+const relation_dto_1 = require("./dto/relation.dto");
+const asset_dto_1 = require("./dto/asset.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 let ContactsController = class ContactsController {
@@ -66,6 +68,39 @@ let ContactsController = class ContactsController {
     }
     removeAdditionalContact(id, contactId) {
         return this.contactsService.removeAdditionalContact(id, contactId);
+    }
+    getRelationTypes(user) {
+        return this.contactsService.getRelationTypes(user.tenantId);
+    }
+    createRelationType(dto, user) {
+        return this.contactsService.createRelationType(user.tenantId, dto);
+    }
+    getContactRelations(id) {
+        return this.contactsService.getContactRelations(id);
+    }
+    createContactRelation(id, dto, user) {
+        return this.contactsService.createContactRelation(user.tenantId, id, dto);
+    }
+    removeContactRelation(relationId, user) {
+        return this.contactsService.removeContactRelation(user.tenantId, relationId);
+    }
+    getAssetTypes(user) {
+        return this.contactsService.getAssetTypes(user.tenantId);
+    }
+    createAssetType(dto, user) {
+        return this.contactsService.createAssetType(user.tenantId, dto);
+    }
+    getContactAssets(id) {
+        return this.contactsService.getContactAssets(id);
+    }
+    createContactAsset(id, dto, user) {
+        return this.contactsService.createContactAsset(user.tenantId, id, dto);
+    }
+    updateContactAsset(assetId, dto, user) {
+        return this.contactsService.updateContactAsset(user.tenantId, assetId, dto);
+    }
+    removeContactAsset(assetId, user) {
+        return this.contactsService.removeContactAsset(user.tenantId, assetId);
     }
     async enrichCNPJ(cnpj) {
         return this.enrichmentService.consultCNPJ(cnpj);
@@ -162,6 +197,93 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], ContactsController.prototype, "removeAdditionalContact", null);
+__decorate([
+    (0, common_1.Get)('relations/types'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "getRelationTypes", null);
+__decorate([
+    (0, common_1.Post)('relations/types'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [relation_dto_1.CreateRelationTypeDto, Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "createRelationType", null);
+__decorate([
+    (0, common_1.Get)(':id/relations'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "getContactRelations", null);
+__decorate([
+    (0, common_1.Post)(':id/relations'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, relation_dto_1.CreateContactRelationDto, Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "createContactRelation", null);
+__decorate([
+    (0, common_1.Delete)(':id/relations/:relationId'),
+    __param(0, (0, common_1.Param)('relationId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "removeContactRelation", null);
+__decorate([
+    (0, common_1.Get)('assets/types'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "getAssetTypes", null);
+__decorate([
+    (0, common_1.Post)('assets/types'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [asset_dto_1.CreateAssetTypeDto, Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "createAssetType", null);
+__decorate([
+    (0, common_1.Get)(':id/assets'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "getContactAssets", null);
+__decorate([
+    (0, common_1.Post)(':id/assets'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, asset_dto_1.CreateContactAssetDto, Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "createContactAsset", null);
+__decorate([
+    (0, common_1.Patch)(':id/assets/:assetId'),
+    __param(0, (0, common_1.Param)('assetId')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, asset_dto_1.UpdateContactAssetDto, Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "updateContactAsset", null);
+__decorate([
+    (0, common_1.Delete)(':id/assets/:assetId'),
+    __param(0, (0, common_1.Param)('assetId')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "removeContactAsset", null);
 __decorate([
     (0, common_1.Get)('enrich/cnpj'),
     __param(0, (0, common_1.Query)('cnpj')),

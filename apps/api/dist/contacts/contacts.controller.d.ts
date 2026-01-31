@@ -6,6 +6,8 @@ import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto';
 import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
+import { CreateRelationTypeDto, CreateContactRelationDto } from './dto/relation.dto';
+import { CreateAssetTypeDto, CreateContactAssetDto, UpdateContactAssetDto } from './dto/asset.dto';
 import { CurrentUserData } from '../common/decorators/current-user.decorator';
 export declare class ContactsController {
     private readonly contactsService;
@@ -22,6 +24,17 @@ export declare class ContactsController {
     addAdditionalContact(id: string, createAdditionalContactDto: CreateAdditionalContactDto): any;
     updateAdditionalContact(id: string, contactId: string, updateAdditionalContactDto: UpdateAdditionalContactDto): any;
     removeAdditionalContact(id: string, contactId: string): any;
+    getRelationTypes(user: CurrentUserData): Promise<any>;
+    createRelationType(dto: CreateRelationTypeDto, user: CurrentUserData): Promise<any>;
+    getContactRelations(id: string): Promise<any[]>;
+    createContactRelation(id: string, dto: CreateContactRelationDto, user: CurrentUserData): Promise<any>;
+    removeContactRelation(relationId: string, user: CurrentUserData): Promise<any>;
+    getAssetTypes(user: CurrentUserData): Promise<any>;
+    createAssetType(dto: CreateAssetTypeDto, user: CurrentUserData): Promise<any>;
+    getContactAssets(id: string): Promise<any>;
+    createContactAsset(id: string, dto: CreateContactAssetDto, user: CurrentUserData): Promise<any>;
+    updateContactAsset(assetId: string, dto: UpdateContactAssetDto, user: CurrentUserData): Promise<any>;
+    removeContactAsset(assetId: string, user: CurrentUserData): Promise<any>;
     enrichCNPJ(cnpj: string): Promise<import("./enrichment.service").CNPJData>;
     enrichCEP(cep: string): Promise<import("./enrichment.service").CEPData>;
 }
