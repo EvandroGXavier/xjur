@@ -54,9 +54,10 @@ export class CreateContactDto {
   @Transform(({ value }) => value === "" ? null : value)
   email?: string;
 
+  @IsOptional()
   @IsString()
-  @MinLength(10, { message: 'Telefone deve ter pelo menos 10 dígitos' })
-  phone: string;
+  @Transform(({ value }) => value === "" ? null : value)
+  phone?: string;
 
   @IsOptional()
   @IsString()
