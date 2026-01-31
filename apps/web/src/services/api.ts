@@ -3,7 +3,7 @@ import axios, { AxiosResponse, AxiosError } from 'axios';
 // Adicionamos o "export" aqui para que as outras telas possam ler esta função
 export const getApiUrl = () => {
   if (window.location.hostname === 'localhost' || window.location.hostname.includes('idx.google.com')) {
-    return `http://${window.location.hostname}:3000`;
+    return `http://${window.location.hostname}:3000/api`;
   }
   // Em produção, usa caminho relativo (Proxy Reverso cuida do resto)
   return '/api';

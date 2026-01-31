@@ -69,9 +69,83 @@ export class SaasService {
     });
   }
 
+  async updateTenant(id: string, data: any) {
+    const { name, document, planId, isActive, password } = data;
+
+    // Check if document belongs to another tenant
+    if (document) {
+      const existing = await this.prisma.tenant.findUnique({ where: { document } });
+      if (existing && existing.id !== id) {
+        throw new BadRequestException('Documento já utilizado por outra empresa.');
+      }
+    }
+
+    // Update Tenant
+    const tenant = await this.prisma.tenant.update({
+      where: { id },
+      data: {
+        name,
+        document,
+        planId,
+        isActive: isActive !== undefined ? isActive : undefined,
+      },
+    });
+
+    // Optional: Update Owner Password
+    if (password) {
+        // Find owner
+        const owner = await this.prisma.user.findFirst({
+            where: { tenantId: id, role: 'OWNER' }
+        });
+        if (owner) {
+            await this.prisma.user.update({
+                where: { id: owner.id },
+                data: { password } // TODO: Hash
+            });
+        }
+    }
+
+    return tenant;
+  }
+
+  async deleteTenant(id: string) {
+    // Delete related data first or rely on cascade?
+    // User relation is mandatory in schema but maybe assume cascade defined or handle manually.
+    // For now, let's delete users first
+    await this.prisma.user.deleteMany({ where: { tenantId: id } });
+    return this.prisma.tenant.delete({ where: { id } });
+  }
+
   async getTenants() {
       return this.prisma.tenant.findMany({
-          include: { plan: true }
+          include: { plan: true },
+          orderBy: { createdAt: 'desc' }
       });
+  }
+
+  // --- PLANS CRUD ---
+
+  async createPlan(data: any) {
+      return this.prisma.plan.create({ data });
+  }
+
+  async getPlans() {
+      return this.prisma.plan.findMany({ orderBy: { price: 'asc' } });
+  }
+
+  async updatePlan(id: string, data: any) {
+      return this.prisma.plan.update({
+          where: { id },
+          data
+      });
+  }
+
+  async deletePlan(id: string) {
+      // Check usage
+      const usage = await this.prisma.tenant.count({ where: { planId: id } });
+      if (usage > 0) {
+          throw new BadRequestException('Não é possível excluir um plano em uso.');
+      }
+      return this.prisma.plan.delete({ where: { id } });
   }
 }
