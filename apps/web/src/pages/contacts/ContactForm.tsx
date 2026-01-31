@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { getApiUrl } from '../../services/api';
+import { api } from '../../services/api';
 
 // Interface matching Backend DTO
 interface ContactData {
@@ -99,11 +99,8 @@ export function ContactForm() {
   const fetchContact = async () => {
     try {
         setLoading(true);
-        const response = await fetch(`${getApiUrl()}/contacts/${id}`);
-        if(response.ok) {
-            const data = await response.json();
-            setFormData(data);
-        }
+        const response = await api.get(`/contacts/${id}`);
+        setFormData(response.data);
     } catch(err) {
         console.error("Failed to fetch contact", err);
     } finally {
@@ -115,12 +112,6 @@ export function ContactForm() {
     e.preventDefault();
     setLoading(true);
     try {
-        const url = id && id !== 'new' 
-            ? `${getApiUrl()}/contacts/${id}`
-            : `${getApiUrl()}/contacts`;
-            
-        const method = id && id !== 'new' ? 'PATCH' : 'POST';
-
         const payload = Object.fromEntries(
           Object.entries(formData).map(([key, value]) => [
             key,
@@ -128,21 +119,17 @@ export function ContactForm() {
           ])
         );
 
-        const response = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (response.ok) {
-            navigate('/contacts');
+        if (id && id !== 'new') {
+            await api.patch(`/contacts/${id}`, payload);
         } else {
-            const error = await response.json();
-            alert(`Erro ao salvar contato: ${error.message || 'Erro desconhecido'}`);
+            await api.post('/contacts', payload);
         }
-    } catch (err) {
+
+        navigate('/contacts');
+    } catch (err: any) {
         console.error(err);
-        alert('Erro ao conectar com servidor');
+        const message = err.response?.data?.message || err.message || 'Erro ao conectar com servidor';
+        alert(`Erro ao salvar contato: ${message}`);
     } finally {
         setLoading(false);
     }
@@ -157,9 +144,9 @@ export function ContactForm() {
 
     setEnriching(true);
     try {
-      const response = await fetch(`${getApiUrl()}/contacts/enrich/cnpj?cnpj=${formData.cnpj}`);
-      if (response.ok) {
-        const data = await response.json();
+      const response = await api.get(`/contacts/enrich/cnpj?cnpj=${formData.cnpj}`);
+      const data = response.data;
+      
         setFormData({
           ...formData,
           companyName: data.razao_social || formData.companyName,
@@ -168,13 +155,10 @@ export function ContactForm() {
           phone: data.ddd_telefone_1 || formData.phone,
         });
         alert('Dados do CNPJ carregados com sucesso!');
-      } else {
-        const error = await response.json();
-        alert(`Erro: ${error.message || 'CNPJ não encontrado'}`);
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Erro ao consultar CNPJ');
+      const message = err.response?.data?.message || 'CNPJ não encontrado';
+      alert(`Erro: ${message}`);
     } finally {
       setEnriching(false);
     }
@@ -189,9 +173,9 @@ export function ContactForm() {
 
     setEnriching(true);
     try {
-      const response = await fetch(`${getApiUrl()}/contacts/enrich/cep?cep=${addressForm.zipCode}`);
-      if (response.ok) {
-        const data = await response.json();
+      const response = await api.get(`/contacts/enrich/cep?cep=${addressForm.zipCode}`);
+      const data = response.data;
+
         setAddressForm({
           ...addressForm,
           street: data.logradouro || addressForm.street,
@@ -199,13 +183,10 @@ export function ContactForm() {
           state: data.uf || addressForm.state,
         });
         alert('Endereço carregado com sucesso!');
-      } else {
-        const error = await response.json();
-        alert(`Erro: ${error.message || 'CEP não encontrado'}`);
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Erro ao consultar CEP');
+      const message = err.response?.data?.message || 'CEP não encontrado';
+      alert(`Erro: ${message}`);
     } finally {
       setEnriching(false);
     }
@@ -220,22 +201,14 @@ export function ContactForm() {
 
     try {
       setLoading(true);
-      const response = await fetch(`${getApiUrl()}/contacts/${id}/addresses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addressForm)
-      });
+      await api.post(`/contacts/${id}/addresses`, addressForm);
 
-      if (response.ok) {
-        await fetchContact();
-        setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
-        setShowAddressForm(false);
-      } else {
-        alert('Erro ao adicionar endereço');
-      }
+      await fetchContact();
+      setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
+      setShowAddressForm(false);
     } catch (err) {
       console.error(err);
-      alert('Erro ao conectar com servidor');
+      alert('Erro ao adicionar endereço');
     } finally {
       setLoading(false);
     }
@@ -246,23 +219,15 @@ export function ContactForm() {
 
     try {
       setLoading(true);
-      const response = await fetch(`${getApiUrl()}/contacts/${id}/addresses/${editingAddress.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addressForm)
-      });
+      await api.patch(`/contacts/${id}/addresses/${editingAddress.id}`, addressForm);
 
-      if (response.ok) {
-        await fetchContact();
-        setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
-        setEditingAddress(null);
-        setShowAddressForm(false);
-      } else {
-        alert('Erro ao atualizar endereço');
-      }
+      await fetchContact();
+      setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
+      setEditingAddress(null);
+      setShowAddressForm(false);
     } catch (err) {
       console.error(err);
-      alert('Erro ao conectar com servidor');
+      alert('Erro ao atualizar endereço');
     } finally {
       setLoading(false);
     }
@@ -274,18 +239,12 @@ export function ContactForm() {
 
     try {
       setLoading(true);
-      const response = await fetch(`${getApiUrl()}/contacts/${id}/addresses/${addressId}`, {
-        method: 'DELETE'
-      });
+      await api.delete(`/contacts/${id}/addresses/${addressId}`);
 
-      if (response.ok) {
-        await fetchContact();
-      } else {
-        alert('Erro ao excluir endereço');
-      }
+      await fetchContact();
     } catch (err) {
       console.error(err);
-      alert('Erro ao conectar com servidor');
+      alert('Erro ao excluir endereço');
     } finally {
       setLoading(false);
     }
