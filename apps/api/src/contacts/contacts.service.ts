@@ -4,6 +4,8 @@ import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
+import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto';
+import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
 
 @Injectable()
 export class ContactsService {
@@ -83,6 +85,35 @@ export class ContactsService {
       where: { 
         id: addressId,
         contactId, // Ensure the address belongs to the contact
+      },
+    });
+  }
+
+  // Additional Contact management methods
+  addAdditionalContact(contactId: string, createAdditionalContactDto: CreateAdditionalContactDto) {
+    return this.prisma.additionalContact.create({
+      data: {
+        ...createAdditionalContactDto,
+        contactId,
+      },
+    });
+  }
+
+  updateAdditionalContact(contactId: string, additionalContactId: string, updateAdditionalContactDto: UpdateAdditionalContactDto) {
+    return this.prisma.additionalContact.update({
+      where: { 
+        id: additionalContactId,
+        contactId, 
+      },
+      data: updateAdditionalContactDto,
+    });
+  }
+
+  removeAdditionalContact(contactId: string, additionalContactId: string) {
+    return this.prisma.additionalContact.delete({
+      where: { 
+        id: additionalContactId,
+        contactId,
       },
     });
   }

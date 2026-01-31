@@ -29,6 +29,7 @@ interface ContactData {
   notes?: string;
   category?: string;
   addresses?: Address[];
+  additionalContacts?: AdditionalContact[];
 }
 
 interface Address {
@@ -38,6 +39,12 @@ interface Address {
   city: string;
   state: string;
   zipCode: string;
+}
+
+interface AdditionalContact {
+  id?: string;
+  type: string;
+  value: string;
 }
 
 const TABS = [
@@ -268,6 +275,78 @@ export function ContactForm() {
     setShowAddressForm(false);
     setEditingAddress(null);
     setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
+  };
+
+  // Additional Contact form states
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [editingContact, setEditingContact] = useState<AdditionalContact | null>(null);
+  const [contactForm, setContactForm] = useState<AdditionalContact>({
+    type: 'EMAIL',
+    value: ''
+  });
+
+  const handleAddContact = async () => {
+    if (!id || id === 'new') {
+        toast.warning('Salve o contato antes de adicionar contatos extras');
+        return;
+    }
+    try {
+        setLoading(true);
+        await api.post(`/contacts/${id}/additional-contacts`, contactForm);
+        await fetchContact();
+        setContactForm({ type: 'EMAIL', value: '' });
+        setShowContactForm(false);
+        toast.success('Contato adicionado!');
+    } catch (err) {
+        console.error(err);
+        toast.error('Erro ao adicionar contato extra');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleUpdateContact = async () => {
+      if (!id || id === 'new' || !editingContact?.id) return;
+      try {
+          setLoading(true);
+          await api.patch(`/contacts/${id}/additional-contacts/${editingContact.id}`, contactForm);
+          await fetchContact();
+          setContactForm({ type: 'EMAIL', value: '' });
+          setEditingContact(null);
+          setShowContactForm(false);
+          toast.success('Contato atualizado!');
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao atualizar contato extra');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleDeleteContact = async (contactId: string) => {
+      try {
+          setLoading(true);
+          await api.delete(`/contacts/${id}/additional-contacts/${contactId}`);
+          await fetchContact();
+          toast.success('Contato removido!');
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao remover contato extra');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const startEditContact = (contact: AdditionalContact) => {
+      setEditingContact(contact);
+      setContactForm(contact);
+      setShowContactForm(true);
+  };
+
+  const cancelContactForm = () => {
+      setShowContactForm(false);
+      setEditingContact(null);
+      setContactForm({ type: 'EMAIL', value: '' });
   };
 
   return (
@@ -683,6 +762,121 @@ export function ContactForm() {
                                 ) : (
                                     <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
                                         <p className="text-slate-400">Nenhum endereço cadastrado</p>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
+            ) : activeTab === 'contacts' ? (
+                <div className="space-y-6 max-w-4xl">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <Users size={20} className="text-indigo-400" /> Contatos Adicionais
+                        </h3>
+                        <button
+                            onClick={() => setShowContactForm(true)}
+                            disabled={!id || id === 'new'}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus size={16} /> Adicionar Contato
+                        </button>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato principal antes de adicionar extras</p>
+                        </div>
+                    ) : (
+                        <>
+                            {showContactForm && (
+                                <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
+                                    <h4 className="text-md font-semibold text-white mb-4">
+                                        {editingContact ? 'Editar Contato' : 'Novo Contato Extra'}
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Tipo</label>
+                                            <select
+                                                value={contactForm.type}
+                                                onChange={e => setContactForm({...contactForm, type: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="EMAIL">E-mail</option>
+                                                <option value="PHONE">Telefone</option>
+                                                <option value="WHATSAPP">WhatsApp</option>
+                                                <option value="INSTAGRAM">Instagram</option>
+                                                <option value="LINKEDIN">LinkedIn</option>
+                                                <option value="WEBSITE">Site</option>
+                                                <option value="OTHER">Outro</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Valor / Link</label>
+                                            <input
+                                                value={contactForm.value}
+                                                onChange={e => setContactForm({...contactForm, value: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="ex: comercial@empresa.com"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 mt-6">
+                                        <button
+                                            onClick={editingContact ? handleUpdateContact : handleAddContact}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
+                                        >
+                                            {loading ? 'Salvando...' : editingContact ? 'Atualizar' : 'Adicionar'}
+                                        </button>
+                                        <button
+                                            onClick={cancelContactForm}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded font-medium transition disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-3">
+                                {formData.additionalContacts && formData.additionalContacts.length > 0 ? (
+                                    formData.additionalContacts.map((contact: any) => (
+                                        <div key={contact.id} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-slate-800 rounded text-indigo-400">
+                                                        {contact.type === 'EMAIL' && <Users size={18} />}
+                                                        {contact.type === 'PHONE' && <Phone size={18} />}
+                                                        {contact.type === 'WHATSAPP' && <MessageSquare size={18} />}
+                                                        {['INSTAGRAM', 'LINKEDIN', 'WEBSITE', 'OTHER'].includes(contact.type) && <Briefcase size={18} />}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-white">{contact.value}</p>
+                                                        <p className="text-xs text-slate-400 font-mono">{contact.type}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                     <button
+                                                        onClick={() => startEditContact(contact)}
+                                                        className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded transition"
+                                                    >
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteContact(contact.id)}
+                                                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                                        <p className="text-slate-400">Nenhum contato adicional cadastrado</p>
                                     </div>
                                 )}
                             </div>

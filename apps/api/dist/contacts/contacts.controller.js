@@ -20,6 +20,8 @@ const create_contact_dto_1 = require("./dto/create-contact.dto");
 const update_contact_dto_1 = require("./dto/update-contact.dto");
 const create_address_dto_1 = require("./dto/create-address.dto");
 const update_address_dto_1 = require("./dto/update-address.dto");
+const create_additional_contact_dto_1 = require("./dto/create-additional-contact.dto");
+const update_additional_contact_dto_1 = require("./dto/update-additional-contact.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 let ContactsController = class ContactsController {
@@ -55,6 +57,15 @@ let ContactsController = class ContactsController {
     }
     removeAddress(id, addressId) {
         return this.contactsService.removeAddress(id, addressId);
+    }
+    addAdditionalContact(id, createAdditionalContactDto) {
+        return this.contactsService.addAdditionalContact(id, createAdditionalContactDto);
+    }
+    updateAdditionalContact(id, contactId, updateAdditionalContactDto) {
+        return this.contactsService.updateAdditionalContact(id, contactId, updateAdditionalContactDto);
+    }
+    removeAdditionalContact(id, contactId) {
+        return this.contactsService.removeAdditionalContact(id, contactId);
     }
     async enrichCNPJ(cnpj) {
         return this.enrichmentService.consultCNPJ(cnpj);
@@ -126,6 +137,31 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], ContactsController.prototype, "removeAddress", null);
+__decorate([
+    (0, common_1.Post)(':id/additional-contacts'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, create_additional_contact_dto_1.CreateAdditionalContactDto]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "addAdditionalContact", null);
+__decorate([
+    (0, common_1.Patch)(':id/additional-contacts/:contactId'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Param)('contactId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, update_additional_contact_dto_1.UpdateAdditionalContactDto]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "updateAdditionalContact", null);
+__decorate([
+    (0, common_1.Delete)(':id/additional-contacts/:contactId'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Param)('contactId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], ContactsController.prototype, "removeAdditionalContact", null);
 __decorate([
     (0, common_1.Get)('enrich/cnpj'),
     __param(0, (0, common_1.Query)('cnpj')),

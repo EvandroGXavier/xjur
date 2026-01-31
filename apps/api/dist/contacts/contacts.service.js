@@ -89,6 +89,28 @@ let ContactsService = class ContactsService {
             },
         });
     }
+    addAdditionalContact(contactId, createAdditionalContactDto) {
+        return this.prisma.additionalContact.create({
+            data: Object.assign(Object.assign({}, createAdditionalContactDto), { contactId }),
+        });
+    }
+    updateAdditionalContact(contactId, additionalContactId, updateAdditionalContactDto) {
+        return this.prisma.additionalContact.update({
+            where: {
+                id: additionalContactId,
+                contactId,
+            },
+            data: updateAdditionalContactDto,
+        });
+    }
+    removeAdditionalContact(contactId, additionalContactId) {
+        return this.prisma.additionalContact.delete({
+            where: {
+                id: additionalContactId,
+                contactId,
+            },
+        });
+    }
 };
 exports.ContactsService = ContactsService;
 exports.ContactsService = ContactsService = __decorate([

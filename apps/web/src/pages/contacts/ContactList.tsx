@@ -8,6 +8,8 @@ interface Contact {
   id: string;
   name: string;
   document: string;
+  cpf?: string;
+  cnpj?: string;
   email: string;
   phone: string;
 }
@@ -20,6 +22,17 @@ export function ContactList() {
   useEffect(() => {
     fetchContacts();
   }, []);
+
+  const formatDocument = (doc: string) => {
+    const cleaned = doc.replace(/\D/g, '');
+    if (cleaned.length === 11) {
+      return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    }
+    if (cleaned.length === 14) {
+      return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    }
+    return doc;
+  };
 
   const fetchContacts = async () => {
     try {
@@ -100,7 +113,7 @@ export function ContactList() {
                       contacts.map(contact => (
                           <tr key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)} className="hover:bg-slate-800/50 cursor-pointer transition-colors group">
                               <td className="px-6 py-4 font-medium text-white">{contact.name}</td>
-                              <td className="px-6 py-4">{contact.document}</td>
+                              <td className="px-6 py-4">{formatDocument(contact.document || contact.cpf || contact.cnpj || '') || '-'}</td>
                               <td className="px-6 py-4">{contact.email || '-'}</td>
                               <td className="px-6 py-4">{contact.phone || '-'}</td>
                               <td className="px-6 py-4 text-right flex justify-end gap-2" onClick={e => e.stopPropagation()}>

@@ -5,6 +5,8 @@ import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
+import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto';
+import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
@@ -64,6 +66,26 @@ export class ContactsController {
   @Delete(':id/addresses/:addressId')
   removeAddress(@Param('id') id: string, @Param('addressId') addressId: string) {
     return this.contactsService.removeAddress(id, addressId);
+  }
+
+  // Additional Contact management endpoints
+  @Post(':id/additional-contacts')
+  addAdditionalContact(@Param('id') id: string, @Body() createAdditionalContactDto: CreateAdditionalContactDto) {
+    return this.contactsService.addAdditionalContact(id, createAdditionalContactDto);
+  }
+
+  @Patch(':id/additional-contacts/:contactId')
+  updateAdditionalContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @Body() updateAdditionalContactDto: UpdateAdditionalContactDto
+  ) {
+    return this.contactsService.updateAdditionalContact(id, contactId, updateAdditionalContactDto);
+  }
+
+  @Delete(':id/additional-contacts/:contactId')
+  removeAdditionalContact(@Param('id') id: string, @Param('contactId') contactId: string) {
+    return this.contactsService.removeAdditionalContact(id, contactId);
   }
 
   // Enrichment endpoints
