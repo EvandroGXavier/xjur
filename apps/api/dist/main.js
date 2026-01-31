@@ -8,11 +8,10 @@ async function bootstrap() {
     app.enableCors();
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new common_1.ValidationPipe({
-        app, : .useGlobalPipes(new common_1.ValidationPipe({
-            whitelist: true,
-            transform: true,
-        })),
-        await: app.listen(3000)
-    }, bootstrap()));
+        whitelist: true,
+        transform: true,
+    }));
+    await app.listen(3000);
 }
+bootstrap();
 //# sourceMappingURL=main.js.map
