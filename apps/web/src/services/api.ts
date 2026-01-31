@@ -5,8 +5,8 @@ export const getApiUrl = () => {
   if (window.location.hostname === 'localhost' || window.location.hostname.includes('idx.google.com')) {
     return `http://${window.location.hostname}:3000`;
   }
-  // Em produção, usa o IP direto da VPS
-  return 'http://185.202.223.115:3000';
+  // Em produção, usa caminho relativo (Proxy Reverso cuida do resto)
+  return '/api';
 };
 
 export const api = axios.create({
