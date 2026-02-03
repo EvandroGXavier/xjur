@@ -138,7 +138,7 @@ export class FinancialService {
         data: {
           tenantId: dto.tenantId,
           title: dto.title,
-          bankName: dto.bankName,
+          bankName: dto.bankName || null,
           accountType: dto.accountType,
           accountNumber: dto.accountNumber || null,
           agency: dto.agency || null,
