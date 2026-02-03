@@ -6,6 +6,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { FinancialModule } from './financial/financial.module';
 import { SaasModule } from './saas/saas.module';
 import { DocumentsModule } from './documents/documents.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -14,7 +15,8 @@ import { DocumentsModule } from './documents/documents.module';
     WhatsappModule,  // Conexão Baileys
     FinancialModule, // Módulo Financeiro
     SaasModule,      // Controle de Assinaturas
-    DocumentsModule  // Biblioteca de Documentos
+    DocumentsModule, // Biblioteca de Documentos
+    UsersModule
   ],
   controllers: [AppController],
   providers: [],

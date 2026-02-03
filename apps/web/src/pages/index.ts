@@ -6,4 +6,5 @@ export * from './contacts';
 export * from './Register';
 export * from './Settings';
 export * from './Documents';
+export * from './Users';
 export * from './Financial';

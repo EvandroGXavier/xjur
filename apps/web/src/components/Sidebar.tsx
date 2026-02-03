@@ -7,7 +7,8 @@ import {
   Users, 
   Bot,
   FileText,
-  Settings
+  Settings,
+  ShieldCheck
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -18,6 +19,7 @@ const menuItems = [
   { icon: DollarSign, label: 'Financeiro', to: '/financial' },
   { icon: Users, label: 'Contatos', to: '/contacts' },
   { icon: FileText, label: 'Documentos', to: '/documents' },
+  { icon: ShieldCheck, label: 'Equipe', to: '/users' },
   { icon: Bot, label: 'Inteligência Artificial', to: '/ai' },
   { icon: Settings, label: 'Configuração', to: '/settings' },
 ];
