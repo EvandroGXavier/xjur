@@ -17,6 +17,7 @@ interface Contact {
 export function ContactList() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('ALL'); // ALL, PF, PJ
 
   useEffect(() => {
     fetchContacts();
@@ -63,13 +64,19 @@ export function ContactList() {
 
   const filteredContacts = contacts.filter(contact => {
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch = (
       contact.name.toLowerCase().includes(searchLower) ||
       (contact.email && contact.email.toLowerCase().includes(searchLower)) ||
       (contact.document && contact.document.includes(searchTerm)) ||
       (contact.cpf && contact.cpf.includes(searchTerm)) ||
       (contact.cnpj && contact.cnpj.includes(searchTerm))
     );
+
+    const matchesType = filterType === 'ALL' 
+        ? true 
+        : (contact.cpf && filterType === 'PF') || (contact.cnpj && filterType === 'PJ');
+
+    return matchesSearch && matchesType;
   });
 
   return (
@@ -99,6 +106,15 @@ export function ContactList() {
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500"
               />
           </div>
+          <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
+          >
+              <option value="ALL">Todos</option>
+              <option value="PF">Pessoa Física</option>
+              <option value="PJ">Pessoa Jurídica</option>
+          </select>
       </div>
 
       {/* Table */}
