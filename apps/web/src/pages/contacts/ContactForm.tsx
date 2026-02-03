@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
+import { masks } from '../../utils/masks';
 
 // Interface matching Backend DTO
 interface ContactData {
@@ -741,9 +742,10 @@ export function ContactForm() {
                                      <label className="text-sm font-medium text-slate-400">CPF</label>
                                      <input 
                                         value={formData.cpf || ''}
-                                        onChange={e => setFormData({...formData, cpf: e.target.value})}
+                                        onChange={e => setFormData({...formData, cpf: masks.cpf(e.target.value)})}
                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                         placeholder="000.000.000-00"
+                                        maxLength={14}
                                      />
                                  </div>
 
@@ -751,7 +753,7 @@ export function ContactForm() {
                                      <label className="text-sm font-medium text-slate-400">RG</label>
                                      <input 
                                         value={formData.rg || ''}
-                                        onChange={e => setFormData({...formData, rg: e.target.value})}
+                                        onChange={e => setFormData({...formData, rg: e.target.value})} // RG doesn't have a standard mask often
                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                         placeholder="00.000.000-0"
                                      />
@@ -804,9 +806,10 @@ export function ContactForm() {
                                      <div className="flex gap-2">
                                          <input 
                                             value={formData.cnpj || ''}
-                                            onChange={e => setFormData({...formData, cnpj: e.target.value})}
+                                            onChange={e => setFormData({...formData, cnpj: masks.cnpj(e.target.value)})}
                                             className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                             placeholder="00.000.000/0000-00"
+                                            maxLength={18}
                                          />
                                          <button
                                              type="button"
@@ -845,9 +848,10 @@ export function ContactForm() {
                                  <input 
                                     required
                                     value={formData.phone}
-                                    onChange={e => setFormData({...formData, phone: e.target.value})}
+                                    onChange={e => setFormData({...formData, phone: masks.phone(e.target.value)})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="(00) 00000-0000"
+                                    maxLength={15}
                                  />
                              </div>
 
@@ -855,9 +859,10 @@ export function ContactForm() {
                                  <label className="text-sm font-medium text-slate-400">WhatsApp</label>
                                  <input 
                                     value={formData.whatsapp || ''}
-                                    onChange={e => setFormData({...formData, whatsapp: e.target.value})}
+                                    onChange={e => setFormData({...formData, whatsapp: masks.phone(e.target.value)})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="(00) 00000-0000"
+                                    maxLength={15}
                                  />
                              </div>
 
@@ -942,9 +947,10 @@ export function ContactForm() {
                                             <div className="flex gap-2">
                                                 <input
                                                     value={addressForm.zipCode}
-                                                    onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})}
+                                                    onChange={e => setAddressForm({...addressForm, zipCode: masks.cep(e.target.value)})}
                                                     className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                     placeholder="00000-000"
+                                                    maxLength={9}
                                                 />
                                                 <button
                                                     type="button"

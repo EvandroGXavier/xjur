@@ -16,8 +16,7 @@ interface Contact {
 
 export function ContactList() {
   const navigate = useNavigate();
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchContacts();
@@ -49,9 +48,6 @@ export function ContactList() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      // Usar toast customizado para confirmação seria ideal, mas para rapidez manteremos confirm nativo por enquanto ou mudaremos
-      // Vamos manter o padrão simples pedido
-      
       const confirmDelete = window.confirm('Tem certeza que deseja excluir este contato?');
       if(confirmDelete) {
           try {
@@ -64,6 +60,17 @@ export function ContactList() {
           }
       }
   };
+
+  const filteredContacts = contacts.filter(contact => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      contact.name.toLowerCase().includes(searchLower) ||
+      (contact.email && contact.email.toLowerCase().includes(searchLower)) ||
+      (contact.document && contact.document.includes(searchTerm)) ||
+      (contact.cpf && contact.cpf.includes(searchTerm)) ||
+      (contact.cnpj && contact.cnpj.includes(searchTerm))
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -86,6 +93,8 @@ export function ContactList() {
               <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input 
                 type="text" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Buscar por nome, CPF ou email..." 
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500"
               />
@@ -107,10 +116,10 @@ export function ContactList() {
               <tbody className="divide-y divide-slate-800">
                   {loading ? (
                       <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">Carregando...</td></tr>
-                  ) : contacts.length === 0 ? (
+                  ) : filteredContacts.length === 0 ? (
                       <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">Nenhum contato encontrado.</td></tr>
                   ) : (
-                      contacts.map(contact => (
+                      filteredContacts.map(contact => (
                           <tr key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)} className="hover:bg-slate-800/50 cursor-pointer transition-colors group">
                               <td className="px-6 py-4 font-medium text-white">{contact.name}</td>
                               <td className="px-6 py-4">{formatDocument(contact.document || contact.cpf || contact.cnpj || '') || '-'}</td>
