@@ -10,6 +10,7 @@ export class TemplatesService {
   create(createTemplateDto: CreateTemplateDto) {
     return this.prisma.documentTemplate.create({
       data: {
+        tenantId: createTemplateDto.tenantId,
         title: createTemplateDto.title,
         content: createTemplateDto.content,
         categoryId: createTemplateDto.categoryId,

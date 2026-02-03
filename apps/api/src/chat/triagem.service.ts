@@ -24,6 +24,7 @@ export class TriagemService {
     // 2. Registra a Comunicação
     const log = await this.prisma.communicationLog.create({
       data: {
+        tenantId: contact.tenantId, // ID obrigatório do Tenant
         contactId: contact.id,
         direction: 'INBOUND',
         channel: 'WHATSAPP',
