@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
-import { PrismaService } from '@dr-x/database';
+import { PrismaService } from '@drx/database';
 import { CreateFinancialRecordDto } from './dto/create-financial-record.dto';
 import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
 import { CreateBankAccountDto } from './dto/create-bank-account.dto';

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@dr-x/database';
+import { PrismaService } from '@drx/database';
 
 @Injectable()
 export class TriagemService {
