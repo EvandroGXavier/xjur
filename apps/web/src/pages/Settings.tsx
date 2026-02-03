@@ -72,7 +72,10 @@ export function Settings() {
   const [formData, setFormData] = useState<any>({});
 
   useEffect(() => {
-    if (activeTab === 'tenants') fetchTenants();
+    if (activeTab === 'tenants') {
+        fetchTenants();
+        fetchPlans();
+    }
     if (activeTab === 'plans') fetchPlans();
   }, [activeTab]);
 
