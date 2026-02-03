@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UsePipes, ValidationPipe } from '@nestjs/common';
 import { FinancialService } from './financial.service';
 import { CreateFinancialRecordDto } from './dto/create-financial-record.dto';
 import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
@@ -12,6 +12,7 @@ export class FinancialController {
   // ==================== FINANCIAL RECORDS ====================
 
   @Post('records')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   createFinancialRecord(@Body() dto: CreateFinancialRecordDto) {
     return this.financialService.createFinancialRecord(dto);
   }
@@ -43,6 +44,7 @@ export class FinancialController {
   }
 
   @Put('records/:id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   updateFinancialRecord(
     @Param('id') id: string,
     @Query('tenantId') tenantId: string,
@@ -62,6 +64,7 @@ export class FinancialController {
   // ==================== BANK ACCOUNTS ====================
 
   @Post('bank-accounts')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   createBankAccount(@Body() dto: CreateBankAccountDto) {
     return this.financialService.createBankAccount(dto);
   }
@@ -80,6 +83,7 @@ export class FinancialController {
   }
 
   @Put('bank-accounts/:id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   updateBankAccount(
     @Param('id') id: string,
     @Query('tenantId') tenantId: string,
@@ -94,6 +98,14 @@ export class FinancialController {
     @Query('tenantId') tenantId: string,
   ) {
     return this.financialService.deleteBankAccount(id, tenantId);
+  }
+
+  @Get('contacts')
+  getContacts(
+    @Query('tenantId') tenantId: string,
+    @Query('search') search?: string,
+  ) {
+    return this.financialService.getContacts(tenantId, search);
   }
 
   // ==================== DASHBOARD & REPORTS ====================

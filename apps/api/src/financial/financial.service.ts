@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '@dr-x/database';
 import { CreateFinancialRecordDto } from './dto/create-financial-record.dto';
 import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
@@ -115,24 +115,56 @@ export class FinancialService {
   // ==================== BANK ACCOUNTS ====================
 
   async createBankAccount(dto: CreateBankAccountDto) {
-    return this.prisma.bankAccount.create({
-      data: {
-        tenantId: dto.tenantId,
-        bankName: dto.bankName,
-        accountType: dto.accountType,
-        accountNumber: dto.accountNumber,
-        agency: dto.agency,
-        balance: dto.balance || 0,
-        isActive: dto.isActive !== undefined ? dto.isActive : true,
-        notes: dto.notes,
-      },
-    });
+    try {
+      // Validação adicional do balance
+      const balance = dto.balance !== undefined ? dto.balance : 0;
+      
+      if (balance < 0) {
+        throw new BadRequestException('Saldo não pode ser negativo');
+      }
+
+      // Validar contactId se fornecido
+      if (dto.contactId) {
+        const contact = await this.prisma.contact.findFirst({
+          where: { id: dto.contactId, tenantId: dto.tenantId },
+        });
+        
+        if (!contact) {
+          throw new BadRequestException('Titular não encontrado');
+        }
+      }
+
+      return await this.prisma.bankAccount.create({
+        data: {
+          tenantId: dto.tenantId,
+          title: dto.title,
+          bankName: dto.bankName,
+          accountType: dto.accountType,
+          accountNumber: dto.accountNumber || null,
+          agency: dto.agency || null,
+          balance,
+          contactId: dto.contactId || null,
+          isActive: dto.isActive !== undefined ? dto.isActive : true,
+          notes: dto.notes || null,
+        },
+        include: {
+          contact: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      console.error('Erro ao criar conta bancária:', error);
+      throw new InternalServerErrorException('Erro ao criar conta bancária');
+    }
   }
 
   async findAllBankAccounts(tenantId: string) {
     return this.prisma.bankAccount.findMany({
       where: { tenantId },
       include: {
+        contact: true,
         _count: {
           select: { financialRecords: true },
         },
@@ -145,6 +177,7 @@ export class FinancialService {
     const account = await this.prisma.bankAccount.findFirst({
       where: { id, tenantId },
       include: {
+        contact: true,
         financialRecords: {
           take: 10,
           orderBy: { dueDate: 'desc' },
@@ -172,6 +205,32 @@ export class FinancialService {
     await this.findOneBankAccount(id, tenantId);
     return this.prisma.bankAccount.delete({
       where: { id },
+    });
+  }
+
+  async getContacts(tenantId: string, search?: string) {
+    const where: any = { tenantId };
+    
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { cpf: { contains: search } },
+        { cnpj: { contains: search } },
+      ];
+    }
+
+    return this.prisma.contact.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        personType: true,
+        cpf: true,
+        cnpj: true,
+        category: true,
+      },
+      take: 50,
+      orderBy: { name: 'asc' },
     });
   }
 

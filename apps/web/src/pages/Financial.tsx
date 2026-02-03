@@ -13,6 +13,7 @@ import {
   Edit,
   Trash2,
   Download,
+  User,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
@@ -40,12 +41,29 @@ interface FinancialRecord {
 
 interface BankAccount {
   id: string;
+  title: string;
   bankName: string;
   accountType: string;
   accountNumber?: string;
   agency?: string;
   balance: number;
   isActive: boolean;
+  contact?: {
+    id: string;
+    name: string;
+    personType: string;
+    cpf?: string;
+    cnpj?: string;
+  };
+}
+
+interface Contact {
+  id: string;
+  name: string;
+  personType: string;
+  cpf?: string;
+  cnpj?: string;
+  category?: string;
 }
 
 interface Dashboard {
@@ -75,6 +93,9 @@ export function Financial() {
   const [showBankModal, setShowBankModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<FinancialRecord | null>(null);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
 
   const [filters, setFilters] = useState({
     type: '',
@@ -96,11 +117,13 @@ export function Financial() {
   });
 
   const [bankFormData, setBankFormData] = useState({
+    title: '',
     bankName: '',
     accountType: 'CHECKING',
     accountNumber: '',
     agency: '',
     balance: '',
+    contactId: '',
     notes: '',
   });
 
@@ -131,6 +154,20 @@ export function Financial() {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchContacts = async () => {
+    setLoadingContacts(true);
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const tenantId = user.tenantId || 'default-tenant-id';
+      const response = await api.get(`/financial/contacts?tenantId=${tenantId}`);
+      setContacts(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar contatos:', error);
+    } finally {
+      setLoadingContacts(false);
     }
   };
 
@@ -167,25 +204,32 @@ export function Financial() {
     setShowModal(true);
   };
 
-  const handleOpenBankModal = (account?: BankAccount) => {
+  const handleOpenBankModal = async (account?: BankAccount) => {
+    // Carregar contatos antes de abrir o modal
+    await fetchContacts();
+    
     if (account) {
       setEditingBank(account);
       setBankFormData({
+        title: account.title,
         bankName: account.bankName,
         accountType: account.accountType,
         accountNumber: account.accountNumber || '',
         agency: account.agency || '',
         balance: account.balance.toString(),
+        contactId: account.contact?.id || '',
         notes: '',
       });
     } else {
       setEditingBank(null);
       setBankFormData({
+        title: '',
         bankName: '',
         accountType: 'CHECKING',
         accountNumber: '',
         agency: '',
         balance: '0',
+        contactId: '',
         notes: '',
       });
     }
@@ -195,20 +239,47 @@ export function Financial() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.description || !formData.amount || !formData.dueDate) {
-      toast.error('Preencha todos os campos obrigatórios');
+    // Validações
+    if (!formData.description.trim()) {
+      toast.error('Preencha a descrição');
       return;
     }
+
+    if (formData.description.trim().length < 3) {
+      toast.error('Descrição deve ter pelo menos 3 caracteres');
+      return;
+    }
+
+    // Validação do amount
+    const amount = parseFloat(formData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Valor inválido. Digite um valor maior que zero');
+      return;
+    }
+
+    if (!formData.dueDate) {
+      toast.error('Preencha a data de vencimento');
+      return;
+    }
+
+    setSubmitting(true);
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const tenantId = user.tenantId || 'default-tenant-id';
 
       const payload = {
-        ...formData,
-        amount: parseFloat(formData.amount),
-        tenantId,
+        description: formData.description.trim(),
+        amount: amount,
+        dueDate: formData.dueDate,
+        paymentDate: formData.paymentDate || undefined,
+        status: formData.status,
+        type: formData.type,
+        category: formData.category.trim() || undefined,
+        paymentMethod: formData.paymentMethod || undefined,
         bankAccountId: formData.bankAccountId || undefined,
+        notes: formData.notes.trim() || undefined,
+        tenantId,
       };
 
       if (editingRecord) {
@@ -220,28 +291,73 @@ export function Financial() {
       }
 
       setShowModal(false);
-      fetchData();
-    } catch (error) {
-      toast.error('Erro ao salvar registro');
-      console.error(error);
+      await fetchData();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message ||
+                          (Array.isArray(error.response?.data?.message)
+                            ? error.response.data.message.join(', ')
+                            : 'Erro ao salvar registro');
+      toast.error(errorMessage);
+      console.error('Erro completo:', error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleBankSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!bankFormData.bankName) {
+    // Validação do título
+    if (!bankFormData.title.trim()) {
+      toast.error('Preencha o título da conta');
+      return;
+    }
+
+    if (bankFormData.title.trim().length < 3) {
+      toast.error('Título deve ter pelo menos 3 caracteres');
+      return;
+    }
+
+    // Validação do nome do banco
+    if (!bankFormData.bankName.trim()) {
       toast.error('Preencha o nome do banco');
       return;
     }
+
+    if (bankFormData.bankName.trim().length < 3) {
+      toast.error('Nome do banco deve ter pelo menos 3 caracteres');
+      return;
+    }
+
+    // Validação e conversão do balance
+    const balanceStr = bankFormData.balance.trim();
+    const balance = balanceStr === '' ? 0 : parseFloat(balanceStr);
+    
+    if (isNaN(balance)) {
+      toast.error('Saldo inválido. Digite um número válido');
+      return;
+    }
+
+    if (balance < 0) {
+      toast.error('Saldo não pode ser negativo');
+      return;
+    }
+
+    setSubmitting(true);
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const tenantId = user.tenantId || 'default-tenant-id';
 
       const payload = {
-        ...bankFormData,
-        balance: parseFloat(bankFormData.balance),
+        title: bankFormData.title.trim(),
+        bankName: bankFormData.bankName.trim(),
+        accountType: bankFormData.accountType,
+        accountNumber: bankFormData.accountNumber.trim() || undefined,
+        agency: bankFormData.agency.trim() || undefined,
+        balance: balance,
+        contactId: bankFormData.contactId || undefined,
+        notes: bankFormData.notes.trim() || undefined,
         tenantId,
       };
 
@@ -254,10 +370,17 @@ export function Financial() {
       }
 
       setShowBankModal(false);
-      fetchData();
-    } catch (error) {
-      toast.error('Erro ao salvar conta bancária');
-      console.error(error);
+      await fetchData();
+    } catch (error: any) {
+      // Melhor tratamento de erros com mensagem específica do backend
+      const errorMessage = error.response?.data?.message || 
+                          (Array.isArray(error.response?.data?.message) 
+                            ? error.response.data.message.join(', ')
+                            : 'Erro ao salvar conta bancária');
+      toast.error(errorMessage);
+      console.error('Erro completo:', error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -605,15 +728,30 @@ export function Financial() {
           {bankAccounts.map((account) => (
             <div key={account.id} className="bg-slate-800 border border-slate-700 rounded-lg p-6">
               <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-1">
                   <div className="p-3 bg-indigo-500/10 rounded-lg">
                     <Building2 className="text-indigo-400" size={24} />
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">{account.bankName}</h3>
-                    <p className="text-sm text-slate-400">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-white">{account.title}</h3>
+                    <p className="text-sm text-slate-400">{account.bankName}</p>
+                    <p className="text-xs text-slate-500">
                       {account.accountType === 'CHECKING' ? 'Conta Corrente' : 'Poupança'}
                     </p>
+                    
+                    {account.contact && (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-400 rounded inline-flex items-center gap-1">
+                          <User size={12} />
+                          {account.contact.name}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {account.contact.personType === 'PF' 
+                            ? account.contact.cpf 
+                            : account.contact.cnpj}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -822,9 +960,12 @@ export function Financial() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                  disabled={submitting}
+                  className={`flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors ${
+                    submitting ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
-                  {editingRecord ? 'Atualizar' : 'Criar'}
+                  {submitting ? 'Salvando...' : (editingRecord ? 'Atualizar' : 'Criar')}
                 </button>
               </div>
             </form>
@@ -849,6 +990,23 @@ export function Financial() {
             </div>
 
             <form onSubmit={handleBankSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Título da Conta <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={bankFormData.title}
+                  onChange={(e) => setBankFormData({ ...bankFormData, title: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: Conta Empresa - Operacional"
+                  required
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Nome para identificar esta conta
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Nome do Banco *</label>
                 <input
@@ -911,6 +1069,31 @@ export function Financial() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Titular da Conta (Opcional)
+                </label>
+                <select
+                  value={bankFormData.contactId}
+                  onChange={(e) => setBankFormData({ ...bankFormData, contactId: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  disabled={loadingContacts}
+                >
+                  <option value="">Nenhum titular</option>
+                  {contacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name} ({contact.personType === 'PF' ? contact.cpf : contact.cnpj})
+                    </option>
+                  ))}
+                </select>
+                {loadingContacts && (
+                  <p className="text-xs text-slate-400 mt-1">Carregando contatos...</p>
+                )}
+                <p className="text-xs text-slate-400 mt-1">
+                  Selecione o contato titular desta conta (CPF ou CNPJ)
+                </p>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Observações</label>
                 <textarea
                   value={bankFormData.notes}
@@ -930,9 +1113,12 @@ export function Financial() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                  disabled={submitting}
+                  className={`flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors ${
+                    submitting ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
-                  {editingBank ? 'Atualizar' : 'Criar'}
+                  {submitting ? 'Salvando...' : (editingBank ? 'Atualizar' : 'Criar')}
                 </button>
               </div>
             </form>
