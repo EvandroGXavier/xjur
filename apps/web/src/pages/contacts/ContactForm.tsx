@@ -428,14 +428,33 @@ export function ContactForm() {
       const response = await api.get(`/contacts/enrich/cnpj?cnpj=${formData.cnpj}`);
       const data = response.data;
       
+      // ReceitaWS returns 'nome' (Razão Social) and 'fantasia' (Nome Fantasia)
+      const companyName = data.nome || data.razao_social || formData.companyName;
+      const tradeName = data.fantasia || data.nome_fantasia || companyName || formData.name;
+
         setFormData({
           ...formData,
-          companyName: data.razao_social || formData.companyName,
-          name: data.nome_fantasia || data.razao_social || formData.name,
+          companyName: companyName,
+          name: tradeName,
           email: data.email || formData.email,
-          phone: data.ddd_telefone_1 || formData.phone,
+          phone: data.telefone || data.ddd_telefone_1 || formData.phone,
         });
-        toast.success('Dados do CNPJ carregados com sucesso!');
+        
+        // Auto-fill address if available and form is empty or user confirms
+        if (data.logradouro) {
+             setAddressForm({
+                 street: data.logradouro,
+                 number: data.numero || '',
+                 city: data.municipio,
+                 state: data.uf,
+                 zipCode: data.cep ? data.cep.replace(/\D/g, '') : ''
+             });
+             // We can suggest the user to add this address
+             toast.success('Dados e Endereço carregados! Clique em "Salvar Endereço" se desejar adicionar.');
+             setShowAddressForm(true); // Open address details
+        } else {
+             toast.success('Dados do CNPJ carregados com sucesso!');
+        }
     } catch (err: any) {
       console.error(err);
       const message = err.response?.data?.message || 'CNPJ não encontrado';
