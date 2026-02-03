@@ -263,7 +263,7 @@ model BankAccount {
   id              String   @id @default(uuid())
   tenantId        String
   title           String   // Nome/Título da conta
-  bankName        String
+  bankName        String?
   accountType     String   // CHECKING (Corrente), SAVINGS (Poupança)
   accountNumber   String?
   agency          String?
