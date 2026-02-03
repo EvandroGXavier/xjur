@@ -1,0 +1,361 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. SAAS CORE MODULE
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  document    String   @unique // CNPJ/CPF do escritório
+  planId      String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  plan        Plan?    @relation(fields: [planId], references: [id])
+  users       User[]
+  contacts    Contact[]
+  processes   Process[]
+  categories  DocumentCategory[]
+  templates   DocumentTemplate[]
+  communicationLogs CommunicationLog[]
+  documentHistory   DocumentHistory[]
+  financialRecords  FinancialRecord[]
+  bankAccounts      BankAccount[]
+  relationTypes     RelationType[]
+  contactRelations  ContactRelation[]
+  assetTypes        AssetType[]
+  contactAssets     ContactAsset[]
+
+  @@map("tenants")
+}
+
+model Plan {
+  id          String   @id @default(uuid())
+  name        String   // BASIC, PRO, FULL
+  maxUsers    Int
+  maxStorage  Int      // MB
+  price       Decimal  @db.Decimal(10, 2)
+  
+  tenants     Tenant[]
+
+  @@map("plans")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  email       String   @unique
+  password    String
+  role        String   // OWNER, ADMIN, MEMBER
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("users")
+}
+
+// 2.1 ENTIDADE ÂNCORA: CONTACT
+model Contact {
+  id                String    @id @default(uuid())
+  tenantId          String
+  name              String
+  personType        String    @default("PF") // PF ou PJ
+  
+  // Campos Pessoa Física
+  cpf               String?
+  rg                String?
+  birthDate         DateTime?
+  
+  // Campos Pessoa Jurídica
+  cnpj              String?
+  companyName       String?   // Razão Social
+  stateRegistration String?   // Inscrição Estadual
+  
+  // Campos Gerais
+  document          String?   // CPF/CNPJ (Mantido para compatibilidade)
+  whatsapp          String?
+  email             String?
+  phone             String?
+  notes             String?
+  category          String?   // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
+  password          String?   // Senha para acesso ao sistema
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relacionamentos
+  addresses          Address[]
+  additionalContacts AdditionalContact[]
+  processes          Process[]
+  communications     CommunicationLog[]
+  relationsFrom      ContactRelation[] @relation("RelationsFrom")
+  relationsTo        ContactRelation[] @relation("RelationsTo")
+  assets             ContactAsset[]
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([cpf])
+  @@index([cnpj])
+  @@index([personType])
+  @@index([category])
+  @@map("contacts")
+}
+
+model RelationType {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String   // Ex: Pai, Sócio
+  reverseName String?  // Ex: Filho (opcional, se null usa name)
+  isBilateral Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  relations   ContactRelation[]
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("relation_types")
+}
+
+model ContactRelation {
+  id             String   @id @default(uuid())
+  tenantId       String
+  fromContactId  String
+  toContactId    String
+  relationTypeId String
+  
+  fromContact    Contact      @relation("RelationsFrom", fields: [fromContactId], references: [id], onDelete: Cascade)
+  toContact      Contact      @relation("RelationsTo", fields: [toContactId], references: [id], onDelete: Cascade)
+  relationType   RelationType @relation(fields: [relationTypeId], references: [id])
+  
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([fromContactId, toContactId, relationTypeId]) // Evitar duplicatas exatas
+  @@map("contact_relations")
+}
+
+model AssetType {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  createdAt   DateTime @default(now())
+
+  assets      ContactAsset[]
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("asset_types")
+}
+
+model ContactAsset {
+  id              String   @id @default(uuid())
+  tenantId        String
+  contactId       String
+  assetTypeId     String
+  description     String
+  acquisitionDate DateTime?
+  value           Decimal? @db.Decimal(10, 2)
+  writeOffDate    DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contact         Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assetType       AssetType  @relation(fields: [assetTypeId], references: [id])
+  tenant          Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@map("contact_assets")
+}
+
+model Address {
+  id        String  @id @default(uuid())
+  contactId String
+  street    String
+  number    String
+  city      String
+  state     String
+  zipCode   String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+model AdditionalContact {
+  id        String  @id @default(uuid())
+  contactId String
+  type      String  // EMAIL, PHONE, ETC
+  value     String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@map("additional_contacts")
+}
+
+// 2.2 MÓDULOS JURÍDICOS E FINANCEIROS
+model Process {
+  id             String   @id @default(uuid())
+  tenantId       String
+  contactId      String
+  cnj            String   @unique
+  court          String   // Tribunal
+  vars           String   // Vara
+  status         String
+  value          Decimal? @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  contact        Contact  @relation(fields: [contactId], references: [id])
+  timeline       ProcessTimeline[]
+  financials     FinancialRecord[]
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("processes")
+}
+
+model ProcessTimeline {
+  id          String   @id @default(uuid())
+  processId   String
+  title       String
+  description String?
+  date        DateTime
+  type        String   // MOVEMENT, MESSAGE, FILE
+  metadata    Json?    // Store file paths or message IDs here
+  createdAt   DateTime @default(now())
+
+  process     Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@map("process_timelines")
+}
+
+model FinancialRecord {
+  id            String    @id @default(uuid())
+  tenantId      String
+  processId     String?
+  bankAccountId String?
+  description   String
+  amount        Decimal   @db.Decimal(10, 2)
+  dueDate       DateTime
+  paymentDate   DateTime?
+  status        String    // PENDING, PAID, CANCELLED, OVERDUE
+  type          String    // INCOME (Receita), EXPENSE (Despesa)
+  category      String?   // Honorários, Custas, Aluguel, etc
+  paymentMethod String?   // PIX, BOLETO, TED, DINHEIRO, CARTAO
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  process       Process?      @relation(fields: [processId], references: [id])
+  bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@map("financial_records")
+}
+
+model BankAccount {
+  id              String   @id @default(uuid())
+  tenantId        String
+  bankName        String
+  accountType     String   // CHECKING (Corrente), SAVINGS (Poupança)
+  accountNumber   String?
+  agency          String?
+  balance         Decimal  @default(0) @db.Decimal(10, 2)
+  isActive        Boolean  @default(true)
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  financialRecords FinancialRecord[]
+
+  @@map("bank_accounts")
+}
+
+// 3. A "INVENÇÃO DR.X": TRIAGEM E COMUNICAÇÃO
+model CommunicationLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  contactId   String?
+  direction   String   // INBOUND, OUTBOUND
+  channel     String   // WHATSAPP
+  content     String
+  mediaUrl    String?  // Caminho local do arquivo
+  mediaType   String?  // AUDIO, IMAGE, PDF
+  status      String   // RECEIVED, TRIAGED, ARCHIVED
+  processedBy String?  // AI or AGENT
+  createdAt   DateTime @default(now())
+
+  contact     Contact? @relation(fields: [contactId], references: [id])
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("communication_logs")
+}
+
+// 4. MÓDULO DE MODELOS DE DOCUMENTOS (DR.X MODELS)
+
+model DocumentCategory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  parentId    String?
+  
+  parent      DocumentCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    DocumentCategory[] @relation("CategoryHierarchy")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  templates   DocumentTemplate[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_categories")
+}
+
+model DocumentTemplate {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  content     String   @db.Text
+  categoryId  String?
+  
+  category    DocumentCategory? @relation(fields: [categoryId], references: [id])
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  history     DocumentHistory[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_templates")
+}
+
+model DocumentHistory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  templateId  String?
+  title       String
+  content     String   @db.Text
+  snapshot    Json?    // Stores the variables values at time of creation
+  status      String   // DRAFT, FINALIZED
+  
+  template    DocumentTemplate? @relation(fields: [templateId], references: [id])
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_history")
+}
+
+model DocumentSettings {
+  id          String   @id @default(uuid())
+  key         String   @unique // HEADER, FOOTER, FONT_FAMILY
+  value       String?
+  
+  updatedAt   DateTime @updatedAt
+
+  @@map("document_settings")
+}

@@ -1,0 +1,48 @@
+﻿name: Deploy Production
+
+on: [push]
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connect and Update
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /www/wwwroot/DrX
+            echo "1. Sincronizando código com GitHub..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "2. Removendo vestígios de builds antigos..."
+            rm -rf apps/web/dist apps/api/dist
+            
+            echo "3. Instalando dependências (Modo Silencioso)..."
+            npm install --quiet
+            
+            echo "4. Gerando Prisma Client (Versão Segura 5.20.0)..."
+            # Forçamos a versão 5.20 para evitar o erro P1012 da versão 7
+            npx prisma@5.20.0 generate --schema=packages/database/prisma/schema.prisma
+            
+            echo "5. Atualizando Banco de Dados..."
+            npx turbo run db:push
+            
+            echo "6. Executando Build via TurboRepo..."
+            # O build compila o frontend e o backend na ordem correta
+            npx turbo run build
+            
+            echo "7. Reiniciando ecossistema PM2..."
+            # Limpamos processos antigos e recarregamos com base no novo ecosystem.config.js
+            # Como removemos drx-web do arquivo, ele não será iniciado.
+            pm2 delete drx-web 2>/dev/null || true
+            pm2 startOrReload ecosystem.config.js
+            pm2 save
+            
+            echo "✅ DEPLOY DO DR.X CONCLUÍDO COM SUCESSO!"
+            pm2 status

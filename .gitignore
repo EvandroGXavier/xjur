@@ -1,0 +1,15 @@
+# Dependências
+node_modules/
+.turbo/
+AD/
+# Builds e Compilados (O que está a travar a sua VPS)
+dist/
+build/
+apps/web/dist/
+apps/api/dist/
+packages/database/dist/
+
+# Ficheiros de Sistema e Logs
+*.log
+.env
+.env.production

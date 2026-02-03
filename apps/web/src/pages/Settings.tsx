@@ -1,0 +1,546 @@
+
+import { useState, useEffect } from 'react';
+import { api } from '../services/api';
+import { 
+  Settings as SettingsIcon, 
+  Building2, 
+  CreditCard, 
+  HelpCircle, 
+  Palette,
+  Search,
+  Plus,
+  MoreVertical,
+  X,
+  Save,
+  Trash2,
+  Check
+} from 'lucide-react';
+import { clsx } from 'clsx';
+
+// --- COMPONENTS ---
+
+const TabButton = ({ active, onClick, icon: Icon, label }: any) => (
+  <button
+    onClick={onClick}
+    className={clsx(
+      "flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors",
+      active 
+        ? "border-indigo-500 text-indigo-400" 
+        : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700"
+    )}
+  >
+    <Icon size={18} />
+    {label}
+  </button>
+);
+
+const Modal = ({ isOpen, onClose, title, children }: any) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-800/50">
+                    <h3 className="text-lg font-semibold text-white">{title}</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="p-6">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- MAIN PAGE ---
+
+export function Settings() {
+  const [activeTab, setActiveTab] = useState('options'); 
+  const [loading, setLoading] = useState(false);
+  
+  // DATA
+  const [tenants, setTenants] = useState<any[]>([]);
+  const [plans, setPlans] = useState<any[]>([]);
+
+  // MODAL STATE
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalType, setModalType] = useState<'tenant' | 'plan'>('tenant');
+  const [editingItem, setEditingItem] = useState<any>(null);
+
+  // FORM STATES
+  const [formData, setFormData] = useState<any>({});
+
+  useEffect(() => {
+    if (activeTab === 'tenants') fetchTenants();
+    if (activeTab === 'plans') fetchPlans();
+  }, [activeTab]);
+
+  // --- FETCHING ---
+
+  const fetchTenants = async () => {
+    try {
+        setLoading(true);
+        const res = await api.get('/saas/tenants');
+        setTenants(res.data);
+    } catch (error) {
+        console.error('Erro ao carregar tenants', error);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const fetchPlans = async () => {
+      try {
+          setLoading(true);
+          const res = await api.get('/saas/plans');
+          setPlans(res.data);
+      } catch (error) {
+          console.error('Erro ao carregar planos', error);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // --- ACTIONS ---
+
+  const handleOpenModal = (type: 'tenant' | 'plan', item?: any) => {
+      setModalType(type);
+      setEditingItem(item || null);
+      
+      if (type === 'tenant') {
+          setFormData(item ? { 
+              name: item.name, 
+              document: item.document, 
+              planId: item.planId, 
+              isActive: item.isActive,
+              password: '' // Reset password field for security
+          } : { 
+              name: '', 
+              document: '', 
+              planId: plans.length > 0 ? plans[0].id : '', 
+              isActive: true,
+              email: '', // Only for new
+              password: '' 
+          });
+      } else {
+          setFormData(item ? {
+              name: item.name,
+              maxUsers: item.maxUsers,
+              maxStorage: item.maxStorage,
+              price: item.price
+          } : {
+              name: '',
+              maxUsers: 5,
+              maxStorage: 1000,
+              price: 0
+          });
+      }
+      
+      setModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      try {
+          setLoading(true);
+          
+          if (modalType === 'tenant') {
+              if (editingItem) {
+                  // Update
+                  await api.post(`/saas/tenants/update/${editingItem.id}`, formData);
+              } else {
+                  // Create
+                  await api.post('/saas/register', formData);
+              }
+              fetchTenants(); // Refresh
+          } else {
+              if (editingItem) {
+                  await api.post(`/saas/plans/update/${editingItem.id}`, formData);
+              } else {
+                  await api.post('/saas/plans', formData);
+              }
+              fetchPlans(); // Refresh
+          }
+          
+          setModalOpen(false);
+      } catch (error: any) {
+          alert('Erro ao salvar: ' + (error.response?.data?.message || error.message));
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleDelete = async (id: string) => {
+      if (!confirm('Tem certeza que deseja excluir? Esta ação não pode ser desfeita.')) return;
+      
+      try {
+          setLoading(true);
+          if (activeTab === 'tenants') {
+              await api.post(`/saas/tenants/delete/${id}`);
+              fetchTenants();
+          } else {
+              await api.post(`/saas/plans/delete/${id}`);
+              fetchPlans();
+          }
+      } catch (error: any) {
+          alert('Erro ao excluir: ' + (error.response?.data?.message || error.message));
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // --- RENDERERS ---
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      
+      {/* HEADER */}
+      <div>
+        <h1 className="text-2xl font-bold text-white">Configurações</h1>
+        <p className="text-slate-400 text-sm">Gerencie as opções do sistema e do ambiente SaaS</p>
+      </div>
+
+      {/* TABS */}
+      <div className="flex border-b border-slate-800 overflow-x-auto">
+        <TabButton active={activeTab === 'options'} onClick={() => setActiveTab('options')} icon={SettingsIcon} label="Opções" />
+        <TabButton active={activeTab === 'tenants'} onClick={() => setActiveTab('tenants')} icon={Building2} label="Empresas" />
+        <TabButton active={activeTab === 'plans'} onClick={() => setActiveTab('plans')} icon={CreditCard} label="Planos" />
+        <TabButton active={activeTab === 'help'} onClick={() => setActiveTab('help')} icon={HelpCircle} label="Ajuda" />
+        <TabButton active={activeTab === 'whitelabel'} onClick={() => setActiveTab('whitelabel')} icon={Palette} label="Whitelabel" />
+      </div>
+
+      {/* CONTENT */}
+      <div className="min-h-[400px]">
+        
+        {/* === OPTIONS TAB === */}
+        {activeTab === 'options' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4">Geral</h3>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <span className="text-slate-300 text-sm">Notificações Sonoras</span>
+                            <div className="w-10 h-5 bg-indigo-600 rounded-full relative cursor-pointer">
+                                <div className="absolute right-1 top-1 w-3 h-3 bg-white rounded-full"></div>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                            <span className="text-slate-300 text-sm">Modo Escuro</span>
+                            <span className="text-indigo-400 text-xs font-bold">ATIVO</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* === TENANTS TAB === */}
+        {activeTab === 'tenants' && (
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="relative w-64">
+                        <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
+                        <input 
+                            type="text" 
+                            placeholder="Buscar empresa..." 
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                        />
+                    </div>
+                    <button 
+                        onClick={() => handleOpenModal('tenant')}
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    >
+                        <Plus size={18} />
+                        Nova Empresa
+                    </button>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                            <tr>
+                                <th className="px-6 py-3 font-medium">Empresa</th>
+                                <th className="px-6 py-3 font-medium">Documento</th>
+                                <th className="px-6 py-3 font-medium">Plano</th>
+                                <th className="px-6 py-3 font-medium">Status</th>
+                                <th className="px-6 py-3 font-medium text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 text-slate-300">
+                            {loading && tenants.length === 0 && (
+                                <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">Carregando...</td></tr>
+                            )}
+                            {!loading && tenants.map((tenant) => (
+                                <tr 
+                                    key={tenant.id} 
+                                    className="hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                    onDoubleClick={() => handleOpenModal('tenant', tenant)}
+                                    title="Duplo clique para editar"
+                                >
+                                    <td className="px-6 py-4 font-medium text-white">{tenant.name}</td>
+                                    <td className="px-6 py-4">{tenant.document}</td>
+                                    <td className="px-6 py-4">
+                                        <span className="px-2 py-1 rounded bg-indigo-500/10 text-indigo-400 text-xs font-bold border border-indigo-500/20">
+                                            {tenant.plan?.name || 'Sem Plano'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {tenant.isActive ? (
+                                            <span className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                                                ATIVO
+                                            </span>
+                                        ) : (
+                                           <span className="flex items-center gap-1.5 text-red-400 text-xs font-bold">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-red-400"></div>
+                                                INATIVO
+                                            </span> 
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                        <button onClick={() => handleDelete(tenant.id)} className="text-slate-500 hover:text-red-400 p-1 transition-colors">
+                                            <Trash2 size={16} />
+                                        </button>
+                                        <button onClick={() => handleOpenModal('tenant', tenant)} className="text-slate-400 hover:text-white p-1">
+                                            <MoreVertical size={16} />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <p className="text-xs text-slate-500 text-right mt-2">* Dê um duplo clique na linha para editar.</p>
+            </div>
+        )}
+        
+        {/* === PLANS TAB === */}
+        {activeTab === 'plans' && (
+             <div className="space-y-4">
+                 <div className="flex items-center justify-between">
+                     <h2 className="text-lg font-semibold text-white">Planos de Assinatura</h2>
+                     <button 
+                         onClick={() => handleOpenModal('plan')}
+                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                     >
+                         <Plus size={18} />
+                         Novo Plano
+                     </button>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                     {plans.map(plan => (
+                         <div 
+                            key={plan.id} 
+                            className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-indigo-500/50 transition-all cursor-pointer group"
+                            onDoubleClick={() => handleOpenModal('plan', plan)}
+                         >
+                             <div className="flex justify-between items-start mb-4">
+                                 <div>
+                                     <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+                                     <p className="text-2xl text-indigo-400 font-bold mt-1">
+                                         R$ {Number(plan.price).toFixed(2)}
+                                         <span className="text-sm text-slate-500 font-normal">/mês</span>
+                                     </p>
+                                 </div>
+                                 <CreditCard className="text-slate-600 group-hover:text-indigo-500 transition-colors" size={24} />
+                             </div>
+                             
+                             <div className="space-y-3 mb-6">
+                                 <div className="flex items-center gap-2 text-sm text-slate-300">
+                                     <Check size={16} className="text-emerald-500" />
+                                     <span>Até <b>{plan.maxUsers}</b> usuários</span>
+                                 </div>
+                                 <div className="flex items-center gap-2 text-sm text-slate-300">
+                                     <Check size={16} className="text-emerald-500" />
+                                     <span><b>{plan.maxStorage} MB</b> de armazenamento</span>
+                                 </div>
+                             </div>
+
+                             <div className="flex gap-2 pt-4 border-t border-slate-800">
+                                 <button 
+                                    onClick={() => handleOpenModal('plan', plan)}
+                                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+                                 >
+                                     Editar
+                                 </button>
+                                 <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(plan.id); }}
+                                    className="bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-400 p-2 rounded-lg transition-colors"
+                                 >
+                                     <Trash2 size={18} />
+                                 </button>
+                             </div>
+                         </div>
+                     ))}
+                     
+                     {plans.length === 0 && !loading && (
+                         <div className="col-span-3 text-center py-12 text-slate-500 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
+                             <CreditCard size={48} className="mx-auto mb-4 opacity-50" />
+                             <p>Nenhum plano cadastrado.</p>
+                         </div>
+                     )}
+                 </div>
+                 <p className="text-xs text-slate-500 text-right mt-2">* Dê um duplo clique no card para editar.</p>
+             </div>
+        )}
+      </div>
+
+      {/* === MODAL === */}
+      <Modal 
+        isOpen={modalOpen} 
+        onClose={() => setModalOpen(false)}
+        title={editingItem ? `Editar ${modalType === 'tenant' ? 'Empresa' : 'Plano'}` : `Nova ${modalType === 'tenant' ? 'Empresa' : 'Plano'}`}
+      >
+          <form onSubmit={handleSave} className="space-y-4">
+              
+              {/* FORMULARIO DE EMPRESA */}
+              {modalType === 'tenant' && (
+                  <>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Nome da Empresa</label>
+                        <input
+                            required
+                            type="text"
+                            value={formData.name || ''}
+                            onChange={e => setFormData({...formData, name: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Documento (CPF/CNPJ)</label>
+                        <input
+                            required
+                            type="text"
+                            value={formData.document || ''}
+                            onChange={e => setFormData({...formData, document: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                        />
+                    </div>
+                    
+                    {!editingItem && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Email do Administrador</label>
+                        <input
+                            required
+                            type="email"
+                            value={formData.email || ''}
+                            onChange={e => setFormData({...formData, email: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                        />
+                    </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Plano</label>
+                        <select
+                            required
+                            value={formData.planId || ''}
+                            onChange={e => setFormData({...formData, planId: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                        >
+                            <option value="">Selecione...</option>
+                            {plans.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">
+                            Nova Senha {editingItem && '(Deixe em branco para manter)'}
+                        </label>
+                        <input
+                            type="password"
+                            value={formData.password || ''}
+                            onChange={e => setFormData({...formData, password: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                            required={!editingItem}
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2">
+                        <input
+                            type="checkbox"
+                            checked={formData.isActive || false}
+                            onChange={e => setFormData({...formData, isActive: e.target.checked})}
+                            id="isActive"
+                            className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <label htmlFor="isActive" className="text-sm text-slate-300">Empresa Ativa</label>
+                    </div>
+                  </>
+              )}
+
+              {/* FORMULARIO DE PLANO */}
+              {modalType === 'plan' && (
+                  <>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Nome do Plano</label>
+                        <input
+                            required
+                            type="text"
+                            value={formData.name || ''}
+                            onChange={e => setFormData({...formData, name: e.target.value})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                            placeholder="Ex: Basic, Pro, Enterprise"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">Max Usuários</label>
+                            <input
+                                required
+                                type="number"
+                                value={formData.maxUsers || ''}
+                                onChange={e => setFormData({...formData, maxUsers: parseInt(e.target.value)})}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">Armazenamento (MB)</label>
+                            <input
+                                required
+                                type="number"
+                                value={formData.maxStorage || ''}
+                                onChange={e => setFormData({...formData, maxStorage: parseInt(e.target.value)})}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Preço (R$)</label>
+                        <input
+                            required
+                            type="number"
+                            step="0.01"
+                            value={formData.price || ''}
+                            onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                        />
+                    </div>
+                  </>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+                  >
+                      Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                  >
+                      <Save size={18} />
+                      Salvar
+                  </button>
+              </div>
+          </form>
+      </Modal>
+
+    </div>
+  );
+}
