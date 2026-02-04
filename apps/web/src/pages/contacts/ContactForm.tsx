@@ -36,7 +36,6 @@ interface ContactData {
   specialStatus?: string;
   specialStatusDate?: string;
   pjQsa?: any[];
-  
   // Campos Gerais
   document?: string;
   email?: string;
@@ -51,8 +50,6 @@ interface ContactData {
 // ... (Address, AdditionalContact, RelationType interfaces remain same)
 
 // ...
-
-
 interface Address {
   id?: string;
   street: string;
@@ -102,10 +99,12 @@ interface ContactAsset {
 }
 
 const TABS = [
-  { id: 'contact', label: 'Contato', icon: Users },
-  { id: 'addresses', label: 'Endereços', icon: Home },
+  { id: 'contact', label: 'Contato (Geral)', icon: Users },
+  { id: 'pf_create', label: 'Novo PF', icon: Users },
+  { id: 'pj_create', label: 'Novo PJ', icon: Briefcase },
   { id: 'relations', label: 'Vínculos', icon: Lock },
   { id: 'contacts', label: 'Contatos', icon: Users },
+  { id: 'addresses', label: 'Endereços', icon: Home },
   { id: 'financial', label: 'Financeiro', icon: DollarSign },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
   { id: 'assets', label: 'Patrimônio', icon: Briefcase },
@@ -718,9 +717,114 @@ export function ContactForm() {
             ))}
         </div>
 
+            {activeTab === 'contact' && (
+                <div className="space-y-6 max-w-4xl">
+                     <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
+                         <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+                             <Users size={20} className="text-indigo-400" /> Dados Pessoais (PF)
+                         </h3>
+                         
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">CPF</label>
+                                 <input 
+                                    value={formData.cpf || ''}
+                                    onChange={e => setFormData({...formData, cpf: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="000.000.000-00"
+                                 />
+                             </div>
+
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">RG</label>
+                                 <input 
+                                    value={formData.rg || ''}
+                                    onChange={e => setFormData({...formData, rg: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="00.000.000-0"
+                                 />
+                             </div>
+
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">Data de Nascimento</label>
+                                 <input 
+                                    type="date"
+                                    value={formData.birthDate || ''}
+                                    onChange={e => setFormData({...formData, birthDate: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                 />
+                             </div>
+                         </div>
+                     </div>
+                     
+                     <div className="flex justify-end">
+                        <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
+                            Salvar Alterações
+                        </button>
+                     </div>
+                </div>
+            )}
+            
+            {activeTab === 'pj_create' && (
+                <div className="space-y-6 max-w-4xl">
+                     <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
+                         <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+                             <Briefcase size={20} className="text-indigo-400" /> Dados Empresariais (PJ)
+                         </h3>
+                         
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                             <div className="space-y-2 md:col-span-2">
+                                 <label className="text-sm font-medium text-slate-400">Razão Social</label>
+                                 <input 
+                                    value={formData.companyName || ''}
+                                    onChange={e => setFormData({...formData, companyName: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="Razão Social da Empresa"
+                                 />
+                             </div>
+
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">CNPJ</label>
+                                 <div className="flex gap-2">
+                                     <input 
+                                        value={formData.cnpj || ''}
+                                        onChange={e => setFormData({...formData, cnpj: e.target.value})}
+                                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="00.000.000/0000-00"
+                                     />
+                                     <button
+                                         type="button"
+                                         onClick={handleEnrichCNPJ}
+                                         disabled={enriching || !formData.cnpj}
+                                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 flex items-center gap-2"
+                                     >
+                                         <Search size={16} />
+                                         {enriching ? 'Consultando...' : 'Consultar'}
+                                     </button>
+                                 </div>
+                             </div>
+
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">Inscrição Estadual</label>
+                                 <input 
+                                    value={formData.stateRegistration || ''}
+                                    onChange={e => setFormData({...formData, stateRegistration: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                 />
+                             </div>
+                         </div>
+                     </div>
+
+                     <div className="flex justify-end">
+                        <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
+                            Salvar Alterações
+                        </button>
+                     </div>
+                </div>
+            )}
         {/* Tab Content */}
         <div className="p-8">
-            {activeTab === 'contact' ? (
+            {activeTab === 'contact' && (
                 <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
                      {/* Tipo de Pessoa */}
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
@@ -929,6 +1033,7 @@ export function ContactForm() {
                                          <option key={cat} value={cat}>{cat}</option>
                                      ))}
                                  </select>
+
                              </div>
 
                              <div className="space-y-2 md:col-span-2">
@@ -945,16 +1050,18 @@ export function ContactForm() {
                      </div>
 
                      <div className="flex justify-end pt-4">
-                         <button 
-                            disabled={loading}
-                            type="submit"
-                            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
-                         >
-                            {loading ? 'Salvando...' : 'Salvar Contato (Ctrl+S)'}
-                         </button>
+                          <button 
+                             disabled={loading}
+                             type="submit"
+                             className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
+                          >
+                             {loading ? 'Salvando...' : 'Salvar Contato (Ctrl+S)'}
+                          </button>
                      </div>
                 </form>
-            ) : activeTab === 'addresses' ? (
+            )}
+
+            {activeTab === 'addresses' && (
                 <div className="space-y-6 max-w-4xl">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -1102,7 +1209,9 @@ export function ContactForm() {
                         </>
                     )}
                 </div>
-            ) : activeTab === 'relations' ? (
+            )}
+
+            {activeTab === 'relations' && (
                 <div className="space-y-6 max-w-4xl">
                      <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -1263,7 +1372,9 @@ export function ContactForm() {
                         </>
                     )}
                 </div>
-            ) : activeTab === 'contacts' ? (
+            )}
+
+            {activeTab === 'contacts' && (
                 <div className="space-y-6 max-w-4xl">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -1378,7 +1489,9 @@ export function ContactForm() {
                         </>
                     )}
                 </div>
-            ) : activeTab === 'assets' ? (
+            )}
+
+            {activeTab === 'assets' && (
                 <div className="space-y-6 max-w-5xl">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -1581,12 +1694,9 @@ export function ContactForm() {
                         </>
                     )}
                 </div>
-            ) : (
-                <div className="flex flex-col items-center justify-center h-64 text-slate-500">
-                    <p className="mb-2">Módulo em construção</p>
-                    <span className="text-xs px-2 py-1 bg-slate-800 rounded text-slate-400">Tab: {activeTab}</span>
-                </div>
             )}
+
+
         </div>
       </div>
     </div>
