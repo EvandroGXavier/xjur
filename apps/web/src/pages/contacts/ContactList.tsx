@@ -16,6 +16,8 @@ interface Contact {
 
 export function ContactList() {
   const navigate = useNavigate();
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('ALL'); // ALL, PF, PJ
 
