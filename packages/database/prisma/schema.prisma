@@ -82,6 +82,19 @@ model Contact {
   companyName       String?   // Razão Social
   stateRegistration String?   // Inscrição Estadual
   
+  // Dados Expandidos PJ (Receita Federal)
+  openingDate       DateTime?
+  size              String?      // Porte (ME, EPP, DEMAIS)
+  legalNature       String?      // Natureza Jurídica
+  mainActivity      Json?        // CNAE Principal { code, text }
+  sideActivities    Json?        // CNAEs Secundários [ { code, text } ]
+  shareCapital      Decimal?     @db.Decimal(15, 2)
+  status            String?      // ATIVA, SUSPENSA, BAIXADA
+  statusDate        DateTime?
+  specialStatus     String?
+  specialStatusDate DateTime?
+  pjQsa             Json?        // Quadro de Sócios e Administradores
+  
   // Campos Gerais
   document          String?   // CPF/CNPJ (Mantido para compatibilidade)
   whatsapp          String?

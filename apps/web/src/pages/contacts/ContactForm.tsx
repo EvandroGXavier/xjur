@@ -6,6 +6,8 @@ import { clsx } from 'clsx';
 import { api } from '../../services/api';
 import { masks } from '../../utils/masks';
 
+import { PJTab } from './PJTab';
+
 // Interface matching Backend DTO
 interface ContactData {
   id?: string;
@@ -22,6 +24,19 @@ interface ContactData {
   companyName?: string;
   stateRegistration?: string;
   
+  // Dados Expandidos PJ
+  openingDate?: string;
+  size?: string;
+  legalNature?: string;
+  mainActivity?: { code: string; text: string };
+  sideActivities?: { code: string; text: string }[];
+  shareCapital?: string; // or number, keeping basic for form
+  status?: string;
+  statusDate?: string;
+  specialStatus?: string;
+  specialStatusDate?: string;
+  pjQsa?: any[];
+  
   // Campos Gerais
   document?: string;
   email?: string;
@@ -32,6 +47,11 @@ interface ContactData {
   addresses?: Address[];
   additionalContacts?: AdditionalContact[];
 }
+
+// ... (Address, AdditionalContact, RelationType interfaces remain same)
+
+// ...
+
 
 interface Address {
   id?: string;
@@ -116,7 +136,9 @@ export function ContactForm() {
     name: '',
     personType: 'PF',
     phone: '',
-    addresses: []
+    addresses: [],
+    sideActivities: [],
+    pjQsa: []
   });
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
@@ -439,6 +461,19 @@ export function ContactForm() {
           name: tradeName,
           email: data.email || formData.email,
           phone: data.telefone || data.ddd_telefone_1 || formData.phone,
+          
+          // Mapeamento Dados PJ Estendidos
+          openingDate: data.abertura,
+          size: data.porte,
+          legalNature: data.natureza_juridica,
+          mainActivity: data.atividade_principal ? data.atividade_principal[0] : null,
+          sideActivities: data.atividades_secundarias || [],
+          shareCapital: data.capital_social,
+          status: data.situacao,
+          statusDate: data.data_situacao,
+          specialStatus: data.situacao_especial,
+          specialStatusDate: data.data_situacao_especial,
+          pjQsa: data.qsa || []
         });
         
         // Auto-fill address if available and form is empty or user confirms
@@ -718,6 +753,11 @@ export function ContactForm() {
                              </label>
                          </div>
                      </div>
+
+                     {/* Nova Aba de Dados Corporativos (Só aparece para PJ) */}
+                     {formData.personType === 'PJ' && (
+                        <PJTab formData={formData} />
+                     )}
 
                      {/* Campos Condicionais - Pessoa Física */}
                      {formData.personType === 'PF' && (
