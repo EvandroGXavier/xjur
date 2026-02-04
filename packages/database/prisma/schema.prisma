@@ -254,13 +254,9 @@ model Process {
   
   tenant         Tenant      @relation(fields: [tenantId], references: [id])
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
   contact        Contact?  @relation(fields: [contactId], references: [id])
   timeline       ProcessTimeline[]
   financials     FinancialRecord[]
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
 
   @@map("processes")
 }
