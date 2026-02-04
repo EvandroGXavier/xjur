@@ -10,6 +10,8 @@ interface Contact {
   document: string;
   cpf?: string;
   cnpj?: string;
+  pfData?: { cpf: string };
+  pjData?: { cnpj: string };
   email: string;
   phone: string;
 }
@@ -113,7 +115,7 @@ export function ContactList() {
                       contacts.map(contact => (
                           <tr key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)} className="hover:bg-slate-800/50 cursor-pointer transition-colors group">
                               <td className="px-6 py-4 font-medium text-white">{contact.name}</td>
-                              <td className="px-6 py-4">{formatDocument(contact.document || contact.cpf || contact.cnpj || '') || '-'}</td>
+                              <td className="px-6 py-4">{formatDocument(contact.document || contact.pfData?.cpf || contact.pjData?.cnpj || contact.cpf || contact.cnpj || '') || '-'}</td>
                               <td className="px-6 py-4">{contact.email || '-'}</td>
                               <td className="px-6 py-4">{contact.phone || '-'}</td>
                               <td className="px-6 py-4 text-right flex justify-end gap-2" onClick={e => e.stopPropagation()}>

@@ -28,11 +28,19 @@ model Tenant {
   templates   DocumentTemplate[]
   communicationLogs CommunicationLog[]
   documentHistory   DocumentHistory[]
-  financialRecords  FinancialRecord[]
+  // financialRecords  FinancialRecord[] // Deprecated/Removed
+  financialSettings FinancialSettings?
+  bankAccounts      BankAccount[]
+  transactionCategories TransactionCategory[]
+  transactions      Transaction[]
+  recurringExpenses RecurringExpense[]
+
   relationTypes     RelationType[]
   contactRelations  ContactRelation[]
   assetTypes        AssetType[]
   contactAssets     ContactAsset[]
+  contactPFs        ContactPF[]
+  contactPJs        ContactPJ[]
 
   @@map("tenants")
 }
@@ -64,32 +72,34 @@ model User {
   @@map("users")
 }
 
-// 2.1 ENTIDADE ÂNCORA: CONTACT
+// 2.1 ENTIDADE ÂNCORA: CONTACT (V2)
 model Contact {
   id                String    @id @default(uuid())
   tenantId          String
-  name              String
-  personType        String    @default("PF") // PF ou PJ
+  name              String    @map("name") // Mantendo nome original da coluna
+  personType        String    @default("PF") @map("personType") // Mantendo original
   
-  // Campos Pessoa Física
+  // Campos Legados (Mantidos para evitar perda de dados)
   cpf               String?
   rg                String?
   birthDate         DateTime?
-  
-  // Campos Pessoa Jurídica
   cnpj              String?
-  companyName       String?   // Razão Social
-  stateRegistration String?   // Inscrição Estadual
-  
-  // Campos Gerais
-  document          String?   // CPF/CNPJ (Mantido para compatibilidade)
+  companyName       String?
+  stateRegistration String?
+
+  // Campos Gerais (Denormalizados p/ performance ou legado)
+  document          String?   // CPF ou CNPJ principal
   whatsapp          String?
   email             String?
   phone             String?
-  notes             String?
-  category          String?   // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
-  password          String?   // Senha para acesso ao sistema
+  notes             String?   @db.Text
+  category          String?   // Cliente, Fornecedor, etc
+  password          String?   // Acesso ao portal
   
+  // Dados Específicos (Relacionamentos 1:1)
+  pfData            ContactPF?
+  pjData            ContactPJ?
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   
@@ -101,13 +111,56 @@ model Contact {
   relationsFrom      ContactRelation[] @relation("RelationsFrom")
   relationsTo        ContactRelation[] @relation("RelationsTo")
   assets             ContactAsset[]
+  
+  debtorTransactions   Transaction[] @relation("DebtorTrx")
+  creditorTransactions Transaction[] @relation("CreditorTrx")
+  
+  recurringDebtor      RecurringExpense[] @relation("RecurringDebtor")
+  recurringCreditor    RecurringExpense[] @relation("RecurringCreditor")
+
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
 
-  @@index([cpf])
-  @@index([cnpj])
+  @@index([document])
   @@index([personType])
   @@index([category])
-  @@map("contacts")
+  @@map("contacts") // Revertido para manter dados
+}
+
+model ContactPF {
+  id              String    @id @default(uuid())
+  contactId       String    @unique
+  tenantId        String
+  
+  // Mapping to new V2 fields
+  cpf             String?   @unique
+  rg              String?
+  birthDate       DateTime? @map("data_nascimento")
+  civilStatus     String?   @map("estado_civil") 
+  profession      String?   @map("profissao")
+  nationality     String?   @default("Brasileira")
+  
+  contact         Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@map("contato_pf")
+}
+
+model ContactPJ {
+  id              String    @id @default(uuid())
+  contactId       String    @unique
+  tenantId        String
+  
+  cnpj            String?   @unique
+  companyName     String?   @map("razao_social")
+  stateReg        String?   @map("inscricao_estadual")
+  municipalReg    String?   @map("inscricao_municipal")
+  foundingDate    DateTime? @map("data_abertura")
+  legalNature     String?   @map("natureza_juridica")
+  
+  contact         Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@map("contato_pj")
 }
 
 model RelationType {
@@ -138,7 +191,7 @@ model ContactRelation {
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
 
   @@unique([fromContactId, toContactId, relationTypeId]) // Evitar duplicatas exatas
-  @@map("contact_relations")
+  @@map("contact_relations") // Revertido
 }
 
 model AssetType {
@@ -200,18 +253,31 @@ model AdditionalContact {
 model Process {
   id             String   @id @default(uuid())
   tenantId       String
-  contactId      String
-  cnj            String   @unique
-  court          String   // Tribunal
-  vars           String   // Vara
+  contactId      String?
+  
+  // Identificadores (pelo menos um deve existir)
+  cnj            String?  @unique // Para Processos Judiciais
+  code           String?  @unique // Para Casos Extrajudiciais
+  
+  // Detalhes
+  title          String?          // Nome amigável (ex: Contrato X)
+  category       String?          // Natureza (Cível, Consultoria, etc)
+  
+  // Campos Judiciais (agora opcionais)
+  court          String?   // Tribunal
+  vars           String?   // Vara
+  
   status         String
-  value          Decimal? @db.Decimal(10, 2)
+  value          Decimal? @db.Decimal(15, 2)
+  comments       String?  // Observações rápidas
+  
+  recurringExpenseId String? // Link se foi gerado por recorrência
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  contact        Contact  @relation(fields: [contactId], references: [id])
+  contact        Contact?  @relation(fields: [contactId], references: [id])
   timeline       ProcessTimeline[]
-  financials     FinancialRecord[]
+  transactions   Transaction[]
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
 
   @@map("processes")
@@ -232,20 +298,119 @@ model ProcessTimeline {
   @@map("process_timelines")
 }
 
-model FinancialRecord {
+// === NOVO MÓDULO FINANCEIRO ===
+
+model BankAccount {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String   // Ex: Banco do Brasil, Caixinha
+  initialBalance Decimal  @db.Decimal(15, 2) @default(0)
+  
+  transactions   Transaction[]
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("bank_accounts")
+}
+
+model RecurringExpense {
+  id              String   @id @default(uuid())
+  tenantId        String
+  description     String
+  amount          Decimal  @db.Decimal(15, 2) // Valor base
+  frequency       String   // MONTHLY, WEEKLY, YEARLY
+  dayOfMonth      Int      // Dia de vencimento (1-31)
+  
+  lastGenerated   DateTime? 
+  nextProcessDate DateTime?
+  isActive        Boolean   @default(true)
+
+  categoryId      String?
+  creditorId      String?
+  debtorId        String?
+
+  category        TransactionCategory? @relation(fields: [categoryId], references: [id])
+  creditor        Contact?             @relation("RecurringCreditor", fields: [creditorId], references: [id])
+  debtor          Contact?             @relation("RecurringDebtor", fields: [debtorId], references: [id])
+  transactions    Transaction[]
+  tenant          Tenant               @relation(fields: [tenantId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("recurring_expenses")
+}
+
+model TransactionCategory {
   id          String   @id @default(uuid())
   tenantId    String
-  processId   String
+  name        String   // Ex: Água, Luz, Honorários
+  type        String   // INCOME, EXPENSE
+  
+  transactions Transaction[]
+  recurringExpenses RecurringExpense[]
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("transaction_categories")
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  tenantId    String
   description String
-  amount      Decimal  @db.Decimal(10, 2)
+  amount      Decimal  @db.Decimal(15, 2)
+  type        String   // INCOME, EXPENSE
+  status      String   // PENDING, PAID, CANCELLED
   dueDate     DateTime
-  status      String   // PENDING, PAID
-  type        String   // FEE, EXPENSE
+  paymentDate DateTime?
+  
+  // Recorrência e Parcelamento
+  recurringExpenseId String?
+  installmentId      String?  // ID compartilhado entre todas as parcelas de uma compra
+  installmentNumber  Int?     // 1, 2, 3...
+  totalInstallments  Int?     // 10, 12...
+  
+  // Ajustes Financeiros
+  originalAmount     Decimal? @db.Decimal(15, 2)
+  interest           Decimal? @db.Decimal(15, 2) // Juros
+  fine               Decimal? @db.Decimal(15, 2) // Multa
+  discount           Decimal? @db.Decimal(15, 2) // Desconto
+  
+  bankAccountId String?
+  categoryId    String?
+  processId     String?
+  
+  // Quem envia o dinheiro (Devedor) e Quem recebe (Credor)
+  debtorId      String? 
+  creditorId    String? 
 
-  process     Process  @relation(fields: [processId], references: [id])
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id])
+  category      TransactionCategory? @relation(fields: [categoryId], references: [id])
+  process       Process? @relation(fields: [processId], references: [id])
+  recurring     RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
+  
+  debtor        Contact? @relation("DebtorTrx", fields: [debtorId], references: [id])
+  creditor      Contact? @relation("CreditorTrx", fields: [creditorId], references: [id])
+  
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
 
-  @@map("financial_records")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("transactions")
+}
+
+model FinancialSettings {
+   id              String @id @default(uuid())
+   tenantId        String @unique
+   
+   // Contatos Padrão
+   defaultOfficeContactId String? // ID do contato que representa o ESCRITÓRIO
+
+   tenant          Tenant @relation(fields: [tenantId], references: [id])
+   @@map("financial_settings")
 }
 
 // 3. A "INVENÇÃO DR.X": TRIAGEM E COMUNICAÇÃO

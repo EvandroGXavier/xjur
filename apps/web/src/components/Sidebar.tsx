@@ -13,7 +13,7 @@ import { clsx } from 'clsx';
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
   { icon: MessageSquare, label: 'Atendimento', to: '/chat' },
-  { icon: Scale, label: 'Processos', to: '/processes' },
+  { icon: Scale, label: 'Processos', to: '/processos' },
   { icon: DollarSign, label: 'Financeiro', to: '/financial' },
   { icon: Users, label: 'Contatos', to: '/contacts' },
   { icon: Bot, label: 'Inteligência Artificial', to: '/ai' },

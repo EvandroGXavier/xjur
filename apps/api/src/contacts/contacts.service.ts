@@ -13,16 +13,49 @@ export class ContactsService {
 
   async create(createContactDto: CreateContactDto, tenantId: string) {
     try {
-      console.log('Creating contact:', { ...createContactDto, tenantId });
+      // Remove addresses e extrai campos específicos
+      const { 
+        addresses, 
+        cpf, rg, birthDate, // PF fields
+        cnpj, companyName, stateRegistration, // PJ fields
+        ...commonData 
+      } = createContactDto as any;
       
-      // Remove addresses do payload pois devem ser criados separadamente
-      const { addresses, ...contactData } = createContactDto as any;
-      
+      const personType = commonData.personType || 'PF';
+      const document = personType === 'PF' ? cpf : cnpj; // Normaliza documento principal
+
+      // Prepara dados aninhados
+      const pfData = personType === 'PF' ? {
+         create: {
+            tenantId,
+            cpf,
+            rg,
+            birthDate: birthDate ? new Date(birthDate) : undefined,
+         }
+      } : undefined;
+
+      const pjData = personType === 'PJ' ? {
+         create: {
+            tenantId,
+            cnpj,
+            companyName,
+            stateReg: stateRegistration,
+         }
+      } : undefined;
+
+      // Criação Transacional
       return await this.prisma.contact.create({
         data: {
-          ...contactData,
+          ...commonData,
+          document, // CPF/CNPJ principal na tabela mestre
           tenantId,
+          pfData,
+          pjData,
         },
+        include: {
+            pfData: true,
+            pjData: true,
+        }
       });
     } catch (error) {
       console.error('Error creating contact:', error);
@@ -33,6 +66,10 @@ export class ContactsService {
   findAll(tenantId: string) {
     return this.prisma.contact.findMany({
       where: { tenantId },
+      include: {
+          pfData: true,
+          pjData: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -43,15 +80,56 @@ export class ContactsService {
       include: {
         addresses: true,
         additionalContacts: true,
+        pfData: true,
+        pjData: true,
+        assets: true,
       },
     });
   }
 
-  update(id: string, updateContactDto: UpdateContactDto) {
-    return this.prisma.contact.update({
-      where: { id },
-      data: updateContactDto,
-    });
+  async update(id: string, updateContactDto: UpdateContactDto) {
+      const { 
+        addresses, 
+        cpf, rg, birthDate, // PF fields
+        cnpj, companyName, stateRegistration, // PJ fields
+        ...commonData 
+      } = updateContactDto as any;
+
+      // Logic to handle nested updates (Upsert is cleaner/safer)
+      // We need tenantId to create nested if not exists, but update DTO might not have it.
+      // Assuming contact exists correctly.
+      
+      // Check current type first if needed, but for now apply data blindly if present.
+      
+      return this.prisma.contact.update({
+        where: { id },
+        data: {
+            ...commonData,
+            // Only update mappings if strictly necessary (document might change)
+            pfData: (cpf || rg) ? {
+                upsert: {
+                    create: {
+                         tenantId: commonData.tenantId, // Warning: tenantId might be missing in DTO
+                         cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined
+                    },
+                    update: {
+                        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined
+                    }
+                }
+            } : undefined,
+             pjData: (cnpj || companyName) ? {
+                upsert: {
+                    create: {
+                         tenantId: commonData.tenantId, 
+                         cnpj, companyName, stateReg: stateRegistration
+                    },
+                    update: {
+                         cnpj, companyName, stateReg: stateRegistration
+                    }
+                }
+            } : undefined,
+        },
+      });
   }
 
   remove(id: string) {

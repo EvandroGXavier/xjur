@@ -5,3 +5,11 @@ export * from './Login';
 export * from './contacts';
 export * from './Register';
 export * from './Settings';
+export { default as Processos } from './Processos';
+export { default as ProcessoConfig } from './ProcessoConfig';
+export { default as ModuleConfigPlaceholder } from './ModuleConfigPlaceholder';
+
+// New Financial Module
+export { Financial } from './Financial';
+export { FinancialNew } from './FinancialNew';
+export { FinancialConfig } from './FinancialConfig';
