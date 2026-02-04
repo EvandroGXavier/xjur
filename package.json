@@ -1,29 +1,26 @@
 {
-  "name": "dr-x-monorepo",
+  "name": "drx-monorepo",
   "private": true,
+  "version": "1.0.0",
+  "description": "DR.X - Ecossistema Jurídico Comercial",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "dev": "turbo run dev",
     "build": "turbo run build",
-    "db:generate": "npx prisma@5.20.0 generate --schema=packages/database/prisma/schema.prisma",
-    "test": "turbo run test",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "db:studio": "turbo run db:studio",
+    "db:push": "turbo run db:push"
   },
   "devDependencies": {
-    "@types/bcrypt": "^6.0.0",
-    "@types/passport-jwt": "^4.0.1",
-    "concurrently": "^8.2.0",
-    "prisma": "5.20.0",
-    "turbo": "^1.10.0"
+    "turbo": "latest",
+    "prettier": "^3.0.0"
   },
-  "dependencies": {
-    "@nestjs/jwt": "^11.0.2",
-    "@nestjs/passport": "^11.0.5",
-    "bcrypt": "^6.0.0",
-    "passport": "^0.7.0",
-    "passport-jwt": "^4.0.1"
-  }
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.0.0"
 }
