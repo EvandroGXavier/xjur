@@ -215,16 +215,49 @@ model AdditionalContact {
 model Process {
   id             String   @id @default(uuid())
   tenantId       String
-  contactId      String
-  cnj            String   @unique
-  court          String   // Tribunal
-  vars           String   // Vara
-  status         String
-  value          Decimal? @db.Decimal(10, 2)
+  contactId      String?  // Pode ser nulo inicialmente se criado via automação
+  cnj            String?  @unique // Opcional para Casos/Consultivo
+  
+  // Identificação Interna
+  category       String   @default("JUDICIAL") // JUDICIAL | EXTRAJUDICIAL
+  title          String?  // Título do Caso (ex: Análise Contratual)
+  code           String?  @unique // Código Interno (ex: CASO-25-001)
+  folder         String?  // Pasta na Nuvem (Z:\, Google Drive)
+  description    String?  @db.Text // Descrição Rica (HTML/Markdown)
+
+  // Detalhes Jurídicos
+  npu            String?     // Numeração Única (Normalizada)
+  court          String?     // Tribunal (TJMG, TRF1, etc) - Opcional para Consultivo
+  courtSystem    String?     // Sistema (PJe, Eproc, Projudi)
+  vars           String?     // Vara / Órgão Julgador
+  district       String?     // Comarca
+  status         String      // OPORTUNIDADE, ATIVO, SUSPENSO, ARQUIVADO
+  
+  // Classificação
+  area           String?     // Cível, Trabalhista, Criminal
+  subject        String?     // Assunto Principal
+  class          String?     // Classe Processual
+  distributionDate DateTime? // Data de Distribuição
+  judge          String?     // Magistrado
+  value          Decimal?    @db.Decimal(15, 2)
+  
+  // Partes (Snapshot JSON para importação rápida)
+  parties        Json?       // [{ name: "João", type: "AUTOR", cpf: "..." }]
+  
+  // Automação
+  lastCrawledAt  DateTime?   // Última atualização via robô
+  autoUpdate     Boolean     @default(true)
+  metadata       Json?       // Dados crus do crawler
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  
+  tenant         Tenant      @relation(fields: [tenantId], references: [id])
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  contact        Contact  @relation(fields: [contactId], references: [id])
+  contact        Contact?  @relation(fields: [contactId], references: [id])
   timeline       ProcessTimeline[]
   financials     FinancialRecord[]
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
@@ -239,6 +272,7 @@ model ProcessTimeline {
   description String?
   date        DateTime
   type        String   // MOVEMENT, MESSAGE, FILE
+  source      String?  // CRAWLER, MANUAL, USER_IMPORT
   metadata    Json?    // Store file paths or message IDs here
   createdAt   DateTime @default(now())
 

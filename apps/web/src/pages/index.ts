@@ -8,3 +8,4 @@ export * from './Settings';
 export * from './Documents';
 export * from './Users';
 export * from './Financial';
+export { ProcessList as Processes } from './processes/ProcessList';

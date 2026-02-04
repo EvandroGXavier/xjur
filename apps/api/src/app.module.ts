@@ -7,6 +7,7 @@ import { FinancialModule } from './financial/financial.module';
 import { SaasModule } from './saas/saas.module';
 import { DocumentsModule } from './documents/documents.module';
 import { UsersModule } from './users/users.module';
+import { ProcessesModule } from './processes/processes.module';
 
 @Module({
   imports: [
@@ -16,7 +17,8 @@ import { UsersModule } from './users/users.module';
     FinancialModule, // Módulo Financeiro
     SaasModule,      // Controle de Assinaturas
     DocumentsModule, // Biblioteca de Documentos
-    UsersModule
+    UsersModule,
+    ProcessesModule, // Automator de Processos
   ],
   controllers: [AppController],
   providers: [],
