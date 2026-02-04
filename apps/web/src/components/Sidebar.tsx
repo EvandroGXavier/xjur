@@ -6,16 +6,30 @@ import {
   DollarSign, 
   Users, 
   Bot,
+<<<<<<< HEAD
   Settings
+=======
+  FileText,
+  Settings,
+  ShieldCheck
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
   { icon: MessageSquare, label: 'Atendimento', to: '/chat' },
+<<<<<<< HEAD
   { icon: Scale, label: 'Processos', to: '/processos' },
   { icon: DollarSign, label: 'Financeiro', to: '/financial' },
   { icon: Users, label: 'Contatos', to: '/contacts' },
+=======
+  { icon: Scale, label: 'Processos', to: '/processes' },
+  { icon: DollarSign, label: 'Financeiro', to: '/financial' },
+  { icon: Users, label: 'Contatos', to: '/contacts' },
+  { icon: FileText, label: 'Documentos', to: '/documents' },
+  { icon: ShieldCheck, label: 'Equipe', to: '/users' },
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   { icon: Bot, label: 'Inteligência Artificial', to: '/ai' },
   { icon: Settings, label: 'Configuração', to: '/settings' },
 ];

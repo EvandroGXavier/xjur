@@ -28,6 +28,7 @@ model Tenant {
   templates   DocumentTemplate[]
   communicationLogs CommunicationLog[]
   documentHistory   DocumentHistory[]
+<<<<<<< HEAD
   // financialRecords  FinancialRecord[] // Deprecated/Removed
   financialSettings FinancialSettings?
   bankAccounts      BankAccount[]
@@ -35,12 +36,19 @@ model Tenant {
   transactions      Transaction[]
   recurringExpenses RecurringExpense[]
 
+=======
+  financialRecords  FinancialRecord[]
+  bankAccounts      BankAccount[]
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   relationTypes     RelationType[]
   contactRelations  ContactRelation[]
   assetTypes        AssetType[]
   contactAssets     ContactAsset[]
+<<<<<<< HEAD
   contactPFs        ContactPF[]
   contactPJs        ContactPJ[]
+=======
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 
   @@map("tenants")
 }
@@ -72,6 +80,7 @@ model User {
   @@map("users")
 }
 
+<<<<<<< HEAD
 // 2.1 ENTIDADE ÂNCORA: CONTACT (V2)
 model Contact {
   id                String    @id @default(uuid())
@@ -100,6 +109,47 @@ model Contact {
   pfData            ContactPF?
   pjData            ContactPJ?
 
+=======
+// 2.1 ENTIDADE ÂNCORA: CONTACT
+model Contact {
+  id                String    @id @default(uuid())
+  tenantId          String
+  name              String
+  personType        String    @default("PF") // PF ou PJ
+  
+  // Campos Pessoa Física
+  cpf               String?
+  rg                String?
+  birthDate         DateTime?
+  
+  // Campos Pessoa Jurídica
+  cnpj              String?
+  companyName       String?   // Razão Social
+  stateRegistration String?   // Inscrição Estadual
+  
+  // Dados Expandidos PJ (Receita Federal)
+  openingDate       DateTime?
+  size              String?      // Porte (ME, EPP, DEMAIS)
+  legalNature       String?      // Natureza Jurídica
+  mainActivity      Json?        // CNAE Principal { code, text }
+  sideActivities    Json?        // CNAEs Secundários [ { code, text } ]
+  shareCapital      Decimal?     @db.Decimal(15, 2)
+  status            String?      // ATIVA, SUSPENSA, BAIXADA
+  statusDate        DateTime?
+  specialStatus     String?
+  specialStatusDate DateTime?
+  pjQsa             Json?        // Quadro de Sócios e Administradores
+  
+  // Campos Gerais
+  document          String?   // CPF/CNPJ (Mantido para compatibilidade)
+  whatsapp          String?
+  email             String?
+  phone             String?
+  notes             String?
+  category          String?   // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
+  password          String?   // Senha para acesso ao sistema
+  
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   
@@ -111,6 +161,7 @@ model Contact {
   relationsFrom      ContactRelation[] @relation("RelationsFrom")
   relationsTo        ContactRelation[] @relation("RelationsTo")
   assets             ContactAsset[]
+<<<<<<< HEAD
   
   debtorTransactions   Transaction[] @relation("DebtorTrx")
   creditorTransactions Transaction[] @relation("CreditorTrx")
@@ -161,6 +212,16 @@ model ContactPJ {
   tenant          Tenant    @relation(fields: [tenantId], references: [id])
 
   @@map("contato_pj")
+=======
+  bankAccounts       BankAccount[] @relation("BankAccounts")
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([cpf])
+  @@index([cnpj])
+  @@index([personType])
+  @@index([category])
+  @@map("contacts")
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 }
 
 model RelationType {
@@ -191,7 +252,11 @@ model ContactRelation {
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
 
   @@unique([fromContactId, toContactId, relationTypeId]) // Evitar duplicatas exatas
+<<<<<<< HEAD
   @@map("contact_relations") // Revertido
+=======
+  @@map("contact_relations")
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 }
 
 model AssetType {
@@ -253,6 +318,7 @@ model AdditionalContact {
 model Process {
   id             String   @id @default(uuid())
   tenantId       String
+<<<<<<< HEAD
   contactId      String?
   
   // Identificadores (pelo menos um deve existir)
@@ -272,12 +338,57 @@ model Process {
   comments       String?  // Observações rápidas
   
   recurringExpenseId String? // Link se foi gerado por recorrência
+=======
+  contactId      String?  // Pode ser nulo inicialmente se criado via automação
+  cnj            String?  @unique // Opcional para Casos/Consultivo
+  
+  // Identificação Interna
+  category       String   @default("JUDICIAL") // JUDICIAL | EXTRAJUDICIAL
+  title          String?  // Título do Caso (ex: Análise Contratual)
+  code           String?  @unique // Código Interno (ex: CASO-25-001)
+  folder         String?  // Pasta na Nuvem (Z:\, Google Drive)
+  description    String?  @db.Text // Descrição Rica (HTML/Markdown)
+
+  // Detalhes Jurídicos
+  npu            String?     // Numeração Única (Normalizada)
+  court          String?     // Tribunal (TJMG, TRF1, etc) - Opcional para Consultivo
+  courtSystem    String?     // Sistema (PJe, Eproc, Projudi)
+  vars           String?     // Vara / Órgão Julgador
+  district       String?     // Comarca
+  status         String      // OPORTUNIDADE, ATIVO, SUSPENSO, ARQUIVADO
+  
+  // Classificação
+  area           String?     // Cível, Trabalhista, Criminal
+  subject        String?     // Assunto Principal
+  class          String?     // Classe Processual
+  distributionDate DateTime? // Data de Distribuição
+  judge          String?     // Magistrado
+  value          Decimal?    @db.Decimal(15, 2)
+  
+  // Partes (Snapshot JSON para importação rápida)
+  parties        Json?       // [{ name: "João", type: "AUTOR", cpf: "..." }]
+  
+  // Automação
+  lastCrawledAt  DateTime?   // Última atualização via robô
+  autoUpdate     Boolean     @default(true)
+  metadata       Json?       // Dados crus do crawler
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  
+  tenant         Tenant      @relation(fields: [tenantId], references: [id])
+
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   contact        Contact?  @relation(fields: [contactId], references: [id])
   timeline       ProcessTimeline[]
+<<<<<<< HEAD
   transactions   Transaction[]
+=======
+  financials     FinancialRecord[]
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
 
   @@map("processes")
@@ -290,6 +401,10 @@ model ProcessTimeline {
   description String?
   date        DateTime
   type        String   // MOVEMENT, MESSAGE, FILE
+<<<<<<< HEAD
+=======
+  source      String?  // CRAWLER, MANUAL, USER_IMPORT
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   metadata    Json?    // Store file paths or message IDs here
   createdAt   DateTime @default(now())
 
@@ -298,6 +413,7 @@ model ProcessTimeline {
   @@map("process_timelines")
 }
 
+<<<<<<< HEAD
 // === NOVO MÓDULO FINANCEIRO ===
 
 model BankAccount {
@@ -412,6 +528,56 @@ model FinancialSettings {
    tenant          Tenant @relation(fields: [tenantId], references: [id])
    @@map("financial_settings")
 }
+=======
+model FinancialRecord {
+  id            String    @id @default(uuid())
+  tenantId      String
+  processId     String?
+  bankAccountId String?
+  description   String
+  amount        Decimal   @db.Decimal(10, 2)
+  dueDate       DateTime
+  paymentDate   DateTime?
+  status        String    // PENDING, PAID, CANCELLED, OVERDUE
+  type          String    // INCOME (Receita), EXPENSE (Despesa)
+  category      String?   // Honorários, Custas, Aluguel, etc
+  paymentMethod String?   // PIX, BOLETO, TED, DINHEIRO, CARTAO
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  process       Process?      @relation(fields: [processId], references: [id])
+  bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@map("financial_records")
+}
+
+
+model BankAccount {
+  id              String   @id @default(uuid())
+  tenantId        String
+  title           String   // Nome/Título da conta
+  bankName        String?
+  accountType     String   // CHECKING (Corrente), SAVINGS (Poupança)
+  accountNumber   String?
+  agency          String?
+  balance         Decimal  @default(0) @db.Decimal(10, 2)
+  contactId       String?  // ID do Titular (opcional)
+  isActive        Boolean  @default(true)
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  contact          Contact? @relation("BankAccounts", fields: [contactId], references: [id])
+  financialRecords FinancialRecord[]
+
+  @@index([contactId])
+  @@map("bank_accounts")
+}
+
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 
 // 3. A "INVENÇÃO DR.X": TRIAGEM E COMUNICAÇÃO
 model CommunicationLog {

@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+<<<<<<< HEAD
 import { PrismaService } from '@dr-x/database';
+=======
+import { PrismaService } from '@drx/database';
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 
@@ -13,8 +17,14 @@ export class DocumentsService {
         title: createDocumentDto.title,
         content: createDocumentDto.content,
         templateId: createDocumentDto.templateId,
+<<<<<<< HEAD
         snapshot: createDocumentDto.snapshot,
         status: createDocumentDto.status,
+=======
+        tenantId: createDocumentDto.tenantId,
+        snapshot: createDocumentDto.snapshot,
+        status: createDocumentDto.status || 'DRAFT',
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
       },
     });
   }

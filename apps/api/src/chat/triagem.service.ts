@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
+<<<<<<< HEAD
 import { PrismaService } from '@dr-x/database';
+=======
+import { PrismaService } from '@drx/database';
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 
 @Injectable()
 export class TriagemService {
@@ -24,6 +28,10 @@ export class TriagemService {
     // 2. Registra a Comunicação
     const log = await this.prisma.communicationLog.create({
       data: {
+<<<<<<< HEAD
+=======
+        tenantId: contact.tenantId, // ID obrigatório do Tenant
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
         contactId: contact.id,
         direction: 'INBOUND',
         channel: 'WHATSAPP',

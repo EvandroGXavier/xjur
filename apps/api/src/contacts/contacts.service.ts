@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
+<<<<<<< HEAD
 import { PrismaService } from '@dr-x/database';
+=======
+import { PrismaService } from '@drx/database';
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -13,6 +17,7 @@ export class ContactsService {
 
   async create(createContactDto: CreateContactDto, tenantId: string) {
     try {
+<<<<<<< HEAD
       // Remove addresses e extrai campos específicos
       const { 
         addresses, 
@@ -56,6 +61,18 @@ export class ContactsService {
             pfData: true,
             pjData: true,
         }
+=======
+      console.log('Creating contact:', { ...createContactDto, tenantId });
+      
+      // Remove addresses do payload pois devem ser criados separadamente
+      const { addresses, ...contactData } = createContactDto as any;
+      
+      return await this.prisma.contact.create({
+        data: {
+          ...contactData,
+          tenantId,
+        },
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
       });
     } catch (error) {
       console.error('Error creating contact:', error);
@@ -66,10 +83,13 @@ export class ContactsService {
   findAll(tenantId: string) {
     return this.prisma.contact.findMany({
       where: { tenantId },
+<<<<<<< HEAD
       include: {
           pfData: true,
           pjData: true,
       },
+=======
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -80,13 +100,17 @@ export class ContactsService {
       include: {
         addresses: true,
         additionalContacts: true,
+<<<<<<< HEAD
         pfData: true,
         pjData: true,
         assets: true,
+=======
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
       },
     });
   }
 
+<<<<<<< HEAD
   async update(id: string, updateContactDto: UpdateContactDto) {
       const { 
         addresses, 
@@ -130,6 +154,13 @@ export class ContactsService {
             } : undefined,
         },
       });
+=======
+  update(id: string, updateContactDto: UpdateContactDto) {
+    return this.prisma.contact.update({
+      where: { id },
+      data: updateContactDto,
+    });
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   }
 
   remove(id: string) {

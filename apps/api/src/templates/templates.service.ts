@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+<<<<<<< HEAD
 import { PrismaService } from '@dr-x/database';
+=======
+import { PrismaService } from '@drx/database';
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 import { CreateTemplateDto } from './dto/create-template.dto';
 import { UpdateTemplateDto } from './dto/update-template.dto';
 
@@ -10,6 +14,10 @@ export class TemplatesService {
   create(createTemplateDto: CreateTemplateDto) {
     return this.prisma.documentTemplate.create({
       data: {
+<<<<<<< HEAD
+=======
+        tenantId: createTemplateDto.tenantId,
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
         title: createTemplateDto.title,
         content: createTemplateDto.content,
         categoryId: createTemplateDto.categoryId,

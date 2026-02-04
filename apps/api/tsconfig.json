@@ -17,8 +17,12 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
+<<<<<<< HEAD
     "paths": {
       "@dr-x/database": ["../../packages/database/dist/index.js"]
     }
+=======
+
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
   }
 }

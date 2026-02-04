@@ -17,6 +17,29 @@ export interface CNPJData {
   cep: string;
   ddd_telefone_1: string;
   email: string;
+<<<<<<< HEAD
+=======
+  
+  // Expanded Data
+  abertura: string;
+  natureza_juridica: string;
+  porte: string;
+  capital_social: string;
+  situacao: string;
+  data_situacao: string;
+  motivo_situacao: string;
+  situacao_especial: string;
+  data_situacao_especial: string;
+  atividade_principal: Array<{ code: string; text: string }>;
+  atividades_secundarias: Array<{ code: string; text: string }>;
+  qsa: Array<{ 
+    nome: string; 
+    qual: string; // Qualificação (Sócio-Admin, etc)
+    pais_origem?: string;
+    nome_rep_legal?: string;
+    qual_rep_legal?: string;
+  }>;
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
 }
 
 export interface CEPData {
@@ -65,6 +88,11 @@ export class EnrichmentService {
         );
       }
 
+<<<<<<< HEAD
+=======
+      // We return the raw data because ReceitaWS structure matches what we need
+      // and our DTO/Interface will type it correctly for consumption
+>>>>>>> f67fa9245bfe51c68d57fe11522543ec186b9f69
       return response.data;
     } catch (error) {
       if (error instanceof HttpException) {
