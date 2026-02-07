@@ -13,7 +13,9 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "db:studio": "turbo run db:studio",
-    "db:push": "turbo run db:push"
+    "db:push": "turbo run db:push",
+    "db:backup:local": "docker exec drx_db_local pg_dump -U drx_dev drx_local > backups/backup.sql",
+    "db:restore:local": "docker exec -i drx_db_local psql -U drx_dev drx_local < backups/backup.sql"
   },
   "devDependencies": {
     "turbo": "latest",

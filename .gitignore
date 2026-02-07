@@ -13,3 +13,9 @@ packages/database/dist/
 *.log
 .env
 .env.production
+
+# Banco de Dados e Backups (PROTEÇÃO CRÍTICA)
+backups/
+*.sql
+*.sqlite
+*.db
