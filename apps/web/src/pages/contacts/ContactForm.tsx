@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -12,7 +12,7 @@ import { PJTab } from './PJTab';
 interface ContactData {
   id?: string;
   name: string;
-  personType: string;
+  personType: string; // 'LEAD' | 'PF' | 'PJ'
   
   // Pessoa Física
   cpf?: string;
@@ -39,8 +39,8 @@ interface ContactData {
   // Campos Gerais
   document?: string;
   email?: string;
-  phone: string;
-  whatsapp?: string;
+  phone: string; // Telefone
+  whatsapp?: string; // Celular (Obrigatório)
   notes?: string;
   category?: string;
   addresses?: Address[];
@@ -98,23 +98,6 @@ interface ContactAsset {
   notes?: string;
 }
 
-const TABS = [
-  { id: 'contact', label: 'Contato (Geral)', icon: Users },
-  { id: 'pf_create', label: 'Novo PF', icon: Users },
-  { id: 'pj_create', label: 'Novo PJ', icon: Briefcase },
-  { id: 'relations', label: 'Vínculos', icon: Lock },
-  { id: 'contacts', label: 'Contatos', icon: Users },
-  { id: 'addresses', label: 'Endereços', icon: Home },
-  { id: 'financial', label: 'Financeiro', icon: DollarSign },
-  { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
-  { id: 'assets', label: 'Patrimônio', icon: Briefcase },
-  { id: 'agenda', label: 'Agenda', icon: Calendar },
-  { id: 'processes', label: 'Processos', icon: Settings },
-  { id: 'attachments', label: 'Anexos', icon: Paperclip },
-  { id: 'contracts', label: 'Contratos', icon: FileText },
-  { id: 'adm', label: 'ADM', icon: Settings }
-];
-
 const CATEGORIES = [
   'Cliente',
   'Fornecedor',
@@ -133,12 +116,54 @@ export function ContactForm() {
   const [activeTab, setActiveTab] = useState('contact');
   const [formData, setFormData] = useState<ContactData>({
     name: '',
-    personType: 'PF',
+    personType: 'LEAD',
     phone: '',
+    whatsapp: '',
+    document: '',
     addresses: [],
     sideActivities: [],
     pjQsa: []
   });
+
+  const TABS = useMemo(() => {
+    const baseTabs = [
+      { id: 'contact', label: 'Contato', icon: Users },
+    ];
+
+    if (formData.personType === 'PF') {
+      baseTabs.push({ id: 'pf_details', label: 'Dados PF', icon: Users });
+    }
+
+    if (formData.personType === 'PJ') {
+      baseTabs.push({ id: 'pj_details', label: 'Dados PJ', icon: Briefcase });
+    }
+
+    // Abas comuns a todos (exceto Lead que pode ter restrições, mas o user disse "Lead... aba PF e PJ ocultas", implying others are fine or default)
+    // "Lead= Cadastro básico... para este a ABA PF e a aba PJ estarão ocultas." -> Implies others might be visible?
+    // "PF... exibe todas as demais."
+    // "PJ... exibe todas as demais."
+    // Let's assume common tabs are visible for everyone including Lead, unless specified.
+    // Spec says: "Lead... Normalmente este cadastro estará com nome, Whatsapp, preenchidos, já que são obrigatórios, para este a ABA PF e a aba PJ estarão ocultas."
+    // It doesn't explicitly hide "Addresses", "Financial", etc. for Leads. I'll keep them visible or maybe hide complex ones?
+    // Usually Leads might not have Financials yet. But strict reading: "PF... exibe todas as demais" -> implies Lead might NOT show all?
+    // Re-reading: "Lead... para este a ABA PF e a aba PJ estarão ocultas." -> That's the only exclusion mentioned.
+    
+    const commonTabs = [
+        { id: 'relations', label: 'Vínculos', icon: Lock },
+        { id: 'contacts', label: 'Contatos', icon: Users },
+        { id: 'addresses', label: 'Endereços', icon: Home },
+        { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
+        { id: 'assets', label: 'Patrimônio', icon: Briefcase },
+        { id: 'agenda', label: 'Agenda', icon: Calendar },
+        { id: 'processes', label: 'Processos', icon: Settings },
+        { id: 'attachments', label: 'Anexos', icon: Paperclip },
+        { id: 'contracts', label: 'Contratos', icon: FileText },
+        { id: 'financial', label: 'Financeiro', icon: DollarSign },
+        { id: 'adm', label: 'ADM', icon: Settings }
+    ];
+
+    return [...baseTabs, ...commonTabs];
+  }, [formData.personType]);
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
   
@@ -411,8 +436,31 @@ export function ContactForm() {
     e.preventDefault();
     setLoading(true);
     try {
+        const toISO = (dateStr: any) => {
+            if (!dateStr || typeof dateStr !== 'string') return dateStr;
+            // Check if dd/mm/yyyy
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+                const [d, m, y] = dateStr.split('/');
+                return `${y}-${m}-${d}T00:00:00.000Z`;
+            }
+            return dateStr;
+        };
+
+        const rawPayload = { ...formData };
+        
+        // Convert specific date fields if they are in BR format
+        if (rawPayload.openingDate) rawPayload.openingDate = toISO(rawPayload.openingDate);
+        if (rawPayload.statusDate) rawPayload.statusDate = toISO(rawPayload.statusDate);
+        if (rawPayload.specialStatusDate) rawPayload.specialStatusDate = toISO(rawPayload.specialStatusDate);
+
+        // Ensure shareCapital is number or compatible string
+        if (rawPayload.shareCapital && typeof rawPayload.shareCapital === 'string') {
+             // Removing currency formatting if present (e.g. "R$ 1.000,00" -> 1000.00)
+             // But usually it comes as number or simple string from enrichment
+        }
+
         const payload = Object.fromEntries(
-          Object.entries(formData).map(([key, value]) => [
+          Object.entries(rawPayload).map(([key, value]) => [
             key,
             value === '' ? null : value
           ])
@@ -825,183 +873,96 @@ export function ContactForm() {
         {/* Tab Content */}
         <div className="p-8">
             {activeTab === 'contact' && (
-                <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
-                     {/* Tipo de Pessoa */}
+                <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl">
+                     {/* Classification */}
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                             <Users size={20} className="text-indigo-400" /> Tipo de Pessoa
+                             <Users size={20} className="text-indigo-400" /> Classificação do Contato
                          </h3>
                          
-                         <div className="flex gap-4">
-                             <label className="flex items-center gap-2 cursor-pointer">
+                         <div className="flex gap-6">
+                             <label className="flex items-center gap-3 cursor-pointer group">
+                                 <div className={clsx("w-5 h-5 rounded-full border-2 flex items-center justify-center transition", formData.personType === 'LEAD' ? "border-indigo-500" : "border-slate-500 group-hover:border-indigo-400")}>
+                                     {formData.personType === 'LEAD' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />}
+                                 </div>
+                                 <input
+                                     type="radio"
+                                     name="personType"
+                                     value="LEAD"
+                                     checked={formData.personType === 'LEAD'}
+                                     onChange={e => setFormData({...formData, personType: e.target.value})}
+                                     className="hidden"
+                                 />
+                                 <div className="flex flex-col">
+                                    <span className={clsx("font-medium transition", formData.personType === 'LEAD' ? "text-indigo-400" : "text-slate-300")}>Lead</span>
+                                    <span className="text-xs text-slate-500">Cadastro básico (Nome + WhatsApp)</span>
+                                 </div>
+                             </label>
+
+                             <label className="flex items-center gap-3 cursor-pointer group">
+                                 <div className={clsx("w-5 h-5 rounded-full border-2 flex items-center justify-center transition", formData.personType === 'PF' ? "border-indigo-500" : "border-slate-500 group-hover:border-indigo-400")}>
+                                     {formData.personType === 'PF' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />}
+                                 </div>
                                  <input
                                      type="radio"
                                      name="personType"
                                      value="PF"
                                      checked={formData.personType === 'PF'}
                                      onChange={e => setFormData({...formData, personType: e.target.value})}
-                                     className="w-4 h-4 text-indigo-600"
+                                     className="hidden"
                                  />
-                                 <span className="text-white">Pessoa Física (PF)</span>
+                                 <div className="flex flex-col">
+                                    <span className={clsx("font-medium transition", formData.personType === 'PF' ? "text-indigo-400" : "text-slate-300")}>Pessoa Física</span>
+                                    <span className="text-xs text-slate-500">Dados completos de PF</span>
+                                 </div>
                              </label>
-                             <label className="flex items-center gap-2 cursor-pointer">
+
+                             <label className="flex items-center gap-3 cursor-pointer group">
+                                 <div className={clsx("w-5 h-5 rounded-full border-2 flex items-center justify-center transition", formData.personType === 'PJ' ? "border-indigo-500" : "border-slate-500 group-hover:border-indigo-400")}>
+                                     {formData.personType === 'PJ' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />}
+                                 </div>
                                  <input
                                      type="radio"
                                      name="personType"
                                      value="PJ"
                                      checked={formData.personType === 'PJ'}
                                      onChange={e => setFormData({...formData, personType: e.target.value})}
-                                     className="w-4 h-4 text-indigo-600"
+                                     className="hidden"
                                  />
-                                 <span className="text-white">Pessoa Jurídica (PJ)</span>
+                                  <div className="flex flex-col">
+                                    <span className={clsx("font-medium transition", formData.personType === 'PJ' ? "text-indigo-400" : "text-slate-300")}>Pessoa Jurídica</span>
+                                    <span className="text-xs text-slate-500">Dados completos de EMPRESA</span>
+                                 </div>
                              </label>
                          </div>
                      </div>
 
-                     {/* Nova Aba de Dados Corporativos (Só aparece para PJ) */}
-                     {formData.personType === 'PJ' && (
-                        <PJTab formData={formData} />
-                     )}
-
-                     {/* Campos Condicionais - Pessoa Física */}
-                     {formData.personType === 'PF' && (
-                         <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
-                             <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                                 <Users size={20} className="text-indigo-400" /> Dados Pessoais
-                             </h3>
-                             
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                 <div className="space-y-2 md:col-span-2">
-                                     <label className="text-sm font-medium text-slate-400">Nome Completo *</label>
-                                     <input 
-                                        required
-                                        value={formData.name}
-                                        onChange={e => setFormData({...formData, name: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="Ex: João da Silva"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">CPF</label>
-                                     <input 
-                                        value={formData.cpf || ''}
-                                        onChange={e => setFormData({...formData, cpf: masks.cpf(e.target.value)})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="000.000.000-00"
-                                        maxLength={14}
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">RG</label>
-                                     <input 
-                                        value={formData.rg || ''}
-                                        onChange={e => setFormData({...formData, rg: e.target.value})} // RG doesn't have a standard mask often
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="00.000.000-0"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">Data de Nascimento</label>
-                                     <input 
-                                        type="date"
-                                        value={formData.birthDate || ''}
-                                        onChange={e => setFormData({...formData, birthDate: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                     />
-                                 </div>
-                             </div>
-                         </div>
-                     )}
-
-                     {/* Campos Condicionais - Pessoa Jurídica */}
-                     {formData.personType === 'PJ' && (
-                         <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
-                             <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                                 <Briefcase size={20} className="text-indigo-400" /> Dados da Empresa
-                             </h3>
-                             
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                 <div className="space-y-2 md:col-span-2">
-                                     <label className="text-sm font-medium text-slate-400">Nome Fantasia *</label>
-                                     <input 
-                                        required
-                                        value={formData.name}
-                                        onChange={e => setFormData({...formData, name: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="Ex: Empresa XYZ"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2 md:col-span-2">
-                                     <label className="text-sm font-medium text-slate-400">Razão Social</label>
-                                     <input 
-                                        value={formData.companyName || ''}
-                                        onChange={e => setFormData({...formData, companyName: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="Razão Social da Empresa"
-                                     />
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">CNPJ</label>
-                                     <div className="flex gap-2">
-                                         <input 
-                                            value={formData.cnpj || ''}
-                                            onChange={e => setFormData({...formData, cnpj: masks.cnpj(e.target.value)})}
-                                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                            placeholder="00.000.000/0000-00"
-                                            maxLength={18}
-                                         />
-                                         <button
-                                             type="button"
-                                             onClick={handleEnrichCNPJ}
-                                             disabled={enriching || !formData.cnpj}
-                                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 flex items-center gap-2"
-                                         >
-                                             <Search size={16} />
-                                             {enriching ? 'Consultando...' : 'Consultar'}
-                                         </button>
-                                     </div>
-                                 </div>
-
-                                 <div className="space-y-2">
-                                     <label className="text-sm font-medium text-slate-400">Inscrição Estadual</label>
-                                     <input 
-                                        value={formData.stateRegistration || ''}
-                                        onChange={e => setFormData({...formData, stateRegistration: e.target.value})}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                        placeholder="000.000.000.000"
-                                     />
-                                 </div>
-                             </div>
-                         </div>
-                     )}
-
-                     {/* Campos Gerais */}
+                     {/* General Information */}
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                             <Phone size={20} className="text-indigo-400" /> Informações de Contato
+                             <FileText size={20} className="text-indigo-400" /> Informações Principais
                          </h3>
                          
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                             <div className="space-y-2">
-                                 <label className="text-sm font-medium text-slate-400">Celular *</label>
+                             {/* Nome Fantasia / Nome */}
+                             <div className="space-y-2 md:col-span-2">
+                                 <label className="text-sm font-medium text-slate-400">
+                                     {formData.personType === 'PJ' ? 'Nome Fantasia *' : 'Nome Completo *'}
+                                 </label>
                                  <input 
                                     required
-                                    value={formData.phone}
-                                    onChange={e => setFormData({...formData, phone: masks.phone(e.target.value)})}
+                                    value={formData.name}
+                                    onChange={e => setFormData({...formData, name: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                    placeholder="(00) 00000-0000"
-                                    maxLength={15}
+                                    placeholder={formData.personType === 'PJ' ? "Nome Fantasia da Empresa" : "Nome do Contato"}
                                  />
                              </div>
 
+                             {/* Celular / WhatsApp (Mandatory) */}
                              <div className="space-y-2">
-                                 <label className="text-sm font-medium text-slate-400">WhatsApp</label>
+                                 <label className="text-sm font-medium text-slate-400">Celular / WhatsApp *</label>
                                  <input 
+                                    required
                                     value={formData.whatsapp || ''}
                                     onChange={e => setFormData({...formData, whatsapp: masks.phone(e.target.value)})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
@@ -1010,6 +971,19 @@ export function ContactForm() {
                                  />
                              </div>
 
+                             {/* Telefone */}
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">Telefone Fixo</label>
+                                 <input 
+                                    value={formData.phone || ''}
+                                    onChange={e => setFormData({...formData, phone: masks.phone(e.target.value)})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="(00) 0000-0000"
+                                    maxLength={14}
+                                 />
+                             </div>
+
+                             {/* E-mail */}
                              <div className="space-y-2 md:col-span-2">
                                  <label className="text-sm font-medium text-slate-400">E-mail</label>
                                  <input 
@@ -1020,22 +994,44 @@ export function ContactForm() {
                                     placeholder="email@exemplo.com"
                                  />
                              </div>
+                             
+                             {/* CPF / CNPJ - Hidden or Optional for Lead */}
+                             {formData.personType !== 'LEAD' && (
+                                <div className="space-y-2 md:col-span-2">
+                                    <label className="text-sm font-medium text-slate-400">
+                                        {formData.personType === 'PJ' ? 'CNPJ' : 'CPF'}
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            value={formData.personType === 'PJ' ? (formData.cnpj || '') : (formData.cpf || '')}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                if (formData.personType === 'PJ') {
+                                                    setFormData({...formData, cnpj: masks.cnpj(val)});
+                                                } else {
+                                                    setFormData({...formData, cpf: masks.cpf(val)});
+                                                }
+                                            }}
+                                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            placeholder={formData.personType === 'PJ' ? "00.000.000/0000-00" : "000.000.000-00"}
+                                            maxLength={formData.personType === 'PJ' ? 18 : 14}
+                                        />
+                                        {formData.personType === 'PJ' && (
+                                            <button
+                                                type="button"
+                                                onClick={handleEnrichCNPJ}
+                                                disabled={enriching || !formData.cnpj}
+                                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                <Search size={16} />
+                                                {enriching ? '...' : 'Buscar'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                             )}
 
-                             <div className="space-y-2">
-                                 <label className="text-sm font-medium text-slate-400">Categoria</label>
-                                 <select
-                                    value={formData.category || ''}
-                                    onChange={e => setFormData({...formData, category: e.target.value})}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                 >
-                                     <option value="">Selecione uma categoria</option>
-                                     {CATEGORIES.map(cat => (
-                                         <option key={cat} value={cat}>{cat}</option>
-                                     ))}
-                                 </select>
-
-                             </div>
-
+                             {/* Observações */}
                              <div className="space-y-2 md:col-span-2">
                                  <label className="text-sm font-medium text-slate-400">Observações</label>
                                  <textarea 
@@ -1043,7 +1039,7 @@ export function ContactForm() {
                                     value={formData.notes || ''}
                                     onChange={e => setFormData({...formData, notes: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                    placeholder="Observações sobre o contato..."
+                                    placeholder="Observações gerais sobre o contato..."
                                  />
                              </div>
                          </div>
@@ -1060,6 +1056,50 @@ export function ContactForm() {
                      </div>
                 </form>
             )}
+
+            {activeTab === 'pf_details' && (
+                <div className="space-y-6 max-w-4xl">
+                     <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
+                         <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+                             <Users size={20} className="text-indigo-400" /> Dados Pessoais (Detalhado)
+                         </h3>
+                         
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">RG</label>
+                                 <input 
+                                    value={formData.rg || ''}
+                                    onChange={e => setFormData({...formData, rg: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="00.000.000-0"
+                                 />
+                             </div>
+
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400">Data de Nascimento</label>
+                                 <input 
+                                    type="date"
+                                    value={formData.birthDate || ''}
+                                    onChange={e => setFormData({...formData, birthDate: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                 />
+                             </div>
+                         </div>
+                     </div>
+                     <div className="flex justify-end">
+                        <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
+                            Salvar Alterações
+                        </button>
+                     </div>
+                </div>
+            )}
+            
+            {/* PJ Tab is used for PJ Details when active */}
+            {activeTab === 'pj_details' && (
+               <PJTab formData={formData} />
+            )}
+
+
 
             {activeTab === 'addresses' && (
                 <div className="space-y-6 max-w-4xl">

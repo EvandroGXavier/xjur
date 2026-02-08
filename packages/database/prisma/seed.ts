@@ -58,27 +58,46 @@ async function main() {
   }
 
   // 3. Criar SuperAdmin User
-  const email = 'evandro@conectionmg.com.br'; // Email do SuperAdmin
-  const password = 'admin'; // Senha provisória
+  const emailEx = 'evandro@conectionmg.com.br';
+  const passwordEx = 'admin';
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email }
-  });
-
-  if (!existingUser) {
-    console.log(`Creating SuperAdmin user: ${email}`);
+  const userEx = await prisma.user.findUnique({ where: { email: emailEx } });
+  if (!userEx) {
     await prisma.user.create({
       data: {
         name: 'SuperAdmin Dr.X',
-        email: email,
-        password: password, // TODO: Hash password in production
+        email: emailEx,
+        password: passwordEx,
         role: 'OWNER',
         tenantId: tenant.id
       }
     });
-    console.log('SuperAdmin created successfully.');
+    console.log(`User created: ${emailEx}`);
+  }
+
+  // 4. Criar Local Admin (para testes do usuário)
+  const localEmail = 'admin@drx.local';
+  const localPass = '123';
+
+  const localUser = await prisma.user.findUnique({ where: { email: localEmail } });
+  if (!localUser) {
+    await prisma.user.create({
+      data: {
+        name: 'Admin Local',
+        email: localEmail,
+        password: localPass,
+        role: 'ADMIN',
+        tenantId: tenant.id
+      }
+    });
+    console.log(`User created: ${localEmail} / ${localPass}`);
   } else {
-    console.log('SuperAdmin already exists.');
+    // Garantir a senha correta se já existir
+    await prisma.user.update({
+        where: { email: localEmail },
+        data: { password: localPass }
+    });
+    console.log(`User updated: ${localEmail} / ${localPass}`);
   }
 }
 

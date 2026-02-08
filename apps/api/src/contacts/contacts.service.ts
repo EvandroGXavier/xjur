@@ -15,43 +15,154 @@ export class ContactsService {
     try {
       console.log('Creating contact:', { ...createContactDto, tenantId });
       
-      // Remove addresses do payload pois devem ser criados separadamente
-      const { addresses, ...contactData } = createContactDto as any;
-      
-      return await this.prisma.contact.create({
+      const { 
+        // PF Fields
+        cpf, rg, birthDate,
+        
+        // PJ Fields
+        cnpj, companyName, stateRegistration, openingDate, size, legalNature,
+        mainActivity, sideActivities, shareCapital, status, statusDate,
+        specialStatus, specialStatusDate, pjQsa,
+        
+        // Address & Additional (handled separately usually but let's be safe)
+        addresses, additionalContacts,
+        
+        ...commonData 
+      } = createContactDto as any;
+
+      // Prepare nested writes
+      const pfCreate = commonData.personType === 'PF' ? {
+        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined
+      } : undefined;
+
+      const pjCreate = commonData.personType === 'PJ' ? {
+        cnpj, companyName, stateRegistration, 
+        openingDate: openingDate ? new Date(openingDate) : undefined,
+        size, legalNature, mainActivity, sideActivities, shareCapital,
+        status, statusDate: statusDate ? new Date(statusDate) : undefined,
+        specialStatus, specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
+        pjQsa
+      } : undefined;
+
+      const contact = await this.prisma.contact.create({
         data: {
-          ...contactData,
+          ...commonData,
           tenantId,
+          pfDetails: pfCreate ? { create: pfCreate } : undefined,
+          pjDetails: pjCreate ? { create: pjCreate } : undefined,
         },
+        include: {
+           pfDetails: true,
+           pjDetails: true
+        }
       });
+      
+      return this.flattenContact(contact);
+
     } catch (error) {
       console.error('Error creating contact:', error);
       throw error;
     }
   }
 
-  findAll(tenantId: string) {
-    return this.prisma.contact.findMany({
+  async findAll(tenantId: string) {
+    const contacts = await this.prisma.contact.findMany({
       where: { tenantId },
+      include: {
+        pfDetails: true,
+        pjDetails: true
+      },
       orderBy: { createdAt: 'desc' },
     });
+    return contacts.map(c => this.flattenContact(c));
   }
 
-  findOne(id: string) {
-    return this.prisma.contact.findUnique({
+  async findOne(id: string) {
+    const contact = await this.prisma.contact.findUnique({
       where: { id },
       include: {
         addresses: true,
         additionalContacts: true,
+        pfDetails: true,
+        pjDetails: true,
+        assets: { include: { assetType: true } },
+        relationsFrom: { include: { toContact: true, relationType: true } },
+        relationsTo: { include: { fromContact: true, relationType: true } }
       },
     });
+    
+    if (!contact) return null;
+    return this.flattenContact(contact);
   }
 
-  update(id: string, updateContactDto: UpdateContactDto) {
-    return this.prisma.contact.update({
+  async update(id: string, updateContactDto: UpdateContactDto) {
+    const { 
+      // PF Fields
+      cpf, rg, birthDate,
+      
+      // PJ Fields
+      cnpj, companyName, stateRegistration, openingDate, size, legalNature,
+      mainActivity, sideActivities, shareCapital, status, statusDate,
+      specialStatus, specialStatusDate, pjQsa,
+      
+      addresses, additionalContacts,
+      
+      ...commonData 
+    } = updateContactDto as any;
+
+    const pfUpdate = {
+        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined
+    };
+
+    const pjUpdate = {
+        cnpj, companyName, stateRegistration, 
+        openingDate: openingDate ? new Date(openingDate) : undefined,
+        size, legalNature, mainActivity, sideActivities, shareCapital,
+        status, statusDate: statusDate ? new Date(statusDate) : undefined,
+        specialStatus, specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
+        pjQsa
+    };
+
+    const contact = await this.prisma.contact.update({
       where: { id },
-      data: updateContactDto,
+      data: {
+        ...commonData,
+        pfDetails: commonData.personType === 'PF' ? {
+            upsert: {
+                create: pfUpdate,
+                update: pfUpdate
+            }
+        } : undefined,
+        pjDetails: commonData.personType === 'PJ' ? {
+            upsert: {
+                create: pjUpdate,
+                update: pjUpdate
+            }
+        } : undefined
+      },
+      include: {
+        pfDetails: true,
+        pjDetails: true
+      }
     });
+
+    return this.flattenContact(contact);
+  }
+
+  // Helper to merge nested details back to flat structure for frontend compatibility
+  private flattenContact(contact: any) {
+     const { pfDetails, pjDetails, ...rest } = contact;
+     let flat = { ...rest };
+     
+     if (pfDetails) {
+         const { id, contactId, ...pfFields } = pfDetails;
+         flat = { ...flat, ...pfFields };
+     }
+     if (pjDetails) {
+         const { id, contactId, ...pjFields } = pjDetails;
+         flat = { ...flat, ...pjFields };
+     }
+     return flat;
   }
 
   remove(id: string) {

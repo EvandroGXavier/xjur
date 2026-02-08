@@ -214,25 +214,35 @@ export class FinancialService {
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
-        { cpf: { contains: search } },
-        { cnpj: { contains: search } },
+        { pfDetails: { cpf: { contains: search } } },
+        { pjDetails: { cnpj: { contains: search } } },
       ];
     }
 
-    return this.prisma.contact.findMany({
+    const contacts = await this.prisma.contact.findMany({
       where,
       select: {
         id: true,
         name: true,
         personType: true,
-        cpf: true,
-        cnpj: true,
         category: true,
+        pfDetails: { select: { cpf: true } },
+        pjDetails: { select: { cnpj: true } },
       },
       take: 50,
       orderBy: { name: 'asc' },
     });
+
+    return contacts.map(c => ({
+      id: c.id,
+      name: c.name,
+      personType: c.personType,
+      category: c.category,
+      cpf: c.pfDetails?.cpf,
+      cnpj: c.pjDetails?.cnpj,
+    }));
   }
+
 
   // ==================== DASHBOARD & REPORTS ====================
 

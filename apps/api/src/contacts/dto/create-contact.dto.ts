@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEmail, MinLength, IsIn, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsEmail, MinLength, IsIn, IsDateString, IsNumber, IsArray, IsObject } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateContactDto {
@@ -8,7 +8,7 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['PF', 'PJ'], { message: 'Tipo de pessoa deve ser PF ou PJ' })
+  @IsIn(['LEAD', 'PF', 'PJ'], { message: 'Tipo de pessoa deve ser LEAD, PF ou PJ' })
   personType?: string;
 
   // Campos Pessoa Física
@@ -42,6 +42,48 @@ export class CreateContactDto {
   @IsString()
   @Transform(({ value }) => value === "" ? null : value)
   stateRegistration?: string;
+
+  // Dados Expandidos PJ (Receita Federal)
+  @IsOptional()
+  @Transform(({ value }) => value === "" ? null : value)
+  openingDate?: string | Date;
+
+  @IsOptional()
+  @IsString()
+  size?: string;
+
+  @IsOptional()
+  @IsString()
+  legalNature?: string;
+
+  @IsOptional()
+  mainActivity?: any; // Json
+
+  @IsOptional()
+  sideActivities?: any; // Json
+
+  @IsOptional()
+  @Transform(({ value }) => value === "" ? null : value)
+  shareCapital?: string | number;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === "" ? null : value)
+  statusDate?: string | Date;
+
+  @IsOptional()
+  @IsString()
+  specialStatus?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === "" ? null : value)
+  specialStatusDate?: string | Date;
+
+  @IsOptional()
+  pjQsa?: any; // Json
 
   // Campos Gerais
   @IsOptional()

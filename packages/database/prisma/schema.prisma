@@ -72,31 +72,8 @@ model Contact {
   name              String
   personType        String    @default("PF") // PF ou PJ
   
-  // Campos Pessoa Física
-  cpf               String?
-  rg                String?
-  birthDate         DateTime?
-  
-  // Campos Pessoa Jurídica
-  cnpj              String?
-  companyName       String?   // Razão Social
-  stateRegistration String?   // Inscrição Estadual
-  
-  // Dados Expandidos PJ (Receita Federal)
-  openingDate       DateTime?
-  size              String?      // Porte (ME, EPP, DEMAIS)
-  legalNature       String?      // Natureza Jurídica
-  mainActivity      Json?        // CNAE Principal { code, text }
-  sideActivities    Json?        // CNAEs Secundários [ { code, text } ]
-  shareCapital      Decimal?     @db.Decimal(15, 2)
-  status            String?      // ATIVA, SUSPENSA, BAIXADA
-  statusDate        DateTime?
-  specialStatus     String?
-  specialStatusDate DateTime?
-  pjQsa             Json?        // Quadro de Sócios e Administradores
-  
   // Campos Gerais
-  document          String?   // CPF/CNPJ (Mantido para compatibilidade)
+  document          String?   // CPF/CNPJ (Mantido para busca rápida/compatibilidade)
   whatsapp          String?
   email             String?
   phone             String?
@@ -104,6 +81,10 @@ model Contact {
   category          String?   // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
   password          String?   // Senha para acesso ao sistema
   
+  // Detalhes Específicos (1:1)
+  pfDetails         PersonDetailPF?
+  pjDetails         PersonDetailPJ?
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   
@@ -118,11 +99,49 @@ model Contact {
   bankAccounts       BankAccount[] @relation("BankAccounts")
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
 
-  @@index([cpf])
-  @@index([cnpj])
+  @@index([document]) // Index on document generic field
   @@index([personType])
   @@index([category])
   @@map("contacts")
+}
+
+model PersonDetailPF {
+  id        String   @id @default(uuid())
+  contactId String   @unique
+  
+  cpf       String?
+  rg        String?
+  birthDate DateTime?
+  
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  
+  @@map("person_details_pf")
+}
+
+model PersonDetailPJ {
+  id                String   @id @default(uuid())
+  contactId         String   @unique
+  
+  cnpj              String?
+  companyName       String?   // Razão Social
+  stateRegistration String?   // Inscrição Estadual
+  
+  // Dados Expandidos PJ (Receita Federal)
+  openingDate       DateTime?
+  size              String?      
+  legalNature       String?      
+  mainActivity      Json?        
+  sideActivities    Json?        
+  shareCapital      Decimal?     @db.Decimal(15, 2)
+  status            String?      
+  statusDate        DateTime?
+  specialStatus     String?
+  specialStatusDate DateTime?
+  pjQsa             Json?        
+  
+  contact           Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  
+  @@map("person_details_pj")
 }
 
 model RelationType {
