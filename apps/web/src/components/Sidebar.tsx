@@ -8,7 +8,9 @@ import {
   Bot,
   FileText,
   Settings,
-  ShieldCheck
+  Package,
+  ShieldCheck,
+  Calendar
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -16,7 +18,9 @@ const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
   { icon: MessageSquare, label: 'Atendimento', to: '/chat' },
   { icon: Scale, label: 'Processos', to: '/processes' },
+  { icon: Calendar, label: 'Agenda', to: '/agenda' },
   { icon: DollarSign, label: 'Financeiro', to: '/financial' },
+  { icon: Package, label: 'Produtos', to: '/products' },
   { icon: Users, label: 'Contatos', to: '/contacts' },
   { icon: FileText, label: 'Documentos', to: '/documents' },
   { icon: ShieldCheck, label: 'Equipe', to: '/users' },

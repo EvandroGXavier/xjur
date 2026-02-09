@@ -36,8 +36,12 @@ export class ProcessCrawlerService {
              return this.crawlByCnj(cleanTerm);
         }
 
-        // Se é busca textual ou documento curto (CPF/Nome), retorna Mock de Lista
-        // Simulando que encontrou um processo específico para o teste
+        // Mock Inteligente para Testes
+        const isDoc = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/.test(cleanTerm) || /^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/.test(cleanTerm);
+        
+        const autorName = isDoc ? 'Autor Simulado (Busca por CPF)' : term.toUpperCase();
+        const autorDoc = isDoc ? term : '000.000.000-00';
+
         return {
             cnj: '5009999-88.2025.8.13.0024',
             npu: '5009999-88.2025.8.13.0024',
@@ -53,7 +57,7 @@ export class ProcessCrawlerService {
             judge: 'Dr. Substituto',
             value: 12500.50,
             parties: [
-                { name: term.toUpperCase(), type: 'AUTOR', document: '000.000.000-00' },
+                { name: autorName, type: 'AUTOR', document: autorDoc },
                 { name: 'Réu Genérico SA', type: 'RÉU', document: '99.999.999/0001-99' }
             ],
             movements: [

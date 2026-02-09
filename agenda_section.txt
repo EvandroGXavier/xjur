@@ -1,0 +1,25 @@
+#### 8. AGENDA (Gestão de Compromissos)
+- **Visão Geral**: Módulo central para controle de prazos processuais, audiências e reuniões, com fluxos transacionais e múltiplos participantes.
+- **Estrutura de Abas e Funcionalidades**:
+  1. **Calendário** (Visão Principal):
+     - *Modos*: Mensal, Semanal, Diária, Lista (Pauta).
+     - *Interatividade*: Drag & Drop para reagendamento rápido.
+     - *Filtros*: Por Advogado Responsável, Tipo de Evento, Status.
+  2. **Novo Compromisso** (Modal Detalhado):
+     - *Abas do Modal*:
+       - **Geral**: Título, Tipo (Audiência, Prazo, Reunião), Data/Hora Início e Fim, Local (Virtual/Físico).
+       - **Vínculos**: Processo (Busca Automática), Cliente (Busca Automática).
+       - **Participantes**: Responsável (Interno), Envolvidos (Cliente, Testemunha, Perito).
+       - **Notificações**: Configuração de lembretes (Email/WhatsApp) prévios.
+       - **Recorrência**: Diária, Semanal, Mensal.
+  3. **Fluxos Transacionais (Status)**:
+     - *Ciclo de Vida*: Agendado -> Confirmado -> Em Andamento -> Realizado -> Cancelado -> Reagendado.
+     - *Ações Específicas*: "Check-in" (Registrar presença), "Ata" (Upload pós-audiência).
+  4. **Integrações**:
+     - Sincronização automática com Prazos dos Processos.
+     - Envio de convite .ics por e-mail.
+
+- **Tabelas do Banco (Projeção PT-BR)**:
+  - `agenda_eventos` (schema: `appointments`)
+  - `agenda_participantes` (schema: `appointment_participants`)
+  - `agenda_tipos` (schema: `appointment_types`)

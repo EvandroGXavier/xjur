@@ -34,6 +34,15 @@ model Tenant {
   contactRelations  ContactRelation[]
   assetTypes        AssetType[]
   contactAssets     ContactAsset[]
+  
+  // New Modules Relationships
+  tags              Tag[]
+  appointments      Appointment[]
+  products          Product[]
+  suppliers         Supplier[]
+  inventoryMovements InventoryMovement[]
+  tickets           Ticket[]
+  waInstances       WaInstance[]
 
   @@map("tenants")
 }
@@ -97,6 +106,12 @@ model Contact {
   relationsTo        ContactRelation[] @relation("RelationsTo")
   assets             ContactAsset[]
   bankAccounts       BankAccount[] @relation("BankAccounts")
+  
+  // New Modules Relationships
+  tags               ContactTag[]
+  appointmentParticipations AppointmentParticipant[]
+  tickets            Ticket[]
+  
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([document]) // Index on document generic field
@@ -276,6 +291,7 @@ model Process {
   contact        Contact?  @relation(fields: [contactId], references: [id])
   timeline       ProcessTimeline[]
   financials     FinancialRecord[]
+  appointments   Appointment[]
 
   @@map("processes")
 }
@@ -427,4 +443,189 @@ model DocumentSettings {
   updatedAt   DateTime @updatedAt
 
   @@map("document_settings")
+}
+// 5. MÓDULO DE ETIQUETAS (TAGS TRANSVERSAIS)
+model Tag {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  color     String   // Hex code
+  textColor String?  // Hex code
+  scope     Json?    // ["CONTACT", "PROCESS", "FINANCE", "TASK"]
+  usage     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  contacts  ContactTag[]
+
+  @@map("tags")
+}
+
+model ContactTag {
+  id        String   @id @default(uuid())
+  tagId     String
+  contactId String
+  
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, contactId])
+  @@map("tags_on_contacts")
+}
+
+// 6. MÓDULO AGENDA (COMPROMISSOS)
+model Appointment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  type        String   // AUDIENCIA, PRAZO, REUNIAO, INTIMACAO
+  startAt     DateTime
+  endAt       DateTime
+  status      String   // SCHEDULED, CONFIRMED, IN_PROGRESS, DONE, CANCELED, RESCHEDULED
+  location    String?  // Físico ou Link (Zoom/Meet)
+  
+  // Vínculos
+  processId   String?
+  process     Process? @relation(fields: [processId], references: [id])
+  
+  recurrence  Json?    // Regra de recorrência (RRule)
+  
+  participants AppointmentParticipant[]
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("appointments")
+}
+
+model AppointmentParticipant {
+  id            String   @id @default(uuid())
+  appointmentId String
+  contactId     String?  // Pode ser um contato da base
+  name          String?  // Ou apenas um nome avulso
+  role          String   // RESPONSABLE, CLIENT, WITNESS, EXPERT
+  confirmed     Boolean  @default(false)
+  
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  contact       Contact?    @relation(fields: [contactId], references: [id])
+
+  @@map("appointment_participants")
+}
+
+// 7. MÓDULO ESTOQUE (PRODUTOS & MOVIMENTAÇÕES)
+model Product {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  barcode     String?
+  minStock    Int      @default(0)
+  currentStock Int     @default(0)
+  costPrice   Decimal? @db.Decimal(10, 2)
+  sellPrice   Decimal? @db.Decimal(10, 2)
+  
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  
+  movements   InventoryMovement[]
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("products")
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  document    String?  // CNPJ
+  email       String?
+  phone       String?
+  
+  products    Product[]
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@map("suppliers")
+}
+
+model InventoryMovement {
+  id          String   @id @default(uuid())
+  tenantId    String
+  productId   String
+  type        String   // IN (Entrada), OUT (Saída), ADJUST (Ajuste)
+  quantity    Int
+  unitPrice   Decimal? @db.Decimal(10, 2)
+  totalPrice  Decimal? @db.Decimal(10, 2)
+  reason      String?
+  
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  createdAt   DateTime @default(now())
+
+  @@map("inventory_movements")
+}
+
+// 8. MÓDULO ATENDIMENTO V2 (OMNICHANNEL TICKETS)
+model Ticket {
+  id          String   @id @default(uuid())
+  tenantId    String
+  code        Int      @default(autoincrement()) // Protocolo numérico amigável
+  title       String
+  status      String   // OPEN, IN_PROGRESS, WAITING, RESOLVED, CLOSED
+  priority    String   // LOW, MEDIUM, HIGH, URGENT
+  channel     String   // WHATSAPP, EMAIL, PHONE, WEBCHAT
+  
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id])
+  
+  assigneeId  String?  // Usuário responsável (User ID)
+  queue       String?  // Departamento (FINANCEIRO, JURIDICO)
+  
+  messages    TicketMessage[]
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id          String   @id @default(uuid())
+  ticketId    String
+  senderType  String   // USER (Agente), CONTACT (Cliente), SYSTEM (Bot)
+  senderId    String?  // ID do User ou Contact
+  content     String   @db.Text
+  contentType String   // TEXT, IMAGE, AUDIO, FILE
+  mediaUrl    String?
+  
+  readAt      DateTime?
+  
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@map("ticket_messages")
+}
+
+model WaInstance {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  status      String   // DISCONNECTED, PAIRING, CONNECTED
+  qrCode      String?  @db.Text
+  serverUrl   String?
+  apiKey      String?
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  updatedAt   DateTime @updatedAt
+
+  @@map("wa_instances")
 }

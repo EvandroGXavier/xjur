@@ -1,5 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface CreateProcessDto {
     tenantId?: string; // Opcional se pegarmos de algum lugar, por enquanto obrigatório ou fixo
@@ -30,18 +32,37 @@ interface CreateProcessDto {
 export class ProcessesService {
     constructor(private prisma: PrismaService) {}
 
+    private logAudit(step: string, data: any) {
+        try {
+            const logDir = path.join(process.cwd(), 'tmp', 'audit_logs');
+            if (!fs.existsSync(logDir)) {
+                fs.mkdirSync(logDir, { recursive: true });
+            }
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `process_${step}_${timestamp}.json`;
+            fs.writeFileSync(path.join(logDir, filename), JSON.stringify(data, null, 2));
+            console.log(`[AUDIT] Log saved: ${filename}`);
+        } catch (e) {
+            console.error('[AUDIT] Failed to save log:', e);
+        }
+    }
+
     async create(data: CreateProcessDto) {
+        this.logAudit('1_RECEIVED_PAYLOAD', data);
         console.log('Creating process payload:', JSON.stringify(data, null, 2));
 
         // Validação Mínima
+        // ... (código existente de validação e tenant)
+        // ... (repetir lógica de tenant e code do código anterior, mantendo consistência)
+        
+        // RECUPERANDO trechos anteriores para contexto (simplificado para replace)
         if (data.category === 'JUDICIAL' && !data.cnj) {
-            throw new BadRequestException('CNJ é obrigatório para processos judiciais.');
+             throw new BadRequestException('CNJ é obrigatório para processos judiciais.');
         }
         if (data.category === 'EXTRAJUDICIAL' && !data.title) {
-            throw new BadRequestException('Título é obrigatório para casos.');
+             throw new BadRequestException('Título é obrigatório para casos.');
         }
 
-        // 1. Resolver Tenant
         let tenantId = data.tenantId;
         if (!tenantId) {
             const defaultTenant = await this.prisma.tenant.findFirst();
@@ -58,7 +79,6 @@ export class ProcessesService {
             }
         }
 
-        // 2. Gerar Código para Casos
         let code = data.cnj;
         if (data.category === 'EXTRAJUDICIAL') {
              const year = new Date().getFullYear();
@@ -76,12 +96,10 @@ export class ProcessesService {
              code = `CASO-${year}-${seq}`;
         }
 
-        // Date Parsing Helper
         const parseDate = (d: any) => {
             if (!d) return new Date();
             if (d instanceof Date) return d;
             if (typeof d === 'string') {
-                // BR format dd/mm/yyyy support
                 if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
                    const [day, month, year] = d.split('/');
                    return new Date(`${year}-${month}-${day}`);
@@ -91,8 +109,7 @@ export class ProcessesService {
             return new Date();
         };
 
-        // 3. Persistir com Upsert para evitar Duplicidade de CNJ
-        
+        // PREPARE DATA
         const processData = {
             tenantId,
             contactId: data.contactId,
@@ -120,22 +137,21 @@ export class ProcessesService {
             metadata: data.metadata || {},
         };
 
+        this.logAudit('2_MAPPED_DATA', processData);
+
         try {
             if (data.category === 'JUDICIAL' && data.cnj) {
                 // Upsert usando CNJ como chave única
                 const process = await this.prisma.process.upsert({
                     where: { cnj: data.cnj },
                     update: {
-                        // Atualizar campos que podem mudar no crawler
                         status: processData.status,
                         value: processData.value,
                         court: processData.court,
                         district: processData.district,
                         judge: processData.judge,
-                        parties: processData.parties, // Atualizar partes se mudou
+                        parties: processData.parties, 
                         metadata: processData.metadata,
-                        // Não atualizamos título/descrição se o usuário customizou, mas aqui é importação bruta.
-                        // Vamos atualizar tudo para garantir sincronia.
                         courtSystem: processData.courtSystem,
                         vars: processData.vars,
                         area: processData.area,
@@ -145,37 +161,77 @@ export class ProcessesService {
                     },
                     create: processData
                 });
+                
+                this.logAudit('3_SAVED_RESULT_UPSERT', process);
                 console.log('Process upserted successfully:', process.id);
                 
-                // 4. Sync Parties to Contacts (Async)
+                // 4. Sync Parties
                 if (processData.parties && Array.isArray(processData.parties)) {
-                    this.syncParties(processData.parties as any[], tenantId)
+                    this.syncParties(processData.parties as any[], tenantId, processData.judge)
                         .catch(err => console.error('Error syncing parties:', err));
                 }
 
                 return process;
             } else {
-                // Caso Extrajudicial ou sem CNJ (sem chave única confiável, cria novo)
                 const process = await this.prisma.process.create({
                     data: processData
                 });
+                
+                this.logAudit('3_SAVED_RESULT_CREATE', process);
                 console.log('Process created successfully:', process.id);
 
-                // 4. Sync Parties to Contacts (Async)
+                // 4. Sync Parties
                 if (processData.parties && Array.isArray(processData.parties)) {
-                    this.syncParties(processData.parties as any[], tenantId)
+                    this.syncParties(processData.parties as any[], tenantId, processData.judge)
                         .catch(err => console.error('Error syncing parties:', err));
                 }
 
                 return process;
             }
         } catch (error) {
+            this.logAudit('ERROR_SAVING', { error: error.message, stack: error.stack });
             console.error('Error creating/upserting process:', error);
             throw error;
         }
     }
 
-    private async syncParties(parties: any[], tenantId: string) {
+    private normalizePartyType(rawType: string): string {
+        const type = rawType ? rawType.toUpperCase() : '';
+        if (['AUTOR', 'REQUERENTE', 'EXEQUENTE', 'IMPETRANTE', 'RECLAMANTE'].some(t => type.includes(t))) return 'ENVOLVIDO (POLO ATIVO)';
+        if (['RÉU', 'REU', 'REQUERIDO', 'EXECUTADO', 'IMPETRADO', 'RECLAMADO'].some(t => type.includes(t))) return 'ENVOLVIDO (POLO PASSIVO)';
+        if (['ADVOGADO', 'PROCURADOR', 'DEFENSOR'].some(t => type.includes(t))) return 'ADVOGADO';
+        if (['PERITO', 'ASSISTENTE'].some(t => type.includes(t))) return 'PERITO';
+        if (['TESTEMUNHA'].some(t => type.includes(t))) return 'TESTEMUNHA';
+        if (['JUIZ', 'MAGISTRADO', 'RELATOR'].some(t => type.includes(t))) return 'MAGISTRADO';
+        return 'TERCEIRO';
+    }
+
+    private async syncParties(parties: any[], tenantId: string, judgeName?: string) {
+        const createdContacts = [];
+
+        // 1. Sync Judge if present
+        if (judgeName && judgeName !== 'Não informado') {
+            const judgeExists = await this.prisma.contact.findFirst({
+                where: { tenantId, name: judgeName, category: 'MAGISTRADO' }
+            });
+            if (!judgeExists) {
+                try {
+                     const newJudge = await this.prisma.contact.create({
+                        data: {
+                            tenantId,
+                            name: judgeName,
+                            personType: 'PF', // Juiz é sempre PF
+                            category: 'MAGISTRADO',
+                            notes: 'Importado automaticamente via Processo'
+                        }
+                    });
+                    console.log(`Created Magistrate contact: ${judgeName}`);
+                    createdContacts.push({ name: judgeName, type: 'MAGISTRADO', id: newJudge.id });
+                } catch (e) { console.warn('Error creating judge:', e); }
+            }
+        }
+
+        // 2. Sync Parties
         if (!parties || !Array.isArray(parties)) return;
 
         for (const party of parties) {
@@ -203,17 +259,20 @@ export class ProcessesService {
                 }
             }
 
+            // Normalizar Categoria
+            const normalizedCategory = this.normalizePartyType(type);
+
             if (!existingContact) {
                 const isPJ = cleanDoc && cleanDoc.length > 11;
                 const personType = isPJ ? 'PJ' : 'PF';
 
                 try {
-                    await this.prisma.contact.create({
+                    const newContact = await this.prisma.contact.create({
                         data: {
                             tenantId,
-                            name: name.substring(0, 100), // Safety check
+                            name: name.substring(0, 100), 
                             personType,
-                            category: type || 'PARTE', 
+                            category: normalizedCategory, 
                             pfDetails: !isPJ ? {
                                 create: { cpf: cleanDoc }
                             } : undefined,
@@ -222,13 +281,16 @@ export class ProcessesService {
                             } : undefined
                         }
                     });
-                    console.log(`Created contact for party: ${name} (${type})`);
+                    console.log(`Created contact for party: ${name} (${normalizedCategory})`);
+                    createdContacts.push({ name, personType, id: newContact.id });
                 } catch (e) {
                     console.warn(`Failed to create contact for ${name}:`, e.message);
                 }
-            } else {
-                console.log(`Contact already exists for party: ${name}`);
             }
+        }
+        
+        if (createdContacts.length > 0) {
+            this.logAudit('4_CREATED_CONTACTS', createdContacts);
         }
     }
     

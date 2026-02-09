@@ -21,33 +21,63 @@ export class TriagemService {
       };
     }
 
-    // 2. Registra a Comunicação
-    const log = await this.prisma.communicationLog.create({
-      data: {
-        tenantId: contact.tenantId, // ID obrigatório do Tenant
+    // 2. Registra o Ticket e a Mensagem
+    // Procura por um ticket ABERTO ou EM ANDAMENTO
+    let ticket = await this.prisma.ticket.findFirst({
+      where: {
         contactId: contact.id,
-        direction: 'INBOUND',
-        channel: 'WHATSAPP',
-        content,
-        mediaUrl,
-        status: 'RECEIVED',
+        status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING'] }
       },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Se não existir, cria um novo
+    if (!ticket) {
+      ticket = await this.prisma.ticket.create({
+        data: {
+          tenantId: contact.tenantId,
+          contactId: contact.id,
+          title: 'Atendimento via WhatsApp',
+          status: 'OPEN',
+          priority: 'MEDIUM',
+          channel: 'WHATSAPP' // Deduzido do método
+        }
+      });
+    }
+
+    // Cria a mensagem no ticket
+    const message = await this.prisma.ticketMessage.create({
+      data: {
+        ticketId: ticket.id,
+        senderType: 'CONTACT',
+        senderId: contact.id,
+        content,
+        contentType: mediaUrl ? 'FILE' : 'TEXT', // Simplificação
+        mediaUrl,
+        readAt: null // Não lido ainda
+      }
     });
 
     // 3. Verificação de Memória Contextual
-    const lastInteraction = await this.prisma.communicationLog.findFirst({
-        where: { contactId: contact.id, id: { not: log.id } },
+    // Busca última mensagem do cliente neste ticket (exceto a atual)
+    const lastInteraction = await this.prisma.ticketMessage.findFirst({
+        where: { 
+            ticketId: ticket.id, 
+            id: { not: message.id },
+            senderType: 'CONTACT'
+        },
         orderBy: { createdAt: 'desc' }
     });
 
     let aiContext = "Saudação Padrão";
     if (lastInteraction) {
-       aiContext = `Cliente retornando. Último assunto: ${lastInteraction.content}`; 
+       aiContext = `Cliente retornando no mesmo ticket. Último assunto: ${lastInteraction.content}`; 
     }
 
     return {
       action: 'NOTIFY_AGENT',
-      logId: log.id,
+      logId: message.id, // ID da mensagem agora
+      ticketId: ticket.id,
       contact: contact.name,
       suggestion: aiContext
     };
@@ -57,28 +87,36 @@ export class TriagemService {
    * 3.1 Triagem de Mídia e Texto (Organização em 1 Clique)
    */
   async linkToProcess(messageId: string, processId: string) {
-    const log = await this.prisma.communicationLog.findUnique({ where: { id: messageId } });
-    if (!log) throw new Error('Message not found');
+    const message = await this.prisma.ticketMessage.findUnique({ where: { id: messageId } });
+    if (!message) throw new Error('Message not found');
 
     const timelineEntry = await this.prisma.processTimeline.create({
       data: {
         processId,
-        title: log.mediaUrl ? 'Nova Prova (Midia)' : 'Mensagem do Cliente',
-        description: log.content,
+        title: message.mediaUrl ? 'Nova Prova (Midia)' : 'Mensagem do Cliente',
+        description: message.content,
         date: new Date(),
-        type: log.mediaUrl ? 'FILE' : 'MESSAGE',
+        type: message.mediaUrl ? 'FILE' : 'MESSAGE',
         metadata: { 
-            originalLogId: log.id, 
+            originalMessageId: message.id, 
+            ticketId: message.ticketId,
             source: 'Dr.X Triagem',
-            mediaUrl: log.mediaUrl 
+            mediaUrl: message.mediaUrl 
         }
       }
     });
 
-    // Marca como Triado
-    await this.prisma.communicationLog.update({
+    // Marca mensagem como Lida/Processada se necessário
+    // E update status do Ticket se for o caso (opcional)
+    await this.prisma.ticketMessage.update({
       where: { id: messageId },
-      data: { status: 'TRIAGED' }
+      data: { readAt: new Date() }
+    });
+    
+    // Opcional: Atualizar status do Ticket para IN_PROGRESS
+    await this.prisma.ticket.update({
+        where: { id: message.ticketId },
+        data: { status: 'IN_PROGRESS' }
     });
 
     return timelineEntry;

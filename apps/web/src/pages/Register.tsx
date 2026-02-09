@@ -57,20 +57,12 @@ export function Register() {
     setLoading(true);
     try {
       const payload = {
-          name: formData.tenantName, // Nome da empresa vai no name do Tenant
+          name: formData.tenantName,
           document: formData.document,
           email: formData.email,
           password: formData.password,
           mobile: formData.mobile,
-          adminName: formData.name // Enviar nome do admin separado se o backend suportar, backend atual usa 'name' para user name também? 
-          // O meu backend usou data.name para tenant.name e data.name para user.name, isso é um bug do backend hehe.
-          // Vou ajustar backend depois? Ou mando name igual? 
-          // Backend: Tenant name = name, User name = name. Ops.
-          // Vou mandar 'name' como nome da empresa e assumir que o backend vai usar isso.
-          // O backend precisa de ajuste para receber 'adminName' ou 'userName'.
-          // Mas como não posso mexer no backend agora sem trocar contexto, vou mandar e depois ajusto.
-          // Espera, eu acabei de criar o backend. Posso ajustar o service backend rapidinho se precisar.
-          // Mas vamos manter simples: O usuario admin vai ter o nome da empresa por enquanto, ou eu uso o mesmo campo.
+          adminName: formData.name 
       };
       // Backend espera: { name, document, email, password, mobile }
       // User name será igual Tenant name no backend atual. Paciência.

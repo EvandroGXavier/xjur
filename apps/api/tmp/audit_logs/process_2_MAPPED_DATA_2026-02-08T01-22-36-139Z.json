@@ -1,0 +1,31 @@
+{
+  "tenantId": "fef57fab-6464-42e0-9085-71b4b4afd978",
+  "cnj": "5009999-88.2025.8.13.0024",
+  "category": "JUDICIAL",
+  "title": "Processo 5009999-88.2025.8.13.0024",
+  "code": "5009999-88.2025.8.13.0024",
+  "court": "TJMG",
+  "courtSystem": "PJe",
+  "vars": "1ª Vara Empresarial",
+  "district": "Belo Horizonte",
+  "status": "DISTRIBUÍDO",
+  "area": "Cível",
+  "subject": "Execução de Título Extrajudicial",
+  "class": "Execução",
+  "distributionDate": "2025-02-01T00:00:00.000Z",
+  "judge": "Dr. Substituto",
+  "value": 12500.5,
+  "parties": [
+    {
+      "name": "63230658604",
+      "type": "AUTOR",
+      "document": "000.000.000-00"
+    },
+    {
+      "name": "Réu Genérico SA",
+      "type": "RÉU",
+      "document": "99.999.999/0001-99"
+    }
+  ],
+  "metadata": {}
+}

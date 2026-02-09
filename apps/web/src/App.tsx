@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
-import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings, Documents, UsersPage } from './pages';
+import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings, Documents, UsersPage, Agenda, ProductsList } from './pages';
 
 // Simularemos uma verificação de autenticação simples
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
@@ -24,7 +24,9 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="chat" element={<Chat />} />
           <Route path="processes" element={<Processes />} />
+          <Route path="agenda" element={<Agenda />} />
           <Route path="financial" element={<Financial />} />
+          <Route path="products" element={<ProductsList />} />
           <Route path="contacts" element={<ContactList />} />
           <Route path="contacts/new" element={<ContactForm />} />
           <Route path="contacts/:id" element={<ContactForm />} />

@@ -9,3 +9,5 @@ export * from './Documents';
 export * from './Users';
 export * from './Financial';
 export { ProcessList as Processes } from './processes/ProcessList';
+export { Agenda } from './Agenda';
+export { ProductsList } from './products/ProductsList';

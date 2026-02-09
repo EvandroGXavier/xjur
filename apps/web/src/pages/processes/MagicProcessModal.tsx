@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, FileText, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, FileText, Check, AlertCircle, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
@@ -15,8 +15,8 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
     const [mode, setMode] = useState<'JUDICIAL' | 'EXTRAJUDICIAL'>('JUDICIAL');
     const [cnj, setCnj] = useState('');
     const [loading, setLoading] = useState(false);
-    const [previewData, setPreviewData] = useState<any>(null); // Dados retornados pelo Crawler
-    const [step, setStep] = useState(1); // 1: Input, 2: Preview
+    const [previewData, setPreviewData] = useState<any>(null);
+    const [step, setStep] = useState(1);
     
     // Formulário manual para Casos
     const [caseForm, setCaseForm] = useState({
@@ -34,8 +34,69 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
 
     if (!isOpen) return null;
 
+    const [isDragging, setIsDragging] = useState(false);
+
+    const processFile = async (file: File) => {
+        if (!file || file.type !== 'application/pdf') {
+            toast.error('Por favor envie apenas arquivos PDF.');
+            return;
+        }
+
+        setLoading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await api.post('/processes/import-pdf', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            const data = response.data;
+            if (!data) throw new Error('Falha ao processar PDF');
+            
+            setPreviewData({
+                ...data,
+                parties: data.parts, // Map parts -> parties
+                judge: data.judge || 'Não identificado', 
+                courtSystem: 'PDF Import',
+                class: 'A Classificar',
+                area: 'Não identificada'
+            });
+            setStep(2);
+            toast.success('Dados extraídos do PDF com IA!');
+        } catch (err) {
+            console.error(err);
+            toast.error('Erro ao ler PDF. Verifique se o arquivo contém texto.');
+        } finally {
+            setLoading(false);
+            setIsDragging(false);
+        }
+    };
+
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) processFile(file);
+        event.target.value = ''; // Reset input
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) processFile(file);
+    };
+
     const handleSearch = async () => {
-        // ... (lógica anterior de busca)
         if (!cnj || cnj.length < 3) {
             toast.warning('Digite um termo de busca válido (mínimo 3 caracteres)');
             return;
@@ -80,11 +141,10 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
 
         setLoading(true);
         try {
-            // Payload para Caso Extrajudicial
             const payload = {
                 title: caseForm.title,
                 category: 'EXTRAJUDICIAL',
-                subject: caseForm.description, // Mapeando description para subject provisoriamente ou criando campo novo no createDTO
+                subject: caseForm.description, 
                 description: caseForm.description,
                 folder: caseForm.folder,
                 value: caseForm.value ? parseFloat(caseForm.value.replace('R$', '').replace('.', '').replace(',', '.')) : 0,
@@ -118,7 +178,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                             {mode === 'JUDICIAL' ? 'Novo Processo Mágico' : 'Novo Caso / Consultivo'}
                         </h2>
                         <p className="text-slate-400 text-sm mt-1">
-                            {mode === 'JUDICIAL' ? 'Dr.X Automation: Digite o CNJ e nós buscamos os dados.' : 'Gerencie contratos, pareceres e demandas extrajudiciais.'}
+                            {mode === 'JUDICIAL' ? 'Use IA para ler PDF ou pesquise manualmente.' : 'Gerencie contratos, pareceres e demandas extrajudiciais.'}
                         </p>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-white transition">✕</button>
@@ -146,27 +206,56 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                         <>
                             {step === 1 && (
                                 <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-slate-300">Buscar por CNJ, CPF, CNPJ ou Nome</label>
-                                        <div className="relative">
+                                    <label
+                                        onDragOver={handleDragOver}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={handleDrop}
+                                        className={clsx(
+                                            "border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition group relative overflow-hidden",
+                                            isDragging ? "border-indigo-500 bg-indigo-500/10" : "border-slate-700 hover:border-indigo-500 hover:bg-slate-800/50"
+                                        )}
+                                    >
+                                        <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
+                                        {loading ? (
+                                             <div className="flex flex-col items-center">
+                                                <Loader2 className="animate-spin text-indigo-400 mb-2" size={32} />
+                                                <p className="text-indigo-300 animate-pulse">Lendo autos do processo...</p>
+                                             </div>
+                                        ) : (
+                                            <>
+                                                <div className="p-4 bg-slate-800 rounded-full mb-3 group-hover:bg-indigo-500/20 group-hover:text-indigo-400 transition">
+                                                    <Upload size={24} className="text-slate-400 group-hover:text-indigo-400" />
+                                                </div>
+                                                <p className="text-slate-300 font-medium">Arraste sua Petição Inicial ou Capa</p>
+                                                <p className="text-slate-500 text-sm mt-1">Extraímos Autores, Réus e Valores com IA</p>
+                                            </>
+                                        )}
+                                    </label>
+
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-px bg-slate-800 flex-1"></div>
+                                        <span className="text-slate-600 text-xs font-bold">OU DIGITE O NÚMERO</span>
+                                        <div className="h-px bg-slate-800 flex-1"></div>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
                                             <input 
                                                 value={cnj}
                                                 onChange={e => setCnj(e.target.value)}
-                                                placeholder="Digite o número do processo, documento ou nome..."
-                                                className="w-full bg-slate-800 border-slate-700 rounded-lg pl-4 pr-12 py-4 text-lg font-mono text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                                                autoFocus
+                                                placeholder="CNJ, CPF ou Nome..."
+                                                className="w-full bg-slate-800 border-slate-700 rounded-lg pl-4 pr-12 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                                             />
-                                            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                                            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                                         </div>
+                                        <button 
+                                            onClick={handleSearch}
+                                            disabled={loading}
+                                            className="px-6 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition border border-slate-700"
+                                        >
+                                            Buscar
+                                        </button>
                                     </div>
-
-                                    <button 
-                                        onClick={handleSearch}
-                                        disabled={loading}
-                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition flex items-center justify-center gap-2"
-                                    >
-                                        {loading ? <Loader2 className="animate-spin" /> : 'Buscar Processo Automaticamente'}
-                                    </button>
                                 </div>
                             )}
 
