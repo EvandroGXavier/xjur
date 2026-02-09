@@ -1,5 +1,6 @@
 
 import { PrismaClient } from '@prisma/client'
+import * as bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
@@ -67,7 +68,7 @@ async function main() {
       data: {
         name: 'SuperAdmin Dr.X',
         email: emailEx,
-        password: passwordEx,
+        password: await bcrypt.hash(passwordEx, 10),
         role: 'OWNER',
         tenantId: tenant.id
       }
@@ -92,12 +93,37 @@ async function main() {
     });
     console.log(`User created: ${localEmail} / ${localPass}`);
   } else {
-    // Garantir a senha correta se já existir
+    // Garantir a senha correta se já existir (com hash)
     await prisma.user.update({
         where: { email: localEmail },
-        data: { password: localPass }
+        data: { password: await bcrypt.hash(localPass, 10) }
     });
     console.log(`User updated: ${localEmail} / ${localPass}`);
+  }
+
+  // 5. Criar Admin User Solicitado (admin@drx.com / admin)
+  const requestedEmail = 'admin@drx.com';
+  const requestedPass = 'admin';
+
+  const requestedUser = await prisma.user.findUnique({ where: { email: requestedEmail } });
+  if (!requestedUser) {
+      await prisma.user.create({
+          data: {
+              name: 'Admin Demo',
+              email: requestedEmail,
+              password: await bcrypt.hash(requestedPass, 10),
+              role: 'OWNER', // Dono para ter full access
+              tenantId: tenant.id
+          }
+      });
+      console.log(`User created: ${requestedEmail} / ${requestedPass}`);
+  } else {
+      // Atualizar hash caso a senha tenha mudado ou para garantir o hash correto
+      await prisma.user.update({
+          where: { email: requestedEmail },
+          data: { password: await bcrypt.hash(requestedPass, 10) }
+      });
+      console.log(`User updated: ${requestedEmail} / ${requestedPass}`);
   }
 }
 

@@ -9,7 +9,9 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
-    "@prisma/client": "^5.20.0"
+    "@prisma/client": "^5.20.0",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
     "prisma": "5.20.0",
