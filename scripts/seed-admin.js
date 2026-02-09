@@ -1,5 +1,6 @@
 
 const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
@@ -49,9 +50,17 @@ async function main() {
         data: {
           name: 'Super Admin',
           email: 'admin@drx.com',
-          password: 'admin', // Plain text for local dev auth
+          password: await bcrypt.hash('admin', 10), // Hashed for secure auth
           role: 'OWNER',
           tenantId: tenant.id
+        }
+      });
+    } else {
+      console.log('Updating User "admin@drx.com" password...');
+      user = await prisma.user.update({
+        where: { email: 'admin@drx.com' },
+        data: {
+          password: await bcrypt.hash('admin', 10)
         }
       });
     }

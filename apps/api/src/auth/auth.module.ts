@@ -5,14 +5,21 @@ import { PrismaModule } from '@drx/database';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
     PrismaModule,
     PassportModule,
-    JwtModule.register({
-      secret: 'secretKey', // TODO: Use env var
-      signOptions: { expiresIn: '60m' },
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET'),
+        signOptions: { 
+          expiresIn: configService.get<string>('JWT_EXPIRATION', '7d') as any
+        },
+      }),
+      inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],

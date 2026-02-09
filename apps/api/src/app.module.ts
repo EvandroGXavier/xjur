@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { ContactsModule } from './contacts/contacts.module';
@@ -14,6 +15,7 @@ import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }), // Carrega .env globalmente
     AuthModule,      // Reativa o sistema de Login
     ContactsModule,  // Gestão de Clientes
     WhatsappModule,  // Conexão Baileys
