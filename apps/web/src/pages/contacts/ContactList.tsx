@@ -1,6 +1,6 @@
 
-import { useState, useEffect } from 'react';
-import { Plus, Users, Mail, Phone, FileText } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Users, Mail, Phone, FileText, Search, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
@@ -23,6 +23,8 @@ export function ContactList() {
   const navigate = useNavigate();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Contact | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   
   useEffect(() => {
     fetchContacts();
@@ -40,6 +42,28 @@ export function ContactList() {
         setLoading(false);
     }
   };
+
+  const sortedContacts = useMemo(() => {
+      let sortableItems = [...contacts];
+      if (searchTerm) {
+          const lowerTerm = searchTerm.toLowerCase();
+          sortableItems = sortableItems.filter(c => 
+              (c.name && c.name.toLowerCase().includes(lowerTerm)) ||
+              (c.email && c.email.toLowerCase().includes(lowerTerm)) ||
+              (c.document && c.document.includes(lowerTerm))
+          );
+      }
+      if (sortConfig.key && sortConfig.direction) {
+          sortableItems.sort((a, b) => {
+              const aValue = a[sortConfig.key!] ?? '';
+              const bValue = b[sortConfig.key!] ?? '';
+              if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+              if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+              return 0;
+          });
+      }
+      return sortableItems;
+  }, [contacts, sortConfig, searchTerm]);
 
   const formatDocument = (doc?: string) => {
     if (!doc) return '-';
@@ -71,9 +95,28 @@ export function ContactList() {
         </button>
       </div>
 
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full md:max-w-xl">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input 
+                type="text" 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Buscar por nome, email ou documento..." 
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500 placeholder-slate-500 transition-all" 
+              />
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+              <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-medium whitespace-nowrap">
+                  <Filter size={16} /> Filtros
+              </button>
+          </div>
+      </div>
+
       <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm min-h-[400px]">
           <DataGrid<Contact>
-            data={contacts}
+            data={sortedContacts}
+            onSort={(key, direction) => setSortConfig({ key: key as keyof Contact, direction })}
             totalItems={contacts.length}
             isLoading={loading}
             columns={[

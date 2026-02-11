@@ -13,7 +13,8 @@ import {
   X,
   Save,
   Trash2,
-  Check
+  Check,
+  Mail
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -385,6 +386,72 @@ export function Settings() {
                      )}
                  </div>
                  <p className="text-xs text-slate-500 text-right mt-2">* Dê um duplo clique no card para editar.</p>
+             </div>
+        )}
+        
+        {/* === HELP TAB === */}
+        {activeTab === 'help' && (
+             <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
+                 <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <HelpCircle size={32} className="text-indigo-500" />
+                 </div>
+                 <h2 className="text-xl font-bold text-white mb-2">Central de Ajuda</h2>
+                 <p className="text-slate-400 max-w-md mx-auto mb-6">
+                     Precisa de ajuda? Entre em contato com nosso suporte técnico ou consulte nossa documentação.
+                 </p>
+                 <div className="flex justify-center gap-4">
+                     <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+                         Abrir Chamado
+                     </button>
+                     <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+                         Ver Documentação
+                     </button>
+                 </div>
+             </div>
+        )}
+
+        {/* === WHITELABEL TAB === */}
+        {activeTab === 'whitelabel' && (
+             <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center relative overflow-hidden group">
+                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                 
+                 <div className="relative z-10">
+                     <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-700">
+                         <Palette size={32} className="text-indigo-400" />
+                     </div>
+                     <h2 className="text-xl font-bold text-white mb-2">Personalização Whitelabel</h2>
+                     <p className="text-slate-400 max-w-lg mx-auto mb-8">
+                         Personalize a plataforma com a sua marca. Altere cores, logotipo, domínio e muito mais para oferecer uma experiência exclusiva aos seus clientes.
+                     </p>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8 text-left">
+                         <div className="p-4 bg-slate-950 border border-slate-800 rounded-lg">
+                             <div className="w-8 h-8 rounded bg-indigo-500/20 flex items-center justify-center mb-3">
+                                 <Palette size={16} className="text-indigo-400" />
+                             </div>
+                             <h3 className="font-medium text-white mb-1">Cores e Tema</h3>
+                             <p className="text-xs text-slate-500">Defina a paleta de cores da interface.</p>
+                         </div>
+                         <div className="p-4 bg-slate-950 border border-slate-800 rounded-lg">
+                             <div className="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center mb-3">
+                                 <Building2 size={16} className="text-purple-400" />
+                             </div>
+                             <h3 className="font-medium text-white mb-1">Domínio Personalizado</h3>
+                             <p className="text-xs text-slate-500">Use seu próprio domínio (ex: app.suaempresa.com).</p>
+                         </div>
+                         <div className="p-4 bg-slate-950 border border-slate-800 rounded-lg">
+                             <div className="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center mb-3">
+                                 <Mail size={16} className="text-emerald-400" />
+                             </div>
+                             <h3 className="font-medium text-white mb-1">Emails Transacionais</h3>
+                             <p className="text-xs text-slate-500">Configure remetente e templates de email.</p>
+                         </div>
+                     </div>
+
+                     <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-bold border border-indigo-500/20">
+                         DISPONÍVEL NO PLANO ENTERPRISE
+                     </span>
+                 </div>
              </div>
         )}
       </div>

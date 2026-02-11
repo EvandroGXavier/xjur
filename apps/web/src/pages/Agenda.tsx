@@ -1,6 +1,6 @@
 
-import { useState, useEffect } from 'react';
-import { Calendar, Plus, Clock, MapPin, Video, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Calendar, Plus, Clock, MapPin, Video, AlertCircle, Gavel } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { DataGrid } from '../components/ui/DataGrid';
@@ -21,6 +21,7 @@ interface Appointment {
 export function Agenda() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Appointment | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
 
   useEffect(() => {
     fetchAppointments();
@@ -38,6 +39,20 @@ export function Agenda() {
         setLoading(false);
     }
   };
+
+  const sortedAppointments = useMemo(() => {
+      let sortableItems = [...appointments];
+      if (sortConfig.key && sortConfig.direction) {
+          sortableItems.sort((a, b) => {
+              const aValue = a[sortConfig.key!] ?? '';
+              const bValue = b[sortConfig.key!] ?? '';
+              if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+              if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+              return 0;
+          });
+      }
+      return sortableItems;
+  }, [appointments, sortConfig]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString('pt-BR', { 
@@ -82,7 +97,8 @@ export function Agenda() {
 
       <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm">
          <DataGrid<Appointment>
-            data={appointments}
+            data={sortedAppointments}
+            onSort={(key, direction) => setSortConfig({ key: key as keyof Appointment, direction })}
             totalItems={appointments.length}
             isLoading={loading}
             columns={[
@@ -103,8 +119,8 @@ export function Agenda() {
                     sortable: true,
                     render: (item) => (
                         <div className="flex items-center gap-2">
-                             {/* Icon placeholder since Gavel is not imported yet, using generalized logic */}
-                             <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 uppercase">{item.type}</span>
+                            {getTypeIcon(item.type)}
+                            <span className="text-xs font-bold text-slate-300 uppercase">{item.type}</span>
                         </div>
                     )
                 },

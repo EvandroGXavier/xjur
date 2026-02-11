@@ -3,8 +3,16 @@ import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
 import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings, Documents, UsersPage, Agenda, ProductsList, ForgotPassword, ResetPassword } from './pages';
 
-// ...
+const PrivateRoute = ({ children }: { children: JSX.Element }) => {
+  const token = localStorage.getItem('token');
+  return token ? children : <Navigate to="/login" replace />;
+};
 
+function App() {
+  return (
+    <BrowserRouter>
+      <Toaster position="top-right" />
+      <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

@@ -8,6 +8,8 @@
     "^.+\\.(t|j)s$": "ts-jest"
   },
   "moduleNameMapper": {
-    "^@drx/database$": "<rootDir>/../../../packages/database/src"
+    "^@drx/database$": "<rootDir>/../../../packages/database/src",
+    "^axios$": "axios/dist/node/axios.cjs",
+    "^@whiskeysockets/baileys$": "<rootDir>/__mocks__/baileys.js"
   }
 }

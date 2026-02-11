@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Package, Plus, Search, Filter } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
@@ -23,6 +23,7 @@ export function ProductsList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Product | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
 
   useEffect(() => {
     fetchProducts();
@@ -40,6 +41,28 @@ export function ProductsList() {
         setLoading(false);
     }
   };
+
+  const sortedProducts = useMemo(() => {
+      let sortableItems = [...products];
+      if (searchTerm) {
+          const lowerTerm = searchTerm.toLowerCase();
+          sortableItems = sortableItems.filter(p => 
+              (p.name && p.name.toLowerCase().includes(lowerTerm)) ||
+              (p.description && p.description.toLowerCase().includes(lowerTerm)) ||
+              (p.supplier?.name && p.supplier.name.toLowerCase().includes(lowerTerm))
+          );
+      }
+      if (sortConfig.key && sortConfig.direction) {
+          sortableItems.sort((a, b) => {
+              const aValue = a[sortConfig.key!] ?? '';
+              const bValue = b[sortConfig.key!] ?? '';
+              if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+              if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+              return 0;
+          });
+      }
+      return sortableItems;
+  }, [products, sortConfig, searchTerm]);
 
   const formatCurrency = (val?: number) => val ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val) : '-';
 
@@ -84,7 +107,8 @@ export function ProductsList() {
 
       <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm min-h-[400px]">
           <DataGrid<Product>
-            data={products}
+            data={sortedProducts}
+            onSort={(key, direction) => setSortConfig({ key: key as keyof Product, direction })}
             totalItems={products.length}
             isLoading={loading}
             columns={[

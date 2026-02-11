@@ -18,8 +18,8 @@
     "db:restore:local": "docker exec -i drx_db_local psql -U drx_dev drx_local < backups/backup.sql"
   },
   "devDependencies": {
-    "turbo": "latest",
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "turbo": "^2.8.4"
   },
   "engines": {
     "node": ">=20.0.0"
