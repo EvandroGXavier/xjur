@@ -57,7 +57,7 @@ export function Register() {
     setLoading(true);
     try {
       const payload = {
-          name: formData.tenantName,
+          tenantName: formData.tenantName,
           document: formData.document,
           email: formData.email,
           password: formData.password,
@@ -74,7 +74,12 @@ export function Register() {
       navigate('/login', { state: { message: 'Cadastro realizado com sucesso! Faça login.' } });
 
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Erro ao realizar cadastro');
+      const message = err.response?.data?.message;
+      if (Array.isArray(message)) {
+          setError(message.join(', '));
+      } else {
+          setError(message || 'Erro ao realizar cadastro');
+      }
       setLoading(false);
     }
   };

@@ -2,6 +2,7 @@
 import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
 import { SaasService } from './saas.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RegisterDto } from '../auth/dto/register.dto';
 
 @Controller('saas')
 export class SaasController {
@@ -9,9 +10,8 @@ export class SaasController {
 
 
   @Post('register')
-  async register(@Body() body: any) {
-    // Body: { name, email, document, mobile, password }
-    return this.saasService.registerTenant(body);
+  async register(@Body() registerDto: RegisterDto) {
+    return this.saasService.registerTenant(registerDto);
   }
 
   @UseGuards(JwtAuthGuard)

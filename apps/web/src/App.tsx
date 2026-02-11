@@ -1,24 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
-import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings, Documents, UsersPage, Agenda, ProductsList } from './pages';
+import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings, Documents, UsersPage, Agenda, ProductsList, ForgotPassword, ResetPassword } from './pages';
 
-// Simularemos uma verificação de autenticação simples
-const PrivateRoute = ({ children }: { children: JSX.Element }) => {
-  const token = localStorage.getItem('token'); // Simplificação. Ideal: Validar token.
-  return token ? children : <Navigate to="/login" />;
-};
+// ...
 
-function App() {
-  return (
-    <BrowserRouter>
-      <Toaster richColors position="top-right" />
-      <Routes>
-        {/* Futura rota de Login apareceria aqui */}
-        {/* <Route path="/login" element={<LoginPage />} /> */}
-        
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Dashboard />} />

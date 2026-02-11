@@ -2,13 +2,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
 import * as bcrypt from 'bcryptjs';
+import { RegisterDto } from '../auth/dto/register.dto';
 
 @Injectable()
 export class SaasService {
   constructor(private prisma: PrismaService) {}
 
-  async registerTenant(data: any) {
-    const { name, email, document, mobile, password, adminName } = data;
+  async registerTenant(data: RegisterDto) {
+    const { tenantName, email, document, mobile, password, adminName } = data;
 
     // 1. Verificar se Tenant já existe (pelo Document)
     const existingTenant = await this.prisma.tenant.findUnique({
@@ -38,7 +39,7 @@ export class SaasService {
       // Cria Tenant
       const tenant = await tx.tenant.create({
         data: {
-          name: name,
+          name: tenantName,
           document: document,
           planId: plan?.id,
           isActive: true,
@@ -48,7 +49,7 @@ export class SaasService {
       // Cria User Admin
       const user = await tx.user.create({
         data: {
-          name: adminName || name, // Use adminName if provided, else fallback to tenant name
+          name: adminName || tenantName, // Use adminName if provided, else fallback to tenant name
           email: email,
           password: await bcrypt.hash(password, 10),
           role: 'OWNER',
