@@ -12,6 +12,7 @@ import { ProcessesModule } from './processes/processes.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { ProductsModule } from './products/products.module';
+import { CommunicationsModule } from './communications/communications.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ProductsModule } from './products/products.module';
     AppointmentsModule, // Agenda e Prazos
     TicketsModule, // Omnichannel, Chat, Chamados
     ProductsModule, // Estoque e Produtos
+    CommunicationsModule, // Webhook de entrada
   ],
   controllers: [AppController],
   providers: [],

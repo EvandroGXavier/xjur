@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
-import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings, Documents, UsersPage, Agenda, ProductsList, ForgotPassword, ResetPassword } from './pages';
+import { Dashboard, Chat, Processes, Financial, AI, ContactList, ContactForm, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ForgotPassword, ResetPassword } from './pages';
+import { ProcessForm } from './pages/processes/ProcessForm';
 
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
   const token = localStorage.getItem('token');
@@ -22,6 +23,8 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="chat" element={<Chat />} />
           <Route path="processes" element={<Processes />} />
+          <Route path="processes/new" element={<ProcessForm />} />
+          <Route path="processes/:id" element={<ProcessForm />} />
           <Route path="agenda" element={<Agenda />} />
           <Route path="financial" element={<Financial />} />
           <Route path="products" element={<ProductsList />} />
@@ -29,7 +32,7 @@ function App() {
           <Route path="contacts/new" element={<ContactForm />} />
           <Route path="contacts/:id" element={<ContactForm />} />
           <Route path="ai" element={<AI />} />
-          <Route path="documents" element={<Documents />} />
+          <Route path="documents" element={<Library />} />
           <Route path="settings" element={<Settings />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

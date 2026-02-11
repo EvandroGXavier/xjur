@@ -1,0 +1,12 @@
+{
+  "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+  "contactId": "eafd9f75-bb58-4900-a770-10d52f849f0c",
+  "title": "Ação Indenizatória vs Banco X",
+  "description": "Cobrança indevida de taxas bancárias.",
+  "status": "ATIVO",
+  "area": "Cível",
+  "distributionDate": "2026-02-11T03:15:17.813Z",
+  "value": 50000,
+  "parties": [],
+  "metadata": {}
+}

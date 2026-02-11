@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import { Plus, Users, Mail, Phone, FileText, Search, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -27,15 +28,18 @@ export function ContactList() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof Contact | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   
   useEffect(() => {
-    fetchContacts();
+    const controller = new AbortController();
+    fetchContacts(controller.signal);
+    return () => controller.abort();
   }, []);
 
-  const fetchContacts = async () => {
+  const fetchContacts = async (signal?: AbortSignal) => {
     try {
         setLoading(true);
-        const response = await api.get('/contacts');
+        const response = await api.get('/contacts', { signal });
         setContacts(Array.isArray(response.data) ? response.data : []);
-    } catch (err) {
+    } catch (err: any) {
+        if (axios.isCancel(err)) return;
         console.error(err);
         toast.error('Erro ao carregar contatos');
     } finally {

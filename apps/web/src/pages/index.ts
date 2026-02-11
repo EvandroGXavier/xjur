@@ -5,7 +5,7 @@ export * from './Login';
 export * from './contacts';
 export * from './Register';
 export * from './Settings';
-export * from './Documents';
+export * from './Library';
 export * from './Users';
 export * from './Financial';
 export { ProcessList as Processes } from './processes/ProcessList';

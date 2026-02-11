@@ -43,7 +43,7 @@ interface Message {
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
   // State
-  const [isConnected, setIsConnected] = useState(true); // Mock true for development
+  const [isConnected, setIsConnected] = useState(true); // TODO: Integrate with backend WA status
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -139,8 +139,9 @@ export const ChatPage: React.FC = () => {
           });
           fetchTickets();
           toast.success('Ticket criado!');
-      } catch (e) {
-          toast.error('Erro ao criar ticket');
+      } catch (e: any) {
+          console.error(e);
+          toast.error('Erro ao criar ticket: ' + (e.response?.data?.message || e.message));
       }
   };
 

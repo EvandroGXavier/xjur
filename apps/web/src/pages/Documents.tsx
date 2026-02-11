@@ -95,17 +95,15 @@ export function Documents() {
     }
 
     try {
-      // Obter tenantId do usuário logado (simulado - deve vir do contexto de autenticação)
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const tenantId = user.tenantId || 'default-tenant-id';
+      // Backend handles tenantId via token
+
 
       if (editingDocument) {
         await api.patch(`/documents/${editingDocument.id}`, formData);
         toast.success('Documento atualizado com sucesso');
       } else {
         await api.post('/documents', {
-          ...formData,
-          tenantId,
+          ...formData, // tenantId is inferred from token
         });
         toast.success('Documento criado com sucesso');
       }

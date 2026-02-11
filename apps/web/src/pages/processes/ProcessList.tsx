@@ -1,5 +1,5 @@
-
 import { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import { 
     Plus, 
     List, 
@@ -9,7 +9,10 @@ import {
     FileText,
     Gavel,
     Trash2,
-    ArrowUp
+    MoreHorizontal,
+    Pencil,
+    Trash,
+    ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -40,6 +43,14 @@ export function ProcessList() {
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [activeMenuId, setActiveMenuId] = useState<string | null>(null); // For dropdown
+
+    // Click outside to close menu
+    useEffect(() => {
+        const handleClickOutside = () => setActiveMenuId(null);
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
     
     // GID: Sorting State
     const [sortConfig, setSortConfig] = useState<{ key: keyof Process | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
@@ -47,15 +58,18 @@ export function ProcessList() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     useEffect(() => {
-        fetchProcesses();
+        const controller = new AbortController();
+        fetchProcesses(controller.signal);
+        return () => controller.abort();
     }, []);
 
-    const fetchProcesses = async () => {
+    const fetchProcesses = async (signal?: AbortSignal) => {
         try {
             setLoading(true);
-            const response = await api.get('/processes');
+            const response = await api.get('/processes', { signal });
             setProcesses(Array.isArray(response.data) ? response.data : []);
-        } catch (err) {
+        } catch (err: any) {
+            if (axios.isCancel(err)) return;
             console.error(err);
             toast.error('Erro ao carregar processos');
         } finally {
@@ -190,7 +204,60 @@ export function ProcessList() {
                                 }
                             },
                             { key: 'value', label: 'Valor', sortable: true, render: (process) => <span className="font-mono text-xs text-slate-300">{formatCurrency(process.value)}</span> },
-                            { key: 'createdAt', label: 'Data', sortable: true, render: (process) => <span className="text-slate-400 text-xs">{formatDate(process.createdAt)}</span> }
+                            { key: 'createdAt', label: 'Data', sortable: true, render: (process) => <span className="text-slate-400 text-xs">{formatDate(process.createdAt)}</span> },
+                            {
+                                key: 'actions' as keyof Process,
+                                label: 'Ações',
+                                sortable: false,
+                                render: (process) => (
+                                    <div className="relative">
+                                        <button 
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                setActiveMenuId(activeMenuId === process.id ? null : process.id); 
+                                            }} 
+                                            className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition"
+                                        >
+                                            <MoreHorizontal size={18} />
+                                        </button>
+                                        
+                                        {activeMenuId === process.id && (
+                                            <div className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/processes/${process.id}`); }} 
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"
+                                                >
+                                                    <Pencil size={14} /> Editar
+                                                </button>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/processes/${process.id}`); }} 
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2 transition-colors"
+                                                >
+                                                    <ExternalLink size={14} /> Abrir Detalhes
+                                                </button>
+                                                <div className="h-px bg-slate-700 my-1"></div>
+                                                <button 
+                                                    onClick={async (e) => { 
+                                                        e.stopPropagation(); 
+                                                        if(confirm('Excluir este processo permanentemente?')) {
+                                                            try {
+                                                                await api.delete(`/processes/${process.id}`);
+                                                                fetchProcesses();
+                                                                toast.success('Processo excluído');
+                                                            } catch(err) {
+                                                                toast.error('Erro ao excluir');
+                                                            }
+                                                        }
+                                                    }} 
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2 transition-colors"
+                                                >
+                                                    <Trash size={14} /> Excluir
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            }
                         ]}
                     />
                 ) : (
