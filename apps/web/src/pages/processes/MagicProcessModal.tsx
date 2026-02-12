@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, FileText, Check, AlertCircle, Loader2, Upload } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, FileText, Check, AlertCircle, Loader2, Upload, User, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
@@ -27,14 +27,34 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
         value: ''
     });
 
+    const [isDragging, setIsDragging] = useState(false);
+
+    // ✅ RESET: Limpar tudo quando o modal abre ou fecha
+    useEffect(() => {
+        if (isOpen) {
+            // Reset ao ABRIR
+            setMode('JUDICIAL');
+            setCnj('');
+            setLoading(false);
+            setPreviewData(null);
+            setStep(1);
+            setIsDragging(false);
+            setCaseForm({
+                title: '',
+                client: '',
+                description: '',
+                folder: '',
+                value: ''
+            });
+        }
+    }, [isOpen]);
+
     const insertTemplate = () => {
         const template = `1. FATOS\n\nANALISE\n\nSUGESTÃO\n1.\n2.\n\n3. DOCUMENTAÇÃO NECESSÁRIA\n- Procuração Assinada\n- Declaração de Hipossuficiência\n`;
         setCaseForm(prev => ({ ...prev, description: prev.description + template }));
     };
 
     if (!isOpen) return null;
-
-    const [isDragging, setIsDragging] = useState(false);
 
     const processFile = async (file: File) => {
         if (!file || file.type !== 'application/pdf') {
@@ -55,17 +75,26 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
             
             setPreviewData({
                 ...data,
-                parties: data.parts, // Map parts -> parties
+                parties: data.parts,
                 judge: data.judge || 'Não identificado', 
-                courtSystem: 'PDF Import',
-                class: 'A Classificar',
-                area: 'Não identificada'
+                courtSystem: data.courtSystem || 'PDF Import',
+                class: data.class || 'A Classificar',
+                area: data.area || 'Não identificada',
+                vars: data.vars,
+                district: data.district,
             });
             setStep(2);
-            toast.success('Dados extraídos do PDF com IA!');
+            
+            // Feedback detalhado
+            const found = [];
+            if (data.cnj) found.push('CNJ');
+            if (data.parts?.length > 0) found.push(`${data.parts.length} parte(s)`);
+            if (data.value) found.push('Valor');
+            if (data.court) found.push('Tribunal');
+            toast.success(`Dados extraídos: ${found.length > 0 ? found.join(', ') : 'Texto básico'}`);
         } catch (err) {
             console.error(err);
-            toast.error('Erro ao ler PDF. Verifique se o arquivo contém texto.');
+            toast.error('Erro ao ler PDF. Verifique se o arquivo contém texto selecionável.');
         } finally {
             setLoading(false);
             setIsDragging(false);
@@ -139,15 +168,31 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
             return;
         }
 
+        if (caseForm.title.trim().length < 5) {
+            toast.warning('O título precisa ter pelo menos 5 caracteres');
+            return;
+        }
+
         setLoading(true);
         try {
+            // ✅ VALIDAÇÃO DE DUPLICATA: Verificar se já existe caso com mesmo título
+            const existing = await api.get(`/processes?search=${encodeURIComponent(caseForm.title.trim())}`);
+            const duplicates = (existing.data || []).filter(
+                (p: any) => p.title?.toLowerCase().trim() === caseForm.title.toLowerCase().trim()
+            );
+            if (duplicates.length > 0) {
+                toast.error(`Já existe um caso com o título "${caseForm.title}". Use um título diferente.`);
+                setLoading(false);
+                return;
+            }
+
             const payload = {
-                title: caseForm.title,
+                title: caseForm.title.trim(),
                 category: 'EXTRAJUDICIAL',
                 subject: caseForm.description, 
                 description: caseForm.description,
                 folder: caseForm.folder,
-                value: caseForm.value ? parseFloat(caseForm.value.replace('R$', '').replace('.', '').replace(',', '.')) : 0,
+                value: caseForm.value ? parseFloat(caseForm.value.replace('R$', '').replace(/\./g, '').replace(',', '.').trim()) : 0,
                 status: 'ATIVO',
             };
 
@@ -260,8 +305,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                             )}
 
                             {step === 2 && previewData && (
-                                <div className="space-y-6">
-                                    {/* ... Preview content ... */} 
+                                <div className="space-y-4">
                                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-lg flex items-start gap-3">
                                         <Check className="text-emerald-400 mt-1" size={20} />
                                         <div>
@@ -270,15 +314,49 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    {/* Título */}
+                                    {previewData.title && (
+                                        <div className="bg-slate-800/50 p-3 rounded">
+                                            <p className="text-xs text-slate-400 uppercase">Título</p>
+                                            <p className="font-medium text-white">{previewData.title}</p>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <InfoItem label="CNJ" value={previewData.cnj} />
                                         <InfoItem label="Tribunal" value={previewData.court} />
-                                        <InfoItem label="Sistema" value={previewData.courtSystem} />
-                                        <InfoItem label="Classe" value={previewData.class} />
+                                        <InfoItem label="Área" value={previewData.area} />
                                         <InfoItem label="Status" value={previewData.status} />
+                                        {previewData.vars && <InfoItem label="Vara" value={previewData.vars} />}
+                                        {previewData.district && <InfoItem label="Comarca" value={previewData.district} />}
+                                        {previewData.judge && <InfoItem label="Magistrado" value={previewData.judge} />}
+                                        {previewData.value && (
+                                            <div className="bg-slate-800/50 p-3 rounded">
+                                                <p className="text-xs text-slate-400 uppercase flex items-center gap-1"><DollarSign size={12} /> Valor</p>
+                                                <p className="font-medium text-emerald-400">R$ {Number(previewData.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                            </div>
+                                        )}
                                     </div>
 
-                                    <div className="flex gap-3 pt-4">
-                                        <button onClick={() => setStep(1)} className="flex-1 bg-slate-800 text-white py-3 rounded-lg">Voltar</button>
+                                    {/* Partes */}
+                                    {previewData.parties && previewData.parties.length > 0 && (
+                                        <div className="bg-slate-800/50 p-3 rounded">
+                                            <p className="text-xs text-slate-400 uppercase mb-2 flex items-center gap-1"><User size={12} /> Partes Identificadas</p>
+                                            {previewData.parties.map((p: any, i: number) => (
+                                                <div key={i} className="flex items-center gap-2 text-sm text-white py-1">
+                                                    <span className={clsx(
+                                                        "text-xs font-bold px-2 py-0.5 rounded",
+                                                        p.type === 'AUTOR' ? "bg-blue-500/20 text-blue-400" : "bg-red-500/20 text-red-400"
+                                                    )}>{p.type}</span>
+                                                    <span>{p.name}</span>
+                                                    {p.document && <span className="text-slate-500 text-xs">({p.document})</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3 pt-2">
+                                        <button onClick={() => setStep(1)} className="flex-1 bg-slate-800 text-white py-3 rounded-lg hover:bg-slate-700 transition">Voltar</button>
                                         <button onClick={handleSaveProcess} disabled={loading} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
                                             {loading ? <Loader2 className="animate-spin" /> : 'Confirmar Importação'}
                                         </button>

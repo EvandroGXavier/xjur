@@ -1,5 +1,5 @@
 
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -20,11 +20,11 @@ export class AppointmentsController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: CurrentUserData) {
+  findAll(@CurrentUser() user: CurrentUserData, @Query('start') start?: string, @Query('end') end?: string) {
     if (!user || !user.tenantId) {
         throw new Error('User context invalid');
     }
-    return this.appointmentsService.findAll(user.tenantId);
+    return this.appointmentsService.findAll(user.tenantId, start, end);
   }
 
   @Get(':id')

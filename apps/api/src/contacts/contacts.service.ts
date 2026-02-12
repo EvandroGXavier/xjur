@@ -74,14 +74,28 @@ export class ContactsService {
     }
   }
 
-  async findAll(tenantId: string) {
+  async findAll(tenantId: string, search?: string) {
+    const where: any = { tenantId };
+
+    if (search && search.trim().length > 0) {
+        const searchTerm = search.trim();
+        where.OR = [
+            { name: { contains: searchTerm, mode: 'insensitive' } },
+            { document: { contains: searchTerm, mode: 'insensitive' } },
+            { email: { contains: searchTerm, mode: 'insensitive' } },
+            // Also search in PF/PJ details if needed, but usually flattened document covers it.
+            // Let's stick to main fields for performance first.
+        ];
+    }
+
     const contacts = await this.prisma.contact.findMany({
-      where: { tenantId },
+      where,
       include: {
         pfDetails: true,
         pjDetails: true
       },
       orderBy: { createdAt: 'desc' },
+      take: search ? 50 : undefined // Limit results if searching to avoid overload
     });
     return contacts.map(c => this.flattenContact(c));
   }

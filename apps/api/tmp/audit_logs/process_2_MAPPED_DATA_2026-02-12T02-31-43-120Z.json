@@ -1,0 +1,27 @@
+{
+  "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+  "cnj": "0000001-23.2024.8.13.0024",
+  "category": "JUDICIAL",
+  "title": "Teste de Processo Judicial",
+  "code": "0000001-23.2024.8.13.0024",
+  "court": "TJMG",
+  "district": "Belo Horizonte",
+  "status": "ATIVO",
+  "area": "Cível",
+  "subject": "Ação de Cobrança",
+  "distributionDate": "2026-02-12T02:31:43.119Z",
+  "value": 15000.5,
+  "parties": [
+    {
+      "name": "João da Silva",
+      "document": "12345678901",
+      "type": "AUTOR"
+    },
+    {
+      "name": "Maria Santos",
+      "document": "98765432100",
+      "type": "R�?U"
+    }
+  ],
+  "metadata": {}
+}

@@ -1,0 +1,32 @@
+{
+  "id": "2999cdd0-ddc0-485a-a2d1-6034b38e60d6",
+  "updated": {
+    "id": "2999cdd0-ddc0-485a-a2d1-6034b38e60d6",
+    "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+    "contactId": null,
+    "cnj": null,
+    "category": "EXTRAJUDICIAL",
+    "title": "Parecer Juridico - Contrato de Locacao",
+    "code": "CASO-2026-0004",
+    "folder": null,
+    "description": "Analise de clausulas contratuais",
+    "npu": null,
+    "court": null,
+    "courtSystem": null,
+    "vars": null,
+    "district": null,
+    "status": "ATIVO",
+    "area": null,
+    "subject": null,
+    "class": null,
+    "distributionDate": null,
+    "judge": null,
+    "value": "3500",
+    "parties": [],
+    "lastCrawledAt": null,
+    "autoUpdate": true,
+    "metadata": {},
+    "createdAt": "2026-02-12T03:13:14.850Z",
+    "updatedAt": "2026-02-12T03:15:12.262Z"
+  }
+}

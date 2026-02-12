@@ -1,0 +1,32 @@
+{
+  "id": "e6b2bc55-885d-40e7-b56a-e16109bb2a08",
+  "updated": {
+    "id": "e6b2bc55-885d-40e7-b56a-e16109bb2a08",
+    "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+    "contactId": null,
+    "cnj": null,
+    "category": "EXTRAJUDICIAL",
+    "title": "CRÉDITOS TRABALHISTAS POPO/VERA",
+    "code": "CASO-2026-0002",
+    "folder": "",
+    "description": "CRÉDITOS TRABALHISTAS POPO/VERA",
+    "npu": null,
+    "court": "",
+    "courtSystem": "",
+    "vars": "",
+    "district": "",
+    "status": "ATIVO",
+    "area": "",
+    "subject": "CRÉDITOS TRABALHISTAS POPO/VERA",
+    "class": null,
+    "distributionDate": null,
+    "judge": "",
+    "value": "100000",
+    "parties": [],
+    "lastCrawledAt": null,
+    "autoUpdate": true,
+    "metadata": {},
+    "createdAt": "2026-02-12T03:00:31.526Z",
+    "updatedAt": "2026-02-12T17:50:38.089Z"
+  }
+}

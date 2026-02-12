@@ -1,0 +1,35 @@
+{
+  "cnj": "5009999-88.2025.8.13.0024",
+  "npu": "5009999-88.2025.8.13.0024",
+  "court": "TJMG",
+  "courtSystem": "PJe",
+  "vars": "1ª Vara Empresarial",
+  "district": "Belo Horizonte",
+  "status": "DISTRIBUÍDO",
+  "area": "Cível",
+  "subject": "Execução de Título Extrajudicial",
+  "class": "Execução",
+  "distributionDate": "2025-02-01T00:00:00.000Z",
+  "judge": "Dr. Substituto",
+  "value": 12500.5,
+  "parties": [
+    {
+      "name": "Autor Simulado (Busca por CPF)",
+      "type": "AUTOR",
+      "document": "79643191672"
+    },
+    {
+      "name": "Réu Genérico SA",
+      "type": "RÉU",
+      "document": "99.999.999/0001-99"
+    }
+  ],
+  "movements": [
+    {
+      "date": "2026-02-12T03:19:35.326Z",
+      "description": "Distribuição Automática",
+      "type": "DISTRIBUTION"
+    }
+  ],
+  "category": "JUDICIAL"
+}

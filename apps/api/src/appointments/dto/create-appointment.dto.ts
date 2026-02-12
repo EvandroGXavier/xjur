@@ -23,7 +23,7 @@ export class CreateParticipantDto {
   @IsUUID()
   contactId?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   name?: string;
 
@@ -46,8 +46,8 @@ export class CreateAppointmentDto {
   description?: string;
 
   @IsNotEmpty()
-  @IsEnum(AppointmentType)
-  type: AppointmentType;
+  @IsString()
+  type: string;
 
   @IsNotEmpty()
   @IsDateString()
@@ -58,8 +58,8 @@ export class CreateAppointmentDto {
   endAt: string;
 
   @IsOptional()
-  @IsEnum(AppointmentStatus)
-  status?: AppointmentStatus;
+  @IsString()
+  status?: string;
 
   @IsOptional()
   @IsString()

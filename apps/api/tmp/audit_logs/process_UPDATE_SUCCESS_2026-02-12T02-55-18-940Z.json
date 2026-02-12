@@ -1,0 +1,32 @@
+{
+  "id": "f0e6e475-e11e-4d7d-941b-e5c3415050c8",
+  "updated": {
+    "id": "f0e6e475-e11e-4d7d-941b-e5c3415050c8",
+    "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+    "contactId": null,
+    "cnj": null,
+    "category": "EXTRAJUDICIAL",
+    "title": "Assessoria Contratual - Empresa ABC",
+    "code": "CASO-2026-0001",
+    "folder": null,
+    "description": "Revisão e análise de contrato de prestação de serviços",
+    "npu": null,
+    "court": null,
+    "courtSystem": null,
+    "vars": null,
+    "district": null,
+    "status": "ATIVO",
+    "area": null,
+    "subject": "Contratos",
+    "class": null,
+    "distributionDate": "2026-02-12T02:32:06.507Z",
+    "judge": null,
+    "value": "8500",
+    "parties": [],
+    "lastCrawledAt": null,
+    "autoUpdate": true,
+    "metadata": {},
+    "createdAt": "2026-02-12T02:32:06.512Z",
+    "updatedAt": "2026-02-12T02:55:18.925Z"
+  }
+}

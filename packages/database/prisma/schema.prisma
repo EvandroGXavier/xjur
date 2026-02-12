@@ -43,6 +43,8 @@ model Tenant {
   inventoryMovements InventoryMovement[]
   tickets           Ticket[]
   waInstances       WaInstance[]
+  partyRoles        PartyRole[]
+  processParties    ProcessParty[]
 
   @@map("tenants")
 }
@@ -112,6 +114,7 @@ model Contact {
   tags               ContactTag[]
   appointmentParticipations AppointmentParticipant[]
   tickets            Ticket[]
+  processParties     ProcessParty[]
   
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
 
@@ -315,8 +318,47 @@ model Process {
   timeline       ProcessTimeline[]
   financials     FinancialRecord[]
   appointments   Appointment[]
+  processParties ProcessParty[]
 
   @@map("processes")
+}
+
+// 2.3 PARTES PROCESSUAIS (Vínculo Processo ↔ Contato)
+model PartyRole {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String   // Ex: AUTOR, RÉU, TESTEMUNHA, PERITO
+  category    String?  // POLO_ATIVO, POLO_PASSIVO, OUTROS
+  isDefault   Boolean  @default(false) // Roles pré-cadastrados (seed)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  processParties ProcessParty[]
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+  @@map("party_roles")
+}
+
+model ProcessParty {
+  id          String   @id @default(uuid())
+  tenantId    String
+  processId   String
+  contactId   String
+  roleId      String
+  isClient    Boolean  @default(false)  // É nosso cliente neste processo?
+  isOpposing  Boolean  @default(false)  // É parte contrária?
+  notes       String?  // Observações sobre a parte
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  process     Process   @relation(fields: [processId], references: [id], onDelete: Cascade)
+  contact     Contact   @relation(fields: [contactId], references: [id])
+  role        PartyRole @relation(fields: [roleId], references: [id])
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@unique([processId, contactId, roleId]) // Evita duplicata exata
+  @@map("process_parties")
 }
 
 model ProcessTimeline {
@@ -329,6 +371,16 @@ model ProcessTimeline {
   source      String?  // CRAWLER, MANUAL, USER_IMPORT
   metadata    Json?    // Store file paths or message IDs here
   createdAt   DateTime @default(now())
+
+  // New Fields for DR.X
+  displayId   String?  // Evento/ID original do tribunal
+  internalSequence Int? // Sequência 1, 2, 3 do DR.X
+  origin      String?  // TRIBUNAL_PJE, TRIBUNAL_EPROC, INTERNO, IA
+  internalDate DateTime? // Data alvo para solução do escritório
+  fatalDate   DateTime? // Prazo fatal do sistema judicial
+  responsibleAdvogado String? // Nome ou ID do advogado
+  aiSummary   String?  // Resumo simplificado para o cliente
+  clientMessage String? // Texto formatado para envio via WhatsApp
 
   process     Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
 

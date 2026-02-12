@@ -44,9 +44,18 @@ export class AppointmentsService {
     });
   }
 
-  async findAll(tenantId: string) {
+  async findAll(tenantId: string, start?: string, end?: string) {
+    const where: any = { tenantId };
+
+    if (start && end) {
+        where.startAt = {
+            gte: new Date(start),
+            lte: new Date(end)
+        };
+    }
+
     return this.prisma.appointment.findMany({
-      where: { tenantId },
+      where,
       include: {
         participants: {
             include: {

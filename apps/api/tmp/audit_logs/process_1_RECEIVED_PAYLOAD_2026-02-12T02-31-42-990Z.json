@@ -1,0 +1,23 @@
+{
+  "category": "JUDICIAL",
+  "cnj": "0000001-23.2024.8.13.0024",
+  "title": "Teste de Processo Judicial",
+  "court": "TJMG",
+  "district": "Belo Horizonte",
+  "status": "ATIVO",
+  "area": "Cível",
+  "subject": "Ação de Cobrança",
+  "value": 15000.5,
+  "parties": [
+    {
+      "name": "João da Silva",
+      "document": "12345678901",
+      "type": "AUTOR"
+    },
+    {
+      "name": "Maria Santos",
+      "document": "98765432100",
+      "type": "R�?U"
+    }
+  ]
+}

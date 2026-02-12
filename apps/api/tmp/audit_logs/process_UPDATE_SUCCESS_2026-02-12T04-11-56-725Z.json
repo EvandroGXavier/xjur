@@ -1,0 +1,32 @@
+{
+  "id": "6ecbd82e-4322-4651-a9fa-11b4354bf26a",
+  "updated": {
+    "id": "6ecbd82e-4322-4651-a9fa-11b4354bf26a",
+    "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+    "contactId": null,
+    "cnj": null,
+    "category": "JUDICIAL",
+    "title": "CLAYTON X MADEREIRA",
+    "code": "CASO-2026-0005",
+    "folder": "",
+    "description": "CLAYTON X MADEREIRA",
+    "npu": null,
+    "court": "",
+    "courtSystem": "",
+    "vars": "",
+    "district": "",
+    "status": "ATIVO",
+    "area": "Cível",
+    "subject": "CLAYTON X MADEREIRA",
+    "class": null,
+    "distributionDate": null,
+    "judge": "",
+    "value": "50000",
+    "parties": [],
+    "lastCrawledAt": null,
+    "autoUpdate": true,
+    "metadata": {},
+    "createdAt": "2026-02-12T03:17:38.603Z",
+    "updatedAt": "2026-02-12T04:11:56.706Z"
+  }
+}

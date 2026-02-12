@@ -1,0 +1,13 @@
+{
+  "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+  "cnj": "0000001-23.2024.8.13.0024",
+  "category": "JUDICIAL",
+  "title": "Acao de Cobranca - Teste",
+  "code": "0000001-23.2024.8.13.0024",
+  "court": "TJMG",
+  "status": "ATIVO",
+  "area": "Civel",
+  "value": 15000.5,
+  "parties": [],
+  "metadata": {}
+}

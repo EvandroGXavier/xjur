@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Dr. Substituto",
+    "type": "MAGISTRADO",
+    "id": "5c9387e7-d23d-4f1f-bf84-cf8614c2ce65"
+  },
+  {
+    "name": "Autor Simulado (Busca por CPF)",
+    "personType": "PF",
+    "id": "a4a00bd2-0caf-4638-97ae-f41d35457438"
+  },
+  {
+    "name": "Réu Genérico SA",
+    "personType": "PJ",
+    "id": "4f49bb7d-ae2c-4a72-9174-25e75e548a2a"
+  }
+]

@@ -32,6 +32,18 @@ export const masks = {
       .replace(/(\d{5})(\d)/, '$1-$2')
       .replace(/(-\d{3})\d+?$/, '$1');
   },
+
+  cnj: (value: string) => {
+    // Formato: 0000000-00.0000.0.00.0000
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{7})(\d)/, '$1-$2')
+      .replace(/(\d{2})(\d)/, '$1.$2')
+      .replace(/(\d{4})(\d)/, '$1.$2')
+      .replace(/(\d{1})(\d)/, '$1.$2')
+      .replace(/(\d{2})(\d)/, '$1.$2')
+      .replace(/(\d{4})\d+?$/, '$1');
+  },
   
   currency: (value: string) => {
       const number = value.replace(/\D/g, '');

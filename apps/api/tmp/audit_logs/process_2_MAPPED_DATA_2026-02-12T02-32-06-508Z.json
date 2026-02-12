@@ -1,0 +1,13 @@
+{
+  "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+  "category": "EXTRAJUDICIAL",
+  "title": "Assessoria Contratual - Empresa ABC",
+  "code": "CASO-2026-0001",
+  "description": "Revisão e análise de contrato de prestação de serviços",
+  "status": "ATIVO",
+  "subject": "Contratos",
+  "distributionDate": "2026-02-12T02:32:06.507Z",
+  "value": 5000,
+  "parties": [],
+  "metadata": {}
+}

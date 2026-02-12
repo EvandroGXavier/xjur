@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -31,6 +31,13 @@ interface CreateProcessDto {
 @Injectable()
 export class ProcessesService {
     constructor(private prisma: PrismaService) {}
+
+    // Helper público para obter tenantId (temporário até JWT)
+    async getFirstTenantId(): Promise<string> {
+        const tenant = await this.prisma.tenant.findFirst();
+        if (!tenant) throw new NotFoundException('Nenhum tenant encontrado');
+        return tenant.id;
+    }
 
     private logAudit(step: string, data: any) {
         try {
@@ -97,7 +104,7 @@ export class ProcessesService {
         }
 
         const parseDate = (d: any) => {
-            if (!d) return new Date();
+            if (!d) return undefined;
             if (d instanceof Date) return d;
             if (typeof d === 'string') {
                 if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
@@ -106,7 +113,7 @@ export class ProcessesService {
                 }
                 return new Date(d);
             }
-            return new Date();
+            return undefined;
         };
 
         // PREPARE DATA
@@ -320,5 +327,108 @@ export class ProcessesService {
          });
          console.log(`Found ${results.length} processes for tenant ${tenantId}`);
          return results;
+    }
+
+    async findOne(id: string) {
+        const process = await this.prisma.process.findUnique({
+            where: { id },
+            include: {
+                timeline: { orderBy: { date: 'desc' }, take: 50 },
+                appointments: { orderBy: { startAt: 'asc' }, take: 20 },
+                contact: true,
+            }
+        });
+
+        if (!process) {
+            throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
+        }
+
+        return process;
+    }
+
+    async update(id: string, data: Partial<CreateProcessDto>) {
+        // Verificar se existe
+        const existing = await this.prisma.process.findUnique({ where: { id } });
+        if (!existing) {
+            throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
+        }
+
+        this.logAudit('UPDATE_RECEIVED', { id, data });
+
+        const parseDate = (d: any) => {
+            if (!d) return undefined;
+            if (d instanceof Date) return d;
+            if (typeof d === 'string') {
+                if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
+                   const [day, month, year] = d.split('/');
+                   return new Date(`${year}-${month}-${day}`);
+                }
+                return new Date(d);
+            }
+            return undefined;
+        };
+
+        // Construir objeto de update apenas com campos enviados
+        const updateData: any = {};
+
+        if (data.title !== undefined) updateData.title = data.title;
+        if (data.cnj !== undefined) updateData.cnj = data.cnj || null;
+        if (data.category !== undefined) updateData.category = data.category;
+        if (data.description !== undefined) updateData.description = data.description;
+        if (data.folder !== undefined) updateData.folder = data.folder;
+        if (data.court !== undefined) updateData.court = data.court;
+        if (data.courtSystem !== undefined) updateData.courtSystem = data.courtSystem;
+        if (data.vars !== undefined) updateData.vars = data.vars;
+        if (data.district !== undefined) updateData.district = data.district;
+        if (data.status !== undefined) updateData.status = data.status;
+        if (data.area !== undefined) updateData.area = data.area;
+        if (data.subject !== undefined) updateData.subject = data.subject;
+        if (data.class !== undefined) updateData.class = data.class;
+        if (data.judge !== undefined) updateData.judge = data.judge;
+        if (data.parties !== undefined) updateData.parties = data.parties;
+        if (data.metadata !== undefined) updateData.metadata = data.metadata;
+        if (data.contactId !== undefined) updateData.contactId = data.contactId;
+
+        if (data.distributionDate !== undefined) {
+            const parsed = parseDate(data.distributionDate);
+            if (parsed) updateData.distributionDate = parsed;
+        }
+
+        if (data.value !== undefined) {
+            updateData.value = typeof data.value === 'string'
+                ? parseFloat(String(data.value).replace('R$', '').trim().replace('.', '').replace(',', '.'))
+                : data.value;
+        }
+
+        try {
+            const updated = await this.prisma.process.update({
+                where: { id },
+                data: updateData,
+            });
+
+            this.logAudit('UPDATE_SUCCESS', { id, updated });
+            console.log(`Process updated: ${id}`);
+            return updated;
+        } catch (error) {
+            this.logAudit('UPDATE_ERROR', { id, error: error.message });
+            console.error('Error updating process:', error);
+            throw error;
+        }
+    }
+
+    async remove(id: string) {
+        const existing = await this.prisma.process.findUnique({ where: { id } });
+        if (!existing) {
+            throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
+        }
+
+        this.logAudit('DELETE', { id, title: existing.title, cnj: existing.cnj });
+
+        // Deletar timeline associada primeiro (relação)
+        await this.prisma.processTimeline.deleteMany({ where: { processId: id } });
+
+        const deleted = await this.prisma.process.delete({ where: { id } });
+        console.log(`Process deleted: ${id} (${existing.title || existing.cnj})`);
+        return { success: true, deleted: { id: deleted.id, title: deleted.title } };
     }
 }
