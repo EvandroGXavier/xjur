@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { DocumentsService } from './documents.service';
 import { DocumentsController } from './documents.controller';
+import { PrismaService } from '../prisma.service';
 
 @Module({
-  imports: [], // Vazio porque o PrismaModule agora é @Global()
+  imports: [], 
   controllers: [DocumentsController],
-  providers: [DocumentsService],
+  providers: [DocumentsService, PrismaService],
   exports: [DocumentsService],
 })
 export class DocumentsModule {}

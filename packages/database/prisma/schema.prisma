@@ -124,9 +124,30 @@ model PersonDetailPF {
   id        String   @id @default(uuid())
   contactId String   @unique
   
-  cpf       String?
-  rg        String?
-  birthDate DateTime?
+  cpf            String?
+  rg             String?
+  rgIssuer       String?
+  rgIssueDate    DateTime?
+  birthDate      DateTime?
+  
+  nis            String?
+  pis            String?
+  ctps           String?
+  motherName     String?
+  fatherName     String?
+  profession     String?
+  nationality    String?
+  naturality     String?
+  gender         String?
+  civilStatus    String?
+  
+  // CNH (New Fields)
+  cnh            String?
+  cnhIssuer      String?
+  cnhIssueDate   DateTime?
+  cnhCategory    String?
+  cnhExpirationDate DateTime?
+  fullName       String? // Nome completo legal (diferente do display name)
   
   contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   
@@ -150,6 +171,7 @@ model PersonDetailPJ {
   shareCapital      Decimal?     @db.Decimal(15, 2)
   status            String?      
   statusDate        DateTime?
+  statusReason      String?
   specialStatus     String?
   specialStatusDate DateTime?
   pjQsa             Json?        

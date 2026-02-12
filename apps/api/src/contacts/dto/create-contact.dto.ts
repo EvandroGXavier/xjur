@@ -26,6 +26,97 @@ export class CreateContactDto {
   @IsDateString()
   @Transform(({ value }) => value === "" ? null : value)
   birthDate?: string;
+  
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  rgIssuer?: string;
+
+  @IsOptional()
+  @IsDateString()
+  @Transform(({ value }) => value === "" ? null : value)
+  rgIssueDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  nis?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  pis?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  ctps?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  motherName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  fatherName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  profession?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  nationality?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  naturality?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  civilStatus?: string;
+
+  // New Fields
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  cnh?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  cnhIssuer?: string;
+
+  @IsOptional()
+  @IsDateString()
+  @Transform(({ value }) => value === "" ? null : value)
+  cnhIssueDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  @Transform(({ value }) => value === "" ? null : value)
+  cnhExpirationDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  cnhCategory?: string;
 
   // Campos Pessoa Jurídica
   @IsOptional()
@@ -73,6 +164,11 @@ export class CreateContactDto {
   @IsOptional()
   @Transform(({ value }) => value === "" ? null : value)
   statusDate?: string | Date;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value === "" ? null : value)
+  statusReason?: string;
 
   @IsOptional()
   @IsString()

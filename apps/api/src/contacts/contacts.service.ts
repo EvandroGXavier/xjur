@@ -18,10 +18,13 @@ export class ContactsService {
       const { 
         // PF Fields
         cpf, rg, birthDate,
+
+        nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, rgIssueDate,
+        fullName, cnh, cnhIssuer, cnhIssueDate, cnhExpirationDate, cnhCategory,
         
         // PJ Fields
         cnpj, companyName, stateRegistration, openingDate, size, legalNature,
-        mainActivity, sideActivities, shareCapital, status, statusDate,
+        mainActivity, sideActivities, shareCapital, status, statusDate, statusReason,
         specialStatus, specialStatusDate, pjQsa,
         
         // Address & Additional (handled separately usually but let's be safe)
@@ -32,7 +35,12 @@ export class ContactsService {
 
       // Prepare nested writes
       const pfCreate = commonData.personType === 'PF' ? {
-        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined
+        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined,
+        nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, 
+        rgIssueDate: rgIssueDate ? new Date(rgIssueDate) : undefined,
+        fullName, cnh, cnhIssuer, cnhCategory,
+        cnhIssueDate: cnhIssueDate ? new Date(cnhIssueDate) : undefined,
+        cnhExpirationDate: cnhExpirationDate ? new Date(cnhExpirationDate) : undefined
       } : undefined;
 
       const pjCreate = commonData.personType === 'PJ' ? {
@@ -40,6 +48,7 @@ export class ContactsService {
         openingDate: openingDate ? new Date(openingDate) : undefined,
         size, legalNature, mainActivity, sideActivities, shareCapital,
         status, statusDate: statusDate ? new Date(statusDate) : undefined,
+        statusReason,
         specialStatus, specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
         pjQsa
       } : undefined;
@@ -99,10 +108,12 @@ export class ContactsService {
     const { 
       // PF Fields
       cpf, rg, birthDate,
+      nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, rgIssueDate,
+      fullName, cnh, cnhIssuer, cnhIssueDate, cnhExpirationDate, cnhCategory,
       
       // PJ Fields
       cnpj, companyName, stateRegistration, openingDate, size, legalNature,
-      mainActivity, sideActivities, shareCapital, status, statusDate,
+      mainActivity, sideActivities, shareCapital, status, statusDate, statusReason,
       specialStatus, specialStatusDate, pjQsa,
       
       addresses, additionalContacts,
@@ -110,8 +121,22 @@ export class ContactsService {
       ...commonData 
     } = updateContactDto as any;
 
+    // FIX: Manual cleanup to ensure PF fields are NOT in commonData (destructuring edge cases)
+    const pfFieldsToRemove = [
+      'fullName', 'cnh', 'cnhIssuer', 'cnhIssueDate', 'cnhExpirationDate', 'cnhCategory',
+      'cpf', 'rg', 'rgIssuer', 'rgIssueDate', 'birthDate',
+      'nis', 'pis', 'ctps', 'motherName', 'fatherName', 'profession', 'nationality', 'naturality', 'gender', 'civilStatus',
+      'secondaryEmail'
+    ];
+    pfFieldsToRemove.forEach(field => delete commonData[field]);
+
     const pfUpdate = {
-        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined
+        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined,
+        nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, 
+        rgIssueDate: rgIssueDate ? new Date(rgIssueDate) : undefined,
+        fullName, cnh, cnhIssuer, cnhCategory,
+        cnhIssueDate: cnhIssueDate ? new Date(cnhIssueDate) : undefined,
+        cnhExpirationDate: cnhExpirationDate ? new Date(cnhExpirationDate) : undefined
     };
 
     const pjUpdate = {
@@ -119,6 +144,7 @@ export class ContactsService {
         openingDate: openingDate ? new Date(openingDate) : undefined,
         size, legalNature, mainActivity, sideActivities, shareCapital,
         status, statusDate: statusDate ? new Date(statusDate) : undefined,
+        statusReason,
         specialStatus, specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
         pjQsa
     };

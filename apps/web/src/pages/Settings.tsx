@@ -477,6 +477,7 @@ export function Settings() {
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
                         />
                     </div>
+
                     <div>
                         <label className="block text-sm font-medium text-slate-400 mb-1">Documento (CPF/CNPJ)</label>
                         <input
@@ -486,6 +487,26 @@ export function Settings() {
                             onChange={e => setFormData({...formData, document: e.target.value})}
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
                         />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">Inscrição Estadual</label>
+                            <input
+                                type="text"
+                                value={formData.stateRegistration || ''}
+                                onChange={e => setFormData({...formData, stateRegistration: e.target.value})}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">Inscrição Municipal</label>
+                            <input
+                                type="text"
+                                value={formData.municipalRegistration || ''}
+                                onChange={e => setFormData({...formData, municipalRegistration: e.target.value})}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                            />
+                        </div>
                     </div>
                     
                     {!editingItem && (

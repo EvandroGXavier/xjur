@@ -1,12 +1,11 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Users, Mail, Phone, FileText, Search, Filter } from 'lucide-react';
+import { Plus, Users, Mail, Phone, FileText, Search, Filter, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { DataGrid } from '../../components/ui/DataGrid';
-import { Badge } from '../../components/ui/Badge';
 
 interface Contact {
   id: string;
@@ -16,6 +15,7 @@ interface Contact {
   cnpj?: string;
   email?: string;
   phone?: string;
+  whatsapp?: string;
   type?: 'PF' | 'PJ';
   active?: boolean;
 }
@@ -160,21 +160,22 @@ export function ContactList() {
                     key: 'phone',
                     label: 'Telefone / WhatsApp',
                     sortable: true,
-                    render: (c) => c.phone ? (
-                        <div className="flex items-center gap-2 text-slate-300">
-                             <Phone size={14} className="text-slate-500" />
-                             {c.phone}
-                        </div>
-                    ) : <span className="text-slate-600">-</span>
-                },
-                {
-                    key: 'active',
-                    label: 'Status',
-                    sortable: true,
                     render: (c) => (
-                        <Badge variant={c.active !== false ? 'success' : 'default'}>
-                            {c.active !== false ? 'ATIVO' : 'INATIVO'}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                            {c.phone && (
+                                <div className="flex items-center gap-2 text-slate-300">
+                                    <Phone size={14} className="text-slate-500" />
+                                    {c.phone}
+                                </div>
+                            )}
+                            {c.whatsapp && c.whatsapp !== c.phone && (
+                                <div className="flex items-center gap-2 text-emerald-400">
+                                    <MessageSquare size={14} />
+                                    {c.whatsapp}
+                                </div>
+                            )}
+                            {!c.phone && !c.whatsapp && <span className="text-slate-600">-</span>}
+                        </div>
                     )
                 }
             ]}
