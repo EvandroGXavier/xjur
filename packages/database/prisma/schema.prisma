@@ -89,6 +89,7 @@ model Contact {
   notes             String?
   category          String?   // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
   password          String?   // Senha para acesso ao sistema
+  active            Boolean   @default(true)
   
   // Detalhes Específicos (1:1)
   pfDetails         PersonDetailPF?

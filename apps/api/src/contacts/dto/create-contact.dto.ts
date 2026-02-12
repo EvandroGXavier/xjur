@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEmail, MinLength, IsIn, IsDateString, IsNumber, IsArray, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsEmail, MinLength, IsIn, IsDateString, IsNumber, IsArray, IsObject, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateContactDto {
@@ -10,6 +10,9 @@ export class CreateContactDto {
   @IsString()
   @IsIn(['LEAD', 'PF', 'PJ'], { message: 'Tipo de pessoa deve ser LEAD, PF ou PJ' })
   personType?: string;
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 
   // Campos Pessoa Física
   @IsOptional()
