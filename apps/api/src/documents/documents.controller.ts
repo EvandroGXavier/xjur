@@ -38,6 +38,11 @@ export class DocumentsController {
     return this.documentsService.getVariables();
   }
 
+  @Post('settings/seed')
+  seedDefaults(@CurrentUser() user: CurrentUserData) {
+    return this.documentsService.seedDefaults(user.tenantId);
+  }
+
   @Post('templates')
   createTemplate(@Body() dto: CreateTemplateDto, @CurrentUser() user: CurrentUserData) {
     return this.documentsService.createTemplate(dto, user.tenantId);

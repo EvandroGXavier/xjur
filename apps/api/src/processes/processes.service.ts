@@ -89,17 +89,32 @@ export class ProcessesService {
         let code = data.cnj;
         if (data.category === 'EXTRAJUDICIAL') {
              const year = new Date().getFullYear();
-             const count = await this.prisma.process.count({
+             
+             // Fetch all codes to safely determine max sequence in memory
+             // This avoids issues with string sorting of different lengths (e.g. "CASO-2026-9" > "CASO-2026-10")
+             const codes = await this.prisma.process.findMany({
                  where: { 
                      tenantId, 
-                     category: 'EXTRAJUDICIAL',
-                     createdAt: {
-                         gte: new Date(`${year}-01-01`),
-                         lt: new Date(`${year + 1}-01-01`)
+                     code: { startsWith: `CASO-${year}-` }
+                 },
+                 select: { code: true }
+             });
+
+             let maxSeq = 0;
+             for (const p of codes) {
+                 if (p.code) {
+                     const parts = p.code.split('-');
+                     if (parts.length === 3) {
+                         const seq = parseInt(parts[2]);
+                         if (!isNaN(seq) && seq > maxSeq) {
+                             maxSeq = seq;
+                         }
                      }
                  }
-             });
-             const seq = String(count + 1).padStart(4, '0');
+             }
+
+             const nextSeq = maxSeq + 1;
+             const seq = String(nextSeq).padStart(4, '0');
              code = `CASO-${year}-${seq}`;
         }
 
@@ -120,7 +135,7 @@ export class ProcessesService {
         const processData = {
             tenantId,
             contactId: data.contactId,
-            cnj: data.cnj,
+            cnj: (data.cnj && data.cnj.trim() !== '') ? data.cnj : null,
             category: data.category,
             title: data.title || `Processo ${data.cnj}`,
             code: code,
@@ -138,7 +153,9 @@ export class ProcessesService {
             class: data.class,
             distributionDate: parseDate(data.distributionDate),
             judge: data.judge,
-            value: typeof data.value === 'string' ? parseFloat(String(data.value).replace('R$', '').trim().replace('.', '').replace(',', '.')) : data.value,
+            value: typeof data.value === 'string' 
+                ? parseFloat(String(data.value).replace('R$', '').trim().replace(/\./g, '').replace(',', '.')) 
+                : data.value,
             
             parties: data.parties || [],
             metadata: data.metadata || {},
@@ -372,7 +389,7 @@ export class ProcessesService {
         const updateData: any = {};
 
         if (data.title !== undefined) updateData.title = data.title;
-        if (data.cnj !== undefined) updateData.cnj = data.cnj || null;
+        if (data.cnj !== undefined) updateData.cnj = (data.cnj && data.cnj.trim() !== '') ? data.cnj : null;
         if (data.category !== undefined) updateData.category = data.category;
         if (data.description !== undefined) updateData.description = data.description;
         if (data.folder !== undefined) updateData.folder = data.folder;
@@ -396,7 +413,7 @@ export class ProcessesService {
 
         if (data.value !== undefined) {
             updateData.value = typeof data.value === 'string'
-                ? parseFloat(String(data.value).replace('R$', '').trim().replace('.', '').replace(',', '.'))
+                ? parseFloat(String(data.value).replace('R$', '').trim().replace(/\./g, '').replace(',', '.'))
                 : data.value;
         }
 

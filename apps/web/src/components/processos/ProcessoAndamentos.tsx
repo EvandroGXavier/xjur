@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+import { api, getApiUrl } from '../../services/api';
 import { Badge } from '../ui/Badge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -8,10 +8,7 @@ import {
     AlertTriangle, 
     MessageCircle, 
     FileText, 
-    Bot, 
-    FileSearch, 
     Send,
-    Loader2,
     RefreshCw,
     Plus,
     Trash2,
@@ -46,6 +43,9 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     const [selectedMessage, setSelectedMessage] = useState<TimelineItem | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<TimelineItem | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+
+    const [attachments, setAttachments] = useState<any[]>([]);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -67,6 +67,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             type: 'MOVEMENT'
         });
         setEditingItem(null);
+        setSelectedFiles(null);
+        setAttachments([]);
         setIsFormOpen(false);
     };
 
@@ -100,19 +102,43 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const data = new FormData();
+            Object.entries(formData).forEach(([key, value]) => {
+                if (value) data.append(key, value);
+            });
+            if (!editingItem) {
+                 data.append('origin', 'INTERNO');
+            }
+            if (selectedFiles) {
+                Array.from(selectedFiles).forEach((file) => {
+                    data.append('files', file);
+                });
+            }
+
+            // Send current attachments (excluding removed ones)
             if (editingItem) {
-                await api.patch(`/processes/${processId}/timelines/${editingItem.id}`, formData);
+                const metadata = {
+                    ...editingItem.metadata,
+                    attachments: attachments
+                };
+                data.append('metadata', JSON.stringify(metadata));
+            }
+
+            if (editingItem) {
+                await api.patch(`/processes/${processId}/timelines/${editingItem.id}`, data, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
                 toast.success('Andamento atualizado!');
             } else {
-                await api.post(`/processes/${processId}/timelines`, {
-                     ...formData,
-                     origin: 'INTERNO'
+                await api.post(`/processes/${processId}/timelines`, data, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 toast.success('Andamento criado!');
             }
             resetForm();
             fetchTimelines();
         } catch (error) {
+            console.error(error);
             toast.error('Erro ao salvar andamento.');
         }
     };
@@ -130,6 +156,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
 
     const openEdit = (item: TimelineItem) => {
         setEditingItem(item);
+        setSelectedFiles(null);
+        setAttachments(item.metadata?.attachments || []);
         setFormData({
             title: item.title,
             description: item.description || '',
@@ -140,6 +168,47 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         });
         setIsFormOpen(true);
     };
+
+// ... inside render form ...
+
+                            <div className="border border-slate-800 rounded p-3 bg-slate-950/50">
+                                <label className="block text-sm font-medium text-slate-400 mb-2">Anexar Documento</label>
+                                <div className="flex items-center gap-2 mb-3">
+                                         <input 
+                                            type="file" 
+                                            multiple
+                                            onChange={e => {
+                                                if (e.target.files) {
+                                                    setSelectedFiles(e.target.files);
+                                                }
+                                            }}
+                                            className="text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500"
+                                        />
+                                </div>
+                                
+                                {/* Existing Attachments List in Edit Mode */}
+                                {attachments.length > 0 && (
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-slate-500 font-medium mb-1">Anexos Atuais:</p>
+                                        {attachments.map((att: any, idx: number) => (
+                                            <div key={idx} className="flex items-center justify-between bg-slate-900 border border-slate-800 p-2 rounded">
+                                                <div className="flex items-center gap-2 text-xs text-emerald-400 overflow-hidden">
+                                                    <FileText size={12} className="shrink-0" />
+                                                    <span className="truncate">{att.originalName}</span>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                                    className="text-slate-500 hover:text-red-500 p-1"
+                                                    title="Remover anexo"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
     const handleSendWhatsapp = (item: TimelineItem) => {
         if (!item.clientMessage) {
@@ -176,6 +245,64 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     };
 
+    const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string; x: number; y: number } | null>(null);
+    const [closeTimeout, setCloseTimeout] = useState<NodeJS.Timeout | null>(null);
+
+    const handleMouseEnterDoc = (e: React.MouseEvent, url: string, title: string) => {
+        if (closeTimeout) {
+            clearTimeout(closeTimeout);
+            setCloseTimeout(null);
+        }
+        
+        const rect = (e.target as HTMLElement).closest('a')?.getBoundingClientRect();
+        if (rect) {
+            // Calculate best position
+            const spaceRight = window.innerWidth - rect.right;
+            const spaceBottom = window.innerHeight - rect.bottom;
+            
+            let x = rect.right + 10;
+            let y = rect.top - 20;
+
+            // If not enough space on right, show on left
+            if (spaceRight < 620) {
+                x = rect.left - 610;
+            }
+            
+            // If not enough space on bottom, show slightly up
+            if (spaceBottom < 720) {
+                y = Math.max(10, window.innerHeight - 720);
+            }
+
+            setPreviewDoc({
+                url,
+                title,
+                x,
+                y
+            });
+        }
+    };
+
+    const handleMouseLeaveDoc = () => {
+        const timeout = setTimeout(() => {
+            setPreviewDoc(null);
+        }, 300); // 300ms delay to allow moving to the popup
+        setCloseTimeout(timeout);
+    };
+
+    const handleMouseEnterPreview = () => {
+        if (closeTimeout) {
+            clearTimeout(closeTimeout);
+            setCloseTimeout(null);
+        }
+    };
+
+    const handleMouseLeavePreview = () => {
+        const timeout = setTimeout(() => {
+             setPreviewDoc(null);
+        }, 300);
+        setCloseTimeout(timeout);
+    };
+
     const formatDateDisplay = (dateStr?: string) => {
         if (!dateStr) return '-';
         try {
@@ -186,7 +313,51 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     };
 
     return (
-        <div className="space-y-4 animate-in fade-in">
+        <div className="space-y-4 animate-in fade-in relative">
+            {/* Document Preview Modal (Mini Browser) */}
+            {previewDoc && (
+                <div 
+                    className="fixed z-[9999] bg-slate-800 border border-slate-600 rounded-lg shadow-2xl flex flex-col overflow-hidden w-[600px] h-[700px] animate-in fade-in zoom-in-95 duration-200"
+                    style={{ top: previewDoc.y, left: previewDoc.x }}
+                    onMouseEnter={handleMouseEnterPreview}
+                    onMouseLeave={handleMouseLeavePreview}
+                >
+                    {/* Header */}
+                    <div className="bg-slate-900 px-3 py-2 border-b border-slate-700 flex items-center justify-between handle cursor-move select-none">
+                        <div className="flex items-center gap-2 text-slate-300">
+                             <FileText size={14} className="text-indigo-400" />
+                             <span className="text-xs font-medium truncate max-w-[350px]">{previewDoc.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                             <a 
+                                href={previewDoc.url} 
+                                target="_blank"
+                                rel="noopener noreferrer" 
+                                className="text-slate-400 hover:text-white"
+                                title="Abrir em Nova Aba"
+                            >
+                                <span className="text-[10px] font-bold border border-slate-600 px-1 rounded hover:bg-slate-700">EXT</span>
+                            </a>
+                            <button 
+                                onClick={() => setPreviewDoc(null)}
+                                className="text-slate-400 hover:text-red-400 p-0.5 rounded hover:bg-slate-800 transition"
+                            >
+                                <span className="font-bold text-xs">✕</span>
+                            </button>
+                        </div>
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 bg-white relative">
+                        {/* We use an iframe to display PDF/images served by the backend */}
+                         <iframe 
+                            src={previewDoc.url} 
+                            className="w-full h-full border-0 bg-slate-100"
+                            title="Document Preview"
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* Header Actions */}
             <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-lg border border-slate-800">
                 <div className="flex items-center gap-2">
@@ -225,109 +396,127 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             {/* Table */}
             <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden shadow-lg">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm text-slate-400">
-                        <thead className="bg-slate-950 text-slate-300 font-medium border-b border-slate-800">
+                    <table className="w-full text-left text-xs bg-white text-slate-900 border-collapse">
+                        <thead className="bg-[#f0f0f0] text-slate-700 font-bold border-b-2 border-slate-300">
                             <tr>
-                                <th className="px-4 py-3 w-16 text-center">#</th>
-                                <th className="px-4 py-3 text-center">Origem</th>
-                                <th className="px-4 py-3">Evento/ID</th>
-                                <th className="px-4 py-3">Prazos</th>
-                                <th className="px-4 py-3 w-1/3">Resumo Técnico</th>
-                                <th className="px-4 py-3 w-1/3">Resumo IA</th>
-                                <th className="px-4 py-3 text-right">Ações</th>
+                                <th className="px-2 py-1 w-12 text-center border-r border-slate-200">#</th>
+                                <th className="px-2 py-1 w-32 border-r border-slate-200">Data/Hora</th>
+                                <th className="px-2 py-1 w-1/4 border-r border-slate-200">Evento</th>
+                                <th className="px-2 py-1 border-r border-slate-200">Descrição</th>
+                                <th className="px-2 py-1 w-24 border-r border-slate-200">Usuário</th>
+                                <th className="px-2 py-1 w-24 text-center">Docs</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-800/50">
+                        <tbody className="divide-y divide-slate-200">
                             {loading ? (
-                                [...Array(3)].map((_, i) => (
-                                    <tr key={i} className="animate-pulse">
-                                        <td colSpan={7} className="px-4 py-8 text-center">
-                                            <div className="h-4 bg-slate-800 rounded w-full opacity-50"></div>
+                                [...Array(5)].map((_, i) => (
+                                    <tr key={i} className="animate-pulse bg-white">
+                                        <td colSpan={6} className="px-4 py-4 text-center">
+                                            <div className="h-4 bg-slate-200 rounded w-full"></div>
                                         </td>
                                     </tr>
                                 ))
                             ) : timelines.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
+                                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                                         Nenhum andamento registrado.
                                     </td>
                                 </tr>
                             ) : (
-                                timelines.map((item) => (
-                                    <tr key={item.id} className="hover:bg-slate-800/30 transition-colors group">
-                                        <td className="px-4 py-3 text-center font-mono text-slate-500">
-                                            {item.internalSequence || '-'}
+                                timelines.map((item, idx) => (
+                                    <tr 
+                                        key={item.id} 
+                                        className={`hover:bg-yellow-50 transition-colors group ${
+                                            idx % 2 === 0 ? 'bg-white' : 'bg-[#f8f9fa]'
+                                        }`}
+                                    >
+                                        <td className="px-2 py-1.5 text-center font-mono text-slate-600 border-r border-slate-200 text-[11px] align-top">
+                                            {item.internalSequence || timelines.length - idx}
                                         </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {getOriginBadge(item.origin)}
+                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-700 font-medium whitespace-nowrap align-top">
+                                            {formatDateDisplay(item.date)}
                                         </td>
-                                        <td className="px-4 py-3">
+                                        <td className="px-2 py-1.5 border-r border-slate-200 align-top">
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-white">{item.displayId || item.title || 'N/A'}</span>
-                                                <span className="text-xs text-slate-500">{formatDateDisplay(item.date)}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex flex-col gap-1">
-                                                {item.internalDate && (
-                                                    <div className="flex items-center gap-1.5 text-xs text-amber-400" title="Data Alvo Interna">
-                                                        <Clock size={12} />
-                                                        <span>{format(new Date(item.internalDate), 'dd/MM/yy', { locale: ptBR })}</span>
-                                                    </div>
-                                                )}
-                                                {item.fatalDate && (
-                                                    <div className="flex items-center gap-1.5 text-xs text-red-400 font-bold" title="Prazo Fatal">
-                                                        <AlertTriangle size={12} />
-                                                        <span>{format(new Date(item.fatalDate), 'dd/MM/yy', { locale: ptBR })}</span>
-                                                    </div>
-                                                )}
-                                                {!item.internalDate && !item.fatalDate && <span className="text-slate-600">-</span>}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-start gap-2">
-                                                <FileText size={14} className="mt-0.5 text-slate-500 flex-shrink-0" />
-                                                <p className="text-slate-300 line-clamp-3 text-xs leading-relaxed">
-                                                    {item.description || item.title}
-                                                </p>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3 bg-slate-900/50">
-                                            {item.aiSummary ? (
-                                                <div className="flex items-start gap-2">
-                                                    <Bot size={14} className="mt-0.5 text-indigo-400 flex-shrink-0" />
-                                                    <p className="text-indigo-200/80 line-clamp-3 text-xs leading-relaxed italic">
-                                                        "{item.aiSummary}"
-                                                    </p>
+                                                <span className="font-bold text-[#0056b3] text-sm hover:underline cursor-pointer">
+                                                    {item.title}
+                                                </span>
+                                                {/* Eproc style origin/type */}
+                                                <div className="flex gap-1 mt-0.5">
+                                                    {getOriginBadge(item.origin)}
+                                                    {item.type && <span className="text-[10px] bg-slate-100 px-1 rounded border border-slate-200">{item.type}</span>}
                                                 </div>
-                                            ) : (
-                                                <span className="text-slate-600 text-xs italic">Aguardando análise...</span>
-                                            )}
+                                            </div>
                                         </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <button 
-                                                    onClick={() => openEdit(item)}
-                                                    className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20 transition-colors"
-                                                    title="Editar"
-                                                >
-                                                    <Edit3 size={16} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDelete(item.id)}
-                                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
-                                                    title="Excluir"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleSendWhatsapp(item)}
-                                                    className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    title="Enviar Zap"
-                                                    disabled={!item.clientMessage}
-                                                >
-                                                    <MessageCircle size={16} />
-                                                </button>
+                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-800 align-top">
+                                            <div className="flex flex-col gap-1">
+                                                <div dangerouslySetInnerHTML={{ __html: item.description || '' }} className="prose prose-sm max-w-none text-xs text-slate-800" />
+                                                
+                                                {/* Meta infos like Prazos */}
+                                                {(item.internalDate || item.fatalDate) && (
+                                                    <div className="flex gap-2 mt-1 bg-slate-50 p-1 rounded border border-slate-100 w-fit">
+                                                         {item.internalDate && (
+                                                            <div className="flex items-center gap-1 text-[10px] text-amber-600 font-semibold" title="Prazo Interno">
+                                                                <Clock size={10} />
+                                                                <span>Int: {format(new Date(item.internalDate), 'dd/MM/yy', { locale: ptBR })}</span>
+                                                            </div>
+                                                        )}
+                                                        {item.fatalDate && (
+                                                            <div className="flex items-center gap-1 text-[10px] text-red-600 font-bold" title="Prazo Fatal">
+                                                                <AlertTriangle size={10} />
+                                                                <span>Fatal: {format(new Date(item.fatalDate), 'dd/MM/yy', { locale: ptBR })}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Actions Row */}
+                                                <div className="flex gap-3 mt-1 opacity-0 group-hover:opacity-100 transition-opacity items-center">
+                                                    <button onClick={() => openEdit(item)} className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5 font-medium" title="Editar">
+                                                        <Edit3 size={10} /> Editar
+                                                    </button>
+                                                    <button onClick={() => handleDelete(item.id)} className="text-[10px] text-red-600 hover:underline flex items-center gap-0.5 font-medium" title="Excluir">
+                                                        <Trash2 size={10} /> Excluir
+                                                    </button>
+                                                    {item.clientMessage && (
+                                                        <button onClick={() => handleSendWhatsapp(item)} className="text-[10px] text-emerald-600 hover:underline flex items-center gap-0.5 font-medium" title="Mensagem Cliente">
+                                                            <MessageCircle size={10} /> Whats
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-600 text-xs align-top">
+                                            {item.metadata?.user || 'sistema'}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-left align-top min-w-[120px]">
+                                            <div className="flex flex-col gap-1 items-start">
+                                                {item.metadata?.attachments?.map((att: any, attIdx: number) => {
+                                                    const docUrl = `${getApiUrl()}/processes/timelines/attachments/${encodeURIComponent(att.fileName)}`;
+                                                    return (
+                                                        <div key={attIdx} className="relative group/doc">
+                                                            <a 
+                                                                href={docUrl} 
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                className="flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-800 hover:underline group/link py-0.5"
+                                                                title={att.originalName}
+                                                                    onMouseEnter={(e) => handleMouseEnterDoc(e, docUrl, att.originalName)}
+                                                                onMouseLeave={handleMouseLeaveDoc}
+                                                            >
+                                                                <FileText size={14} className="text-blue-500 group-hover/link:text-blue-700" />
+                                                                <span className="truncate max-w-[140px]">{att.originalName}</span>
+                                                            </a>
+                                                        </div>
+                                                    );
+                                                })}
+                                                
+                                                {item.origin === 'TRIBUNAL_EPROC' && (
+                                                     <button className="text-[#0056b3] hover:text-blue-800 flex items-center gap-1.5" title="Ver no Eproc">
+                                                        <FileText size={14} />
+                                                        <span className="text-[11px] font-bold">HTML</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -427,6 +616,45 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                     onChange={e => setFormData({...formData, description: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:border-indigo-500 outline-none h-24 resize-none"
                                 />
+                            </div>
+
+                            <div className="border border-slate-800 rounded p-3 bg-slate-950/50">
+                                <label className="block text-sm font-medium text-slate-400 mb-2">Anexar Documento</label>
+                                <div className="flex items-center gap-2 mb-3">
+                                         <input 
+                                            type="file" 
+                                            multiple
+                                            onChange={e => {
+                                                if (e.target.files) {
+                                                    setSelectedFiles(e.target.files);
+                                                }
+                                            }}
+                                            className="text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500"
+                                        />
+                                </div>
+                                
+                                {/* Existing Attachments List in Edit Mode */}
+                                {attachments.length > 0 && (
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-slate-500 font-medium mb-1">Anexos Atuais:</p>
+                                        {attachments.map((att: any, idx: number) => (
+                                            <div key={idx} className="flex items-center justify-between bg-slate-900 border border-slate-800 p-2 rounded">
+                                                <div className="flex items-center gap-2 text-xs text-emerald-400 overflow-hidden">
+                                                    <FileText size={12} className="shrink-0" />
+                                                    <span className="truncate">{att.originalName}</span>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                                    className="text-slate-500 hover:text-red-500 p-1"
+                                                    title="Remover anexo"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 border-t border-slate-800 pt-4">

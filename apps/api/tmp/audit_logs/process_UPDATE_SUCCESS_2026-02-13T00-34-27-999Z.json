@@ -1,0 +1,32 @@
+{
+  "id": "6b661312-7dea-4694-be76-6844589a7a3c",
+  "updated": {
+    "id": "6b661312-7dea-4694-be76-6844589a7a3c",
+    "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+    "contactId": null,
+    "cnj": "0000942866988.8.13.0024",
+    "category": "JUDICIAL",
+    "title": "Processo Judicial Teste Audit",
+    "code": "0000942866988.8.13.0024",
+    "folder": "http://drive.google.com/test",
+    "description": "Updated Description via Audit Script",
+    "npu": null,
+    "court": null,
+    "courtSystem": null,
+    "vars": null,
+    "district": null,
+    "status": "ATIVO",
+    "area": null,
+    "subject": null,
+    "class": null,
+    "distributionDate": null,
+    "judge": null,
+    "value": "50000",
+    "parties": [],
+    "lastCrawledAt": null,
+    "autoUpdate": true,
+    "metadata": {},
+    "createdAt": "2026-02-13T00:34:27.006Z",
+    "updatedAt": "2026-02-13T00:34:27.987Z"
+  }
+}

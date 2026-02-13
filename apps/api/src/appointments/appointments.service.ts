@@ -44,7 +44,7 @@ export class AppointmentsService {
     });
   }
 
-  async findAll(tenantId: string, start?: string, end?: string) {
+  async findAll(tenantId: string, start?: string, end?: string, processId?: string) {
     const where: any = { tenantId };
 
     if (start && end) {
@@ -52,6 +52,10 @@ export class AppointmentsService {
             gte: new Date(start),
             lte: new Date(end)
         };
+    }
+    
+    if (processId) {
+        where.processId = processId;
     }
 
     return this.prisma.appointment.findMany({

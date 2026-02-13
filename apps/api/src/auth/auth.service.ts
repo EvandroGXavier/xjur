@@ -33,7 +33,8 @@ export class AuthService {
         email: user.email, 
         sub: user.id, 
         tenantId: user.tenantId, // Supondo que o user venha com tenantId ou tenant.id
-        role: user.role 
+        role: user.role,
+        name: user.name
     };
     
     return {

@@ -7,6 +7,7 @@ import { ArrowLeft, Save, Loader2, FileText, Users, Calendar, Activity } from 'l
 import { masks } from '../../utils/masks';
 import { ProcessParties } from './ProcessParties';
 import { ProcessoAndamentos } from '../../components/processos/ProcessoAndamentos';
+import { ProcessAgenda } from '../../components/processos/ProcessAgenda';
 
 export function ProcessForm() {
     const { id } = useParams();
@@ -88,9 +89,24 @@ export function ProcessForm() {
                 // Redireciona para edição para liberar as abas
                 navigate(`/processes/${res.data.id}`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            toast.error('Erro ao salvar processo');
+            const message = err.response?.data?.message || err.message || 'Erro ao conectar com servidor';
+            
+            const errorDetail = err.response?.data || err;
+            const errorString = typeof errorDetail === 'object' ? JSON.stringify(errorDetail, null, 2) : String(errorDetail);
+
+            toast.error(`Erro ao salvar processo`, {
+                description: message,
+                action: {
+                    label: 'Copiar Erro',
+                    onClick: () => {
+                        navigator.clipboard.writeText(errorString);
+                        toast.success('Erro copiado!');
+                    }
+                },
+                duration: 10000,
+            });
         } finally {
             setLoading(false);
         }
@@ -347,11 +363,8 @@ export function ProcessForm() {
 
                 {/* ─── TAB: AGENDA ─── */}
                 {isEditing && activeTab === 'AGENDA' && (
-                    <div className="animate-in fade-in flex items-center justify-center h-64 border border-dashed border-slate-800 rounded-xl bg-slate-900/30 text-slate-500">
-                        <div className="text-center">
-                            <Calendar size={48} className="mx-auto mb-3 opacity-20" />
-                            <p>Funcionalidade de Agenda em desenvolvimento...</p>
-                        </div>
+                    <div className="animate-in fade-in">
+                        <ProcessAgenda processId={id!} />
                     </div>
                 )}
 

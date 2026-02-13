@@ -22,7 +22,7 @@ const menuItems = [
   { icon: DollarSign, label: 'Financeiro', to: '/financial' },
   { icon: Package, label: 'Produtos', to: '/products' },
   { icon: Users, label: 'Contatos', to: '/contacts' },
-  { icon: FileText, label: 'Documentos', to: '/documents' },
+  { icon: FileText, label: 'Biblioteca', to: '/documents' },
   { icon: ShieldCheck, label: 'Equipe', to: '/users' },
   { icon: Bot, label: 'Inteligência Artificial', to: '/ai' },
   { icon: Settings, label: 'Configuração', to: '/settings' },

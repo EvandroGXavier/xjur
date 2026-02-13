@@ -20,11 +20,11 @@ export class AppointmentsController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: CurrentUserData, @Query('start') start?: string, @Query('end') end?: string) {
+  findAll(@CurrentUser() user: CurrentUserData, @Query('start') start?: string, @Query('end') end?: string, @Query('processId') processId?: string) {
     if (!user || !user.tenantId) {
         throw new Error('User context invalid');
     }
-    return this.appointmentsService.findAll(user.tenantId, start, end);
+    return this.appointmentsService.findAll(user.tenantId, start, end, processId);
   }
 
   @Get(':id')

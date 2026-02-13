@@ -20,6 +20,7 @@ interface AppointmentModalProps {
     onClose: () => void;
     onSave: () => void;
     appointment?: any; 
+    processId?: string;
 }
 
 // Predefined Options
@@ -49,7 +50,7 @@ const ROLE_OPTIONS = [
     { label: 'Estagiário', value: 'INTERN' }
 ];
 
-export function AppointmentModal({ isOpen, onClose, onSave, appointment }: AppointmentModalProps) {
+export function AppointmentModal({ isOpen, onClose, onSave, appointment, processId }: AppointmentModalProps) {
     const [loading, setLoading] = useState(false);
     const [tab, setTab] = useState<'DETAILS' | 'PARTICIPANTS'>('DETAILS');
     
@@ -172,6 +173,7 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment }: Appoi
         try {
             const payload = {
                 ...formData,
+                processId: appointment?.processId || processId,
                 startAt: new Date(formData.startAt).toISOString(),
                 endAt: new Date(formData.endAt).toISOString(),
                 participants: participants.map(p => ({

@@ -1,0 +1,11 @@
+{
+  "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+  "cnj": "0000942806502.8.13.0024",
+  "category": "JUDICIAL",
+  "title": "Processo Judicial Teste Audit",
+  "code": "0000942806502.8.13.0024",
+  "status": "ATIVO",
+  "value": 50000,
+  "parties": [],
+  "metadata": {}
+}

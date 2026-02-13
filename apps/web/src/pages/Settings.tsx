@@ -208,8 +208,15 @@ export function Settings() {
       {/* TABS */}
       <div className="flex border-b border-slate-800 overflow-x-auto">
         <TabButton active={activeTab === 'options'} onClick={() => setActiveTab('options')} icon={SettingsIcon} label="Opções" />
-        <TabButton active={activeTab === 'tenants'} onClick={() => setActiveTab('tenants')} icon={Building2} label="Empresas" />
-        <TabButton active={activeTab === 'plans'} onClick={() => setActiveTab('plans')} icon={CreditCard} label="Planos" />
+        
+        {/* SAAS TABS - SUPER ADMIN ONLY */}
+        {JSON.parse(localStorage.getItem('user') || '{}')?.email === 'evandro@conectionmg.com.br' && (
+            <>
+                <TabButton active={activeTab === 'tenants'} onClick={() => setActiveTab('tenants')} icon={Building2} label="Empresas" />
+                <TabButton active={activeTab === 'plans'} onClick={() => setActiveTab('plans')} icon={CreditCard} label="Planos" />
+            </>
+        )}
+
         <TabButton active={activeTab === 'help'} onClick={() => setActiveTab('help')} icon={HelpCircle} label="Ajuda" />
         <TabButton active={activeTab === 'whitelabel'} onClick={() => setActiveTab('whitelabel')} icon={Palette} label="Whitelabel" />
       </div>

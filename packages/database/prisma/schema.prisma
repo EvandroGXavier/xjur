@@ -281,7 +281,7 @@ model Process {
   // Identificação Interna
   category       String   @default("JUDICIAL") // JUDICIAL | EXTRAJUDICIAL
   title          String?  // Título do Caso (ex: Análise Contratual)
-  code           String?  @unique // Código Interno (ex: CASO-25-001)
+  code           String?  // Código Interno (ex: CASO-25-001)
   folder         String?  // Pasta na Nuvem (Z:\, Google Drive)
   description    String?  @db.Text // Descrição Rica (HTML/Markdown)
 
@@ -320,6 +320,7 @@ model Process {
   appointments   Appointment[]
   processParties ProcessParty[]
 
+  @@unique([tenantId, code])
   @@map("processes")
 }
 

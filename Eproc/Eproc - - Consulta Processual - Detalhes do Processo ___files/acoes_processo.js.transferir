@@ -1,0 +1,26 @@
+$(document).ready(function() {
+    $('#btnRetirarPlantao').click(function(e) {
+        e.preventDefault();
+
+        const link = $(this).attr('href');
+
+        $.ajax({
+            type: 'POST',
+            dataType: 'json',
+            url: urlVerificarAudienciaEmAberto,
+            data: {numProcesso: numProcesso},
+            success: function(response) {
+                if (response) {
+                    if (confirm('Existem audiência(s) pendente(s)! Deseja continuar?')) {
+                        window.location.href = link;
+                    }
+                } else {
+                    window.location.href = link;
+                }
+            },
+            error: function(error) {
+                console.error('Erro ao buscar audiências em aberto:', error);
+            }
+        });
+    });
+});
