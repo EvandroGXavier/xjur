@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Users, Mail, Phone, FileText, Search, Filter, MessageSquare } from 'lucide-react';
+import { Plus, Users, Mail, Phone, FileText, Search, Filter, MessageSquare, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
@@ -91,12 +91,21 @@ export function ContactList() {
           </h1>
           <p className="text-slate-400 mt-1">Gerencie sua base de clientes, parceiros e fornecedores.</p>
         </div>
-        <button 
-            onClick={() => navigate('/contacts/new')} 
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap"
-        >
-            <Plus size={20} /> Novo Contato
-        </button>
+
+        <div className="flex items-center gap-3">
+            <button 
+                onClick={() => navigate('/contacts/import')} 
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg font-medium transition shadow-sm border border-slate-700 whitespace-nowrap"
+            >
+                <Upload size={18} /> Importar
+            </button>
+            <button 
+                onClick={() => navigate('/contacts/new')} 
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap"
+            >
+                <Plus size={20} /> Novo Contato
+            </button>
+        </div>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center">

@@ -59,10 +59,18 @@ export class ContactsService {
           tenantId,
           pfDetails: pfCreate ? { create: pfCreate } : undefined,
           pjDetails: pjCreate ? { create: pjCreate } : undefined,
+          addresses: addresses && addresses.length > 0 ? {
+             create: addresses
+          } : undefined,
+          additionalContacts: additionalContacts && additionalContacts.length > 0 ? {
+             create: additionalContacts
+          } : undefined,
         },
         include: {
            pfDetails: true,
-           pjDetails: true
+           pjDetails: true,
+           addresses: true,
+           additionalContacts: true,
         }
       });
       
@@ -143,6 +151,14 @@ export class ContactsService {
       'secondaryEmail'
     ];
     pfFieldsToRemove.forEach(field => delete commonData[field]);
+
+    // Same for PJ fields
+    const pjFieldsToRemove = [
+      'cnpj', 'companyName', 'stateRegistration', 'openingDate', 'size', 'legalNature',
+      'mainActivity', 'sideActivities', 'shareCapital', 'status', 'statusDate', 'statusReason',
+      'specialStatus', 'specialStatusDate', 'pjQsa'
+    ];
+    pjFieldsToRemove.forEach(field => delete commonData[field]);
 
     const pfUpdate = {
         cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined,

@@ -38,6 +38,7 @@ export function Login() {
       localStorage.setItem('token', access_token);
       localStorage.setItem('user', JSON.stringify(user));
       
+      console.log('Login successful, redirecting to dashboard...');
       navigate('/');
     } catch (err: any) {
       const message = err.response?.data?.message;

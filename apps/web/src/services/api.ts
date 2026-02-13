@@ -34,6 +34,10 @@ api.interceptors.response.use(
       data: error.response?.data,
     });
     if (error.response?.status === 401) {
+      // Evitar redirect infinito se o erro 401 vier do prprio login (credenciais invlidas)
+      if (error.config?.url?.includes('/auth/login')) {
+         return Promise.reject(error);
+      }
       localStorage.removeItem('token');
       window.location.href = '/login';
     }

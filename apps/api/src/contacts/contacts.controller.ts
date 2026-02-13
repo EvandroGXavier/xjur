@@ -1,6 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ContactsService } from './contacts.service';
 import { EnrichmentService } from './enrichment.service';
+import { ContactsImportService } from './contacts-import.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -9,6 +11,7 @@ import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto'
 import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
 import { CreateRelationTypeDto, CreateContactRelationDto } from './dto/relation.dto';
 import { CreateAssetTypeDto, CreateContactAssetDto, UpdateContactAssetDto } from './dto/asset.dto';
+import { ImportContactsDto } from './dto/import-contact.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
@@ -18,7 +21,23 @@ export class ContactsController {
   constructor(
     private readonly contactsService: ContactsService,
     private readonly enrichmentService: EnrichmentService,
+    private readonly contactsImportService: ContactsImportService,
   ) {}
+
+  @Post('import/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadFile(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('File is required');
+    return this.contactsImportService.parseFile(file);
+  }
+
+  @Post('import/execute')
+  executeImport(@Body() dto: ImportContactsDto, @CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) {
+       throw new Error('User context invalid');
+    }
+    return this.contactsImportService.executeImport(user.tenantId, dto);
+  }
 
   @Post()
   create(@Body() createContactDto: CreateContactDto, @CurrentUser() user: CurrentUserData) {
