@@ -4,8 +4,8 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = 'admin@drx.local';
-  const password = '123';
+  const email = 'evandro@conectionmg.com.br';
+  const password = '572811Egx@';
   const hashedPassword = await bcrypt.hash(password, 10);
 
   // 1. Create Tenant
