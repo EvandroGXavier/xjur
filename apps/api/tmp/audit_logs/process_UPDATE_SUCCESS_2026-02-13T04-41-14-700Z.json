@@ -1,0 +1,32 @@
+{
+  "id": "387e682c-3992-4c10-b24d-68a2ae836f7f",
+  "updated": {
+    "id": "387e682c-3992-4c10-b24d-68a2ae836f7f",
+    "tenantId": "2c3a253d-fa62-43d1-b02c-1addbf5f17dc",
+    "contactId": null,
+    "cnj": null,
+    "category": "EXTRAJUDICIAL",
+    "title": "AAAAAAAAAA",
+    "code": "CASO-2026-0007",
+    "folder": "",
+    "description": "",
+    "npu": null,
+    "court": "",
+    "courtSystem": "",
+    "vars": "",
+    "district": "",
+    "status": "EM_ANDAMENTO",
+    "area": "",
+    "subject": "",
+    "class": null,
+    "distributionDate": null,
+    "judge": "",
+    "value": "0",
+    "parties": [],
+    "lastCrawledAt": null,
+    "autoUpdate": true,
+    "metadata": {},
+    "createdAt": "2026-02-13T00:35:01.732Z",
+    "updatedAt": "2026-02-13T04:41:14.673Z"
+  }
+}
