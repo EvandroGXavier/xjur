@@ -1,5 +1,5 @@
-# === BASE STAGE ===
-FROM node:20-alpine AS base
+# === BASE STAGE (Debian Slim) ===
+FROM node:20-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -12,10 +12,10 @@ COPY packages/database/package.json ./packages/database/
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 
-# Install git and openssl (required for Prisma)
-RUN apk add --no-cache git openssl libc6-compat
+# Install git and openssl (Debian way)
+RUN apt-get update -y && apt-get install -y openssl git ca-certificates
 
-# Install dependencies (using npm as per project structure)
+# Install dependencies
 RUN npm install
 
 # Copy source code
@@ -30,11 +30,12 @@ FROM deps AS builder
 RUN npx turbo run build
 
 # === RUNNER (API) ===
-FROM node:20-alpine AS runner-api
+FROM node:20-slim AS runner-api
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apk add --no-cache openssl libc6-compat
+# Install runtime dependencies (Debian way)
+# Isso garante que a libssl correta esteja disponível para o Prisma
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
@@ -48,8 +49,17 @@ EXPOSE 3000
 CMD ["node", "apps/api/dist/main"]
 
 # === RUNNER (WEB - NGINX) ===
+# Web pode continuar no Alpine pois é apenas Nginx estático
 FROM nginx:alpine AS runner-web
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
-# Custom Nginx config can be added here
+# Configuração Customizada do Nginx para SPA (React Router)
+RUN echo 'server { \
+    listen 80; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html index.htm; \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
