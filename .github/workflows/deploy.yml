@@ -16,8 +16,18 @@ jobs:
           port: 22
           script_stop_on_error: true
           script: |
+            # Carregar variáveis de ambiente do aaPanel/Linux
+            source /etc/profile
+            [ -f ~/.bashrc ] && source ~/.bashrc
+            
+            # Garantir NVM se existir
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
+            # Debug: Mostrar versões para garantir que estamos usando o Node certo
+            echo "Node version: $(node -v)"
+            echo "NPM version: $(npm -v)"
+            echo "PM2 path: $(which pm2)"
 
             cd /www/wwwroot/DrX || exit 1
             
