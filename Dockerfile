@@ -12,8 +12,8 @@ COPY packages/database/package.json ./packages/database/
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 
-# Install git (required for some dependencies)
-RUN apk add --no-cache git
+# Install git and openssl (required for Prisma)
+RUN apk add --no-cache git openssl libc6-compat
 
 # Install dependencies (using npm as per project structure)
 RUN npm install
@@ -32,6 +32,9 @@ RUN npx turbo run build
 # === RUNNER (API) ===
 FROM node:20-alpine AS runner-api
 WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache openssl libc6-compat
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
