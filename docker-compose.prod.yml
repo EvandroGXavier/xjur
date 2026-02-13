@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector:latest
+    container_name: drx_db_prod
+    environment:
+      POSTGRES_USER: drx
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-drx_secure_pass_123}
+      POSTGRES_DB: drx_db
+    volumes:
+      - drx_data_prod:/var/lib/postgresql/data
+    restart: unless-stopped
+    ports:
+      - "5432:5432" # Careful with host port conflict if Postgres is running on host
+
+  api:
+    build:
+      context: .
+      target: runner-api
+    container_name: drx_api_prod
+    environment:
+      DATABASE_URL: postgresql://drx:${DB_PASSWORD:-drx_secure_pass_123}@db:5432/drx_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:-SUPER_SECRET_KEY_CHANGE_ME}
+      PORT: 3000
+      NODE_ENV: production
+    depends_on:
+      - db
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+
+  web:
+    build:
+      context: .
+      target: runner-web
+    container_name: drx_web_prod
+    restart: unless-stopped
+    ports:
+      - "8080:80" # Exposed on 8080 or setup Nginx proxy manager
+    depends_on:
+      - api
+
+volumes:
+  drx_data_prod:

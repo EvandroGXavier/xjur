@@ -14,35 +14,48 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
+          script_stop_on_error: true
           script: |
-            cd /www/wwwroot/DrX
-            echo "1. Sincronizando código com GitHub..."
-            git fetch origin main
-            git reset --hard origin/main
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            cd /www/wwwroot/DrX || exit 1
             
-            echo "2. Removendo vestígios de builds antigos..."
+            echo "1. Sincronizando código com GitHub..."
+            # Reset hard para garantir estado limpo
+            git fetch origin main || exit 1
+            git reset --hard origin/main || exit 1
+            
+            echo "2. Limpando dependencias e builds antigos..."
+            # Removemos node_modules para garantir que não haja conflitos de versão
+            rm -rf node_modules
+            rm -rf apps/api/node_modules
+            rm -rf apps/web/node_modules
+            rm -rf packages/database/node_modules
             rm -rf apps/web/dist apps/api/dist
             
-            echo "3. Instalando dependências (Modo Silencioso)..."
-            npm install --quiet
+            echo "3. Instalando dependências (Clean Install)..."
+            # Instala todas as dependências do monorepo
+            npm install || exit 1
             
-            echo "4. Gerando Prisma Client (Versão Segura 5.20.0)..."
-            # Forçamos a versão 5.20 para evitar o erro P1012 da versão 7
-            npx prisma@5.20.0 generate --schema=packages/database/prisma/schema.prisma
+            echo "4. Gerando Prisma Client..."
+            # Força a geração do cliente do banco
+            npx turbo run db:generate || exit 1
             
-            echo "5. Atualizando Banco de Dados..."
-            npx turbo run db:push
+            echo "5. Atualizando Banco de Dados (Force)..."
+            # --accept-data-loss: Aceita perda de dados se houver alteração de esquema destrutiva (conforme solicitado)
+            # Executamos direto o prisma para garantir que o flag seja passado corretamente
+            npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss || exit 1
             
-            echo "6. Executando Build via TurboRepo..."
-            # O build compila o frontend e o backend na ordem correta
-            npx turbo run build
+            echo "6. Executando Build (API + Web)..."
+            # --force ignora cache do turbo para garantir rebuild completo
+            npx turbo run build --force || exit 1
             
             echo "7. Reiniciando ecossistema PM2..."
-            # Limpamos processos antigos e recarregamos com base no novo ecosystem.config.js
-            # Como removemos drx-web do arquivo, ele não será iniciado.
-            pm2 delete drx-web 2>/dev/null || true
-            pm2 startOrReload ecosystem.config.js
-            pm2 save
+            # Reinicia processos para carregar código novo da API
+            pm2 delete all || true
+            pm2 start ecosystem.config.js --update-env || exit 1
+            pm2 save || exit 1
             
             echo "✅ DEPLOY DO DR.X CONCLUÍDO COM SUCESSO!"
             pm2 status
