@@ -12,6 +12,9 @@ COPY packages/database/package.json ./packages/database/
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 
+# Install git (required for some dependencies)
+RUN apk add --no-cache git
+
 # Install dependencies (using npm as per project structure)
 RUN npm install
 

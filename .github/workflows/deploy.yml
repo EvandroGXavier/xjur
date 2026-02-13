@@ -14,8 +14,9 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
-          script_stop_on_error: true
           script: |
+            set -e # Parar script se houver erro
+            
             # Carregar variáveis de ambiente do aaPanel/Linux
             source /etc/profile
             [ -f ~/.bashrc ] && source ~/.bashrc
