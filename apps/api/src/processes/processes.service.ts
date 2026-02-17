@@ -318,15 +318,11 @@ export class ProcessesService {
         }
     }
     
-    async findAll(params: { tenantId?: string, search?: string }) {
-        console.log('Finding processes with params:', params);
-         const defaultTenant = await this.prisma.tenant.findFirst();
-         const tenantId = params.tenantId || defaultTenant?.id;
-
-         if (!tenantId) {
-             console.warn('No tenant found for findAll');
-             return [];
-         }
+    async findAll(params: { tenantId: string, search?: string }) {
+        if (!params.tenantId) {
+             throw new BadRequestException('Tenant ID is required');
+        }
+        const { tenantId } = params;
 
          const where: any = { tenantId };
          
@@ -334,7 +330,6 @@ export class ProcessesService {
              where.OR = [
                  { cnj: { contains: params.search } },
                  { title: { contains: params.search, mode: 'insensitive' } },
-                 // Removed complex JSON filter for reliability for now
              ];
          }
 
@@ -342,13 +337,12 @@ export class ProcessesService {
              where,
              orderBy: { createdAt: 'desc' }
          });
-         console.log(`Found ${results.length} processes for tenant ${tenantId}`);
          return results;
     }
 
-    async findOne(id: string) {
-        const process = await this.prisma.process.findUnique({
-            where: { id },
+    async findOne(id: string, tenantId: string) {
+        const process = await this.prisma.process.findFirst({
+            where: { id, tenantId },
             include: {
                 timeline: { orderBy: { date: 'desc' }, take: 50 },
                 appointments: { orderBy: { startAt: 'asc' }, take: 20 },
@@ -363,9 +357,9 @@ export class ProcessesService {
         return process;
     }
 
-    async update(id: string, data: Partial<CreateProcessDto>) {
-        // Verificar se existe
-        const existing = await this.prisma.process.findUnique({ where: { id } });
+    async update(id: string, data: Partial<CreateProcessDto>, tenantId: string) {
+        // Verificar se existe e pertence ao tenant
+        const existing = await this.prisma.process.findFirst({ where: { id, tenantId } });
         if (!existing) {
             throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
         }
@@ -419,7 +413,7 @@ export class ProcessesService {
 
         try {
             const updated = await this.prisma.process.update({
-                where: { id },
+                where: { id }, // tenantId já garantido pelo findFirst acima? Sim, mas idealmente usar updateMany ou garantir id unico
                 data: updateData,
             });
 
@@ -433,8 +427,8 @@ export class ProcessesService {
         }
     }
 
-    async remove(id: string) {
-        const existing = await this.prisma.process.findUnique({ where: { id } });
+    async remove(id: string, tenantId: string) {
+        const existing = await this.prisma.process.findFirst({ where: { id, tenantId } });
         if (!existing) {
             throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
         }

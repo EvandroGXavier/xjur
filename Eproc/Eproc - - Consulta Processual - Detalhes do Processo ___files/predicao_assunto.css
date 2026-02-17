@@ -1,8 +1,0 @@
-#fldAssuntos tr[data-assunto-principal="true"] td:nth-child(1) {
-    display: flex;
-    align-items: center;
-}
-#fldAssuntos tr[data-assunto-principal="true"] td:nth-child(1) img {
-    margin-left: 4px;
-    width: 16px;
-}

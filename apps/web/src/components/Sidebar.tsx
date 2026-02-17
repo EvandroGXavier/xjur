@@ -10,13 +10,15 @@ import {
   Settings,
   Package,
   ShieldCheck,
-  Calendar
+  Calendar,
+  Columns
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
   { icon: MessageSquare, label: 'Atendimento', to: '/chat' },
+  { icon: Columns, label: 'Kanban', to: '/kanban' },
   { icon: Scale, label: 'Processos', to: '/processes' },
   { icon: Calendar, label: 'Agenda', to: '/agenda' },
   { icon: DollarSign, label: 'Financeiro', to: '/financial' },

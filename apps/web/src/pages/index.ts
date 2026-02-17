@@ -13,3 +13,5 @@ export { Agenda } from './Agenda';
 export { ProductsList } from './products/ProductsList';
 export * from './ForgotPassword';
 export * from './ResetPassword';
+export * from './atendimento/atendimento';
+export { Kanban } from './Kanban';

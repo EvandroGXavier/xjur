@@ -1,5 +1,8 @@
 
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
@@ -31,9 +34,26 @@ export class TicketsController {
   }
 
   @Post(':id/messages')
-  addMessage(@Param('id') id: string, @Body() createMessageDto: CreateMessageDto, @CurrentUser() user: CurrentUserData) {
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './storage/uploads',
+      filename: (req, file, cb) => {
+        const randomName = Array(32).fill(null).map(() => (Math.round(Math.random() * 16)).toString(16)).join('');
+        return cb(null, `${randomName}${extname(file.originalname)}`);
+      }
+    })
+  }))
+  addMessage(
+    @Param('id') id: string, 
+    @Body() createMessageDto: CreateMessageDto, 
+    @CurrentUser() user: CurrentUserData,
+    @UploadedFile() file?: Express.Multer.File
+  ) {
     if (!user || !user.tenantId) throw new Error('User context invalid');
-    return this.ticketsService.addMessage(id, createMessageDto, user.tenantId, user.userId);
+    console.log('Incoming Message Body (DEBUG):', JSON.stringify(createMessageDto));
+    if (file) console.log('Incoming File (DEBUG):', file.originalname, file.mimetype);
+    
+    return this.ticketsService.addMessage(id, createMessageDto, user.tenantId, user.userId, file);
   }
 
   @Patch(':id/status')
@@ -47,5 +67,10 @@ export class TicketsController {
   simulateIncoming(@Param('id') id: string, @Body('content') content: string, @CurrentUser() user: CurrentUserData) {
      if (!user || !user.tenantId) throw new Error('User context invalid');
      return this.ticketsService.simulateIncomingMessage(id, content, user.tenantId);
+  }
+  @Post(':id/read')
+  async markAsRead(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.ticketsService.markAsRead(id, user.tenantId);
   }
 }

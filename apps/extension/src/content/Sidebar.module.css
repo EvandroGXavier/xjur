@@ -1,0 +1,109 @@
+/* Estilos locais para Sidebar.tsx */
+.sidebarContainer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    background-color: #f7f9fa;
+    border-left: 1px solid #d1d7db;
+    z-index: 9999; /* Acima do WhatsApp */
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    width: 300px; /* Largura padrão */
+}
+
+.open {
+    transform: translateX(0); /* Normal */
+}
+
+.closed {
+    transform: translateX(100%); /* Escondido à direita */
+    width: 0;
+}
+
+.toggleBtn {
+    position: absolute;
+    left: -32px;
+    top: 50%;
+    width: 32px;
+    height: 48px;
+    background-color: #00a884; /* Verde WhatsApp */
+    border: none;
+    border-radius: 8px 0 0 8px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.content {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: #3b4a54; /* Cinza escuro WhatsApp */
+}
+
+.header {
+  margin-bottom: 24px;
+  border-bottom: 1px solid #e9edef;
+  padding-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #111b21;
+}
+
+.version {
+  font-size: 0.75rem;
+  color: #8696a0;
+  background: #f0f2f5;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.menu {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.menuItem {
+  flex: 1;
+  background: white;
+  border: 1px solid #e9edef;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #54656f;
+  transition: background 0.2s;
+}
+
+.menuItem:hover {
+  background: #f0f2f5;
+  color: #111b21;
+}
+
+.body {
+  flex: 1;
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px dashed #d1d7db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #8696a0;
+}

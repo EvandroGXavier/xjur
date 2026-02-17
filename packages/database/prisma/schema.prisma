@@ -44,6 +44,7 @@ model Tenant {
   inventoryMovements InventoryMovement[]
   tickets           Ticket[]
   waInstances       WaInstance[]
+  connections       Connection[]
   partyRoles        PartyRole[]
   processParties    ProcessParty[]
 
@@ -92,6 +93,7 @@ model Contact {
   notes             String?
   category          String?   // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
   password          String?   // Senha para acesso ao sistema
+  profilePicUrl     String?   // URL da foto de perfil
   active            Boolean   @default(true)
   
   // Detalhes Específicos (1:1)
@@ -678,12 +680,15 @@ model Ticket {
 model TicketMessage {
   id          String   @id @default(uuid())
   ticketId    String
+  externalId  String?  @unique
+  status      String   @default("SENT") // PENDING, SENT, DELIVERED, READ, PLAYED, FAILED
   senderType  String   // USER (Agente), CONTACT (Cliente), SYSTEM (Bot)
   senderId    String?  // ID do User ou Contact
   content     String   @db.Text
   contentType String   // TEXT, IMAGE, AUDIO, FILE
   mediaUrl    String?
-  
+  quotedId    String?
+
   readAt      DateTime?
   
   ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
@@ -705,4 +710,21 @@ model WaInstance {
   updatedAt   DateTime @updatedAt
 
   @@map("wa_instances")
+}
+
+model Connection {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  type        String   // WHATSAPP, INSTAGRAM, EMAIL
+  status      String   // CONNECTED, DISCONNECTED, PAIRING, ERROR
+  
+  config      Json?    // Credentials, tokens, settings
+  qrCode      String?  @db.Text
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("connections")
 }

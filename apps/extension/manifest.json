@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Xjur Client",
+  "version": "1.0.0",
+  "action": { "default_popup": "index.html" },
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*"
+  ],
+  "content_scripts": [
+    {
+      "js": ["src/content/index.tsx"],
+      "matches": ["https://web.whatsapp.com/*"]
+    }
+  ]
+}

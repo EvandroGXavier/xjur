@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Param, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Res, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Param, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Res, Req, UseGuards, ForbiddenException } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { ProcessCrawlerService } from './process-crawler.service';
@@ -6,8 +6,11 @@ import { ProcessesService } from './processes.service';
 import { ProcessPdfService } from './process-pdf.service';
 import { ProcessPartiesService } from './process-parties.service';
 import { ProcessTimelinesService } from './process-timelines.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
 @Controller('processes')
+@UseGuards(JwtAuthGuard)
 export class ProcessesController {
     constructor(
         private readonly crawlerService: ProcessCrawlerService,
@@ -29,16 +32,13 @@ export class ProcessesController {
     // --- PARTY ROLES (Tipos de Parte - Cadastrável) ---
 
     @Get('party-roles')
-    async findAllRoles() {
-        // TODO: extrair tenantId do token JWT
-        const tenant = await this.processesService.getFirstTenantId();
-        return this.partiesService.findAllRoles(tenant);
+    async findAllRoles(@CurrentUser() user: CurrentUserData) {
+        return this.partiesService.findAllRoles(user.tenantId);
     }
 
     @Post('party-roles')
-    async createRole(@Body() body: { name: string; category?: string }) {
-        const tenant = await this.processesService.getFirstTenantId();
-        return this.partiesService.createRole(tenant, body.name, body.category);
+    async createRole(@Body() body: { name: string; category?: string }, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.createRole(user.tenantId, body.name, body.category);
     }
 
     @Delete('party-roles/:id')
@@ -49,28 +49,28 @@ export class ProcessesController {
     // --- CRUD PROCESS ---
 
     @Post()
-    async create(@Body() body: any) {
-        return this.processesService.create(body);
+    async create(@Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.create({ ...body, tenantId: user.tenantId });
     }
 
     @Get()
-    async findAll(@Query('search') search: string) {
-        return this.processesService.findAll({ search });
+    async findAll(@CurrentUser() user: CurrentUserData, @Query('search') search: string) {
+        return this.processesService.findAll({ tenantId: user.tenantId, search });
     }
 
     @Get(':id')
-    async findOne(@Param('id') id: string) {
-        return this.processesService.findOne(id);
+    async findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.findOne(id, user.tenantId);
     }
 
     @Patch(':id')
-    async update(@Param('id') id: string, @Body() body: any) {
-        return this.processesService.update(id, body);
+    async update(@Param('id') id: string, @Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.update(id, body, user.tenantId);
     }
 
     @Delete(':id')
-    async remove(@Param('id') id: string) {
-        return this.processesService.remove(id);
+    async remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.remove(id, user.tenantId);
     }
 
     // --- TIMELINES (Andamentos) ---

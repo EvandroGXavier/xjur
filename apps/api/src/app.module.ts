@@ -14,6 +14,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { ProductsModule } from './products/products.module';
 import { CommunicationsModule } from './communications/communications.module';
+import { ConnectionsModule } from './connections/connections.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
@@ -31,6 +32,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     TicketsModule, // Omnichannel, Chat, Chamados
     ProductsModule, // Estoque e Produtos
     CommunicationsModule, // Webhook de entrada
+    ConnectionsModule, // Gestão de Conexões (WhatsApp, Instagram, Email)
   ],
   controllers: [AppController],
   providers: [

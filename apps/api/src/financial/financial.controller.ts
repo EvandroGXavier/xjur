@@ -1,11 +1,14 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UsePipes, ValidationPipe, UseGuards } from '@nestjs/common';
 import { FinancialService } from './financial.service';
 import { CreateFinancialRecordDto } from './dto/create-financial-record.dto';
 import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
 import { CreateBankAccountDto } from './dto/create-bank-account.dto';
 import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
 @Controller('financial')
+@UseGuards(JwtAuthGuard)
 export class FinancialController {
   constructor(private readonly financialService: FinancialService) {}
 
@@ -13,20 +16,20 @@ export class FinancialController {
 
   @Post('records')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  createFinancialRecord(@Body() dto: CreateFinancialRecordDto) {
-    return this.financialService.createFinancialRecord(dto);
+  createFinancialRecord(@Body() dto: CreateFinancialRecordDto, @CurrentUser() user: CurrentUserData) {
+    return this.financialService.createFinancialRecord({ ...dto, tenantId: user.tenantId });
   }
 
   @Get('records')
   findAllFinancialRecords(
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Query('type') type?: string,
     @Query('status') status?: string,
     @Query('category') category?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.financialService.findAllFinancialRecords(tenantId, {
+    return this.financialService.findAllFinancialRecords(user.tenantId, {
       type,
       status,
       category,
@@ -38,92 +41,92 @@ export class FinancialController {
   @Get('records/:id')
   findOneFinancialRecord(
     @Param('id') id: string,
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.financialService.findOneFinancialRecord(id, tenantId);
+    return this.financialService.findOneFinancialRecord(id, user.tenantId);
   }
 
   @Put('records/:id')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   updateFinancialRecord(
     @Param('id') id: string,
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateFinancialRecordDto,
   ) {
-    return this.financialService.updateFinancialRecord(id, tenantId, dto);
+    return this.financialService.updateFinancialRecord(id, user.tenantId, dto);
   }
 
   @Delete('records/:id')
   deleteFinancialRecord(
     @Param('id') id: string,
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.financialService.deleteFinancialRecord(id, tenantId);
+    return this.financialService.deleteFinancialRecord(id, user.tenantId);
   }
 
   // ==================== BANK ACCOUNTS ====================
 
   @Post('bank-accounts')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  createBankAccount(@Body() dto: CreateBankAccountDto) {
-    return this.financialService.createBankAccount(dto);
+  createBankAccount(@Body() dto: CreateBankAccountDto, @CurrentUser() user: CurrentUserData) {
+    return this.financialService.createBankAccount({ ...dto, tenantId: user.tenantId });
   }
 
   @Get('bank-accounts')
-  findAllBankAccounts(@Query('tenantId') tenantId: string) {
-    return this.financialService.findAllBankAccounts(tenantId);
+  findAllBankAccounts(@CurrentUser() user: CurrentUserData) {
+    return this.financialService.findAllBankAccounts(user.tenantId);
   }
 
   @Get('bank-accounts/:id')
   findOneBankAccount(
     @Param('id') id: string,
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.financialService.findOneBankAccount(id, tenantId);
+    return this.financialService.findOneBankAccount(id, user.tenantId);
   }
 
   @Put('bank-accounts/:id')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   updateBankAccount(
     @Param('id') id: string,
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateBankAccountDto,
   ) {
-    return this.financialService.updateBankAccount(id, tenantId, dto);
+    return this.financialService.updateBankAccount(id, user.tenantId, dto);
   }
 
   @Delete('bank-accounts/:id')
   deleteBankAccount(
     @Param('id') id: string,
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.financialService.deleteBankAccount(id, tenantId);
+    return this.financialService.deleteBankAccount(id, user.tenantId);
   }
 
   @Get('contacts')
   getContacts(
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Query('search') search?: string,
   ) {
-    return this.financialService.getContacts(tenantId, search);
+    return this.financialService.getContacts(user.tenantId, search);
   }
 
   // ==================== DASHBOARD & REPORTS ====================
 
   @Get('dashboard')
   getDashboard(
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    return this.financialService.getDashboard(tenantId, startDate, endDate);
+    return this.financialService.getDashboard(user.tenantId, startDate, endDate);
   }
 
   @Get('process/:processId/balance')
   getProcessBalance(
     @Param('processId') processId: string,
-    @Query('tenantId') tenantId: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.financialService.getProcessBalance(processId, tenantId);
+    return this.financialService.getProcessBalance(processId, user.tenantId);
   }
 }

@@ -106,9 +106,15 @@ export class ContactsImportService {
   }
 
   private mapRowToDto(row: any, mapping: ContactMappingDto): CreateContactDto {
-    const getValue = (key?: string) => key ? row[key] : undefined;
-
-    const document = getValue(mapping.document)?.toString().replace(/\D/g, '') || undefined;
+    const getValue = (key?: string) => {
+        if (!key) return undefined;
+        const val = row[key];
+        return val !== undefined && val !== null ? String(val) : undefined;
+    };
+    
+    // Document cleanup
+    let documentStr = getValue(mapping.document);
+    const document = documentStr ? documentStr.replace(/\D/g, '') : undefined;
     const isCNPJ = document && document.length > 11;
     const personType = isCNPJ ? 'PJ' : 'PF';
 
