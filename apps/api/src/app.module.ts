@@ -1,4 +1,5 @@
 import { Module, Logger } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, HttpAdapterHost } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -20,6 +21,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }), // Carrega .env globalmente
+    ScheduleModule.forRoot(),
     AuthModule,      // Reativa o sistema de Login
     ContactsModule,  // Gestão de Clientes
     WhatsappModule,  // Conexão Baileys

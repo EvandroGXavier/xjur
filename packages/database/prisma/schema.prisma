@@ -681,13 +681,14 @@ model TicketMessage {
   id          String   @id @default(uuid())
   ticketId    String
   externalId  String?  @unique
-  status      String   @default("SENT") // PENDING, SENT, DELIVERED, READ, PLAYED, FAILED
+  status      String   @default("SENT") // PENDING, SENT, DELIVERED, READ, PLAYED, FAILED, SCHEDULED
   senderType  String   // USER (Agente), CONTACT (Cliente), SYSTEM (Bot)
   senderId    String?  // ID do User ou Contact
   content     String   @db.Text
   contentType String   // TEXT, IMAGE, AUDIO, FILE
   mediaUrl    String?
   quotedId    String?
+  scheduledAt DateTime? // Time when the message should be sent
 
   readAt      DateTime?
   

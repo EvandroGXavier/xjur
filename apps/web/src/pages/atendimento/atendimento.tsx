@@ -25,7 +25,10 @@ import {
   Plus,
   Loader2,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  Shield,
+  Calendar,
+  X
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Badge } from '../../components/ui/Badge';
@@ -34,6 +37,7 @@ import { KanbanBoard } from './components/Kanban';
 import { Connections } from './components/Connections';
 import { TagsManager } from './components/Tags';
 import { AtendimentoSettings } from './components/Settings';
+import { ConfiguracoesWhatsapp } from './components/ConfiguracoesWhatsapp';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -58,6 +62,7 @@ interface Ticket {
     email?: string;
     whatsapp?: string;
     category?: string;
+    profilePicUrl?: string;
   };
   assigneeId?: string;
   queue?: string;
@@ -89,7 +94,7 @@ interface ContactProcess {
   category: string;
 }
 
-type Module = 'chats' | 'quick_replies' | 'kanban' | 'tags' | 'connections' | 'settings' | 'bot';
+type Module = 'chats' | 'quick_replies' | 'kanban' | 'tags' | 'connections' | 'settings' | 'bot' | 'security';
 type TabFilter = 'all' | 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
 
 // =========================
@@ -120,6 +125,8 @@ export function AtendimentoPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [showNewTicketModal, setShowNewTicketModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
 
   // =========================
   // DERIVED STATE
@@ -385,12 +392,21 @@ export function AtendimentoPage() {
           const formData = new FormData();
           formData.append('content', content);
           formData.append('file', selectedFile);
+          if (scheduledAt) formData.append('scheduledAt', scheduledAt);
           
           await api.post(`/tickets/${selectedTicketId}/messages`, formData, {
               headers: { 'Content-Type': 'multipart/form-data' }
           });
       } else {
-          await api.post(`/tickets/${selectedTicketId}/messages`, { content });
+          await api.post(`/tickets/${selectedTicketId}/messages`, { 
+              content,
+              scheduledAt: scheduledAt || undefined
+          });
+      }
+
+      if (scheduledAt) {
+          toast.success(`Mensagem agendada para ${new Date(scheduledAt).toLocaleString()}`);
+          setScheduledAt(null);
       }
 
       // WebSocket will deliver the real message via ticket:message event.
@@ -598,11 +614,14 @@ export function AtendimentoPage() {
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-3">
                       <div className="relative">
-                        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 font-bold overflow-hidden">
-                          {ticket.contact?.name 
-                            ? <span className="text-sm">{ticket.contact.name.substring(0, 2).toUpperCase()}</span>
-                            : <User size={20} />
-                          }
+                        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 font-bold overflow-hidden border border-slate-700">
+                          {ticket.contact?.profilePicUrl ? (
+                            <img src={ticket.contact.profilePicUrl} alt={ticket.contact.name} className="w-full h-full object-cover" />
+                          ) : ticket.contact?.name ? (
+                            <span className="text-sm">{ticket.contact.name.substring(0, 2).toUpperCase()}</span>
+                          ) : (
+                            <User size={20} />
+                          )}
                         </div>
                         {/* Priority dot */}
                         <div className={clsx("absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900", getPriorityColor(ticket.priority))} />
@@ -640,6 +659,8 @@ export function AtendimentoPage() {
         return <TagsManager />;
       case 'settings':
         return <AtendimentoSettings />;
+      case 'security':
+        return <ConfiguracoesWhatsapp />;
       case 'bot':
         return (
           <div className="flex-1 flex flex-col bg-slate-950 p-8 items-center justify-center text-center">
@@ -683,25 +704,36 @@ export function AtendimentoPage() {
         <ModuleButton active={activeModule === 'tags'} icon={Tags} label="Etiquetas" onClick={() => setActiveModule('tags')} color="text-pink-400" />
         <ModuleButton active={activeModule === 'bot'} icon={Bot} label="Chatbots" onClick={() => setActiveModule('bot')} color="text-cyan-400" />
         <ModuleButton active={activeModule === 'connections'} icon={QrCode} label="Conexões" onClick={() => setActiveModule('connections')} color="text-emerald-400" />
+        <ModuleButton active={activeModule === 'security'} icon={Shield} label="Segurança WhatsApp" onClick={() => setActiveModule('security')} color="text-blue-400" />
         <div className="flex-1"></div>
         <ModuleButton active={activeModule === 'settings'} icon={Sliders} label="Configurações" onClick={() => setActiveModule('settings')} />
       </div>
 
-      {/* Left Panel (Dynamic Content) */}
-      {renderModuleContent()}
+      {/* Module Content (List or Full Page) */}
+      {activeModule === 'chats' ? (
+        renderModuleContent()
+      ) : (
+        <div className="flex-1 overflow-hidden h-full">
+           {renderModuleContent()}
+        </div>
+      )}
 
-      {/* Center: Chat Area */}
-      <div className="flex-1 flex flex-col bg-slate-950 relative">
-        {activeModule === 'chats' && selectedTicket ? (
+      {/* Center: Chat Area - Only visible in Chat Module */}
+      {activeModule === 'chats' && (
+        <div className="flex-1 flex flex-col bg-slate-950 relative">
+          {selectedTicket ? (
           <>
             {/* Chat Header */}
             <div className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm flex items-center justify-between px-6 sticky top-0 z-20">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-indigo-900/50 flex items-center justify-center text-indigo-200 font-bold border border-indigo-500/30">
-                  {selectedTicket.contact?.name 
-                    ? <span className="text-sm">{selectedTicket.contact.name.substring(0, 2).toUpperCase()}</span>
-                    : <User size={20} />
-                  }
+                <div className="w-10 h-10 rounded-full bg-indigo-900/50 flex items-center justify-center text-indigo-200 font-bold border border-indigo-500/30 overflow-hidden">
+                  {selectedTicket.contact?.profilePicUrl ? (
+                    <img src={selectedTicket.contact.profilePicUrl} alt={selectedTicket.contact.name} className="w-full h-full object-cover" />
+                  ) : selectedTicket.contact?.name ? (
+                    <span className="text-sm">{selectedTicket.contact.name.substring(0, 2).toUpperCase()}</span>
+                  ) : (
+                    <User size={20} />
+                  )}
                 </div>
                 <div>
                   <h3 className="font-bold text-white">{selectedTicket.contact?.name || selectedTicket.title}</h3>
@@ -781,7 +813,16 @@ export function AtendimentoPage() {
                 }
 
                 return (
-                  <div key={msg.id} className={clsx("flex", isMe ? "justify-end" : "justify-start")}>
+                  <div key={msg.id} className={clsx("flex gap-3", isMe ? "justify-end" : "justify-start items-end")}>
+                    {!isMe && (
+                       <div className="w-8 h-8 rounded-full bg-slate-800 flex-shrink-0 flex items-center justify-center overflow-hidden border border-slate-700">
+                          {selectedTicket.contact?.profilePicUrl ? (
+                            <img src={selectedTicket.contact.profilePicUrl} alt="Foto" className="w-full h-full object-cover" />
+                          ) : (
+                            <User size={14} className="text-slate-500" />
+                          )}
+                       </div>
+                    )}
                     <div className={clsx(
                       "max-w-[70%] rounded-2xl p-4 shadow-md relative group transition-all hover:shadow-lg",
                       isMe 
@@ -882,18 +923,71 @@ export function AtendimentoPage() {
                         />
                         
                         {(messageInput.trim() || selectedFile) && (
-                            <button 
-                              onClick={handleSendMessage}
-                              disabled={sendingMessage}
-                              className={clsx(
-                                "ml-2 p-1.5 rounded-lg transition text-indigo-400 hover:bg-slate-700",
-                                sendingMessage && "opacity-50 cursor-wait"
-                              )}
-                            >
-                              {sendingMessage ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                            </button>
+                            <div className="flex items-center gap-1">
+                                <div className="relative">
+                                    <button 
+                                        onClick={() => setShowSchedulePicker(!showSchedulePicker)}
+                                        className={clsx(
+                                            "p-1.5 rounded-lg transition hover:bg-slate-700",
+                                            scheduledAt ? "text-amber-400" : "text-slate-400 hover:text-indigo-400"
+                                        )}
+                                        title="Agendar Mensagem"
+                                    >
+                                        <Calendar size={18} />
+                                    </button>
+
+                                    {showSchedulePicker && (
+                                        <div className="absolute bottom-full right-0 mb-4 bg-slate-900 border border-slate-700 rounded-xl p-4 shadow-2xl z-50 animate-in slide-in-from-bottom-2 w-72">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                                    <Clock size={14} className="text-indigo-400" />
+                                                    Agendar Envio
+                                                </h4>
+                                                <button onClick={() => setShowSchedulePicker(false)}>
+                                                    <X size={16} className="text-slate-500 hover:text-white" />
+                                                </button>
+                                            </div>
+                                            <input 
+                                                type="datetime-local" 
+                                                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm focus:ring-1 focus:ring-indigo-500 mb-3"
+                                                min={new Date().toISOString().slice(0, 16)}
+                                                onChange={(e) => setScheduledAt(e.target.value)}
+                                            />
+                                            <p className="text-[10px] text-slate-500 mb-3 leading-tight">
+                                                A mensagem será disparada após o horário selecionado.
+                                            </p>
+                                            <button 
+                                                onClick={() => setShowSchedulePicker(false)}
+                                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-lg transition"
+                                            >
+                                                Confirmar
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <button 
+                                    onClick={handleSendMessage}
+                                    disabled={sendingMessage}
+                                    className={clsx(
+                                        "p-1.5 rounded-lg transition text-indigo-400 hover:bg-slate-700",
+                                        sendingMessage && "opacity-50 cursor-wait"
+                                    )}
+                                >
+                                    {sendingMessage ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                                </button>
+                            </div>
                         )}
                       </div>
+
+                      {scheduledAt && (
+                          <div className="absolute -top-10 left-4 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] px-2 py-1 rounded-md flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+                              <Calendar size={10} /> Agendado: {new Date(scheduledAt).toLocaleString()}
+                              <button onClick={() => setScheduledAt(null)} className="hover:text-amber-400">
+                                  <X size={10} />
+                              </button>
+                          </div>
+                      )}
 
                       {(!messageInput.trim() && !selectedFile) && (
                         <button 
@@ -908,31 +1002,28 @@ export function AtendimentoPage() {
               )}
             </div>
           </>
-        ) : activeModule !== 'chats' ? (
-          <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 opacity-50">
-            <div className="text-slate-600 text-9xl"><MessageSquare opacity={0.1} /></div>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950">
-            <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mb-6 border border-slate-800">
-              <MessageSquare size={48} className="text-slate-700" />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950">
+              <div className="w-24 h-24 bg-slate-900 rounded-full flex items-center justify-center mb-6 border border-slate-800">
+                <MessageSquare size={48} className="text-slate-700" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-100 mb-2">CRM DR.X</h3>
+              <p className="text-slate-400 max-w-sm">Selecione uma conversa para iniciar o atendimento ou busque um contato.</p>
+              <div className="mt-8 flex gap-4">
+                <button 
+                  onClick={() => setShowNewTicketModal(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition shadow-lg shadow-indigo-500/20"
+                >
+                  <Plus size={16} /> Novo Atendimento
+                </button>
+              </div>
+              <div className="mt-8 flex gap-2 text-xs text-slate-500">
+                <span className="flex items-center gap-1"><Gavel size={12} /> Integração Jurídica Total</span>
+              </div>
             </div>
-            <h3 className="text-2xl font-bold text-slate-100 mb-2">CRM DR.X</h3>
-            <p className="text-slate-400 max-w-sm">Selecione uma conversa para iniciar o atendimento ou busque um contato.</p>
-            <div className="mt-8 flex gap-4">
-              <button 
-                onClick={() => setShowNewTicketModal(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition shadow-lg shadow-indigo-500/20"
-              >
-                <Plus size={16} /> Novo Atendimento
-              </button>
-            </div>
-            <div className="mt-8 flex gap-2 text-xs text-slate-500">
-              <span className="flex items-center gap-1"><Gavel size={12} /> Integração Jurídica Total</span>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Right Panel: DR.X Intelligence */}
       {activeModule === 'chats' && selectedTicket && (

@@ -101,6 +101,15 @@ export function Connections() {
                 });
                 setConnectingId(null);
                 toast.success('WhatsApp conectado com sucesso!');
+
+                // Prompt for contact import
+                if (confirm('WhatsApp Conectado! Deseja importar os contatos do seu telefone agora?')) {
+                    api.post(`/whatsapp/${data.connectionId}/sync-contacts`).then(() => {
+                        toast.success('Importação de contatos iniciada em segundo plano.');
+                    }).catch(err => {
+                        toast.error('Erro ao iniciar importação: ' + err.message);
+                    });
+                }
             } else if (data.status === 'DISCONNECTED') {
                 delete qrRawCache[data.connectionId];
                 setQrMap(prev => {
@@ -485,6 +494,17 @@ export function Connections() {
                                                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                                                 Sincronizado
                                             </span>
+
+                                            <button 
+                                                onClick={() => {
+                                                    api.post(`/whatsapp/${conn.id}/sync-contacts`)
+                                                        .then(() => toast.success('Sincronização iniciada.'))
+                                                        .catch(() => toast.error('Erro ao sincronizar.'));
+                                                }}
+                                                className="mt-4 text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition flex items-center gap-1"
+                                            >
+                                                <RefreshCw size={10} /> Sincronizar Contatos
+                                            </button>
                                         </div>
                                     ) : isPairing && rawQr ? (
                                         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 w-full">

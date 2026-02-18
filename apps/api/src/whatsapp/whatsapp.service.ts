@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger, Inject, forwardRef } from '@nestjs/common';
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
@@ -19,10 +19,13 @@ import { WhatsappGateway } from './whatsapp.gateway';
 import { FileLogger } from '../common/file-logger';
 
 @Injectable()
-export class WhatsappService implements OnModuleInit {
+export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private sessions: Map<string, WASocket> = new Map();
+  private initializingSessions: Map<string, Promise<WASocket>> = new Map();
   private reconnecting: Set<string> = new Set();
   private msgRetryCounterCache: Map<string, NodeCache> = new Map(); // Store caches per connection
+  private jidCache: Map<string, NodeCache> = new Map(); // Cache verified JIDs
+  private connectionCache: Map<string, any> = new Map(); // Cache connection data
   private readonly logger = new Logger(WhatsappService.name);
   private readonly fileLogger = new FileLogger();
 
@@ -36,6 +39,18 @@ export class WhatsappService implements OnModuleInit {
   async onModuleInit() {
     this.logger.log('Restoring WhatsApp sessions...');
     await this.restoreSessions();
+  }
+
+  async onModuleDestroy() {
+    this.logger.log('Shutting down WhatsApp sessions...');
+    for (const [id, socket] of this.sessions.entries()) {
+        try {
+            socket.end(undefined);
+            this.logger.log(`Session ${id} closed.`);
+        } catch (e) {
+            this.logger.error(`Error closing session ${id}: ${e.message}`);
+        }
+    }
   }
 
   private async restoreSessions() {
@@ -60,7 +75,25 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  async createSession(connectionId: string) {
+  async createSession(connectionId: string): Promise<WASocket> {
+    // If session is already being initialized, return that promise
+    if (this.initializingSessions.has(connectionId)) {
+      this.fileLogger.log(`Session for ${connectionId} is already being initialized, returning existing promise`);
+      return this.initializingSessions.get(connectionId)!;
+    }
+
+    const sessionPromise = this._internalCreateSession(connectionId);
+    this.initializingSessions.set(connectionId, sessionPromise);
+    
+    try {
+      const socket = await sessionPromise;
+      return socket;
+    } finally {
+      this.initializingSessions.delete(connectionId);
+    }
+  }
+
+  private async _internalCreateSession(connectionId: string): Promise<WASocket> {
     this.fileLogger.log(`Starting createSession for ${connectionId}`);
     // If session already exists and is alive, destroy it first to force new QR
     if (this.sessions.has(connectionId)) {
@@ -93,9 +126,10 @@ export class WhatsappService implements OnModuleInit {
     const envLevel = process.env.WA_LOGGER_LEVEL || 'debug';
     const level = validLevels.includes(envLevel) ? envLevel : 'debug';
 
+    const loggerPath = path.resolve(process.cwd(), 'baileys-internal.log');
     const logger = require('pino')({ 
         level,
-    });
+    }, require('pino').destination(loggerPath));
     this.fileLogger.log(`Initialized Pino logger for ${connectionId}`);
 
     // Create a new cache for message retries for this connection
@@ -113,150 +147,153 @@ export class WhatsappService implements OnModuleInit {
       syncFullHistory: false,
       msgRetryCounterCache, // Use the cache for retries
       generateHighQualityLinkPreview: true,
-      markOnlineOnConnect: false,
+      markOnlineOnConnect: true,
+      shouldIgnoreJid: (jid) => jid.includes('broadcast'), // Performance: ignore broadcasts
     });
+
+    // Initialize JID cache for this connection
+    this.jidCache.set(connectionId, new NodeCache({ stdTTL: 3600 })); // 1 hour TTL
 
     this.sessions.set(connectionId, socket);
     this.reconnecting.delete(connectionId);
 
     socket.ev.on('creds.update', saveCreds);
 
-    socket.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
-      const { connection, lastDisconnect, qr } = update;
-      this.fileLogger.log(`Connection Update for ${connectionId}: ${JSON.stringify({ connection, qr: !!qr, error: lastDisconnect?.error })}`);
+    // Use process for batch events (more robust in newer Baileys)
+    socket.ev.process(async (events) => {
+        this.fileLogger.log(`EVENT BATCH: ${Object.keys(events).join(', ')}`);
+        // 1. Connection Updates
+        if (events['connection.update']) {
+            const update = events['connection.update'];
+            const { connection, lastDisconnect, qr } = update;
+            this.fileLogger.log(`Connection Update for ${connectionId}: ${JSON.stringify({ connection, qr: !!qr, error: lastDisconnect?.error })}`);
 
-      if (qr) {
-        this.logger.log(`📢 QR Code generated for Connection ${connectionId}`);
-        try {
-          // Save QR as data URL in database for polling fallback
-          const QRCode = require('qrcode');
-          const dataUrl = await QRCode.toDataURL(qr);
-          await this.prisma.connection.update({
-            where: { id: connectionId },
-            data: { 
-              qrCode: dataUrl,
-              status: 'PAIRING'
+            if (qr) {
+                this.logger.log(`📢 QR Code generated for Connection ${connectionId}`);
+                try {
+                    const QRCode = require('qrcode');
+                    const dataUrl = await QRCode.toDataURL(qr);
+                    await this.prisma.connection.update({
+                        where: { id: connectionId },
+                        data: { qrCode: dataUrl, status: 'PAIRING' }
+                    });
+                    this.whatsappGateway.emitQrCode(connectionId, qr);
+                    this.whatsappGateway.emitConnectionStatus(connectionId, 'PAIRING');
+                } catch (e) {
+                    this.logger.error(`Failed to process QR: ${e.message}`);
+                }
             }
-          });
-          this.fileLogger.log(`QR Code saved to DB for ${connectionId}`);
 
-          // Emit QR raw string via WebSocket for real-time rendering
-          this.whatsappGateway.emitQrCode(connectionId, qr);
-          this.whatsappGateway.emitConnectionStatus(connectionId, 'PAIRING');
-        } catch (e) {
-          this.logger.error(`Failed to process QR: ${e.message}`);
-        }
-      }
+            if (connection === 'close') {
+                const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                this.logger.warn(`Connection ${connectionId} closed (code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
+                
+                this.sessions.delete(connectionId);
+                this.msgRetryCounterCache.delete(connectionId);
+                this.jidCache.delete(connectionId);
 
-      if (connection === 'close') {
-        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-        this.logger.warn(`Connection ${connectionId} closed (code: ${statusCode}). Reconnecting: ${shouldReconnect}`);
-        
-        // Clean up current session
-        this.sessions.delete(connectionId);
-        this.msgRetryCounterCache.delete(connectionId); // Clean cache on close
+                if (shouldReconnect && !this.reconnecting.has(connectionId)) {
+                    this.reconnecting.add(connectionId);
+                    await this.prisma.connection.update({
+                        where: { id: connectionId },
+                        data: { status: 'DISCONNECTED', qrCode: null }
+                    });
+                    this.whatsappGateway.emitConnectionStatus(connectionId, 'DISCONNECTED');
+                    setTimeout(() => this.createSession(connectionId), 3000);
+                } else {
+                    await this.prisma.connection.update({
+                        where: { id: connectionId },
+                        data: { status: 'DISCONNECTED', qrCode: null }
+                    });
+                    this.whatsappGateway.emitConnectionStatus(connectionId, 'DISCONNECTED');
+                    try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) {}
+                }
+            } else if (connection === 'open') {
+                this.logger.log(`✅ Connection ${connectionId} opened! User: ${socket.user?.id}`);
+                this.reconnecting.delete(connectionId);
+                
+                // Force online presence to ensure message delivery
+                await socket.sendPresenceUpdate('available');
 
-        if (shouldReconnect && !this.reconnecting.has(connectionId)) {
-          this.reconnecting.add(connectionId);
-          
-          await this.prisma.connection.update({
-            where: { id: connectionId },
-            data: { status: 'DISCONNECTED', qrCode: null }
-          });
-          
-          // Notify frontend of disconnection so it shows reconnect UI
-          this.whatsappGateway.emitConnectionStatus(connectionId, 'DISCONNECTED');
-          
-          // Try to reconnect after delay
-          setTimeout(async () => {
-            try {
-              await this.createSession(connectionId);
-            } catch (e) {
-              this.logger.error(`Reconnection failed for ${connectionId}: ${e.message}`);
-              this.reconnecting.delete(connectionId);
+                await this.prisma.connection.update({
+                    where: { id: connectionId },
+                    data: { status: 'CONNECTED', qrCode: null }
+                });
+                this.whatsappGateway.emitConnectionStatus(connectionId, 'CONNECTED');
             }
-          }, 3000);
-        } else {
-          // Logged out — clean everything
-          await this.prisma.connection.update({
-            where: { id: connectionId },
-            data: { status: 'DISCONNECTED', qrCode: null }
-          });
-          this.whatsappGateway.emitConnectionStatus(connectionId, 'DISCONNECTED');
-          
-          try { 
-            fs.rmSync(sessionDir, { recursive: true, force: true }); 
-          } catch (e) {}
         }
-      } else if (connection === 'open') {
-        this.logger.log(`✅ Connection ${connectionId} opened!`);
-        this.reconnecting.delete(connectionId);
-        
-        await this.prisma.connection.update({
-          where: { id: connectionId },
-          data: { status: 'CONNECTED', qrCode: null }
-        });
-        
-        // Notify frontend
-        this.whatsappGateway.emitConnectionStatus(connectionId, 'CONNECTED');
-      }
-    });
 
-
-
-    // Handle Message Status Updates (Blue Ticks)
-    socket.ev.on('messages.update', async (updates) => {
-        for (const update of updates) {
-             if (update.update.status && update.key.id) {
-                 const statusKey = update.update.status;
-                 let newStatus = 'SENT';
-                 
-                 // Map Baileys enum to our status
-                 // PENDING=0, SERVER_ACK=1, DELIVERY_ACK=2, READ=3, PLAYED=4
-                 if (statusKey === 3 || statusKey === 4) newStatus = 'READ';
-                 else if (statusKey === 2) newStatus = 'DELIVERED';
-                 else if (statusKey === 1) newStatus = 'SENT';
-                 else return; // Ignore pending or others
-
-                 try {
-                     const msg = await this.prisma.ticketMessage.findUnique({
-                         where: { externalId: update.key.id }
-                     });
-
-                     if (msg) {
-                         const data: any = { status: newStatus };
-                         if (newStatus === 'READ') data.readAt = new Date();
-
-                         await this.prisma.ticketMessage.update({
-                             where: { id: msg.id },
-                             data
-                         });
-                         
-                         // Need tenantId. Fetch connection cached? Or from DB.
-                         // Optimization: cached?
-                         // For now DB.
-                         const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
-                         if (conn) {
-                             this.ticketsGateway.emitMessageStatus(conn.tenantId, msg.ticketId, msg.id, newStatus);
-                         }
-                     }
-                 } catch (e) {
-                     // console.error(e);
-                 }
-             }
+        // 2. Incoming Messages
+        if (events['messages.upsert']) {
+            const m = events['messages.upsert'];
+            this.fileLogger.log(`MESSAGES.UPSERT EVENT: type=${m.type} count=${m.messages?.length}`);
+            
+            for (const msg of m.messages) {
+                const remoteJid = msg.key.remoteJid;
+                this.fileLogger.log(`Message Item: fromMe=${msg.key.fromMe} jid=${remoteJid} id=${msg.key.id} type=${m.type}`);
+                
+                // Process ALL incoming non-self messages, regardless of type (notify or append)
+                if (!msg.key.fromMe && remoteJid !== 'status@broadcast') {
+                    await this.handleIncomingMessage(connectionId, msg, socket);
+                }
+            }
         }
-    });
 
-    // Handle incoming messages
-    socket.ev.on('messages.upsert', async (m) => {
-      if (m.type === 'notify') {
-        for (const msg of m.messages) {
-          if (!msg.key.fromMe) {
-            await this.handleIncomingMessage(connectionId, msg, socket);
-          }
+        // 4. Contact Updates (Real Import)
+        if (events['contacts.set']) {
+            const contacts = events['contacts.set'].contacts;
+            this.logger.log(`📥 Contacts Set for ${connectionId}: ${contacts.length} contacts. Importing...`);
+            await this.importContactsBatch(connectionId, contacts);
         }
-      }
+
+        if (events['contacts.upsert']) {
+            const contacts = events['contacts.upsert'];
+            this.logger.log(`📥 Contacts Upsert for ${connectionId}: ${contacts.length} contacts. Importing...`);
+            await this.importContactsBatch(connectionId, contacts);
+        }
+
+        // 5. Contact Profile Picture Updates
+        if (events['contacts.update']) {
+            for (const update of events['contacts.update']) {
+                if (update.imgUrl && update.id) {
+                    this.logger.log(`🖼️ Profile picture updated for ${update.id}`);
+                    await this.updateContactProfilePic(connectionId, update.id, update.imgUrl);
+                }
+            }
+        }
+
+        // 3. Message Status Updates (Blue Ticks)
+        if (events['messages.update']) {
+            for (const update of events['messages.update']) {
+                if (update.update.status && update.key.id) {
+                    const statusKey = update.update.status;
+                    let newStatus = 'SENT';
+                    if (statusKey === 3 || statusKey === 4) newStatus = 'READ';
+                    else if (statusKey === 2) newStatus = 'DELIVERED';
+                    else if (statusKey === 1) newStatus = 'SENT';
+                    else continue;
+
+                    try {
+                        const msg = await this.prisma.ticketMessage.findUnique({
+                            where: { externalId: update.key.id }
+                        });
+                        if (msg) {
+                            const data: any = { status: newStatus };
+                            if (newStatus === 'READ') data.readAt = new Date();
+                            await this.prisma.ticketMessage.update({ where: { id: msg.id }, data });
+                            
+                            let conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+                            if (conn) {
+                                this.ticketsGateway.emitMessageStatus(conn.tenantId, msg.ticketId, msg.id, newStatus);
+                            }
+                        }
+                    } catch (e) {
+                        this.logger.error(`Error updating message status: ${e.message}`);
+                    }
+                }
+            }
+        }
     });
 
     return socket;
@@ -264,39 +301,71 @@ export class WhatsappService implements OnModuleInit {
 
 
   private async handleIncomingMessage(connectionId: string, msg: proto.IWebMessageInfo, socket: WASocket) {
+    this.fileLogger.log(`Processing handleIncomingMessage for ${connectionId}. JID: ${msg.key.remoteJid}`);
+    
     const connection = await this.prisma.connection.findUnique({
       where: { id: connectionId }
     });
 
-    if (!connection) return;
+    if (!connection) {
+        this.fileLogger.warn(`Connection ${connectionId} not found in DB during handleIncomingMessage`);
+        return;
+    }
 
     const messageContent = msg.message;
     if (!messageContent) return;
 
-    let text = messageContent.conversation || messageContent.extendedTextMessage?.text;
+    // Recursive unwrap for ephemeral and other containers
+    const unwrap = (m: any): any => {
+        if (!m) return m;
+        if (m.ephemeralMessage) return unwrap(m.ephemeralMessage.message);
+        if (m.viewOnceMessage) return unwrap(m.viewOnceMessage.message);
+        if (m.viewOnceMessageV2) return unwrap(m.viewOnceMessageV2.message);
+        if (m.documentWithCaptionMessage) return unwrap(m.documentWithCaptionMessage.message);
+        if (m.editMessage) return unwrap(m.editMessage.message);
+        return m;
+    };
+    const realContent = unwrap(messageContent);
+
+    if (!realContent) {
+        this.fileLogger.log(`Message from ${msg.key.remoteJid} has no real content after unwrapping.`);
+        return;
+    }
+
+    let text = realContent.conversation || realContent.extendedTextMessage?.text || realContent.imageMessage?.caption || realContent.videoMessage?.caption || realContent.documentMessage?.caption || '';
     let type = 'TEXT';
     
     // Detect Media Types
-    if (messageContent.imageMessage) {
-        text = messageContent.imageMessage.caption || '[Imagem]';
+    if (realContent.imageMessage) {
         type = 'IMAGE';
-    } else if (messageContent.videoMessage) {
-        text = messageContent.videoMessage.caption || '[Vídeo]';
+    } else if (realContent.videoMessage) {
         type = 'VIDEO';
-    } else if (messageContent.audioMessage) {
+    } else if (realContent.audioMessage) {
         text = '[Áudio]';
         type = 'AUDIO';
-    } else if (messageContent.documentMessage) {
-        text = messageContent.documentMessage.fileName || '[Documento]';
+    } else if (realContent.documentMessage) {
+        text = text || realContent.documentMessage.fileName || '[Documento]';
         type = 'DOCUMENT';
-    } else if (messageContent.stickerMessage) {
+    } else if (realContent.stickerMessage) {
         text = '[Figurinha]';
         type = 'STICKER';
     }
 
-    if (!text && type === 'TEXT') return;
+    if (!text && type === 'TEXT' && !realContent.pollCreationMessage) {
+        this.fileLogger.log(`Skipping empty message or unhandled type from ${msg.key.remoteJid}: ${JSON.stringify(realContent)}`);
+        return;
+    }
+
+    // Handle Polls (Simple text representation)
+    if (realContent.pollCreationMessage) {
+        text = `[Enquete] ${realContent.pollCreationMessage.name}`;
+    }
 
     let remoteJid = msg.key.remoteJid;
+    if (!remoteJid) {
+        this.fileLogger.error(`Message has no remoteJid! skipping.`);
+        return;
+    }
     const isGroup = remoteJid.endsWith('@g.us');
     let pushName = msg.pushName || 'WhatsApp Contact';
     
@@ -305,7 +374,7 @@ export class WhatsappService implements OnModuleInit {
     // ==========================================
     if (isGroup) {
         const config = connection.config as any || {};
-        const blockGroups = config.blockGroups ?? true; // Default: Block groups
+        const blockGroups = config.blockGroups ?? false; // Default: CHANGED TO FALSE to avoid blocking by mistake
         const groupWhitelist = config.groupWhitelist || []; // Array of Group JIDs
 
         if (blockGroups) {
@@ -361,11 +430,30 @@ export class WhatsappService implements OnModuleInit {
       let fullJid = remoteJid.replace(/:[0-9]+/, '');
       let phone = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
       
+      // Robust search for contact (handles Brazil 9-digit discrepancy)
       let contact = await this.prisma.contact.findFirst({
         where: { tenantId, phone }
       });
 
+      if (!contact && phone.startsWith('55') && !isGroup) {
+          // Try alternative phone format (with/without the 9)
+          let altPhone = '';
+          if (phone.length === 13 && phone[4] === '9') {
+              altPhone = phone.slice(0, 4) + phone.slice(5);
+          } else if (phone.length === 12) {
+              altPhone = phone.slice(0, 4) + '9' + phone.slice(4);
+          }
+          
+          if (altPhone) {
+              this.fileLogger.log(`Searching for alternative phone: ${altPhone}`);
+              contact = await this.prisma.contact.findFirst({
+                  where: { tenantId, phone: altPhone }
+              });
+          }
+      }
+
       if (!contact) {
+        this.fileLogger.log(`Creating new contact for ${phone} (${pushName})`);
         contact = await this.prisma.contact.create({
           data: {
             tenantId,
@@ -379,7 +467,18 @@ export class WhatsappService implements OnModuleInit {
       } else {
           const updates: any = {};
           if (isGroup && contact.name !== pushName) updates.name = pushName;
-          if (!contact.whatsapp) updates.whatsapp = fullJid;
+          
+          // CRITICAL: Update the JID in database if it changed or was empty
+          // This ensures that future outgoing messages use the latest verified identity
+          if (contact.whatsapp !== fullJid) updates.whatsapp = fullJid;
+
+          // FETCH PROFILE PIC if missing
+          if (!contact.profilePicUrl) {
+              try {
+                  const url = await socket.profilePictureUrl(remoteJid, 'image').catch(() => null);
+                  if (url) updates.profilePicUrl = url;
+              } catch (e) {}
+          }
           
           if (Object.keys(updates).length > 0) {
               contact = await this.prisma.contact.update({
@@ -481,6 +580,17 @@ export class WhatsappService implements OnModuleInit {
       let finalContent = text;
       if (isGroup && msg.pushName) {
           finalContent = `__${msg.pushName}__: ${text}`;
+      }
+
+      // Check if message already exists
+      if (msg.key.id) {
+          const existingMsg = await this.prisma.ticketMessage.findUnique({
+              where: { externalId: msg.key.id }
+          });
+          if (existingMsg) {
+              this.logger.log(`♻️ Ignored duplicate message: ${msg.key.id}`);
+              return;
+          }
       }
 
       const message = await this.prisma.ticketMessage.create({
@@ -637,7 +747,10 @@ export class WhatsappService implements OnModuleInit {
         let delayMs = 300;
         
         if (type === 'audio') {
-            delayMs = 1000; // More time for voice message presence
+            delayMs = 2000; // More time for recording presence
+            try {
+                await socket.sendPresenceUpdate('recording', jid);
+            } catch (e) {}
         }
 
         if (type === 'image') {
@@ -645,9 +758,12 @@ export class WhatsappService implements OnModuleInit {
         } else if (type === 'video') {
             messageContent = { video: mediaBuffer, caption };
         } else if (type === 'audio') {
-            // WhatsApp PTT (voice note) is picky. audio/mp4 is a safe bet for WebM/Opus blobs from browsers.
-            // If it's a browser recording (webm), we label it mp4 which WA prefers for non-ogg PTT.
-            const finalMime = (mimetype && mimetype.includes('webm')) ? 'audio/mp4' : (mimetype || 'audio/aac');
+            // WhatsApp PTT (voice note) is NATIVE in OGG/OPUS. 
+            // Browser recordings are WebM/OPUS. Sending WebM with audio/ogg label often works 
+            // better than audio/mp4 because the codec (Opus) matches what WA expects for PTT.
+            const isWebm = (mimetype && mimetype.includes('webm')) || finalPath.endsWith('.webm');
+            const finalMime = isWebm ? 'audio/ogg; codecs=opus' : (mimetype || 'audio/mp4');
+            
             this.fileLogger.log(`🎵 Preparing audio PTT with mime: ${finalMime} (Source: ${mimetype})`);
             messageContent = { 
                 audio: mediaBuffer, 
@@ -686,11 +802,17 @@ export class WhatsappService implements OnModuleInit {
 
     let jid = this.formatJid(to);
     
+    // Check JID cache first
+    const cache = this.jidCache.get(socket.user?.id || 'default'); // Baileys ID is more reliable for cache key
+    const cachedJid = cache?.get<string>(jid);
+    if (cachedJid) return cachedJid;
+
     try {
         // onWhatsApp is the most reliable way to find the real identity
         const [result] = await socket.onWhatsApp(jid);
         if (result?.exists) {
             this.fileLogger.log(`🔍 JID Verified: ${jid} -> ${result.jid}`);
+            cache?.set(jid, result.jid);
             return result.jid;
         }
 
@@ -710,6 +832,7 @@ export class WhatsappService implements OnModuleInit {
                 const [altResult] = await socket.onWhatsApp(alternativeJid);
                 if (altResult?.exists) {
                     this.fileLogger.log(`🔍 Corrected JID for Brazil: ${jid} -> ${altResult.jid}`);
+                    cache?.set(jid, altResult.jid);
                     return altResult.jid;
                 }
             }
@@ -860,5 +983,135 @@ export class WhatsappService implements OnModuleInit {
             updatedAt: c.updatedAt
         }))
     };
+  }
+
+  // ==========================================
+  // CONTACT SYNC & HELPERS
+  // ==========================================
+  
+  async syncContacts(connectionId: string) {
+      const socket = this.sessions.get(connectionId);
+      if (!socket) throw new Error('Conexão não está ativa');
+
+      const connection = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+      if (!connection) return;
+
+      this.logger.log(`🚀 Starting manual contact sync for connection ${connectionId}...`);
+      
+      try {
+          // Manual sync usually means the user wants to force an update
+          // We can try to get the list of chats and then fetch metadata/pics
+          // Baileys doesn't expose a "getAllContacts" easily without a store, 
+          // but we can try to re-trigger a fetch of groups and maybe query some presence.
+          
+          const groups = await socket.groupFetchAllParticipating();
+          this.logger.log(`Synced ${Object.keys(groups).length} groups.`);
+
+          // Background task to refresh all profile pics of existing contacts
+          this.refreshAllProfilePics(connectionId).catch(err => 
+              this.logger.error(`Error in background PFP refresh: ${err.message}`)
+          );
+
+          return { success: true, message: 'Sincronização e atualização de fotos iniciada.' };
+      } catch (e) {
+          throw new Error(`Falha na sincronização: ${e.message}`);
+      }
+  }
+
+  private async importContactsBatch(connectionId: string, waContacts: any[]) {
+      const connection = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+      if (!connection) return;
+      const tenantId = connection.tenantId;
+
+      this.logger.log(`📦 Processing batch of ${waContacts.length} contacts for tenant ${tenantId}`);
+
+      for (const waContact of waContacts) {
+          const jid = waContact.id;
+          if (!jid || jid.includes('broadcast')) continue;
+
+          const isGroup = jid.endsWith('@g.us');
+          const pushName = waContact.name || waContact.verifiedName || waContact.notify || (isGroup ? 'Grupo WhatsApp' : 'Contato WhatsApp');
+          
+          let fullJid = jid.replace(/:[0-9]+/, '');
+          let phone = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+
+          try {
+              // Same robust search logic as handleIncomingMessage
+              let contact = await this.prisma.contact.findFirst({
+                  where: { tenantId, phone }
+              });
+
+              if (!contact) {
+                 await this.prisma.contact.create({
+                      data: {
+                          tenantId,
+                          name: pushName,
+                          phone: phone,
+                          whatsapp: fullJid,
+                          category: isGroup ? 'Grupo' : 'Lead',
+                          profilePicUrl: waContact.imgUrl || undefined
+                      }
+                  });
+              } else {
+                  // Update existing if name or JID changed
+                  const updates: any = {};
+                  if (contact.name === 'Contato WhatsApp' && pushName !== 'Contato WhatsApp') updates.name = pushName;
+                  if (!contact.whatsapp) updates.whatsapp = fullJid;
+                  if (waContact.imgUrl && !contact.profilePicUrl) updates.profilePicUrl = waContact.imgUrl;
+
+                  if (Object.keys(updates).length > 0) {
+                      await this.prisma.contact.update({
+                          where: { id: contact.id },
+                          data: updates
+                      });
+                  }
+              }
+          } catch (e) {
+              this.logger.error(`Error importing contact ${jid}: ${e.message}`);
+          }
+      }
+  }
+
+  private async refreshAllProfilePics(connectionId: string) {
+      const socket = this.sessions.get(connectionId);
+      if (!socket) return;
+
+      const connection = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+      if (!connection) return;
+
+      const contacts = await this.prisma.contact.findMany({
+          where: { tenantId: connection.tenantId, whatsapp: { not: null } },
+          select: { id: true, whatsapp: true }
+      });
+
+      this.logger.log(`📸 Refreshing profile pics for ${contacts.length} contacts...`);
+
+      for (const contact of contacts) {
+          try {
+              const url = await socket.profilePictureUrl(contact.whatsapp!, 'image').catch(() => null);
+              if (url) {
+                  await this.prisma.contact.update({
+                      where: { id: contact.id },
+                      data: { profilePicUrl: url }
+                  });
+                  // Small delay to avoid rate limiting
+                  await new Promise(r => setTimeout(r, 1000));
+              }
+          } catch (e) {
+              this.logger.warn(`Failed to fetch PFP for ${contact.whatsapp}: ${e.message}`);
+          }
+      }
+      this.logger.log(`✅ Profile pic refresh completed for ${connectionId}`);
+  }
+
+  private async updateContactProfilePic(connectionId: string, jid: string, url: string) {
+      const connection = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+      if (!connection) return;
+
+      const phone = jid.split('@')[0].split(':')[0];
+      await this.prisma.contact.updateMany({
+          where: { tenantId: connection.tenantId, phone },
+          data: { profilePicUrl: url }
+      });
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 
 @Controller('whatsapp')
@@ -20,6 +20,11 @@ export class WhatsappController {
   async disconnect(@Body() body: { connectionId: string }) {
       await this.whatsappService.disconnect(body.connectionId);
       return { success: true, message: 'Desconectado com sucesso' };
+  }
+
+  @Post(':id/sync-contacts')
+  async syncContacts(@Param('id') id: string) {
+      return this.whatsappService.syncContacts(id);
   }
 
   @Get('debug')

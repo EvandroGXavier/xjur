@@ -12,4 +12,7 @@ export class CreateMessageDto {
   @IsOptional()
   @IsString()
   mediaUrl?: string;
+
+  @IsOptional()
+  scheduledAt?: string; // ISO String from frontend
 }

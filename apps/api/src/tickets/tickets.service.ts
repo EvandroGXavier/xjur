@@ -5,6 +5,7 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { TicketsGateway } from './tickets.gateway';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class TicketsService {
@@ -132,15 +133,20 @@ export class TicketsService {
         else contentType = 'FILE'; 
     }
 
+    const scheduledAt = createMessageDto.scheduledAt ? new Date(createMessageDto.scheduledAt) : null;
+    const isScheduled = scheduledAt && scheduledAt > new Date();
+
     const message = await this.prisma.ticketMessage.create({
       data: {
         ticketId: ticket.id,
         senderType: 'USER',
         senderId: userId,
-        content: createMessageDto.content || '', // content is optional for media
+        content: createMessageDto.content || '',
         contentType: contentType as any,
         mediaUrl: mediaUrl,
-      },
+        scheduledAt: isScheduled ? scheduledAt : null,
+        status: isScheduled ? 'SCHEDULED' : 'SENT',
+      } as any,
     });
 
     // Update ticket updatedAt
@@ -156,74 +162,8 @@ export class TicketsService {
     // ==========================================
     // SEND VIA WHATSAPP (Baileys) if channel is WHATSAPP
     // ==========================================
-    if (ticket.channel === 'WHATSAPP') {
-      const phone = ticket.contact?.whatsapp || ticket.contact?.phone;
-
-      if (!phone) {
-         this.ticketsGateway.emitTicketError(tenantId, {
-             ticketId: ticket.id,
-             message: 'Contato sem telefone/WhatsApp cadastrado. Mensagem salva apenas internamente.',
-             code: 'NO_PHONE'
-         });
-      } else {
-        try {
-          // Find CONNECTED WhatsApp connection for this tenant
-          const connection = await this.prisma.connection.findFirst({
-            where: { 
-              tenantId, 
-              type: 'WHATSAPP', 
-              status: 'CONNECTED' 
-            },
-          });
-
-          if (connection) {
-            let externalId: string | undefined;
-
-            if (contentType === 'TEXT') {
-                const safeContent = message.content || '';
-                externalId = await this.whatsappService.sendText(connection.id, phone, safeContent);
-            } else {
-                 let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document';
-                 if (contentType === 'IMAGE') mediaType = 'image';
-                 else if (contentType === 'AUDIO') mediaType = 'audio';
-                 else if (file?.mimetype?.startsWith('video/')) mediaType = 'video';
-                 
-                 externalId = await this.whatsappService.sendMedia(
-                     connection.id, 
-                     phone, 
-                     mediaType, 
-                     mediaUrl, 
-                     message.content || '',
-                     file?.mimetype,
-                     file?.originalname
-                 );
-            }
-            
-            if (externalId && typeof externalId === 'string') {
-                await this.prisma.ticketMessage.update({
-                    where: { id: message.id },
-                    data: { externalId, status: 'SENT' }
-                });
-            }
-
-            this.logger.log(`✅ WhatsApp message sent to ${phone} via connection ${connection.id}`);
-          } else {
-            this.logger.warn(`⚠️ No CONNECTED WhatsApp connection for tenant ${tenantId}.`);
-            this.ticketsGateway.emitTicketError(tenantId, {
-                ticketId: ticket.id,
-                message: 'Nenhuma conexão WhatsApp ativa. Verifique o menu Conexões.',
-                code: 'NO_CONNECTION'
-            });
-          }
-        } catch (error) {
-          this.logger.error(`❌ Failed to send WhatsApp message to ${phone}: ${error.message}`);
-          this.ticketsGateway.emitTicketError(tenantId, {
-              ticketId: ticket.id,
-              message: `Erro ao enviar WhatsApp: ${error.message}`,
-              code: 'SEND_ERROR'
-          });
-        }
-      }
+    if (ticket.channel === 'WHATSAPP' && !isScheduled) {
+      await this.sendToWhatsApp(tenantId, ticket, message, file);
     }
 
     // 🔌 Emit WebSocket event for new message
@@ -371,5 +311,100 @@ export class TicketsService {
       
       // Emit update
       this.ticketsGateway.emitTicketUpdated(tenantId, { ...ticket, _count: { messages: 0 } }); 
+  }
+
+  // ==========================================
+  // SHARED SENDING LOGIC (For immediate and scheduled)
+  // ==========================================
+  private async sendToWhatsApp(tenantId: string, ticket: any, message: any, file?: any) {
+    const phone = ticket.contact?.whatsapp || ticket.contact?.phone;
+    if (!phone) {
+        this.ticketsGateway.emitTicketError(tenantId, {
+            ticketId: ticket.id,
+            message: 'Contato sem telefone/WhatsApp cadastrado.',
+            code: 'NO_PHONE'
+        });
+        return;
+    }
+
+    try {
+        const connection = await this.prisma.connection.findFirst({
+            where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' },
+        });
+
+        if (!connection) {
+            this.logger.warn(`No active connection for tenant ${tenantId}`);
+            this.ticketsGateway.emitTicketError(tenantId, {
+                ticketId: ticket.id,
+                message: 'Nenhuma conexão WhatsApp ativa no momento.',
+                code: 'NO_CONNECTION'
+            });
+            return;
+        }
+
+        let externalId: string | undefined;
+
+        if (message.contentType === 'TEXT') {
+            externalId = await this.whatsappService.sendText(connection.id, phone, message.content);
+        } else {
+            let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document';
+            if (message.contentType === 'IMAGE') mediaType = 'image';
+            else if (message.contentType === 'AUDIO') mediaType = 'audio';
+            // Simple mapping for existing paths
+            externalId = await this.whatsappService.sendMedia(
+                connection.id, 
+                phone, 
+                mediaType, 
+                message.mediaUrl, 
+                message.content || '',
+                file?.mimetype,
+                file?.originalname
+            );
+        }
+
+        if (externalId && typeof externalId === 'string') {
+            await this.prisma.ticketMessage.update({
+                where: { id: message.id },
+                data: { externalId, status: 'SENT' }
+            });
+            this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
+        }
+        this.logger.log(`✅ WhatsApp message sent to ${phone}`);
+    } catch (error) {
+        this.logger.error(`❌ WhatsApp Send Error: ${error.message}`);
+        this.ticketsGateway.emitTicketError(tenantId, {
+            ticketId: ticket.id,
+            message: `Falha no envio: ${error.message}`,
+            code: 'SEND_ERROR'
+        });
+    }
+  }
+
+  // ==========================================
+  // BACKGROUND TASK: Scheduled Messages
+  // ==========================================
+  @Cron(CronExpression.EVERY_MINUTE)
+  async handleScheduledMessages() {
+    const now = new Date();
+    const scheduledMessages = await this.prisma.ticketMessage.findMany({
+      where: {
+        status: 'SCHEDULED',
+        scheduledAt: { lte: now }
+      } as any,
+      include: {
+        ticket: {
+          include: {
+            contact: true
+          }
+        }
+      }
+    });
+
+    if (scheduledMessages.length > 0) {
+      this.logger.log(`⏲️ Processing ${scheduledMessages.length} scheduled messages...`);
+      for (const msg of (scheduledMessages as any[])) {
+        await this.sendToWhatsApp(msg.ticket.tenantId, msg.ticket, msg);
+      }
+    }
   }
 }
