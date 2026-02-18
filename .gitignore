@@ -1,4 +1,3 @@
-
 node_modules/
 .turbo/
 dist/
@@ -7,12 +6,13 @@ apps/web/dist/
 apps/api/dist/
 packages/database/dist/
 *.log
-.env
-.env.production
+whatsapp-debug.log
+.env*
+! .env.example
 .agent/
 backups/
 *.sql
 *.sqlite
 *.db
 Exemplos/
-apps/api/storage/uploads/
+apps/api/storage/

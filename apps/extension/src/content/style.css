@@ -1,0 +1,6 @@
+/* Global styles for Xjur Client Extension */
+#xjur-client-root {
+  /* Ensure our container has a high z-index and doesn't interfere with page flow unexpectedly */
+  position: relative;
+  z-index: 99999;
+}

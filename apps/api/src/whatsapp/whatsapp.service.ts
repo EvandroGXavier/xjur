@@ -11,7 +11,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import * as path from 'path';
 import * as fs from 'fs';
-import NodeCache from 'node-cache'; // Import local NodeCache
+import NodeCache = require('node-cache');
 import { PrismaService } from '../prisma.service';
 import { TicketsGateway } from '../tickets/tickets.gateway';
 import { WhatsappGateway } from './whatsapp.gateway';
@@ -264,6 +264,12 @@ export class WhatsappService implements OnModuleInit {
 
 
   private async handleIncomingMessage(connectionId: string, msg: proto.IWebMessageInfo, socket: WASocket) {
+    const connection = await this.prisma.connection.findUnique({
+      where: { id: connectionId }
+    });
+
+    if (!connection) return;
+
     const messageContent = msg.message;
     if (!messageContent) return;
 
@@ -298,29 +304,41 @@ export class WhatsappService implements OnModuleInit {
     // GROUP HANDLING LOGIC
     // ==========================================
     if (isGroup) {
-        // Fetch Connection Config to check for Blocks/Whitelists
-        const connection = await this.prisma.connection.findUnique({
-            where: { id: connectionId }
-        });
-        
-        if (!connection) return;
-
         const config = connection.config as any || {};
-        const blockGroups = config.blockGroups || false; // Default: Allow all
+        const blockGroups = config.blockGroups ?? true; // Default: Block groups
         const groupWhitelist = config.groupWhitelist || []; // Array of Group JIDs
 
         if (blockGroups) {
-            // If blocking is enabled, only allow if in whitelist
-            if (!groupWhitelist.includes(remoteJid)) {
-                this.logger.log(`🚫 Blocking message from group ${remoteJid} (Not in whitelist)`);
+            // 1. Check Manual Whitelist
+            let isAllowed = groupWhitelist.includes(remoteJid);
+
+            // 2. Check if Group is associated with any Process
+            if (!isAllowed) {
+                const processWithGroup = await this.prisma.process.findFirst({
+                    where: {
+                        tenantId: connection.tenantId,
+                        OR: [
+                            { contact: { whatsapp: remoteJid } }, // Direct contact
+                            { processParties: { some: { contact: { whatsapp: remoteJid } } } } // Party in process
+                        ]
+                    }
+                });
+                if (processWithGroup) {
+                    isAllowed = true;
+                    this.logger.log(`✅ Auto-allowing group ${remoteJid} because it is linked to process ${processWithGroup.code || processWithGroup.id}`);
+                }
+            }
+
+            if (!isAllowed) {
+                this.logger.log(`🚫 Blocking message from group ${remoteJid} (Not in whitelist and no process found)`);
                 return;
             }
         }
 
         // Get Real Group Name
         try {
-            const groupMetadata = await socket.groupMetadata(remoteJid);
-            pushName = groupMetadata.subject || 'Grupo WhatsApp';
+            const groupMetadata = await socket.groupMetadata(remoteJid).catch(() => null);
+            if (groupMetadata) pushName = groupMetadata.subject || 'Grupo WhatsApp';
         } catch (e) {
             this.logger.warn(`Could not fetch group metadata for ${remoteJid}`);
             pushName = 'Grupo WhatsApp';
@@ -330,12 +348,6 @@ export class WhatsappService implements OnModuleInit {
     this.logger.log(`Received message from ${remoteJid} (Group: ${isGroup}) on connection ${connectionId}: ${text}`);
 
     try {
-      const connection = await this.prisma.connection.findUnique({
-        where: { id: connectionId }
-      });
-
-      if (!connection) return;
-
       const tenantId = connection.tenantId;
 
       // Find or create contact
@@ -523,15 +535,15 @@ export class WhatsappService implements OnModuleInit {
       throw new Error(`WhatsApp connection is lost for ${connectionId}`);
     }
     
-    // Normalize phone number (Ensure 55 for Brazil if not present)
-    const jid = this.formatJid(to);
+    // Use JID discovery to avoid the common Brazil 9-digit identity issue
+    const jid = await this.getCorrectJid(socket, to);
     
     if (!jid || !jid.includes('@')) {
          this.logger.error(`❌ Invalid JID generated for ${to}: ${jid}`);
          throw new Error(`Invalid WhatsApp number: ${to}`);
     }
 
-    this.logger.log(`📤 Message Req: to=${to} jid=${jid} text="${text}" conn=${connectionId}`);
+    this.logger.log(`📤 Message Req: to=${to} targetJid=${jid} text="${text}" conn=${connectionId}`);
 
     try {
       // Validate existence on WhatsApp (optional, but good for debugging)
@@ -589,14 +601,14 @@ export class WhatsappService implements OnModuleInit {
         throw new Error(`WhatsApp connection is lost for ${connectionId}`);
     }
 
-    const jid = this.formatJid(to);
+    const jid = await this.getCorrectJid(socket, to);
     
     if (!jid || !jid.includes('@')) {
          this.logger.error(`❌ Invalid JID generated for ${to}: ${jid}`);
          throw new Error(`Invalid WhatsApp number: ${to}`);
     }
 
-    this.logger.log(`📤 Media Req: to=${to} jid=${jid} type=${type} url=${url} mime=${mimetype} conn=${connectionId}`);
+    this.fileLogger.log(`📤 Media Req: to=${to} targetJid=${jid} type=${type} url=${url} mime=${mimetype} conn=${connectionId}`);
 
     try {
         let mediaBuffer: Buffer;
@@ -606,25 +618,42 @@ export class WhatsappService implements OnModuleInit {
         if (!fs.existsSync(finalPath)) {
             finalPath = path.resolve(process.cwd(), url);
             if (!fs.existsSync(finalPath)) {
-                 throw new Error(`File not found: ${url} (Resolved: ${finalPath})`);
+                this.fileLogger.error(`❌ File not found: ${url} (Resolved: ${finalPath})`);
+                throw new Error(`File not found: ${url} (Resolved: ${finalPath})`);
             }
         }
+        
+        this.fileLogger.log(`📄 Reading file from: ${finalPath}`);
 
         try {
             mediaBuffer = fs.readFileSync(finalPath);
+            this.fileLogger.log(`📦 Buffer loaded: ${mediaBuffer.length} bytes`);
         } catch (e) {
-            this.logger.error(`Failed to read file at ${finalPath}: ${e.message}`);
+            this.fileLogger.error(`❌ Failed to read file at ${finalPath}: ${e.message}`);
             throw new Error(`Could not read media file: ${e.message}`);
         }
 
         let messageContent: any;
+        let delayMs = 300;
+        
+        if (type === 'audio') {
+            delayMs = 1000; // More time for voice message presence
+        }
 
         if (type === 'image') {
             messageContent = { image: mediaBuffer, caption };
         } else if (type === 'video') {
             messageContent = { video: mediaBuffer, caption };
         } else if (type === 'audio') {
-            messageContent = { audio: mediaBuffer, mimetype: mimetype || 'audio/mp4', ptt: true }; 
+            // WhatsApp PTT (voice note) is picky. audio/mp4 is a safe bet for WebM/Opus blobs from browsers.
+            // If it's a browser recording (webm), we label it mp4 which WA prefers for non-ogg PTT.
+            const finalMime = (mimetype && mimetype.includes('webm')) ? 'audio/mp4' : (mimetype || 'audio/aac');
+            this.fileLogger.log(`🎵 Preparing audio PTT with mime: ${finalMime} (Source: ${mimetype})`);
+            messageContent = { 
+                audio: mediaBuffer, 
+                mimetype: finalMime, 
+                ptt: true 
+            }; 
         } else {
             // Document
             messageContent = { 
@@ -635,14 +664,62 @@ export class WhatsappService implements OnModuleInit {
             };
         }
 
+        // Ensure presence is subscribed for better delivery
+        await socket.presenceSubscribe(jid);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+
         const response = await socket.sendMessage(jid, messageContent);
-        this.logger.log(`✅ Media successfully sent to ${jid}`);
+        this.fileLogger.log(`✅ Media successfully sent to ${jid}. Type: ${type} MsgID: ${response?.key?.id}`);
         return response?.key?.id;
 
     } catch (err) {
-        this.logger.error(`❌ Baileys sendMedia error: ${err.message} stack=${err.stack}`);
+        this.fileLogger.error(`❌ Baileys sendMedia error: ${err.message} stack=${err.stack}`);
          throw new Error(`Failed to send media to ${to}: ${err.message}`);
     }
+  }
+
+  private async getCorrectJid(socket: WASocket, to: string): Promise<string> {
+    if (!to) return '';
+    
+    // If it's already a full JID for group or LID, return as is
+    if (to.includes('@g.us') || to.includes('@lid')) return to;
+
+    let jid = this.formatJid(to);
+    
+    try {
+        // onWhatsApp is the most reliable way to find the real identity
+        const [result] = await socket.onWhatsApp(jid);
+        if (result?.exists) {
+            this.fileLogger.log(`🔍 JID Verified: ${jid} -> ${result.jid}`);
+            return result.jid;
+        }
+
+        // Brazil 9-digit heuristic fix
+        let numeric = jid.replace(/\D/g, '');
+        if (numeric.startsWith('55')) {
+            let alternativeJid: string | null = null;
+            if (numeric.length === 13 && numeric[4] === '9') {
+                // Number has 9, try without it
+                alternativeJid = numeric.slice(0, 4) + numeric.slice(5) + '@s.whatsapp.net';
+            } else if (numeric.length === 12) {
+                // Number doesn't have 9, try with it
+                alternativeJid = numeric.slice(0, 4) + '9' + numeric.slice(4) + '@s.whatsapp.net';
+            }
+
+            if (alternativeJid) {
+                const [altResult] = await socket.onWhatsApp(alternativeJid);
+                if (altResult?.exists) {
+                    this.fileLogger.log(`🔍 Corrected JID for Brazil: ${jid} -> ${altResult.jid}`);
+                    return altResult.jid;
+                }
+            }
+        }
+        this.fileLogger.warn(`⚠️ JID ${jid} not verified on WhatsApp, sending as is.`);
+    } catch (e) {
+        this.logger.warn(`Could not verify JID onWhatsApp for ${to}: ${e.message}`);
+    }
+
+    return jid;
   }
 
   private formatJid(contact: string): string {
