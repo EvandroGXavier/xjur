@@ -128,8 +128,9 @@ export class TicketsService {
 
     if (file) {
         mediaUrl = file.path;
+        const isAudio = file.mimetype.startsWith('audio/') || file.mimetype.includes('webm');
         if (file.mimetype.startsWith('image/')) contentType = 'IMAGE';
-        else if (file.mimetype.startsWith('audio/')) contentType = 'AUDIO';
+        else if (isAudio) contentType = 'AUDIO';
         else contentType = 'FILE'; 
     }
 
@@ -159,7 +160,7 @@ export class TicketsService {
           waitingReply: false,
           // Auto-update status to IN_PROGRESS when agent responds on OPEN tickets
           ...(ticket.status === 'OPEN' ? { status: 'IN_PROGRESS' } : {}),
-        }
+        } as any
     });
 
     // ==========================================
@@ -225,7 +226,7 @@ export class TicketsService {
               updatedAt: new Date(),
               lastMessageAt: new Date(),
               waitingReply: true
-          }
+          } as any
       });
 
       // 🔌 Emit WebSocket event for simulated incoming message

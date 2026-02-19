@@ -113,8 +113,13 @@ type Module = 'chats' | 'quick_replies' | 'kanban' | 'tags' | 'connections' | 's
 const getMediaUrl = (path: string | null) => {
   if (!path) return '';
   if (path.startsWith('blob:') || path.startsWith('http')) return path;
-  const baseUrl = (api.defaults.baseURL || '').replace(/\/api$/, '') || 'http://localhost:3000';
-  return `${baseUrl}/${path.replace(/\\/g, '/')}`;
+  
+  // Limpar prefixo api/ se existir na baseURL para pegar a raiz do server
+  const baseUrl = (api.defaults.baseURL || '').replace(/\/api\/?$/, '') || 'http://localhost:3000';
+  
+  // Normalizar barras para o browser e garantir que o path não duplique a base
+  const cleanPath = path.replace(/\\/g, '/');
+  return `${baseUrl}/${cleanPath}`;
 };
 
 // =========================
@@ -255,14 +260,31 @@ export function AtendimentoPage() {
   const handleSendAudio = useCallback(async (blob: Blob) => {
     if (!selectedTicketId) return;
     const tempId = `temp-${Date.now()}`;
-    setMessages(p => [...p, { id: tempId, ticketId: selectedTicketId, senderType: 'USER', content: '', contentType: 'AUDIO', mediaUrl: URL.createObjectURL(blob), createdAt: new Date().toISOString() } as TicketMessage]);
+    
+    // UI Optimistic
+    setMessages(p => [...p, { 
+      id: tempId, 
+      ticketId: selectedTicketId, 
+      senderType: 'USER', 
+      content: '', 
+      contentType: 'AUDIO', 
+      mediaUrl: URL.createObjectURL(blob), 
+      createdAt: new Date().toISOString() 
+    } as TicketMessage]);
+    
     setIsRecording(false);
+    
     const formData = new FormData();
     formData.append('file', blob, 'audio.webm');
     formData.append('contentType', 'AUDIO');
+    formData.append('content', ''); // Campo obrigatório no DTO se validado
+
     try {
-        await api.post(`/tickets/${selectedTicketId}/messages`, formData);
-    } catch {
+        await api.post(`/tickets/${selectedTicketId}/messages`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    } catch (err) {
+        console.error("Erro ao enviar áudio:", err);
         toast.error("Falha ao enviar áudio");
         setMessages(p => p.filter(m => m.id !== tempId));
     }
