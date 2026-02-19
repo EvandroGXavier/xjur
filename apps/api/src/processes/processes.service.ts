@@ -335,6 +335,13 @@ export class ProcessesService {
 
          const results = await this.prisma.process.findMany({
              where,
+             include: {
+                 tags: {
+                     include: {
+                         tag: true
+                     }
+                 }
+             },
              orderBy: { createdAt: 'desc' }
          });
          return results;
@@ -347,6 +354,11 @@ export class ProcessesService {
                 timeline: { orderBy: { date: 'desc' }, take: 50 },
                 appointments: { orderBy: { startAt: 'asc' }, take: 20 },
                 contact: true,
+                tags: {
+                    include: {
+                        tag: true
+                    }
+                }
             }
         });
 

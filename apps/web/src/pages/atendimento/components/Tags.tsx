@@ -49,19 +49,11 @@ export function TagsManager() {
 
     const fetchTags = async () => {
         try {
-            const response = await api.get('/contacts/tags');
+            const response = await api.get('/tags');
             setTags(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
-            // Fallback com dados locais se a API não estiver disponível
-            setTags([
-                { id: '1', name: 'VIP', color: '#eab308', textColor: '#000', scope: ['CONTACT'], usage: 5, active: true },
-                { id: '2', name: 'Lead Quente', color: '#ef4444', textColor: '#fff', scope: ['CONTACT', 'TASK'], usage: 12, active: true },
-                { id: '3', name: 'Urgente', color: '#f97316', textColor: '#fff', scope: ['PROCESS', 'TASK'], usage: 8, active: true },
-                { id: '4', name: 'Pago', color: '#22c55e', textColor: '#fff', scope: ['FINANCE'], usage: 20, active: true },
-                { id: '5', name: 'Pendente', color: '#6366f1', textColor: '#fff', scope: ['FINANCE', 'PROCESS'], usage: 15, active: true },
-                { id: '6', name: 'Primeiro Contato', color: '#06b6d4', textColor: '#fff', scope: ['CONTACT'], usage: 3, active: true },
-                { id: '7', name: 'Retorno', color: '#8b5cf6', textColor: '#fff', scope: ['CONTACT', 'TASK'], usage: 7, active: true },
-            ]);
+            console.error('Erro ao buscar etiquetas:', error);
+            setTags([]);
         } finally {
             setLoading(false);
         }
@@ -77,7 +69,7 @@ export function TagsManager() {
             if (editingId) {
                 // Update
                 try {
-                    await api.patch(`/contacts/tags/${editingId}`, formData);
+                    await api.patch(`/tags/${editingId}`, formData);
                 } catch {
                     // Fallback local
                     setTags(tags.map(t => t.id === editingId ? { ...t, ...formData } : t));
@@ -86,7 +78,7 @@ export function TagsManager() {
             } else {
                 // Create
                 try {
-                    const res = await api.post('/contacts/tags', formData);
+                    const res = await api.post('/tags', formData);
                     setTags([...tags, res.data]);
                 } catch {
                     // Fallback local
@@ -98,11 +90,11 @@ export function TagsManager() {
                     };
                     setTags([...tags, newTag]);
                 }
-                toast.success('Tag criada!');
             }
 
             resetForm();
-            fetchTags();
+            await fetchTags();
+            toast.success(editingId ? 'Tag atualizada!' : 'Tag criada!');
         } catch (error) {
             toast.error('Erro ao salvar tag');
         }
@@ -123,7 +115,7 @@ export function TagsManager() {
         if (!confirm('Excluir esta tag? Ela será removida de todos os registros.')) return;
         
         try {
-            await api.delete(`/contacts/tags/${id}`);
+            await api.delete(`/tags/${id}`);
         } catch {
             // Fallback local
         }

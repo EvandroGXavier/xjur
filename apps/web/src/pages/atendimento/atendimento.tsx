@@ -114,12 +114,18 @@ const getMediaUrl = (path: string | null) => {
   if (!path) return '';
   if (path.startsWith('blob:') || path.startsWith('http')) return path;
   
+  // Normalizar barras para o browser
+  const cleanPath = path.replace(/\\/g, '/');
+  
+  // Garantir que não comece com barra pois vamos concatenar com baseUrl que pode ou não ter slash
+  const finalPath = cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath;
+
   // Limpar prefixo api/ se existir na baseURL para pegar a raiz do server
   const baseUrl = (api.defaults.baseURL || '').replace(/\/api\/?$/, '') || 'http://localhost:3000';
   
-  // Normalizar barras para o browser e garantir que o path não duplique a base
-  const cleanPath = path.replace(/\\/g, '/');
-  return `${baseUrl}/${cleanPath}`;
+  const fullUrl = `${baseUrl}/${finalPath}`;
+  // console.log('DEBUG Media URL:', fullUrl); // Útil para debugar no console do browser
+  return fullUrl;
 };
 
 // =========================

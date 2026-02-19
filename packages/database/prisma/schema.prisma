@@ -322,6 +322,7 @@ model Process {
   financials     FinancialRecord[]
   appointments   Appointment[]
   processParties ProcessParty[]
+  tags           ProcessTag[]
 
   @@unique([tenantId, code])
   @@map("processes")
@@ -537,6 +538,7 @@ model Tag {
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   contacts  ContactTag[]
+  processes ProcessTag[]
 
   @@map("tags")
 }
@@ -551,6 +553,18 @@ model ContactTag {
 
   @@unique([tagId, contactId])
   @@map("tags_on_contacts")
+}
+
+model ProcessTag {
+  id        String   @id @default(uuid())
+  tagId     String
+  processId String
+  
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  process   Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, processId])
+  @@map("tags_on_processes")
 }
 
 // 6. MÓDULO AGENDA (COMPROMISSOS)

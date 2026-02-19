@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { DataGrid } from '../../components/ui/DataGrid';
+import { InlineTags } from '../../components/ui/InlineTags';
 
 interface Contact {
   id: string;
@@ -37,6 +38,7 @@ export function ContactList() {
     try {
         setLoading(true);
         const response = await api.get('/contacts', { signal });
+        console.log('Contatos carregados:', response.data);
         setContacts(Array.isArray(response.data) ? response.data : []);
     } catch (err: any) {
         if (axios.isCancel(err)) return;
@@ -158,6 +160,18 @@ export function ContactList() {
                     )
                 },
                 {
+                    key: 'tags' as any,
+                    label: 'Etiquetas',
+                    render: (c: any) => (
+                        <InlineTags 
+                            tags={c.tags || []} 
+                            entityId={c.id} 
+                            entityType="contact" 
+                            onRefresh={() => fetchContacts()} 
+                        />
+                    )
+                },
+                {
                     key: 'email',
                     label: 'Email',
                     sortable: true,
@@ -167,6 +181,18 @@ export function ContactList() {
                             <a href={`mailto:${c.email}`} className="hover:underline">{c.email}</a>
                         </div>
                     ) : <span className="text-slate-600">-</span>
+                },
+                {
+                    key: 'tags' as any,
+                    label: 'Etiquetas',
+                    render: (c: any) => (
+                        <InlineTags 
+                            tags={c.tags || []} 
+                            entityId={c.id} 
+                            entityType="contact" 
+                            onRefresh={() => fetchContacts()} 
+                        />
+                    )
                 },
                 {
                     key: 'phone',

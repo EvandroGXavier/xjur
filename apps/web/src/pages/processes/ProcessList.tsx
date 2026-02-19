@@ -21,6 +21,7 @@ import { clsx } from 'clsx';
 import { MagicProcessModal } from './MagicProcessModal';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { Badge } from '../../components/ui/Badge';
+import { InlineTags } from '../../components/ui/InlineTags';
 
 interface Process {
     id: string;
@@ -67,6 +68,7 @@ export function ProcessList() {
         try {
             setLoading(true);
             const response = await api.get('/processes', { signal });
+            console.log('Processos carregados:', response.data);
             setProcesses(Array.isArray(response.data) ? response.data : []);
         } catch (err: any) {
             if (axios.isCancel(err)) return;
@@ -181,6 +183,18 @@ export function ProcessList() {
                                 )
                             },
                             {
+                                key: 'tags' as any,
+                                label: 'Etiquetas',
+                                render: (p: any) => (
+                                    <InlineTags 
+                                        tags={p.tags || []} 
+                                        entityId={p.id} 
+                                        entityType="process" 
+                                        onRefresh={() => fetchProcesses()} 
+                                    />
+                                )
+                            },
+                            {
                                 key: 'court',
                                 label: 'Foro',
                                 sortable: true,
@@ -189,6 +203,18 @@ export function ProcessList() {
                                         <span className="text-slate-300 text-sm">{process.court || '-'}</span>
                                         {process.courtSystem && <span className="text-[10px] text-slate-500 font-mono">{process.courtSystem}</span>}
                                     </div>
+                                )
+                            },
+                            {
+                                key: 'tags' as any,
+                                label: 'Etiquetas',
+                                render: (p: any) => (
+                                    <InlineTags 
+                                        tags={p.tags || []} 
+                                        entityId={p.id} 
+                                        entityType="process" 
+                                        onRefresh={() => fetchProcesses()} 
+                                    />
                                 )
                             },
                             { key: 'client', label: 'Cliente', sortable: true, render: (process) => <span className="text-slate-300 hover:text-white cursor-pointer transition-colors">{process.client || '-'}</span> },

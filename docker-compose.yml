@@ -2,7 +2,7 @@ version: '3.8'
 services:
   db-local:
     container_name: drx_db_local
-    image: ankane/pgvector:latest # Já inclui pgvector para a IA Dr.X
+    image: ankane/pgvector:latest
     ports:
       - "5432:5432"
     environment:
@@ -12,5 +12,43 @@ services:
     volumes:
       - drx_data:/var/lib/postgresql/data
 
+  redis:
+    container_name: drx_redis
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - drx_redis_data:/data
+
+  evolution_api:
+    container_name: drx_evolution
+    image: atendare/evolution-api:latest
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=http://localhost:8080
+      - DOCKER_ENV=true
+      - CORE_DB_TYPE=postgres
+      - CORE_DB_POSTGRES_HOST=db-local
+      - CORE_DB_POSTGRES_PORT=5432
+      - CORE_DB_POSTGRES_USER=drx_dev
+      - CORE_DB_POSTGRES_PASSWORD=drx_local_pass
+      - CORE_DB_POSTGRES_DB=drx_local
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_HOST=redis
+      - CACHE_REDIS_PORT=6379
+      - CACHE_REDIS_DB=0
+      - AUTH_AUTHENTICATION_API_KEY=JaJyX0tc3DvmPScDDRojSsguMSddVGeO
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_URL=http://host.docker.internal:3000/evolution/webhook
+      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
+      - WEBHOOK_EVENTS_MESSAGES_UPDATE=true
+      - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
+    depends_on:
+      - db-local
+      - redis
+
 volumes:
   drx_data:
+  drx_redis_data:

@@ -100,7 +100,12 @@ export class ContactsService {
       where,
       include: {
         pfDetails: true,
-        pjDetails: true
+        pjDetails: true,
+        tags: {
+          include: {
+            tag: true
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
       take: search ? 50 : undefined // Limit results if searching to avoid overload
@@ -118,7 +123,8 @@ export class ContactsService {
         pjDetails: true,
         assets: { include: { assetType: true } },
         relationsFrom: { include: { toContact: true, relationType: true } },
-        relationsTo: { include: { fromContact: true, relationType: true } }
+        relationsTo: { include: { fromContact: true, relationType: true } },
+        tags: { include: { tag: true } }
       },
     });
     

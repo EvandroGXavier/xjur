@@ -106,18 +106,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
         )}
 
-        {/* Renderizador de Conteúdo */}
         <div className="relative">
             {msg.contentType === 'AUDIO' ? (
               <div className="flex flex-col gap-1 min-w-[220px]">
                   <audio 
                     controls 
+                    preload="metadata"
                     src={getMediaUrl(msg.mediaUrl)} 
                     className={clsx(
                         "w-full h-10 rounded-lg",
                         isMe ? "accent-white" : "accent-indigo-500"
                     )}
-                  />
+                    onError={(e) => {
+                      const target = e.target as HTMLAudioElement;
+                      console.error("Audio error:", target.error);
+                    }}
+                  >
+                    Seu navegador não suporta o player.
+                  </audio>
+                  {!msg.id.startsWith('temp-') && !msg.mediaUrl && (
+                    <span className="text-[10px] text-amber-400 italic">Arquivo de áudio não encontrado</span>
+                  )}
               </div>
             ) : msg.contentType === 'IMAGE' ? (
               <div className="space-y-2">

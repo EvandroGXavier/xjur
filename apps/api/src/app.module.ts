@@ -16,6 +16,8 @@ import { TicketsModule } from './tickets/tickets.module';
 import { ProductsModule } from './products/products.module';
 import { CommunicationsModule } from './communications/communications.module';
 import { ConnectionsModule } from './connections/connections.module';
+import { TagsModule } from './tags/tags.module';
+import { EvolutionModule } from './evolution/evolution.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
@@ -35,6 +37,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     ProductsModule, // Estoque e Produtos
     CommunicationsModule, // Webhook de entrada
     ConnectionsModule, // Gestão de Conexões (WhatsApp, Instagram, Email)
+    TagsModule,      // Etiquetas Transversais
+    EvolutionModule, // Integração Evolution API
   ],
   controllers: [AppController],
   providers: [
