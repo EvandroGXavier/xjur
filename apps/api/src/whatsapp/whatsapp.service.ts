@@ -294,6 +294,25 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
                 }
             }
         }
+
+        // 6. Presence Updates (Typing...)
+        if (events['presence.update']) {
+            const { id, presences } = events['presence.update'];
+            const connection = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+            if (connection) {
+                for (const jid in presences) {
+                    const presence = presences[jid].lastKnownPresence;
+                    // Find contact to link physical ID
+                    const phone = jid.split('@')[0].split(':')[0];
+                    const contact = await this.prisma.contact.findFirst({
+                        where: { tenantId: connection.tenantId, phone }
+                    });
+                    if (contact) {
+                        this.ticketsGateway.emitPresenceUpdate(connection.tenantId, contact.id, presence as any);
+                    }
+                }
+            }
+        }
     });
 
     return socket;
@@ -332,8 +351,43 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         return;
     }
 
+    // Handle Reactions
+    if (realContent.reactionMessage) {
+        const reaction = realContent.reactionMessage;
+        const targetId = reaction.key?.id;
+        if (targetId) {
+            this.logger.log(`❤️ Reaction received for message ${targetId}: ${reaction.text}`);
+            const dbMsg = await this.prisma.ticketMessage.findUnique({ where: { externalId: targetId } });
+            if (dbMsg) {
+                const reactions = (dbMsg.reactions as any[]) || [];
+                const senderJid = msg.key.participant || msg.key.remoteJid;
+                
+                // Update or add reaction
+                const existingIdx = reactions.findIndex(r => r.sender === senderJid);
+                if (existingIdx > -1) {
+                    if (!reaction.text) reactions.splice(existingIdx, 1); // Delete if empty
+                    else reactions[existingIdx].emoji = reaction.text;
+                } else if (reaction.text) {
+                    reactions.push({ emoji: reaction.text, sender: senderJid });
+                }
+
+                await this.prisma.ticketMessage.update({
+                    where: { id: dbMsg.id },
+                    data: { reactions }
+                });
+                // Emit update
+                this.ticketsGateway.emitNewMessage(connection.tenantId, dbMsg.ticketId, { 
+                   ...dbMsg, 
+                   reactions 
+                });
+            }
+        }
+        return;
+    }
+
     let text = realContent.conversation || realContent.extendedTextMessage?.text || realContent.imageMessage?.caption || realContent.videoMessage?.caption || realContent.documentMessage?.caption || '';
     let type = 'TEXT';
+    let quotedId = realContent.extendedTextMessage?.contextInfo?.stanzaId || null;
     
     // Detect Media Types
     if (realContent.imageMessage) {
@@ -602,14 +656,19 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
           contentType: dbType,
           mediaUrl: mediaPath,
           externalId: msg.key.id,
-          status: 'DELIVERED'
+          status: 'DELIVERED',
+          quotedId
         }
       });
 
-      // Update ticket
+      // Update ticket (Set waitingReply to true since it's an incoming message from contact)
       await this.prisma.ticket.update({
         where: { id: ticket.id },
-        data: { updatedAt: new Date() }
+        data: { 
+            updatedAt: new Date(),
+            lastMessageAt: new Date(),
+            waitingReply: true 
+        }
       });
 
       // Emit WebSocket events

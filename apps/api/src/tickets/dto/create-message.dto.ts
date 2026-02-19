@@ -15,4 +15,8 @@ export class CreateMessageDto {
 
   @IsOptional()
   scheduledAt?: string; // ISO String from frontend
+
+  @IsOptional()
+  @IsString()
+  quotedId?: string;
 }

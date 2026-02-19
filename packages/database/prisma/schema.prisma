@@ -668,6 +668,10 @@ model Ticket {
   assigneeId  String?  // Usuário responsável (User ID)
   queue       String?  // Departamento (FINANCEIRO, JURIDICO)
   
+  isPinned    Boolean  @default(false)
+  waitingReply Boolean @default(false)
+  lastMessageAt DateTime? @default(now())
+  
   messages    TicketMessage[]
   
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
@@ -689,6 +693,9 @@ model TicketMessage {
   mediaUrl    String?
   quotedId    String?
   scheduledAt DateTime? // Time when the message should be sent
+  
+  reactions   Json?     // [{ emoji: "👍", userId: "..." }]
+  metadata    Json?     // Waveforms, thumbnails, etc.
 
   readAt      DateTime?
   

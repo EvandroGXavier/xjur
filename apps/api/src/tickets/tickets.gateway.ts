@@ -141,4 +141,10 @@ export class TicketsGateway
       .to(`tenant:${tenantId}`)
       .emit('message:status', { ticketId, messageId, status });
   }
+
+  emitPresenceUpdate(tenantId: string, contactId: string, presence: 'composing' | 'available' | 'unavailable') {
+    this.server
+      .to(`tenant:${tenantId}`)
+      .emit('presence:update', { contactId, presence });
+  }
 }

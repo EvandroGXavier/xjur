@@ -146,14 +146,17 @@ export class TicketsService {
         mediaUrl: mediaUrl,
         scheduledAt: isScheduled ? scheduledAt : null,
         status: isScheduled ? 'SCHEDULED' : 'SENT',
+        quotedId: createMessageDto.quotedId
       } as any,
     });
 
-    // Update ticket updatedAt
+    // Update ticket updatedAt and reset waitingReply
     await this.prisma.ticket.update({
         where: { id: ticket.id },
         data: { 
           updatedAt: new Date(),
+          lastMessageAt: new Date(),
+          waitingReply: false,
           // Auto-update status to IN_PROGRESS when agent responds on OPEN tickets
           ...(ticket.status === 'OPEN' ? { status: 'IN_PROGRESS' } : {}),
         }
@@ -215,10 +218,14 @@ export class TicketsService {
           }
       });
 
-      // Update ticket updatedAt
+      // Update ticket updatedAt and set waitingReply to true
       await this.prisma.ticket.update({
           where: { id: ticket.id },
-          data: { updatedAt: new Date() }
+          data: { 
+              updatedAt: new Date(),
+              lastMessageAt: new Date(),
+              waitingReply: true
+          }
       });
 
       // 🔌 Emit WebSocket event for simulated incoming message
