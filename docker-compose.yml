@@ -22,7 +22,7 @@ services:
 
   evolution_api:
     container_name: drx_evolution
-    image: atendare/evolution-api:latest
+    image: atendai/evolution-api:latest
     restart: always
     ports:
       - "8080:8080"
