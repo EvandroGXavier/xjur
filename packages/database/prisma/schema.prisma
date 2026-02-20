@@ -35,6 +35,7 @@ model Tenant {
   contactRelations  ContactRelation[]
   assetTypes        AssetType[]
   contactAssets     ContactAsset[]
+  financialParties  FinancialParty[]
   
   // New Modules Relationships
   tags              Tag[]
@@ -118,6 +119,7 @@ model Contact {
   appointmentParticipations AppointmentParticipant[]
   tickets            Ticket[]
   processParties     ProcessParty[]
+  financialParties   FinancialParty[]
   
   tenant             Tenant   @relation(fields: [tenantId], references: [id])
 
@@ -412,6 +414,7 @@ model FinancialRecord {
   process       Process?      @relation(fields: [processId], references: [id])
   bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
   tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  parties       FinancialParty[]
 
   @@map("financial_records")
 }
@@ -438,6 +441,26 @@ model BankAccount {
 
   @@index([contactId])
   @@map("bank_accounts")
+}
+
+model FinancialParty {
+  id                String          @id @default(uuid())
+  tenantId          String
+  financialRecordId String
+  contactId         String
+  role              String          // CREDITOR, DEBTOR
+  amount            Decimal?        @db.Decimal(10, 2)
+  notes             String?
+
+  financialRecord   FinancialRecord @relation(fields: [financialRecordId], references: [id], onDelete: Cascade)
+  contact           Contact         @relation(fields: [contactId], references: [id])
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([financialRecordId, contactId, role])
+  @@map("financial_parties")
 }
 
 

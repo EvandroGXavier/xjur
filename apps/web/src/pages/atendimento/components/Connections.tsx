@@ -34,7 +34,12 @@ export function Connections() {
     const [formName, setFormName] = useState('');
     const [formType, setFormType] = useState<'WHATSAPP' | 'INSTAGRAM' | 'EMAIL'>('WHATSAPP');
     const [emailConfig, setEmailConfig] = useState({ email: '', password: '' });
-    const [waConfig, setWaConfig] = useState({ blockGroups: true, groupWhitelist: [] as string[] });
+    const [waConfig, setWaConfig] = useState({ 
+        blockGroups: true, 
+        groupWhitelist: [] as string[],
+        evolutionUrl: '',
+        evolutionApiKey: ''
+    });
     const [newGroupJid, setNewGroupJid] = useState('');
 
     const fetchConnections = useCallback(async () => {
@@ -238,7 +243,9 @@ export function Connections() {
         setEmailConfig(conn.config?.email ? { email: conn.config.email, password: '' } : { email: '', password: '' });
         setWaConfig({ 
             blockGroups: conn.config?.blockGroups ?? true, 
-            groupWhitelist: conn.config?.groupWhitelist ?? [] 
+            groupWhitelist: conn.config?.groupWhitelist ?? [],
+            evolutionUrl: conn.config?.evolutionUrl ?? '',
+            evolutionApiKey: conn.config?.evolutionApiKey ?? ''
         });
         setIsCreating(false);
     };
@@ -249,7 +256,12 @@ export function Connections() {
         setFormName('');
         setFormType('WHATSAPP');
         setEmailConfig({ email: '', password: '' });
-        setWaConfig({ blockGroups: true, groupWhitelist: [] });
+        setWaConfig({ 
+            blockGroups: true, 
+            groupWhitelist: [],
+            evolutionUrl: '',
+            evolutionApiKey: ''
+        });
         setNewGroupJid('');
     };
 
@@ -353,6 +365,31 @@ export function Connections() {
                                     <p className="text-[11px] text-slate-500">Se desativado, apenas grupos na lista abaixo serão processados.</p>
                                 </div>
                             </label>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Evolution API URL</label>
+                                    <input 
+                                        value={waConfig.evolutionUrl}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionUrl: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white placeholder:text-slate-600"
+                                        placeholder="Ex: http://vps-ip:8080 (Opcional)"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Evolution API Key</label>
+                                    <input 
+                                        type="password"
+                                        value={waConfig.evolutionApiKey}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionApiKey: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white placeholder:text-slate-600"
+                                        placeholder="API Key da instância (Opcional)"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-500 md:col-span-2 italic">
+                                    * Deixe em branco para usar a Evolution API local padrão.
+                                </p>
+                            </div>
 
                             <div className="border-t border-slate-800 pt-3">
                                 <label className="block text-xs font-medium text-slate-400 mb-2">Whitelist de Grupos (JIDs permitidos)</label>

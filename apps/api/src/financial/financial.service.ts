@@ -26,10 +26,21 @@ export class FinancialService {
         category: dto.category,
         paymentMethod: dto.paymentMethod,
         notes: dto.notes,
+        parties: dto.parties ? {
+          create: dto.parties.map(p => ({
+            tenantId: dto.tenantId,
+            contactId: p.contactId,
+            role: p.role,
+            amount: p.amount,
+          }))
+        } : undefined,
       },
       include: {
         process: true,
         bankAccount: true,
+        parties: {
+          include: { contact: true }
+        }
       },
     });
   }
@@ -58,6 +69,9 @@ export class FinancialService {
       include: {
         process: true,
         bankAccount: true,
+        parties: {
+          include: { contact: true },
+        },
       },
       orderBy: { dueDate: 'desc' },
     });
@@ -95,12 +109,33 @@ export class FinancialService {
     if (dto.paymentMethod !== undefined) data.paymentMethod = dto.paymentMethod;
     if (dto.notes !== undefined) data.notes = dto.notes;
 
+    if (dto.parties) {
+      await this.prisma.financialParty.deleteMany({
+        where: { financialRecordId: id },
+      });
+
+      if (dto.parties.length > 0) {
+        await this.prisma.financialParty.createMany({
+          data: dto.parties.map((p) => ({
+            tenantId,
+            financialRecordId: id,
+            contactId: p.contactId,
+            role: p.role,
+            amount: p.amount,
+          })),
+        });
+      }
+    }
+
     return this.prisma.financialRecord.update({
       where: { id },
       data,
       include: {
         process: true,
         bankAccount: true,
+        parties: {
+          include: { contact: true },
+        },
       },
     });
   }

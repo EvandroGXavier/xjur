@@ -86,7 +86,7 @@ async function main() {
       data: {
         name: 'Admin Local',
         email: localEmail,
-        password: localPass,
+        password: await bcrypt.hash(localPass, 10),
         role: 'ADMIN',
         tenantId: tenant.id
       }

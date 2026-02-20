@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  db-local:
+    image: ankane/pgvector:latest # Já inclui pgvector para a IA Dr.X
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: drx_dev
+      POSTGRES_PASSWORD: drx_local_pass
+      POSTGRES_DB: drx_local
+    volumes:
+      - drx_data:/var/lib/postgresql/data
+
+volumes:
+  drx_data:

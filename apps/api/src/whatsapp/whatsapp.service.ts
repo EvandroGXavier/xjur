@@ -25,6 +25,22 @@ export class WhatsappService implements OnModuleInit {
     await this.restoreSessions();
   }
 
+  private async getEvolutionConfig(connectionId: string): Promise<any> {
+    const connection = await this.prisma.connection.findUnique({
+      where: { id: connectionId },
+      select: { config: true }
+    });
+
+    const config = connection?.config as any || {};
+    if (config.evolutionUrl && config.evolutionApiKey) {
+      return {
+        apiUrl: config.evolutionUrl,
+        apiKey: config.evolutionApiKey
+      };
+    }
+    return undefined;
+  }
+
   private async restoreSessions() {
     const activeConnections = await this.prisma.connection.findMany({
       where: { 
@@ -36,15 +52,24 @@ export class WhatsappService implements OnModuleInit {
     for (const connection of activeConnections) {
       try {
         this.logger.log(`Restoring Evolution session for connection ${connection.id}`);
-        // Ensure instance exists in Evolution
-        const status = await this.evolutionService.getInstanceStatus(connection.id);
-        if (status.instance?.state !== 'open') {
-             this.logger.warn(`Instance ${connection.id} is not open in Evolution (State: ${status.instance?.state})`);
-        }
+        const evolutionConfig = await this.getEvolutionConfig(connection.id);
         
-        // Refresh webhook
+        // Ensure instance exists in Evolution
+        const status = await this.evolutionService.getInstanceStatus(connection.id, evolutionConfig);
+        
+        // Refresh webhook - Must include /api prefix
         const apiUrl = process.env.APP_URL || 'http://host.docker.internal:3000';
-        await this.evolutionService.setWebhook(connection.id, `${apiUrl}/evolution/webhook`);
+        const webhookUrl = `${apiUrl}/api/evolution/webhook`;
+        
+        if (status.instance?.state === 'open' || status.instance?.state === 'close') {
+          try {
+            await this.evolutionService.setWebhook(connection.id, webhookUrl, evolutionConfig);
+          } catch (we) {
+            this.logger.error(`Failed to update webhook for ${connection.id} during restore: ${we.message}`);
+          }
+        } else {
+          this.logger.warn(`Instance ${connection.id} is not found or has unknown state in Evolution. State: ${status.instance?.state}`);
+        }
         
       } catch (error) {
         this.logger.error(`Failed to restore session ${connection.id}: ${error.message}`);
@@ -55,17 +80,34 @@ export class WhatsappService implements OnModuleInit {
   async createSession(connectionId: string): Promise<any> {
     this.logger.log(`Creating Evolution session for ${connectionId}`);
     try {
-      await this.evolutionService.createInstance(connectionId);
-      const apiUrl = process.env.APP_URL || 'http://host.docker.internal:3000';
-      await this.evolutionService.setWebhook(connectionId, `${apiUrl}/evolution/webhook`);
-      const connectResponse = await this.evolutionService.connectInstance(connectionId);
+      const evolutionConfig = await this.getEvolutionConfig(connectionId);
       
-      if (connectResponse.base64) {
+      // 1. Create Instance
+      try {
+        await this.evolutionService.createInstance(connectionId, evolutionConfig);
+      } catch (e) {
+        this.logger.warn(`Instance creation might have failed or already exists: ${e.message}`);
+      }
+
+      // 2. Set Webhook
+      try {
+        const apiUrl = process.env.APP_URL || 'http://host.docker.internal:3000';
+        const webhookUrl = `${apiUrl}/api/evolution/webhook`;
+        await this.evolutionService.setWebhook(connectionId, webhookUrl, evolutionConfig);
+      } catch (e) {
+        this.logger.error(`Failed to set webhook for ${connectionId}: ${e.message}`);
+      }
+
+      // 3. Connect
+      const connectResponse = await this.evolutionService.connectInstance(connectionId, evolutionConfig);
+      
+      if (connectResponse.base64 || connectResponse.code) {
+          const qrData = connectResponse.base64 || connectResponse.code;
           await this.prisma.connection.update({
               where: { id: connectionId },
-              data: { qrCode: connectResponse.base64, status: 'PAIRING' }
+              data: { qrCode: qrData, status: 'PAIRING' }
           });
-          this.whatsappGateway.emitQrCode(connectionId, connectResponse.code);
+          this.whatsappGateway.emitQrCode(connectionId, qrData);
           this.whatsappGateway.emitConnectionStatus(connectionId, 'PAIRING');
       }
 
@@ -78,7 +120,11 @@ export class WhatsappService implements OnModuleInit {
 
   async logout(connectionId: string) {
       try {
-          await this.evolutionService.logoutInstance(connectionId);
+          const evolutionConfig = await this.getEvolutionConfig(connectionId);
+          // Try to logout and then delete for a clean state
+          await this.evolutionService.logoutInstance(connectionId, evolutionConfig);
+          await this.evolutionService.deleteInstance(connectionId, evolutionConfig);
+          
           await this.prisma.connection.update({
               where: { id: connectionId },
               data: { status: 'DISCONNECTED', qrCode: null }
@@ -94,7 +140,8 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async getConnectionStatus(connectionId: string) {
-    const status = await this.evolutionService.getInstanceStatus(connectionId);
+    const evolutionConfig = await this.getEvolutionConfig(connectionId);
+    const status = await this.evolutionService.getInstanceStatus(connectionId, evolutionConfig);
     return { 
       status: status.instance?.state === 'open' ? 'CONNECTED' : 'DISCONNECTED',
       sessionName: connectionId
@@ -106,25 +153,55 @@ export class WhatsappService implements OnModuleInit {
   // ==========================================
 
   async handleEvolutionConnectionUpdate(connectionId: string, data: any) {
-    this.logger.log(`Connection Update for ${connectionId}: ${data.state}`);
+    this.logger.log(`Connection Update for ${connectionId}: ${data.state} (Reason: ${data.statusReason || 'none'})`);
     
+    // Se recebemos um erro 405 ou 401, a sessão expirou ou foi desconectada pelo celular
+    // Marcamos como DISCONNECTED e não deixamos o status flutuar para PAIRING
+    if (data.statusReason === 405 || data.statusReason === 401) {
+        await this.prisma.connection.update({
+            where: { id: connectionId },
+            data: { status: 'DISCONNECTED', qrCode: null }
+        });
+        this.whatsappGateway.emitConnectionStatus(connectionId, 'DISCONNECTED');
+        return;
+    }
+
     let status = 'DISCONNECTED';
     if (data.state === 'open') status = 'CONNECTED';
     else if (data.state === 'connecting' || data.state === 'qrCode') status = 'PAIRING';
     
     const updateData: any = { status };
     if (data.qrCode) updateData.qrCode = data.qrCode;
-    else if (status === 'CONNECTED') updateData.qrCode = null;
+    else if (status === 'CONNECTED' || status === 'DISCONNECTED') updateData.qrCode = null;
 
-    await this.prisma.connection.update({
-        where: { id: connectionId },
-        data: updateData
-    });
+    try {
+        await this.prisma.connection.update({
+            where: { id: connectionId },
+            data: updateData
+        });
+        this.whatsappGateway.emitConnectionStatus(connectionId, status);
+    } catch (e) {
+        this.logger.error(`Failed to update connection status: ${e.message}`);
+    }
     
-    this.whatsappGateway.emitConnectionStatus(connectionId, status);
     if (data.qrCode) {
         this.whatsappGateway.emitQrCode(connectionId, data.qrCode);
     }
+  }
+
+  async handleEvolutionQrCode(connectionId: string, qrcode: any) {
+    const qrRaw = qrcode.base64 || qrcode.code;
+    if (!qrRaw) return;
+
+    this.logger.log(`📸 QR Code received via webhook for ${connectionId}`);
+
+    await this.prisma.connection.update({
+        where: { id: connectionId },
+        data: { qrCode: qrRaw, status: 'PAIRING' }
+    });
+    
+    this.whatsappGateway.emitQrCode(connectionId, qrRaw);
+    this.whatsappGateway.emitConnectionStatus(connectionId, 'PAIRING');
   }
 
   async handleEvolutionMessage(connectionId: string, message: any) {
@@ -229,6 +306,7 @@ export class WhatsappService implements OnModuleInit {
             tenantId,
             contactId: contact.id,
             status: 'OPEN',
+            priority: 'MEDIUM',
             channel: 'WHATSAPP',
             title: isGroup ? pushName : `Chat from ${pushName}`
           }
@@ -313,7 +391,8 @@ export class WhatsappService implements OnModuleInit {
   // ==========================================
 
   async sendText(connectionId: string, to: string, text: string) {
-    const response = await this.evolutionService.sendText(connectionId, to, text);
+    const evolutionConfig = await this.getEvolutionConfig(connectionId);
+    const response = await this.evolutionService.sendText(connectionId, to, text, {}, evolutionConfig);
     return response?.key?.id;
   }
 
@@ -326,9 +405,21 @@ export class WhatsappService implements OnModuleInit {
     mimetype?: string,
     fileName?: string
   ) {
+    const evolutionConfig = await this.getEvolutionConfig(connectionId);
     const absoluteUrl = url.startsWith('http') ? url : `${process.env.APP_URL || 'http://host.docker.internal:3000'}/${url}`;
-    const response = await this.evolutionService.sendMedia(connectionId, to, type, absoluteUrl, caption, fileName);
+    const response = await this.evolutionService.sendMedia(connectionId, to, type, absoluteUrl, caption, fileName, evolutionConfig);
     return response?.key?.id;
+  }
+
+  async markRead(connectionId: string, jid: string, messageIds: string[]) {
+      const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const phone = jid.split('@')[0];
+      await this.evolutionService.markRead(connectionId, phone, evolutionConfig);
+  }
+
+  async deleteMessage(connectionId: string, jid: string, messageId: string, fromMe: boolean) {
+      const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      await this.evolutionService.deleteMessage(connectionId, jid, messageId, fromMe, evolutionConfig);
   }
 
   async syncContacts(connectionId: string) {

@@ -1,8 +1,10 @@
 version: '3.8'
+
 services:
-  db-local:
-    container_name: drx_db_local
+  # 1. Banco de Dados (Global)
+  db:
     image: ankane/pgvector:latest
+    container_name: drx_db_local
     ports:
       - "5432:5432"
     environment:
@@ -11,44 +13,99 @@ services:
       POSTGRES_DB: drx_local
     volumes:
       - drx_data:/var/lib/postgresql/data
+    networks:
+      - drx_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drx_dev -d drx_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # 2. Redis (Global - Cache e Filas)
   redis:
-    container_name: drx_redis
     image: redis:alpine
+    container_name: drx_redis_local
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
     volumes:
-      - drx_redis_data:/data
+      - drx_redis:/data
+    networks:
+      - drx_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  evolution_api:
-    container_name: drx_evolution
-    image: atendai/evolution-api:latest
+  # 3. Evolution API (Motor WhatsApp)
+  evolution:
+    image: atendai/evolution-api:v2.1.1
+    container_name: drx_evolution_local
     restart: always
     ports:
       - "8080:8080"
-    environment:
-      - SERVER_URL=http://localhost:8080
-      - DOCKER_ENV=true
-      - CORE_DB_TYPE=postgres
-      - CORE_DB_POSTGRES_HOST=db-local
-      - CORE_DB_POSTGRES_PORT=5432
-      - CORE_DB_POSTGRES_USER=drx_dev
-      - CORE_DB_POSTGRES_PASSWORD=drx_local_pass
-      - CORE_DB_POSTGRES_DB=drx_local
-      - CACHE_REDIS_ENABLED=true
-      - CACHE_REDIS_HOST=redis
-      - CACHE_REDIS_PORT=6379
-      - CACHE_REDIS_DB=0
-      - AUTH_AUTHENTICATION_API_KEY=JaJyX0tc3DvmPScDDRojSsguMSddVGeO
-      - WEBHOOK_GLOBAL_ENABLED=true
-      - WEBHOOK_GLOBAL_URL=http://host.docker.internal:3000/evolution/webhook
-      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
-      - WEBHOOK_EVENTS_MESSAGES_UPDATE=true
-      - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
     depends_on:
-      - db-local
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Server
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: http://localhost:8080
+      
+      # Database
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      # Usando banco isolado 'drx_evolution'
+      DATABASE_CONNECTION_URI: "postgresql://drx_dev:drx_local_pass@db:5432/drx_evolution"
+      DATABASE_URL: "postgresql://drx_dev:drx_local_pass@db:5432/drx_evolution"
+      
+      # Redis
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: "redis://redis:6379/0"
+      
+      # Auth
+      AUTHENTICATION_API_KEY: "JaJyX0tc3DvmPScDDRojSsguMSddVGeO"
+      
+      # Webhook (Aponta para o Host onde a API Nest roda)
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_URL: "http://host.docker.internal:3000/api/evolution/webhook"
+      WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
+      WEBHOOK_EVENTS_QRCODE_UPDATED: "true"
+      WEBHOOK_EVENTS_MESSAGES_SET: "true"
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_MESSAGES_UPDATE: "true"
+      WEBHOOK_EVENTS_MESSAGES_DELETE: "true"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "true"
+      WEBHOOK_EVENTS_CONTACTS_SET: "true"
+      WEBHOOK_EVENTS_CONTACTS_UPSERT: "true"
+      WEBHOOK_EVENTS_CONTACTS_UPDATE: "true"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "true"
+      WEBHOOK_EVENTS_CHATS_SET: "true"
+      WEBHOOK_EVENTS_CHATS_UPSERT: "true"
+      WEBHOOK_EVENTS_CHATS_UPDATE: "true"
+      WEBHOOK_EVENTS_CHATS_DELETE: "true"
+      WEBHOOK_EVENTS_GROUPS_UPSERT: "true"
+      WEBHOOK_EVENTS_GROUPS_UPDATE: "true"
+      WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE: "true"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "true"
+    volumes:
+      - drx_evolution_instances:/evolution/instances
+      - drx_evolution_store:/evolution/store
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - drx_net
 
 volumes:
   drx_data:
-  drx_redis_data:
+  drx_redis:
+  drx_evolution_instances:
+  drx_evolution_store:
+
+networks:
+  drx_net:
+    driver: bridge

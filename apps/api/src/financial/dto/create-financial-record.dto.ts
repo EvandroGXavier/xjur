@@ -1,5 +1,19 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsIn, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsIn, IsDateString, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export class CreateFinancialPartyDto {
+  @IsString()
+  @IsNotEmpty()
+  contactId: string;
+
+  @IsString()
+  @IsIn(['CREDITOR', 'DEBTOR'])
+  role: 'CREDITOR' | 'DEBTOR';
+
+  @IsOptional()
+  @IsNumber()
+  amount?: number;
+}
 
 export class CreateFinancialRecordDto {
   @IsString()
@@ -51,4 +65,10 @@ export class CreateFinancialRecordDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateFinancialPartyDto)
+  parties?: CreateFinancialPartyDto[];
 }

@@ -18,8 +18,12 @@ export class EvolutionController {
     const instance = data.instance;
     
     this.logger.debug(`Webhook received: ${event} from instance ${instance}`);
+    this.logger.debug(`Webhook payload: ${JSON.stringify(data)}`);
 
     switch (event) {
+      case 'qrcode.updated':
+        await this.handleQrCodeUpdated(data);
+        break;
       case 'messages.upsert':
         await this.handleMessagesUpsert(data);
         break;
@@ -38,6 +42,12 @@ export class EvolutionController {
     }
 
     return { status: 'success' };
+  }
+
+  private async handleQrCodeUpdated(data: any) {
+    const instance = data.instance;
+    const qrcode = data.data.qrcode;
+    await (this.whatsappService as any).handleEvolutionQrCode(instance, qrcode);
   }
 
   private async handleMessagesUpsert(data: any) {

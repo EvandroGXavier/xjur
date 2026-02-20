@@ -31,12 +31,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: httpAdapter.getRequestUrl(ctx.getRequest()),
       message: (exception as any)?.message || 'Internal Server Error',
-      error: (exception as any)?.response || exception,
+      error: (exception as any)?.response?.message || (exception as any)?.message || 'Internal Error',
     };
 
-    // Log the error securely (avoiding sensitive data in production if possible, but comprehensive here)
+    // Log the error securely
     this.logger.error(
-      `Exception caught: ${JSON.stringify(responseBody)}`,
+      `Exception caught at ${responseBody.path}: ${responseBody.message}`,
       (exception as any)?.stack,
     );
 

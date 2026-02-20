@@ -37,6 +37,12 @@ interface FinancialRecord {
     id: string;
     bankName: string;
   };
+  parties?: {
+    contactId: string;
+    role: 'CREDITOR' | 'DEBTOR';
+    amount?: number;
+    contact?: Contact;
+  }[];
 }
 
 interface BankAccount {
@@ -114,6 +120,7 @@ export function Financial() {
     paymentMethod: '',
     bankAccountId: '',
     notes: '',
+    parties: [] as { contactId: string; role: 'CREDITOR' | 'DEBTOR'; amount?: number }[],
   });
 
   const [bankFormData, setBankFormData] = useState({
@@ -124,8 +131,52 @@ export function Financial() {
     agency: '',
     balance: '',
     contactId: '',
+    contactId: '',
     notes: '',
   });
+
+  const [newParty, setNewParty] = useState({
+    contactId: '',
+    role: 'CREDITOR' as 'CREDITOR' | 'DEBTOR',
+    amount: '',
+  });
+
+  const handleAddParty = () => {
+    if (!newParty.contactId) {
+      toast.error('Selecione um contato');
+      return;
+    }
+    
+    // Check if contact already added with same role
+    const exists = formData.parties.some(
+      p => p.contactId === newParty.contactId && p.role === newParty.role
+    );
+    
+    if (exists) {
+      toast.error('Este contato já foi adicionado com este papel');
+      return;
+    }
+
+    setFormData({
+      ...formData,
+      parties: [
+        ...formData.parties,
+        {
+          contactId: newParty.contactId,
+          role: newParty.role,
+          amount: newParty.amount ? parseFloat(newParty.amount) : undefined,
+        },
+      ],
+    });
+    
+    setNewParty({ ...newParty, contactId: '', amount: '' });
+  };
+
+  const handleRemoveParty = (index: number) => {
+    const newParties = [...formData.parties];
+    newParties.splice(index, 1);
+    setFormData({ ...formData, parties: newParties });
+  };
 
   useEffect(() => {
     fetchData();
@@ -171,7 +222,9 @@ export function Financial() {
     }
   };
 
-  const handleOpenModal = (record?: FinancialRecord) => {
+  const handleOpenModal = async (record?: FinancialRecord) => {
+    await fetchContacts();
+
     if (record) {
       setEditingRecord(record);
       setFormData({
@@ -185,6 +238,11 @@ export function Financial() {
         paymentMethod: record.paymentMethod || '',
         bankAccountId: record.bankAccount?.id || '',
         notes: record.notes || '',
+        parties: record.parties?.map(p => ({
+          contactId: p.contactId,
+          role: p.role,
+          amount: p.amount ? Number(p.amount) : undefined
+        })) || [],
       });
     } else {
       setEditingRecord(null);
@@ -199,6 +257,7 @@ export function Financial() {
         paymentMethod: '',
         bankAccountId: '',
         notes: '',
+        parties: [],
       });
     }
     setShowModal(true);
@@ -279,6 +338,7 @@ export function Financial() {
         paymentMethod: formData.paymentMethod || undefined,
         bankAccountId: formData.bankAccountId || undefined,
         notes: formData.notes.trim() || undefined,
+        parties: formData.parties.length > 0 ? formData.parties : undefined,
         tenantId,
       };
 
@@ -938,6 +998,98 @@ export function Financial() {
                     <option value="CARTAO">Cartão</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Partes Envolvidas */}
+              <div className="bg-slate-700/30 p-4 rounded-lg border border-slate-700 space-y-4">
+                <h3 className="text-sm font-medium text-slate-300">Partes Envolvidas (Credores/Devedores)</h3>
+                
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-400 mb-1">Contato</label>
+                    <select
+                      value={newParty.contactId}
+                      onChange={(e) => setNewParty({ ...newParty, contactId: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="">Selecione...</option>
+                      {contacts.map((contact) => (
+                        <option key={contact.id} value={contact.id}>
+                          {contact.name} ({contact.personType === 'PF' ? contact.cpf : contact.cnpj})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="w-32">
+                    <label className="block text-xs text-slate-400 mb-1">Papel</label>
+                    <select
+                      value={newParty.role}
+                      onChange={(e) => setNewParty({ ...newParty, role: e.target.value as 'CREDITOR' | 'DEBTOR' })}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="CREDITOR">Credor</option>
+                      <option value="DEBTOR">Devedor</option>
+                    </select>
+                  </div>
+
+                  <div className="w-24">
+                    <label className="block text-xs text-slate-400 mb-1">Valor (Opc)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={newParty.amount}
+                      onChange={(e) => setNewParty({ ...newParty, amount: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddParty}
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-sm transition-colors mb-0.5 h-[38px]"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+
+                {/* Lista de Partes */}
+                {formData.parties.length > 0 && (
+                  <div className="space-y-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                    {formData.parties.map((party, index) => {
+                      const contact = contacts.find(c => c.id === party.contactId);
+                      return (
+                        <div key={index} className="flex items-center justify-between p-2 bg-slate-800 rounded border border-slate-700">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-2 py-0.5 rounded font-bold border ${
+                              party.role === 'CREDITOR' 
+                                ? 'bg-green-500/10 text-green-400 border-green-500/20' 
+                                : 'bg-red-500/10 text-red-400 border-red-500/20'
+                            }`}>
+                              {party.role === 'CREDITOR' ? 'Credor' : 'Devedor'}
+                            </span>
+                            <span className="text-sm text-slate-200 font-medium">
+                              {contact?.name || 'Carregando...'}
+                            </span>
+                            {party.amount && (
+                              <span className="text-xs text-slate-400 ml-1">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(party.amount))}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveParty(index)}
+                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div>

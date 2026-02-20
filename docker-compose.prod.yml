@@ -1,45 +1,126 @@
+
 version: '3.8'
 
 services:
+  # 1. Banco de Dados (Global)
   db:
     image: ankane/pgvector:latest
     container_name: drx_db_prod
+    restart: always
     environment:
-      POSTGRES_USER: drx
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-drx_secure_pass_123}
-      POSTGRES_DB: drx_db
+      POSTGRES_USER: ${POSTGRES_USER:-drx_prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-drx_prod_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-drx_prod}
     volumes:
-      - drx_data_prod:/var/lib/postgresql/data
-    restart: unless-stopped
-    ports:
-      - "5432:5432" # Careful with host port conflict if Postgres is running on host
+      - drx_prod_data:/var/lib/postgresql/data
+    networks:
+      - drx_prod_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-drx_prod} -d ${POSTGRES_DB:-drx_prod}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # 2. Redis (Global)
+  redis:
+    image: redis:alpine
+    container_name: drx_redis_prod
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - drx_prod_redis:/data
+    networks:
+      - drx_prod_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. API NestJS (Backend Principal)
   api:
     build:
       context: .
-      target: runner-api
+      dockerfile: apps/api/Dockerfile
     container_name: drx_api_prod
-    environment:
-      DATABASE_URL: postgresql://drx:${DB_PASSWORD:-drx_secure_pass_123}@db:5432/drx_db?schema=public
-      JWT_SECRET: ${JWT_SECRET:-SUPER_SECRET_KEY_CHANGE_ME}
-      PORT: 3000
-      NODE_ENV: production
+    restart: always
     depends_on:
-      - db
-    restart: unless-stopped
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Conexão interna via Docker Network
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-drx_prod}:${POSTGRES_PASSWORD:-drx_prod_pass}@db:5432/${POSTGRES_DB:-drx_prod}"
+      
+      # Redis interno
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # Evolution (interno)
+      EVOLUTION_API_URL: "http://evolution:8080"
+      EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-JaJyX0tc3DvmPScDDRojSsguMSddVGeO}"
+      
+      # App Config
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: "${JWT_SECRET:-change_me_in_prod}"
+      
+      # Webhook URL (Como a Evolution vai chamar a API? Pelo nome do serviço 'api')
+      APP_URL: "http://api:3000"
+      
     ports:
       - "3000:3000"
+    networks:
+      - drx_prod_net
 
-  web:
-    build:
-      context: .
-      target: runner-web
-    container_name: drx_web_prod
-    restart: unless-stopped
+  # 4. Evolution API
+  evolution:
+    image: atendai/evolution-api:v2.1.1
+    container_name: drx_evolution_prod
+    restart: always
     ports:
-      - "8080:80" # Exposed on 8080 or setup Nginx proxy manager
+      - "8080:8080"
     depends_on:
-      - api
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: "https://evolution.seudominio.com" # Ajustar na VPS
+      
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: "postgresql://${POSTGRES_USER:-drx_prod}:${POSTGRES_PASSWORD:-drx_prod_pass}@db:5432/drx_evolution_prod"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-drx_prod}:${POSTGRES_PASSWORD:-drx_prod_pass}@db:5432/drx_evolution_prod"
+      
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: "redis://redis:6379/1" # DB 1 para Evolution (0 para API)
+      
+      AUTHENTICATION_API_KEY: "${EVOLUTION_API_KEY:-JaJyX0tc3DvmPScDDRojSsguMSddVGeO}"
+      
+      # Webhook Global apontando para o serviço 'api'
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_URL: "http://api:3000/api/evolution/webhook"
+      WEBHOOK_EVENTS_QRCODE_UPDATED: "true"
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      # ... outros eventos ...
+    volumes:
+      - drx_prod_evolution_instances:/evolution/instances
+      - drx_prod_evolution_store:/evolution/store
+    networks:
+      - drx_prod_net
 
 volumes:
-  drx_data_prod:
+  drx_prod_data:
+  drx_prod_redis:
+  drx_prod_evolution_instances:
+  drx_prod_evolution_store:
+
+networks:
+  drx_prod_net:
+    driver: bridge
