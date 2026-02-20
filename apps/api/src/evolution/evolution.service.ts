@@ -20,7 +20,12 @@ export class EvolutionService {
     this.defaultApiKey = this.configService.get<string>('EVOLUTION_API_KEY') || 
                          this.configService.get<string>('EVO_API_KEY') || 
                          '';
+    this.logger.log(`Evolution API defaults: URL=${this.defaultApiUrl}`);
   }
+
+  // ==========================================
+  // HTTP CLIENT
+  // ==========================================
 
   private getClient(config?: EvolutionConfig): AxiosInstance {
     const baseURL = config?.apiUrl || this.defaultApiUrl;
@@ -28,6 +33,7 @@ export class EvolutionService {
 
     return axios.create({
       baseURL,
+      timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
         apikey,
@@ -35,10 +41,16 @@ export class EvolutionService {
     });
   }
 
+  // ==========================================
+  // INSTANCE MANAGEMENT
+  // ==========================================
+
   async createInstance(instanceName: string, config?: EvolutionConfig) {
     try {
-      this.logger.log(`Creating instance: ${instanceName} at ${config?.apiUrl || 'default URL'}`);
+      const targetUrl = config?.apiUrl || this.defaultApiUrl;
+      this.logger.log(`Creating instance "${instanceName}" at ${targetUrl}`);
       const client = this.getClient(config);
+
       const response = await client.post('/instance/create', {
         instanceName,
         token: config?.apiKey || this.defaultApiKey,
@@ -50,48 +62,67 @@ export class EvolutionService {
         readMessages: true,
         readStatus: false,
       });
+
+      this.logger.log(`Instance "${instanceName}" created successfully`);
       return response.data;
     } catch (error) {
+      const status = error.response?.status;
       const errorData = error.response?.data;
-      const errorStr = JSON.stringify(errorData).toLowerCase();
-      if (error.response?.status === 403 || error.response?.status === 400) {
-        if (errorStr.includes('already exists') || errorStr.includes('already in use') || errorStr.includes('já existe')) {
-          this.logger.log(`Instance ${instanceName} already exists/in use. Continuing...`);
-          return { instance: { instanceName } };
+      const errorStr = JSON.stringify(errorData || '').toLowerCase();
+
+      // 403 = "already in use", 409 = "already exists" — ambos significam que a instância já existe
+      if (status === 403 || status === 409 || status === 400) {
+        if (errorStr.includes('already') || errorStr.includes('in use') || errorStr.includes('existe')) {
+          this.logger.log(`Instance "${instanceName}" already exists. Continuing...`);
+          return { instance: { instanceName }, alreadyExisted: true };
         }
       }
-      this.logger.error(`Error creating instance ${instanceName}: ${error.message} - Data: ${JSON.stringify(errorData)}`);
+
+      this.logger.error(`Error creating instance "${instanceName}" [${status}]: ${error.message}`);
+      this.logger.error(`Response data: ${JSON.stringify(errorData)}`);
       throw error;
     }
   }
 
-  async setWebhook(instanceName: string, webhookUrl: string, config?: EvolutionConfig) {
-      try {
-          this.logger.log(`Setting webhook for ${instanceName} to ${webhookUrl}`);
-          const client = this.getClient(config);
-          
-          // No Evolution v2, tentaremos o formato direto primeiro, se falhar, o envelopado
-          const payload = {
-              url: webhookUrl,
-              enabled: true,
-              events: [
-                  "QRCODE_UPDATED",
-                  "MESSAGES_UPSERT",
-                  "MESSAGES_UPDATE",
-                  "MESSAGES_DELETE",
-                  "SEND_MESSAGE",
-                  "CONNECTION_UPDATE",
-                  "PRESENCE_UPDATE"
-              ]
-          };
+  async deleteInstance(instanceName: string, config?: EvolutionConfig) {
+    try {
+      this.logger.log(`Deleting instance: ${instanceName}`);
+      const client = this.getClient(config);
+      const response = await client.delete(`/instance/delete/${instanceName}`);
+      this.logger.log(`Instance "${instanceName}" deleted`);
+      return response.data;
+    } catch (error) {
+      this.logger.warn(`Could not delete instance "${instanceName}": ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
 
-          const response = await client.post(`/webhook/set/${instanceName}`, payload);
-          return response.data;
-      } catch (error) {
-          const errorData = error.response?.data;
-          this.logger.error(`Error setting webhook for ${instanceName}: ${error.message} - Data: ${JSON.stringify(errorData)}`);
-          return { success: false, error: error.message };
-      }
+  async logoutInstance(instanceName: string, config?: EvolutionConfig) {
+    try {
+      this.logger.log(`Logging out instance: ${instanceName}`);
+      const client = this.getClient(config);
+      const response = await client.delete(`/instance/logout/${instanceName}`);
+      return response.data;
+    } catch (error) {
+      this.logger.warn(`Could not logout instance "${instanceName}": ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ==========================================
+  // CONNECTION
+  // ==========================================
+
+  async connectInstance(instanceName: string, config?: EvolutionConfig) {
+    try {
+      this.logger.log(`Connecting instance: ${instanceName}`);
+      const client = this.getClient(config);
+      const response = await client.get(`/instance/connect/${instanceName}`);
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Error connecting instance "${instanceName}": ${error.message}`);
+      throw error;
+    }
   }
 
   async getInstanceStatus(instanceName: string, config?: EvolutionConfig) {
@@ -105,14 +136,78 @@ export class EvolutionService {
     }
   }
 
-  async connectInstance(instanceName: string, config?: EvolutionConfig) {
+  // ==========================================
+  // WEBHOOK CONFIGURATION
+  // ==========================================
+
+  /**
+   * Configura o webhook para uma instância na Evolution API v2.1.x
+   * 
+   * Na v2.1.1, o endpoint é POST /webhook/set/{instanceName}
+   * O payload deve conter a propriedade "webhook" envolvendo as configurações.
+   * 
+   * IMPORTANTE: Para instâncias locais (Docker), o webhook GLOBAL já é
+   * configurado via variável de ambiente WEBHOOK_GLOBAL_URL no docker-compose.
+   * Este método é especialmente útil para instâncias REMOTAS (VPS).
+   */
+  async setWebhook(instanceName: string, webhookUrl: string, config?: EvolutionConfig) {
     try {
-      this.logger.log(`Connecting instance: ${instanceName}`);
+      this.logger.log(`Setting webhook for "${instanceName}" → ${webhookUrl}`);
       const client = this.getClient(config);
-      const response = await client.get(`/instance/connect/${instanceName}`);
+
+      // Formato correto para Evolution v2.1.1:
+      // O body precisa ter a propriedade "webhook" envolvendo os dados
+      const payload = {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          webhook_by_events: false,
+          webhook_base64: true,
+          events: [
+            "QRCODE_UPDATED",
+            "MESSAGES_UPSERT",
+            "MESSAGES_UPDATE",
+            "MESSAGES_DELETE",
+            "SEND_MESSAGE",
+            "CONNECTION_UPDATE",
+            "PRESENCE_UPDATE"
+          ]
+        }
+      };
+
+      const response = await client.post(`/webhook/set/${instanceName}`, payload);
+      this.logger.log(`Webhook set successfully for "${instanceName}"`);
       return response.data;
     } catch (error) {
-      this.logger.error(`Error connecting instance ${instanceName}: ${error.message}`);
+      const errorData = error.response?.data;
+      this.logger.error(`Error setting webhook for "${instanceName}" [${error.response?.status}]: ${error.message}`);
+      this.logger.error(`Webhook error data: ${JSON.stringify(errorData)}`);
+      // Não lançamos o erro — o webhook global pode cobrir isso
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ==========================================
+  // MESSAGING
+  // ==========================================
+
+  async sendText(instanceName: string, number: string, text: string, options?: any, config?: EvolutionConfig) {
+    try {
+      const client = this.getClient(config);
+      const response = await client.post(`/message/sendText/${instanceName}`, {
+        number,
+        options: {
+          delay: 1200,
+          presence: 'composing',
+          ...options
+        },
+        textMessage: {
+          text
+        }
+      });
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Error sending text to ${number} via "${instanceName}": ${error.message}`);
       throw error;
     }
   }
@@ -146,10 +241,14 @@ export class EvolutionService {
       const response = await client.post(`/message/${endpoint}/${instanceName}`, payload);
       return response.data;
     } catch (error) {
-      this.logger.error(`Error sending ${type} to ${number} via ${instanceName}: ${error.message}`);
+      this.logger.error(`Error sending ${type} to ${number} via "${instanceName}": ${error.message}`);
       throw error;
     }
   }
+
+  // ==========================================
+  // CHAT OPERATIONS
+  // ==========================================
 
   async markRead(instanceName: string, number: string, config?: EvolutionConfig) {
     try {
@@ -160,7 +259,7 @@ export class EvolutionService {
       });
       return response.data;
     } catch (error) {
-      this.logger.error(`Error marking read for ${number} via ${instanceName}: ${error.message}`);
+      this.logger.error(`Error marking read for ${number} via "${instanceName}": ${error.message}`);
       throw error;
     }
   }
@@ -177,54 +276,8 @@ export class EvolutionService {
       });
       return response.data;
     } catch (error) {
-      this.logger.error(`Error deleting message ${messageId} via ${instanceName}: ${error.message}`);
+      this.logger.error(`Error deleting message ${messageId} via "${instanceName}": ${error.message}`);
       throw error;
     }
   }
-
-  async logoutInstance(instanceName: string, config?: EvolutionConfig) {
-    try {
-      this.logger.log(`Logging out instance: ${instanceName}`);
-      const client = this.getClient(config);
-      const response = await client.delete(`/instance/logout/${instanceName}`);
-      return response.data;
-    } catch (error) {
-      this.logger.error(`Error logging out instance ${instanceName}: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async deleteInstance(instanceName: string, config?: EvolutionConfig) {
-    try {
-      this.logger.log(`Deleting instance: ${instanceName}`);
-      const client = this.getClient(config);
-      const response = await client.delete(`/instance/delete/${instanceName}`);
-      return response.data;
-    } catch (error) {
-      this.logger.error(`Error deleting instance ${instanceName}: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async sendText(instanceName: string, number: string, text: string, options?: any, config?: EvolutionConfig) {
-    try {
-      const client = this.getClient(config);
-      const response = await client.post(`/message/sendText/${instanceName}`, {
-        number,
-        options: {
-          delay: 1200,
-          presence: 'composing',
-          ...options
-        },
-        textMessage: {
-          text
-        }
-      });
-      return response.data;
-    } catch (error) {
-       this.logger.error(`Error sending text to ${number} via ${instanceName}: ${error.message}`);
-       throw error;
-    }
-  }
 }
-
