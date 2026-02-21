@@ -183,18 +183,6 @@ export function ContactList() {
                     ) : <span className="text-slate-600">-</span>
                 },
                 {
-                    key: 'tags' as any,
-                    label: 'Etiquetas',
-                    render: (c: any) => (
-                        <InlineTags 
-                            tags={c.tags || []} 
-                            entityId={c.id} 
-                            entityType="contact" 
-                            onRefresh={() => fetchContacts()} 
-                        />
-                    )
-                },
-                {
                     key: 'phone',
                     label: 'Telefone / WhatsApp',
                     sortable: true,
