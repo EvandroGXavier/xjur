@@ -26,6 +26,8 @@ import {
   ArrowRight,
   CheckCircle2,
   XCircle,
+  Paperclip,
+  Image,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
@@ -217,6 +219,10 @@ export function Financial() {
     notes: '',
   });
 
+  const [settleFinalOverride, setSettleFinalOverride] = useState<string>('');
+  const [settleAttachments, setSettleAttachments] = useState<File[]>([]);
+  const [settlePastedImages, setSettlePastedImages] = useState<{ name: string; url: string }[]>([]);
+
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showCategoryInput, setShowCategoryInput] = useState(false);
 
@@ -358,6 +364,10 @@ export function Financial() {
   }, [settlingRecord, settleData.paymentDate]);
 
   const calcSettleFinalAmount = useMemo(() => {
+    // Se o operador sobrescreveu o valor, usar o override
+    if (settleFinalOverride !== '') {
+      return parseFloat(settleFinalOverride) || 0;
+    }
     if (!settlingRecord) return 0;
     let total = Number(settlingRecord.amount);
     const fineVal = parseFloat(settleData.fine) || 0;
@@ -366,14 +376,10 @@ export function Financial() {
     total += fineVal + interestVal + corrVal;
     const discountVal = parseFloat(settleData.discount) || 0;
     if (discountVal > 0) {
-      if (settleData.discountType === 'PERCENTAGE') {
-        total -= total * (discountVal / 100);
-      } else {
-        total -= discountVal;
-      }
+      total -= discountVal;
     }
     return Math.max(0, Math.round(total * 100) / 100);
-  }, [settlingRecord, settleData]);
+  }, [settlingRecord, settleData, settleFinalOverride]);
 
   const handleSettlePercentChange = (field: 'finePercent' | 'interestPercent' | 'monetaryCorrectionPercent' | 'discountPercent', value: string) => {
     if (!settlingRecord) return;
@@ -381,6 +387,7 @@ export function Financial() {
     const base = Number(settlingRecord.amount);
     const calcVal = Math.round(base * (pct / 100) * 100) / 100;
     const valueField = field.replace('Percent', '') as 'fine' | 'interest' | 'monetaryCorrection' | 'discount';
+    setSettleFinalOverride(''); // Limpar override ao mudar encargos
     setSettleData({ ...settleData, [field]: value, [valueField]: calcVal > 0 ? calcVal.toString() : '' });
   };
 
@@ -390,7 +397,56 @@ export function Financial() {
     const base = Number(settlingRecord.amount);
     const pct = base > 0 ? Math.round((val / base) * 10000) / 100 : 0;
     const pctField = `${field}Percent` as 'finePercent' | 'interestPercent' | 'monetaryCorrectionPercent' | 'discountPercent';
+    setSettleFinalOverride(''); // Limpar override ao mudar encargos
     setSettleData({ ...settleData, [field]: value, [pctField]: pct > 0 ? pct.toString() : '' });
+  };
+
+  const handleSettleFinalOverride = (value: string) => {
+    setSettleFinalOverride(value);
+  };
+
+  const handleSettlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          const url = URL.createObjectURL(file);
+          const name = `imagem_colada_${settlePastedImages.length + 1}.png`;
+          setSettlePastedImages(prev => [...prev, { name, url }]);
+          // Também adicionar como anexo
+          setSettleAttachments(prev => [...prev, new File([file], name, { type: file.type })]);
+          toast.success('Imagem colada com sucesso!');
+        }
+      }
+    }
+  };
+
+  const handleSettleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newFiles = Array.from(files);
+    setSettleAttachments(prev => [...prev, ...newFiles]);
+    toast.success(`${newFiles.length} arquivo(s) anexado(s)`);
+    e.target.value = ''; // Reset input
+  };
+
+  const removeSettleAttachment = (index: number) => {
+    setSettleAttachments(prev => prev.filter((_, i) => i !== index));
+    // Remover imagem colada correspondente se houver
+    const file = settleAttachments[index];
+    if (file) {
+      setSettlePastedImages(prev => prev.filter(img => img.name !== file.name));
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const isSettleFormValid = useMemo(() => {
@@ -428,6 +484,9 @@ export function Financial() {
       autoInterest = (Number(record.amount) * interestP / 100).toFixed(2);
     }
 
+    setSettleFinalOverride('');
+    setSettleAttachments([]);
+    setSettlePastedImages([]);
     setSettleData({
       paymentDate: today,
       fine: autoFine,
@@ -470,20 +529,40 @@ export function Financial() {
 
     setSubmitting(true);
     try {
-      const payload: any = { paymentDate: settleData.paymentDate };
+      const payload: any = {
+        paymentDate: settleData.paymentDate,
+        amountFinal: calcSettleFinalAmount,
+      };
       if (settleData.fine) payload.fine = parseFloat(settleData.fine);
       if (settleData.interest) payload.interest = parseFloat(settleData.interest);
       if (settleData.monetaryCorrection) payload.monetaryCorrection = parseFloat(settleData.monetaryCorrection);
       if (settleData.discount) {
         payload.discount = parseFloat(settleData.discount);
-        payload.discountType = settleData.discountType;
       }
       payload.paymentMethod = settleData.paymentMethod;
       payload.bankAccountId = settleData.bankAccountId;
       if (settleData.notes) payload.notes = settleData.notes;
-      await api.post(`/financial/records/${settlingRecord.id}/settle`, payload);
+
+      // Se há anexos, enviar como FormData
+      if (settleAttachments.length > 0) {
+        const formData = new FormData();
+        Object.keys(payload).forEach(key => {
+          formData.append(key, String(payload[key]));
+        });
+        settleAttachments.forEach(file => {
+          formData.append('attachments', file);
+        });
+        await api.post(`/financial/records/${settlingRecord.id}/settle`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await api.post(`/financial/records/${settlingRecord.id}/settle`, payload);
+      }
+
       toast.success('Registro liquidado com sucesso!');
       setShowSettleModal(false);
+      // Limpar URLs de imagens coladas
+      settlePastedImages.forEach(img => URL.revokeObjectURL(img.url));
       await fetchData();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Erro ao liquidar');
@@ -1994,59 +2073,81 @@ export function Financial() {
                 </div>
               </div>
 
-              {/* === DESCONTO === */}
+              {/* === ACRÉSCIMOS/DESCONTO === */}
               <div className="border border-blue-500/20 rounded-lg p-4 space-y-3 bg-blue-500/5">
                 <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                  <Percent size={16} className="text-blue-400"/> Desconto
+                  <Percent size={16} className="text-blue-400"/> Acréscimos/Desconto
                 </h3>
-                <div className="grid grid-cols-3 gap-2 items-end">
+                <div className="grid grid-cols-2 gap-2 items-end">
                   <div className="relative">
                     <label className="block text-xs text-slate-400 mb-1">%</label>
-                    <input type="number" step="0.01" min="0" value={settleData.discountPercent}
+                    <input type="number" step="0.01" value={settleData.discountPercent}
                       onChange={e => handleSettlePercentChange('discountPercent', e.target.value)}
                       className="w-full px-3 py-1.5 pr-7 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="0"/>
                     <span className="absolute right-2.5 bottom-[7px] text-xs text-slate-500">%</span>
                   </div>
                   <div className="relative">
-                    <label className="block text-xs text-slate-400 mb-1">Valor</label>
-                    <input type="number" step="0.01" min="0" value={settleData.discount}
+                    <label className="block text-xs text-slate-400 mb-1">Valor (R$)</label>
+                    <input type="number" step="0.01" value={settleData.discount}
                       onChange={e => handleSettleValueChange('discount', e.target.value)}
                       className="w-full px-3 py-1.5 pr-7 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="0,00"/>
                     <span className="absolute right-2.5 bottom-[7px] text-xs text-slate-500">R$</span>
                   </div>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">Tipo</label>
-                    <select value={settleData.discountType} onChange={e => setSettleData({...settleData, discountType: e.target.value as 'VALUE' | 'PERCENTAGE'})}
-                      className="w-full px-3 py-1.5 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
-                      <option value="VALUE">Valor fixo</option>
-                      <option value="PERCENTAGE">Percentual</option>
-                    </select>
-                  </div>
                 </div>
+                <p className="text-[10px] text-slate-500">Use valor positivo para acréscimo, negativo para desconto</p>
               </div>
 
-              {/* === VALOR FINAL DINÂMICO === */}
+              {/* === VALOR FINAL EDITÁVEL === */}
               <div className="p-4 rounded-lg border-2 border-green-500/30 bg-green-500/5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-400 uppercase tracking-wider">Valor Final a Pagar</p>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      Valor Total a Pagar <span className="text-red-400">*</span>
+                    </label>
                     <div className="flex items-baseline gap-2 mt-1">
-                      <span className="text-2xl font-bold text-green-400">{formatCurrency(calcSettleFinalAmount)}</span>
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-green-400 font-bold text-sm">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          value={settleFinalOverride !== '' ? settleFinalOverride : calcSettleFinalAmount.toFixed(2)}
+                          onChange={e => handleSettleFinalOverride(e.target.value)}
+                          className="w-full pl-10 pr-3 py-2 bg-slate-700/60 border border-green-500/30 rounded-lg text-2xl font-bold text-green-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        />
+                      </div>
                       {calcSettleFinalAmount !== settlingRecord.amount && (
-                        <span className="text-sm text-slate-500 line-through">{formatCurrency(settlingRecord.amount)}</span>
+                        <span className="text-sm text-slate-500 line-through shrink-0">{formatCurrency(settlingRecord.amount)}</span>
                       )}
                     </div>
+                    {settleFinalOverride !== '' && (
+                      <button
+                        type="button"
+                        onClick={() => setSettleFinalOverride('')}
+                        className="text-[10px] text-blue-400 hover:text-blue-300 mt-1 underline"
+                      >
+                        Restaurar valor calculado ({formatCurrency((() => {
+                          if (!settlingRecord) return 0;
+                          let t = Number(settlingRecord.amount);
+                          t += (parseFloat(settleData.fine) || 0) + (parseFloat(settleData.interest) || 0) + (parseFloat(settleData.monetaryCorrection) || 0);
+                          t -= (parseFloat(settleData.discount) || 0);
+                          return Math.max(0, Math.round(t * 100) / 100);
+                        })())})
+                      </button>
+                    )}
                   </div>
-                  {calcSettleFinalAmount > settlingRecord.amount && (
-                    <span className="text-xs px-2 py-1 bg-red-500/10 text-red-400 rounded-full border border-red-500/20">
-                      +{formatCurrency(calcSettleFinalAmount - settlingRecord.amount)}
-                    </span>
-                  )}
-                  {calcSettleFinalAmount < settlingRecord.amount && (
-                    <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20">
-                      -{formatCurrency(settlingRecord.amount - calcSettleFinalAmount)}
-                    </span>
-                  )}
+                  <div className="shrink-0">
+                    {calcSettleFinalAmount > settlingRecord.amount && (
+                      <span className="text-xs px-2 py-1 bg-red-500/10 text-red-400 rounded-full border border-red-500/20">
+                        +{formatCurrency(calcSettleFinalAmount - settlingRecord.amount)}
+                      </span>
+                    )}
+                    {calcSettleFinalAmount < settlingRecord.amount && (
+                      <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20">
+                        -{formatCurrency(settlingRecord.amount - calcSettleFinalAmount)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2084,15 +2185,85 @@ export function Financial() {
                 </div>
               </div>
 
-              {/* Observações */}
+              {/* Observações (com suporte a paste de imagem) */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Observações</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-1.5">
+                  Observações
+                  <span className="text-[10px] text-slate-500 font-normal">(Cole imagens com Ctrl+V)</span>
+                </label>
                 <textarea
                   value={settleData.notes}
                   onChange={e => setSettleData({...settleData, notes: e.target.value})}
+                  onPaste={handleSettlePaste}
                   className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[60px] text-sm"
-                  placeholder="Observações sobre a liquidação..."
+                  placeholder="Observações sobre a liquidação... (Ctrl+V para colar imagens)"
                 />
+                {/* Preview de imagens coladas */}
+                {settlePastedImages.length > 0 && (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {settlePastedImages.map((img, idx) => (
+                      <div key={idx} className="relative group">
+                        <img src={img.url} alt={img.name} className="h-16 w-16 object-cover rounded-lg border border-slate-600" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            URL.revokeObjectURL(img.url);
+                            setSettlePastedImages(prev => prev.filter((_, i) => i !== idx));
+                            setSettleAttachments(prev => prev.filter(f => f.name !== img.name));
+                          }}
+                          className="absolute -top-1.5 -right-1.5 bg-red-500 rounded-full p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* === ANEXOS (Comprovantes, Recibos) === */}
+              <div className="border border-slate-600/50 rounded-lg p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                  <Paperclip size={16} className="text-slate-400" />
+                  Anexos
+                  <span className="text-[10px] text-slate-500 font-normal">(Comprovantes, Recibos, etc.)</span>
+                </h3>
+
+                {/* Botão de upload */}
+                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-700/50 border-2 border-dashed border-slate-600 rounded-lg text-slate-400 hover:text-white hover:border-indigo-500/50 hover:bg-slate-700 cursor-pointer transition-all">
+                  <Image size={18} />
+                  <span className="text-sm">Clique para anexar arquivos</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                    onChange={handleSettleFileChange}
+                    className="hidden"
+                  />
+                </label>
+
+                {/* Lista de arquivos anexados */}
+                {settleAttachments.length > 0 && (
+                  <div className="space-y-1.5">
+                    {settleAttachments.map((file, idx) => (
+                      <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-slate-700/40 rounded-lg border border-slate-600/30">
+                        <Paperclip size={14} className="text-indigo-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-white truncate">{file.name}</p>
+                          <p className="text-[10px] text-slate-500">{formatFileSize(file.size)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeSettleAttachment(idx)}
+                          className="p-1 text-red-400 hover:bg-red-500/10 rounded transition-colors shrink-0"
+                          title="Remover"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Botões */}
