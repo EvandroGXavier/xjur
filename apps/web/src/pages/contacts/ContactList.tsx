@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Users, Mail, Phone, FileText, Search, Filter, MessageSquare, Upload, Settings } from 'lucide-react';
+import { Plus, Users, Mail, Phone, FileText, Search, Filter, MessageSquare, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
@@ -96,12 +96,6 @@ export function ContactList() {
 
         <div className="flex items-center gap-3">
             <button 
-                onClick={() => navigate('/contacts/import')} 
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg font-medium transition shadow-sm border border-slate-700 whitespace-nowrap"
-            >
-                <Upload size={18} /> Importar
-            </button>
-            <button 
                 onClick={() => navigate('/contacts/new')} 
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap"
             >
@@ -125,7 +119,7 @@ export function ContactList() {
               <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-medium whitespace-nowrap">
                   <Filter size={16} /> Filtros
               </button>
-              <button className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Configurar Grid">
+              <button onClick={() => navigate('/contacts/config')} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Configurações de Contatos">
                   <Settings size={20} />
               </button>
           </div>
