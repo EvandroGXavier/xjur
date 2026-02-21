@@ -24,37 +24,78 @@ jobs:
             cd /www/wwwroot/DrX
             set -e 
 
-            echo "1. Sincronizando código..."
+            echo "========================================="
+            echo "🚀 DR.X DEPLOY - $(date)"
+            echo "========================================="
+
+            echo "1️⃣ Sincronizando código..."
             git fetch --all
             git reset --hard origin/main
+            echo "✅ Código sincronizado: $(git log --oneline -1)"
 
-            echo "2. Instalando dependências..."
-            # Usando --no-audit para ser mais rápido
-            npm install --no-audit
+            echo "2️⃣ Instalando dependências..."
+            npm install --no-audit --prefer-offline
+            echo "✅ Dependências instaladas"
 
-            echo "3. Sincronizando Banco de Dados..."
-            # Forçamos a porta 5434 caso o .env esteja errado
+            echo "3️⃣ Sincronizando Banco de Dados..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public"
             
             npx prisma generate --schema=packages/database/prisma/schema.prisma
             npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
+            echo "✅ Banco sincronizado"
 
-            echo "4. Executando Build..."
-            # Limpa cache do turbo para evitar lixo de builds antigas
+            echo "4️⃣ Executando Build..."
             npx turbo run build --force
+            echo "✅ Build concluído"
 
-            echo "5. Reiniciando serviços..."
-            # API
-            pm2 restart drx-api || pm2 start apps/api/dist/main.js --name drx-api
+            # Verificar se os builds existem
+            echo "📁 Verificando arquivos de build..."
+            ls -la apps/api/dist/main.js 2>/dev/null && echo "✅ API build OK" || echo "❌ API build FALTANDO!"
+            ls -la apps/web/dist/index.html 2>/dev/null && echo "✅ Web build OK" || echo "❌ Web build FALTANDO!"
+
+            echo "5️⃣ Reiniciando serviços..."
+
+            # Parar tudo antes de reiniciar
+            pm2 delete drx-api 2>/dev/null || true
+            pm2 delete drx-web 2>/dev/null || true
+            pm2 delete drx-studio 2>/dev/null || true
+
+            # API - com variáveis de ambiente
+            cd /www/wwwroot/DrX
+            DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public" \
+            pm2 start apps/api/dist/main.js --name drx-api --update-env
+
+            # Esperar API inicializar
+            sleep 3
+
+            # Verificar se API está rodando
+            if pm2 show drx-api | grep -q "online"; then
+              echo "✅ API online"
+            else
+              echo "❌ API falhou! Logs:"
+              pm2 logs drx-api --lines 30 --nostream
+            fi
 
             # Web App
-            pm2 delete drx-web || true
             pm2 serve apps/web/dist 8080 --name drx-web --spa
+            echo "✅ Web servindo na porta 8080"
 
             # Studio
-            pm2 delete drx-studio || true
-            pm2 start "npx prisma studio --port 5555 --schema=packages/database/prisma/schema.prisma" --name drx-studio
+            pm2 start "npx prisma studio --port 5555 --schema=/www/wwwroot/DrX/packages/database/prisma/schema.prisma" --name drx-studio
+            echo "✅ Studio na porta 5555"
 
             pm2 save
-            echo "🚀 DR.X ONLINE NA PORTA 5434!"
+
+            echo "========================================="
+            echo "📊 STATUS FINAL:"
+            echo "========================================="
             pm2 status
+
+            # Health check
+            echo ""
+            echo "🩺 HEALTH CHECK:"
+            sleep 2
+            curl -s -o /dev/null -w "API (3000): HTTP %{http_code}\n" http://localhost:3000/api/health 2>/dev/null || echo "API (3000): ❌ Sem resposta"
+            curl -s -o /dev/null -w "Web (8080): HTTP %{http_code}\n" http://localhost:8080/ 2>/dev/null || echo "Web (8080): ❌ Sem resposta"
+            echo ""
+            echo "🚀 DR.X DEPLOY COMPLETO!"
