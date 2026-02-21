@@ -159,10 +159,10 @@ export class WhatsappService implements OnModuleInit {
       const createResult = await this.evolutionService.createInstance(connectionId, evolutionConfig);
       this.logger.log(`Instance created: ${JSON.stringify(createResult?.instance?.instanceName || 'ok')}`);
 
-      // 3. Configurar Webhook
-      const apiUrl = process.env.APP_URL || 'http://host.docker.internal:3000';
-      const webhookUrl = `${apiUrl}/api/evolution/webhook`;
-      
+      // 3. Configurar Webhook (usar URL interna Docker para comunicação container-a-container)
+      const webhookBaseUrl = process.env.WEBHOOK_INTERNAL_URL || process.env.APP_URL || 'http://host.docker.internal:3000';
+      const webhookUrl = `${webhookBaseUrl}/api/evolution/webhook`;
+      this.logger.log(`Setting webhook URL: ${webhookUrl}`);  
       const webhookResult = await this.evolutionService.setWebhook(connectionId, webhookUrl, evolutionConfig);
       this.logger.log(`Webhook result: ${JSON.stringify(webhookResult)}`);
 

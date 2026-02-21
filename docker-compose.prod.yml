@@ -64,6 +64,8 @@ services:
       # Evolution API (comunicação interna via Docker Network)
       EVOLUTION_API_URL: "http://evolution:8080"
       EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-JaJyX0tc3DvmPScDDRojSsguMSddVGeO}"
+      # URL interna para webhook (Evolution → API dentro do Docker)
+      WEBHOOK_INTERNAL_URL: "http://api:3000"
     ports:
       - "3000:3000"
     networks:
