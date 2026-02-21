@@ -272,7 +272,20 @@ export class WhatsappService implements OnModuleInit {
     
     // ── 405/401: SESSÃO EXPIROU ──
     // Deletar instância na Evolution para PARAR o loop de reconexão
+    // MAS: NÃO deletar se a connection está em PAIRING (criação nova, estado transitório)
     if (reason === 405 || reason === 401) {
+      // Verificar se está em fase de criação (PAIRING) — se sim, ignorar o 405/401
+      // pois é um estado transitório normal da Evolution antes do QR code
+      try {
+        const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+        if (conn?.status === 'PAIRING') {
+          this.logger.warn(`Connection ${connectionId} got ${reason} but is PAIRING — ignoring (transient state)`);
+          return;
+        }
+      } catch (e) {
+        // Se não conseguir verificar, prosseguir com kill
+      }
+
       // Adicionar ao cooldown IMEDIATAMENTE para bloquear webhooks subsequentes
       this.killedInstances.set(connectionId, Date.now());
       
