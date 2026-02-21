@@ -1,9 +1,7 @@
-﻿name: Deploy Production
-
+name: Deploy Production
 on:
   push:
     branches: [ main ]
-
 jobs:
   deploy:
     name: Deploy to VPS
@@ -17,45 +15,46 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           script: |
-            # Carregar ambiente para garantir que comandos como npm e pm2 funcionem
+            # 1. Carregar Ambiente
             source /etc/profile
             [ -f ~/.bashrc ] && source ~/.bashrc
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-            cd /www/wwwroot/DrX
-            set -e # Aborta se qualquer comando falhar
             
-            echo "1. Sincronizando código com GitHub..."
+            cd /www/wwwroot/DrX
+            set -e 
+
+            echo "1. Sincronizando código..."
             git fetch --all
             git reset --hard origin/main
-            
+
             echo "2. Instalando dependências..."
-            npm install
-            
+            # Usando --no-audit para ser mais rápido
+            npm install --no-audit
+
             echo "3. Sincronizando Banco de Dados..."
-            # Gera o client e aplica mudanças de schema de forma segura
-            npx turbo run db:generate
+            # Forçamos a porta 5434 caso o .env esteja errado
+            export DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public"
+            
+            npx prisma generate --schema=packages/database/prisma/schema.prisma
             npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
-            
-            echo "4. Executando Build (Turbo)..."
-            # Builda todo o monorepo respeitando as dependências internas
-            npx turbo run build
-            
-            echo "5. Reiniciando serviços do DR.X..."
-            
-            # API (NestJS)
+
+            echo "4. Executando Build..."
+            # Limpa cache do turbo para evitar lixo de builds antigas
+            npx turbo run build --force
+
+            echo "5. Reiniciando serviços..."
+            # API
             pm2 restart drx-api || pm2 start apps/api/dist/main.js --name drx-api
-            
-            # Web App (Vite - Servido via PM2)
-            # Rodando na porta 8080 conforme sua solicitação
+
+            # Web App
             pm2 delete drx-web || true
             pm2 serve apps/web/dist 8080 --name drx-web --spa
-            
-            # Prisma Studio (Acesso administrativo na porta 5555)
+
+            # Studio
             pm2 delete drx-studio || true
             pm2 start "npx prisma studio --port 5555 --schema=packages/database/prisma/schema.prisma" --name drx-studio
-            
+
             pm2 save
-            echo "🚀 Sistema DR.X atualizado com sucesso!"
+            echo "🚀 DR.X ONLINE NA PORTA 5434!"
             pm2 status
