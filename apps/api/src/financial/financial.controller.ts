@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UsePipes, ValidationPipe, UseGuards } from '@nestjs/common';
 import { FinancialService } from './financial.service';
-import { CreateFinancialRecordDto } from './dto/create-financial-record.dto';
+import { CreateFinancialRecordDto, CreateInstallmentsDto, PartialPaymentDto, SettleRecordDto, CreateTransactionSplitDto } from './dto/create-financial-record.dto';
 import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
 import { CreateBankAccountDto } from './dto/create-bank-account.dto';
 import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
@@ -28,6 +28,8 @@ export class FinancialController {
     @Query('category') category?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('parentId') parentId?: string,
+    @Query('showInstallments') showInstallments?: string,
   ) {
     return this.financialService.findAllFinancialRecords(user.tenantId, {
       type,
@@ -35,6 +37,8 @@ export class FinancialController {
       category,
       startDate,
       endDate,
+      parentId,
+      showInstallments: showInstallments === 'true',
     });
   }
 
@@ -62,6 +66,84 @@ export class FinancialController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.financialService.deleteFinancialRecord(id, user.tenantId);
+  }
+
+  // ==================== PARCELAMENTO ====================
+
+  @Post('installments')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  createInstallments(@Body() dto: CreateInstallmentsDto, @CurrentUser() user: CurrentUserData) {
+    return this.financialService.createInstallments({ ...dto, tenantId: user.tenantId });
+  }
+
+  // ==================== PAGAMENTO PARCIAL ====================
+
+  @Post('records/:id/partial-payment')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  processPartialPayment(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: PartialPaymentDto,
+  ) {
+    return this.financialService.processPartialPayment(id, { ...dto, tenantId: user.tenantId });
+  }
+
+  // ==================== LIQUIDAÇÃO COM ENCARGOS ====================
+
+  @Post('records/:id/settle')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  settleRecord(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: SettleRecordDto,
+  ) {
+    return this.financialService.settleRecord(id, { ...dto, tenantId: user.tenantId });
+  }
+
+  // ==================== RATEIO (SPLITS) ====================
+
+  @Post('records/:id/splits')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  createSplits(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+    @Body() splits: CreateTransactionSplitDto[],
+  ) {
+    return this.financialService.createSplits(id, user.tenantId, splits);
+  }
+
+  @Get('records/:id/splits')
+  getSplits(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.financialService.getSplits(id, user.tenantId);
+  }
+
+  // ==================== CATEGORIAS FINANCEIRAS ====================
+
+  @Post('categories')
+  createCategory(
+    @Body() data: { name: string; type?: string; color?: string; icon?: string; parentId?: string },
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.financialService.createCategory(user.tenantId, data);
+  }
+
+  @Get('categories')
+  findAllCategories(
+    @CurrentUser() user: CurrentUserData,
+    @Query('type') type?: string,
+  ) {
+    return this.financialService.findAllCategories(user.tenantId, type);
+  }
+
+  @Delete('categories/:id')
+  deleteCategory(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.financialService.deleteCategory(id, user.tenantId);
   }
 
   // ==================== BANK ACCOUNTS ====================

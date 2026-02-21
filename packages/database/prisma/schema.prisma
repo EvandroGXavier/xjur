@@ -36,6 +36,8 @@ model Tenant {
   assetTypes        AssetType[]
   contactAssets     ContactAsset[]
   financialParties  FinancialParty[]
+  transactionSplits TransactionSplit[]
+  financialCategories FinancialCategory[]
   
   // New Modules Relationships
   tags              Tag[]
@@ -399,23 +401,52 @@ model FinancialRecord {
   tenantId      String
   processId     String?
   bankAccountId String?
+  categoryId    String?   // FK para FinancialCategory
   description   String
-  amount        Decimal   @db.Decimal(10, 2)
+  amount        Decimal   @db.Decimal(15, 2)
   dueDate       DateTime
   paymentDate   DateTime?
-  status        String    // PENDING, PAID, CANCELLED, OVERDUE
+  status        String    // PENDING, PAID, CANCELLED, OVERDUE, PARTIAL
   type          String    // INCOME (Receita), EXPENSE (Despesa)
-  category      String?   // Honorários, Custas, Aluguel, etc
+  category      String?   // Legado: texto livre (Honorários, Custas, etc)
   paymentMethod String?   // PIX, BOLETO, TED, DINHEIRO, CARTAO
   notes         String?   @db.Text
+
+  // === ENCARGOS & DESCONTOS ===
+  fine               Decimal?  @db.Decimal(15, 2) // Multa
+  interest           Decimal?  @db.Decimal(15, 2) // Juros
+  monetaryCorrection Decimal?  @db.Decimal(15, 2) // Correção monetária
+  discount           Decimal?  @db.Decimal(15, 2) // Desconto
+  discountType       String?   // VALUE (valor fixo) ou PERCENTAGE (percentual)
+  amountFinal        Decimal?  @db.Decimal(15, 2) // Valor final calculado (amount + encargos - descontos)
+  amountPaid         Decimal?  @db.Decimal(15, 2) // Valor efetivamente pago
+
+  // === PARCELAMENTO ===
+  parentId           String?   // FK auto-referencial: transação-mãe
+  installmentNumber  Int?      // Número da parcela (1, 2, 3...)
+  totalInstallments  Int?      // Total de parcelas
+  periodicity        String?   // MONTHLY, BIWEEKLY, WEEKLY, CUSTOM
+  isResidual         Boolean   @default(false) // Parcela residual de pagamento parcial?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  process       Process?      @relation(fields: [processId], references: [id])
-  bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
-  tenant        Tenant        @relation(fields: [tenantId], references: [id])
-  parties       FinancialParty[]
+  // Relações
+  process            Process?            @relation(fields: [processId], references: [id])
+  bankAccount        BankAccount?        @relation(fields: [bankAccountId], references: [id])
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  financialCategory  FinancialCategory?  @relation(fields: [categoryId], references: [id])
+  parties            FinancialParty[]
+  splits             TransactionSplit[]
 
+  // Auto-relacionamento (Parcelas / Residuais)
+  parent             FinancialRecord?    @relation("Installments", fields: [parentId], references: [id])
+  children           FinancialRecord[]   @relation("Installments")
+
+  @@index([parentId])
+  @@index([tenantId, status])
+  @@index([tenantId, type])
+  @@index([tenantId, dueDate])
   @@map("financial_records")
 }
 
@@ -461,6 +492,53 @@ model FinancialParty {
 
   @@unique([financialRecordId, contactId, role])
   @@map("financial_parties")
+}
+
+// === RATEIO DE TRANSAÇÃO ===
+model TransactionSplit {
+  id                String   @id @default(uuid())
+  tenantId          String
+  financialRecordId String
+  contactId         String
+  role              String   // CREDITOR ou DEBTOR
+  amount            Decimal  @db.Decimal(15, 2) // Valor absoluto do rateio
+  percentage        Decimal? @db.Decimal(5, 2)  // % do total (ex: 33.33)
+  description       String?  // Descrição opcional do rateio
+  isPaid            Boolean  @default(false)
+  paidAt            DateTime?
+  notes             String?
+
+  financialRecord   FinancialRecord @relation(fields: [financialRecordId], references: [id], onDelete: Cascade)
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([financialRecordId])
+  @@map("transaction_splits")
+}
+
+// === CATEGORIAS FINANCEIRAS DINÂMICAS ===
+model FinancialCategory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  type        String?  // INCOME, EXPENSE, BOTH
+  color       String?  // Hex color
+  icon        String?  // Ícone (opcional)
+  parentId    String?  // Subcategorias
+  active      Boolean  @default(true)
+
+  parent      FinancialCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    FinancialCategory[] @relation("CategoryTree")
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
+  records     FinancialRecord[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@map("financial_categories")
 }
 
 
