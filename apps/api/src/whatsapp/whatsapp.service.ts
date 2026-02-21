@@ -31,7 +31,12 @@ export class WhatsappService implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log('Evolution API Integration Initialized');
-    await this.restoreSessions();
+    try {
+      await this.restoreSessions();
+    } catch (error) {
+      this.logger.warn(`Failed to restore WhatsApp sessions (Evolution API may be unavailable): ${error.message}`);
+      this.logger.warn('The API will continue running without WhatsApp restoration. Tags, contacts, and other modules are unaffected.');
+    }
   }
 
   // ==========================================

@@ -50,9 +50,10 @@ export function TagsManager() {
     const fetchTags = async () => {
         try {
             const response = await api.get('/tags');
+            console.log('[TAGS] Resposta GET /tags:', response.status, response.data);
             setTags(Array.isArray(response.data) ? response.data : []);
-        } catch (error) {
-            console.error('Erro ao buscar etiquetas:', error);
+        } catch (error: any) {
+            console.error('[TAGS] Erro ao buscar etiquetas:', error.response?.status, error.response?.data, error.message);
             setTags([]);
         } finally {
             setLoading(false);
@@ -67,36 +68,18 @@ export function TagsManager() {
 
         try {
             if (editingId) {
-                // Update
-                try {
-                    await api.patch(`/tags/${editingId}`, formData);
-                } catch {
-                    // Fallback local
-                    setTags(tags.map(t => t.id === editingId ? { ...t, ...formData } : t));
-                }
+                await api.patch(`/tags/${editingId}`, formData);
                 toast.success('Tag atualizada!');
             } else {
-                // Create
-                try {
-                    const res = await api.post('/tags', formData);
-                    setTags([...tags, res.data]);
-                } catch {
-                    // Fallback local
-                    const newTag: Tag = {
-                        id: Math.random().toString(36).substr(2, 9),
-                        ...formData,
-                        usage: 0,
-                        active: true,
-                    };
-                    setTags([...tags, newTag]);
-                }
+                await api.post('/tags', formData);
+                toast.success('Tag criada!');
             }
-
             resetForm();
             await fetchTags();
-            toast.success(editingId ? 'Tag atualizada!' : 'Tag criada!');
-        } catch (error) {
-            toast.error('Erro ao salvar tag');
+        } catch (error: any) {
+            console.error('Erro ao salvar tag:', error);
+            const msg = error.response?.data?.message || 'Erro ao salvar tag. Verifique os logs do servidor.';
+            toast.error(msg);
         }
     };
 
@@ -116,11 +99,12 @@ export function TagsManager() {
         
         try {
             await api.delete(`/tags/${id}`);
-        } catch {
-            // Fallback local
+            setTags(tags.filter(t => t.id !== id));
+            toast.success('Tag excluída');
+        } catch (error: any) {
+            console.error('Erro ao excluir tag:', error);
+            toast.error(error.response?.data?.message || 'Erro ao excluir tag');
         }
-        setTags(tags.filter(t => t.id !== id));
-        toast.success('Tag excluída');
     };
 
     const toggleScope = (scope: string) => {

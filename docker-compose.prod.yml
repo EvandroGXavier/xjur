@@ -1,27 +1,28 @@
-
 version: '3.8'
 
 services:
-  # 1. Banco de Dados (Global)
+  # 1. Banco de Dados (PostgreSQL + pgvector)
   db:
     image: ankane/pgvector:latest
     container_name: drx_db_prod
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-drx_prod}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-drx_prod_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-drx_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-drx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-drx_secure_pass_123}
+      POSTGRES_DB: ${POSTGRES_DB:-drx_db}
     volumes:
       - drx_prod_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
     networks:
       - drx_prod_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-drx_prod} -d ${POSTGRES_DB:-drx_prod}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-drx} -d ${POSTGRES_DB:-drx_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # 2. Redis (Global)
+  # 2. Redis (Cache + Filas do Evolution)
   redis:
     image: redis:alpine
     container_name: drx_redis_prod
@@ -29,6 +30,8 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - drx_prod_redis:/data
+    ports:
+      - "6379:6379"
     networks:
       - drx_prod_net
     healthcheck:
@@ -41,7 +44,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: Dockerfile
+      target: runner-api
     container_name: drx_api_prod
     restart: always
     depends_on:
@@ -50,68 +54,92 @@ services:
       redis:
         condition: service_healthy
     environment:
-      # Conexão interna via Docker Network
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-drx_prod}:${POSTGRES_PASSWORD:-drx_prod_pass}@db:5432/${POSTGRES_DB:-drx_prod}"
-      
-      # Redis interno
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-drx}:${POSTGRES_PASSWORD:-drx_secure_pass_123}@db:5432/${POSTGRES_DB:-drx_db}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      
-      # Evolution (interno)
-      EVOLUTION_API_URL: "http://evolution:8080"
-      EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-JaJyX0tc3DvmPScDDRojSsguMSddVGeO}"
-      
-      # App Config
       NODE_ENV: production
       PORT: 3000
-      JWT_SECRET: "${JWT_SECRET:-change_me_in_prod}"
-      
-      # Webhook URL (Como a Evolution vai chamar a API? Pelo nome do serviço 'api')
-      APP_URL: "http://api:3000"
-      
+      JWT_SECRET: "${JWT_SECRET:-drx-default-secret-change-me-in-production}"
+      APP_URL: "${APP_URL:-https://drx.evandroadvogado.com}"
+      # Evolution API (comunicação interna via Docker Network)
+      EVOLUTION_API_URL: "http://evolution:8080"
+      EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-JaJyX0tc3DvmPScDDRojSsguMSddVGeO}"
     ports:
       - "3000:3000"
     networks:
       - drx_prod_net
 
-  # 4. Evolution API
+  # 4. Web (Nginx + SPA React)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner-web
+    container_name: drx_web_prod
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+    networks:
+      - drx_prod_net
+
+  # 5. Evolution API (Motor WhatsApp)
   evolution:
     image: atendai/evolution-api:v2.1.1
     container_name: drx_evolution_prod
     restart: always
-    ports:
-      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-      api:
-        condition: service_started
     environment:
+      # Server
       SERVER_TYPE: http
       SERVER_PORT: 8080
-      SERVER_URL: "https://evolution.seudominio.com" # Ajustar na VPS
+      SERVER_URL: "${EVOLUTION_SERVER_URL:-https://evolution.evandroadvogado.com}"
       
+      # Database (banco separado para Evolution)
       DATABASE_ENABLED: "true"
       DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: "postgresql://${POSTGRES_USER:-drx_prod}:${POSTGRES_PASSWORD:-drx_prod_pass}@db:5432/drx_evolution_prod"
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-drx_prod}:${POSTGRES_PASSWORD:-drx_prod_pass}@db:5432/drx_evolution_prod"
+      DATABASE_CONNECTION_URI: "postgresql://${POSTGRES_USER:-drx}:${POSTGRES_PASSWORD:-drx_secure_pass_123}@db:5432/drx_evolution_prod"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-drx}:${POSTGRES_PASSWORD:-drx_secure_pass_123}@db:5432/drx_evolution_prod"
       
+      # Redis
       CACHE_REDIS_ENABLED: "true"
-      CACHE_REDIS_URI: "redis://redis:6379/1" # DB 1 para Evolution (0 para API)
+      CACHE_REDIS_URI: "redis://redis:6379/1"
       
+      # Auth
       AUTHENTICATION_API_KEY: "${EVOLUTION_API_KEY:-JaJyX0tc3DvmPScDDRojSsguMSddVGeO}"
       
-      # Webhook Global apontando para o serviço 'api'
+      # Webhook Global (aponta para API dentro da rede Docker)
       WEBHOOK_GLOBAL_ENABLED: "true"
       WEBHOOK_GLOBAL_URL: "http://api:3000/api/evolution/webhook"
+      WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
       WEBHOOK_EVENTS_QRCODE_UPDATED: "true"
+      WEBHOOK_EVENTS_MESSAGES_SET: "true"
       WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
-      # ... outros eventos ...
+      WEBHOOK_EVENTS_MESSAGES_UPDATE: "true"
+      WEBHOOK_EVENTS_MESSAGES_DELETE: "true"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "true"
+      WEBHOOK_EVENTS_CONTACTS_SET: "true"
+      WEBHOOK_EVENTS_CONTACTS_UPSERT: "true"
+      WEBHOOK_EVENTS_CONTACTS_UPDATE: "true"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "true"
+      WEBHOOK_EVENTS_CHATS_SET: "true"
+      WEBHOOK_EVENTS_CHATS_UPSERT: "true"
+      WEBHOOK_EVENTS_CHATS_UPDATE: "true"
+      WEBHOOK_EVENTS_CHATS_DELETE: "true"
+      WEBHOOK_EVENTS_GROUPS_UPSERT: "true"
+      WEBHOOK_EVENTS_GROUPS_UPDATE: "true"
+      WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE: "true"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "true"
     volumes:
       - drx_prod_evolution_instances:/evolution/instances
       - drx_prod_evolution_store:/evolution/store
+    ports:
+      - "8081:8080"
     networks:
       - drx_prod_net
 

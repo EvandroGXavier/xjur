@@ -14,7 +14,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: configService.get<string>('JWT_SECRET') || 'drx-default-secret-change-me-in-production',
         signOptions: { 
           expiresIn: configService.get<string>('JWT_EXPIRATION', '7d') as any
         },

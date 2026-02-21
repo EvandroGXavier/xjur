@@ -11,10 +11,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private authService: AuthService,
     private configService: ConfigService,
   ) {
+    const secret = configService.get<string>('JWT_SECRET') || 'drx-default-secret-change-me-in-production';
+    if (!configService.get<string>('JWT_SECRET')) {
+      console.warn('⚠️  [JwtStrategy] JWT_SECRET não definido! Usando fallback. Configure JWT_SECRET no ambiente de produção!');
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'), 
+      secretOrKey: secret,
     });
   }
 

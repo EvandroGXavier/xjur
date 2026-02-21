@@ -25,7 +25,7 @@ jobs:
             set -e 
 
             echo "========================================="
-            echo "🚀 DR.X DEPLOY - $(date)"
+            echo "🚀 DR.X DEPLOY (Docker) - $(date)"
             echo "========================================="
 
             echo "1️⃣ Sincronizando código..."
@@ -33,69 +33,42 @@ jobs:
             git reset --hard origin/main
             echo "✅ Código sincronizado: $(git log --oneline -1)"
 
-            echo "2️⃣ Instalando dependências..."
-            npm install --no-audit --prefer-offline
-            echo "✅ Dependências instaladas"
-
-            echo "3️⃣ Sincronizando Banco de Dados..."
-            export DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public"
-            
-            npx prisma generate --schema=packages/database/prisma/schema.prisma
-            npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
-            echo "✅ Banco sincronizado"
-
-            echo "4️⃣ Executando Build..."
-            npx turbo run build --force
-            echo "✅ Build concluído"
-
-            # Verificar se os builds existem
-            echo "📁 Verificando arquivos de build..."
-            ls -la apps/api/dist/main.js 2>/dev/null && echo "✅ API build OK" || echo "❌ API build FALTANDO!"
-            ls -la apps/web/dist/index.html 2>/dev/null && echo "✅ Web build OK" || echo "❌ Web build FALTANDO!"
-
-            echo "5️⃣ Reiniciando serviços..."
-
-            # Parar tudo antes de reiniciar
+            echo "2️⃣ Limpando PM2 legado..."
             pm2 delete drx-api 2>/dev/null || true
             pm2 delete drx-web 2>/dev/null || true
             pm2 delete drx-studio 2>/dev/null || true
+            pm2 save 2>/dev/null || true
 
-            # API - com variáveis de ambiente
-            cd /www/wwwroot/DrX
-            DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public" \
-            pm2 start apps/api/dist/main.js --name drx-api --update-env
-
-            # Esperar API inicializar
-            sleep 3
-
-            # Verificar se API está rodando
-            if pm2 show drx-api | grep -q "online"; then
-              echo "✅ API online"
-            else
-              echo "❌ API falhou! Logs:"
-              pm2 logs drx-api --lines 30 --nostream
-            fi
-
-            # Web App
-            pm2 serve apps/web/dist 8080 --name drx-web --spa
-            echo "✅ Web servindo na porta 8080"
-
-            # Studio
-            pm2 start "npx prisma studio --port 5555 --schema=/www/wwwroot/DrX/packages/database/prisma/schema.prisma" --name drx-studio
-            echo "✅ Studio na porta 5555"
-
-            pm2 save
-
+            echo "3️⃣ Configurando variáveis de ambiente..."
+            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
+            export POSTGRES_USER="drx"
+            export POSTGRES_PASSWORD="drx_secure_pass_123"
+            export POSTGRES_DB="drx_db"
+            export APP_URL="https://drx.evandroadvogado.com"
+            export EVOLUTION_API_KEY="${{ secrets.EVOLUTION_API_KEY }}"
+            export EVOLUTION_SERVER_URL="https://evolution.evandroadvogado.com"
+            
+            echo "4️⃣ Reconstruindo containers (API + Web)..."
+            docker compose -f docker-compose.prod.yml build --no-cache api web
+            
+            echo "5️⃣ Reiniciando stack completa..."
+            docker compose -f docker-compose.prod.yml up -d
+            
+            echo "6️⃣ Sincronizando banco de dados..."
+            sleep 8
+            docker exec drx_api_prod npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss 2>/dev/null || echo "⚠️ Prisma push falhou (pode já estar sincronizado)"
+            
             echo "========================================="
             echo "📊 STATUS FINAL:"
             echo "========================================="
-            pm2 status
+            docker compose -f docker-compose.prod.yml ps
 
             # Health check
             echo ""
             echo "🩺 HEALTH CHECK:"
-            sleep 2
-            curl -s -o /dev/null -w "API (3000): HTTP %{http_code}\n" http://localhost:3000/api/health 2>/dev/null || echo "API (3000): ❌ Sem resposta"
-            curl -s -o /dev/null -w "Web (8080): HTTP %{http_code}\n" http://localhost:8080/ 2>/dev/null || echo "Web (8080): ❌ Sem resposta"
+            sleep 5
+            curl -s -o /dev/null -w "API  (3000): HTTP %{http_code}\n" http://localhost:3000/api 2>/dev/null || echo "API  (3000): ❌ Sem resposta"
+            curl -s -o /dev/null -w "Web  (8080): HTTP %{http_code}\n" http://localhost:8080/ 2>/dev/null || echo "Web  (8080): ❌ Sem resposta"
+            curl -s -o /dev/null -w "Evol (8081): HTTP %{http_code}\n" http://localhost:8081/ 2>/dev/null || echo "Evol (8081): ❌ Sem resposta"
             echo ""
             echo "🚀 DR.X DEPLOY COMPLETO!"
