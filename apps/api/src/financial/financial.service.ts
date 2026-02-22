@@ -79,6 +79,107 @@ export class FinancialService {
       dto.discountType,
     );
 
+    if (!dto.parentId && dto.totalInstallments && dto.totalInstallments > 1) {
+      const parent = await this.prisma.financialRecord.create({
+        data: {
+          tenantId: dto.tenantId,
+          processId: dto.processId,
+          bankAccountId: dto.bankAccountId,
+          categoryId: dto.categoryId,
+          description: dto.description,
+          amount: dto.amount,
+          amountFinal: amountFinal,
+          dueDate: new Date(dto.dueDate),
+          paymentDate: dto.paymentDate ? new Date(dto.paymentDate) : null,
+          status: dto.status || 'PENDING',
+          type: dto.type,
+          category: dto.category,
+          paymentMethod: dto.paymentMethod,
+          notes: dto.notes ? `${dto.notes} | Parcelado em ${dto.totalInstallments}x` : `Parcelado em ${dto.totalInstallments}x`,
+          fine: dto.fine,
+          interest: dto.interest,
+          monetaryCorrection: dto.monetaryCorrection,
+          discount: dto.discount,
+          discountType: dto.discountType,
+          totalInstallments: dto.totalInstallments,
+          periodicity: dto.periodicity,
+          parties: dto.parties ? {
+            create: dto.parties.map(p => ({
+              tenantId: dto.tenantId,
+              contactId: p.contactId,
+              role: p.role,
+              amount: p.amount,
+            }))
+          } : undefined,
+          splits: dto.splits ? {
+            create: dto.splits.map(s => ({
+              tenantId: dto.tenantId,
+              contactId: s.contactId,
+              role: s.role,
+              amount: s.amount,
+              percentage: s.percentage,
+              description: s.description,
+              notes: s.notes,
+            }))
+          } : undefined,
+        },
+      });
+
+      const installments = [];
+      const parentAmountFinal = Number(amountFinal);
+      const installmentAmount = Math.floor((parentAmountFinal / dto.totalInstallments) * 100) / 100;
+      const remainder = Math.round((parentAmountFinal - (installmentAmount * dto.totalInstallments)) * 100) / 100;
+
+      for (let i = 0; i < dto.totalInstallments; i++) {
+        const d = new Date(dto.dueDate);
+        const periodicity = dto.periodicity || 'MONTHLY';
+        
+        switch (periodicity) {
+          case 'WEEKLY':
+            d.setDate(d.getDate() + (7 * i));
+            break;
+          case 'BIWEEKLY':
+            d.setDate(d.getDate() + (14 * i));
+            break;
+          case 'CUSTOM':
+          case 'MONTHLY':
+          default:
+            d.setMonth(d.getMonth() + i);
+            break;
+        }
+
+        const amount = i === dto.totalInstallments - 1
+          ? installmentAmount + remainder
+          : installmentAmount;
+
+        installments.push({
+          tenantId: dto.tenantId,
+          processId: dto.processId,
+          bankAccountId: dto.bankAccountId,
+          categoryId: dto.categoryId,
+          description: `${dto.description} - Parcela ${i + 1}/${dto.totalInstallments}`,
+          amount: amount,
+          amountFinal: amount, // A parcela não embute os encargos adicionais do pai a menos que liquidados separadamente depois
+          dueDate: d,
+          status: i === 0 && dto.status === 'PAID' ? 'PAID' : 'PENDING',
+          paymentDate: i === 0 && dto.status === 'PAID' ? parent.paymentDate : null,
+          type: dto.type,
+          category: dto.category,
+          paymentMethod: dto.paymentMethod,
+          parentId: parent.id,
+          installmentNumber: i + 1,
+          totalInstallments: dto.totalInstallments,
+          periodicity: dto.periodicity,
+        });
+      }
+
+      await this.prisma.financialRecord.createMany({
+        data: installments,
+      });
+
+      return this.findOneFinancialRecord(parent.id, dto.tenantId);
+    }
+
     return this.prisma.financialRecord.create({
       data: {
         tenantId: dto.tenantId,
