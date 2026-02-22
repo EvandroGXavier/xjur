@@ -118,12 +118,22 @@ export function Settings() {
               document: item.document, 
               planId: item.planId, 
               isActive: item.isActive,
+              msTenantId: item.msTenantId || '',
+              msClientId: item.msClientId || '',
+              msClientSecret: item.msClientSecret || '',
+              msFolderId: item.msFolderId || '',
+              msStorageActive: item.msStorageActive || false,
               password: '' // Reset password field for security
           } : { 
               name: '', 
               document: '', 
               planId: plans.length > 0 ? plans[0].id : '', 
               isActive: true,
+              msTenantId: '',
+              msClientId: '',
+              msClientSecret: '',
+              msFolderId: '',
+              msStorageActive: false,
               email: '', // Only for new
               password: '' 
           });
@@ -566,6 +576,76 @@ export function Settings() {
                             className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
                         />
                         <label htmlFor="isActive" className="text-sm text-slate-300">Empresa Ativa</label>
+                    </div>
+
+                    <div className="mt-6 pt-6 border-t border-slate-800">
+                        <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                            <svg className="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
+                            </svg>
+                            Integração Microsoft 365
+                        </h4>
+                        
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.msStorageActive || false}
+                                    onChange={e => setFormData({...formData, msStorageActive: e.target.checked})}
+                                    id="msStorageActive"
+                                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                                />
+                                <label htmlFor="msStorageActive" className="text-sm text-slate-300">Ativar Armazenamento OneDrive/SharePoint</label>
+                            </div>
+
+                            {formData.msStorageActive && (
+                                <>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-400 mb-1">Tenant ID Diretório (Azure)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.msTenantId || ''}
+                                            onChange={e => setFormData({...formData, msTenantId: e.target.value})}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                                            placeholder="Ex: 8a7b6c5d..."
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-1">Client ID (App)</label>
+                                            <input
+                                                type="text"
+                                                value={formData.msClientId || ''}
+                                                onChange={e => setFormData({...formData, msClientId: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-1">Client Secret</label>
+                                            <input
+                                                type="password"
+                                                value={formData.msClientSecret || ''}
+                                                onChange={e => setFormData({...formData, msClientSecret: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-400 mb-1">ID da Pasta Raiz no OneDrive</label>
+                                        <input
+                                            type="text"
+                                            value={formData.msFolderId || ''}
+                                            onChange={e => setFormData({...formData, msFolderId: e.target.value})}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                                            placeholder="Ex: 01ABCDEFXYZ..."
+                                        />
+                                        <p className="text-[10px] text-slate-500 mt-1">
+                                            Os processos serão criados como subpastas dentro desta pasta Microsoft.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                   </>
               )}

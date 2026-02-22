@@ -39,6 +39,15 @@ model Tenant {
   transactionSplits TransactionSplit[]
   financialCategories FinancialCategory[]
   
+  // Integração Microsoft 365 (OneDrive/SharePoint)
+  msTenantId        String?
+  msClientId        String?
+  msClientSecret    String?
+  msAccessToken     String?   @db.Text
+  msRefreshToken    String?   @db.Text
+  msFolderId        String?   // Pasta raiz do escritório no OneDrive
+  msStorageActive   Boolean   @default(false)
+  
   // New Modules Relationships
   tags              Tag[]
   appointments      Appointment[]
@@ -291,6 +300,10 @@ model Process {
   code           String?  // Código Interno (ex: CASO-25-001)
   folder         String?  // Pasta na Nuvem (Z:\, Google Drive)
   description    String?  @db.Text // Descrição Rica (HTML/Markdown)
+  
+  // Microsoft 365 Integration
+  msDriveId      String?  // ID da pasta do processo no OneDrive
+  msFolderUrl    String?  // Link do OneDrive para acesso rápido
 
   // Detalhes Jurídicos
   npu            String?     // Numeração Única (Normalizada)
@@ -606,6 +619,10 @@ model DocumentHistory {
   content     String   @db.Text
   snapshot    Json?    // Stores the variables values at time of creation
   status      String   // DRAFT, FINALIZED
+  
+  // Microsoft 365 Integration
+  msFileId    String?  // ID do docx no OneDrive
+  msFileUrl   String?  // Link de edição no Word Online
   
   template    DocumentTemplate? @relation(fields: [templateId], references: [id])
   tenant      Tenant   @relation(fields: [tenantId], references: [id])

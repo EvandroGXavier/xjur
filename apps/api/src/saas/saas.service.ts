@@ -72,7 +72,7 @@ export class SaasService {
   }
 
   async updateTenant(id: string, data: any) {
-    const { name, document, planId, isActive, password } = data;
+    const { name, document, planId, isActive, password, msTenantId, msClientId, msClientSecret, msFolderId, msStorageActive } = data;
 
     // Check if document belongs to another tenant
     if (document) {
@@ -90,6 +90,11 @@ export class SaasService {
         document,
         planId,
         isActive: isActive !== undefined ? isActive : undefined,
+        msTenantId: msTenantId !== undefined ? msTenantId : undefined,
+        msClientId: msClientId !== undefined ? msClientId : undefined,
+        msClientSecret: msClientSecret !== undefined ? msClientSecret : undefined,
+        msFolderId: msFolderId !== undefined ? msFolderId : undefined,
+        msStorageActive: msStorageActive !== undefined ? msStorageActive : undefined,
       },
     });
 
