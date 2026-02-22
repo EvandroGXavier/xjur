@@ -264,6 +264,35 @@ export class EvolutionService {
     }
   }
 
+  async findContacts(instanceName: string, config?: EvolutionConfig) {
+    try {
+      const client = this.getClient(config);
+      // Tentativa POST (Padrão Evolution v2.1.x)
+      const response = await client.post(`/chat/findContacts/${instanceName}`, {});
+      return response.data;
+    } catch (error) {
+      // Fallback para GET (v1.x ou outras configs)
+      try {
+        const client = this.getClient(config);
+        const response = await client.get(`/chat/findContacts/${instanceName}`);
+        return response.data;
+      } catch (err2) {
+        this.logger.error(`Error finding contacts via "${instanceName}": ${error.message} / ${err2.message}`);
+        throw error;
+      }
+    }
+  }
+
+  async fetchProfilePictureUrl(instanceName: string, number: string, config?: EvolutionConfig) {
+    try {
+      const client = this.getClient(config);
+      const response = await client.post(`/chat/fetchProfilePictureUrl/${instanceName}`, { number });
+      return response.data?.profilePictureUrl || response.data?.profilePicUrl || null;
+    } catch (error) {
+      return null; // Muitas vezes o contato não tem foto ou a rota não acha
+    }
+  }
+
   async deleteMessage(instanceName: string, remoteJid: string, messageId: string, fromMe: boolean, config?: EvolutionConfig) {
     try {
       const client = this.getClient(config);

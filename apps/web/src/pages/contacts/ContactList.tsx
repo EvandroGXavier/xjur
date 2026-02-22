@@ -21,6 +21,7 @@ interface Contact {
   whatsapp?: string;
   type?: 'PF' | 'PJ';
   active?: boolean;
+  profilePicUrl?: string;
 }
 
 export function ContactList() {
@@ -140,18 +141,27 @@ export function ContactList() {
                     label: 'Nome / Razão Social',
                     sortable: true,
                     render: (c) => (
-                        <div className="flex flex-col cursor-pointer" onClick={() => navigate(`/contacts/${c.id}`)}>
-                            <span className="font-medium text-white hover:text-indigo-400 transition-colors">{c.name}</span>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                {c.type && (
-                                    <span className={`text-[10px] font-bold px-1 rounded ${c.type === 'PJ' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
-                                        {c.type}
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/contacts/${c.id}`)}>
+                            {c.profilePicUrl ? (
+                                <img src={c.profilePicUrl} alt={c.name} className="w-10 h-10 rounded-full object-cover border border-slate-700" />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-slate-800 flex flex-col items-center justify-center border border-slate-700 font-bold text-slate-400">
+                                    {c.name.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <div className="flex flex-col">
+                                <span className="font-medium text-white hover:text-indigo-400 transition-colors">{c.name}</span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    {c.type && (
+                                        <span className={`text-[10px] font-bold px-1 rounded ${c.type === 'PJ' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                                            {c.type}
+                                        </span>
+                                    )}
+                                    <span className="text-slate-500 text-xs flex items-center gap-1">
+                                        <FileText size={10} />
+                                        {formatDocument(c.document || c.cpf || c.cnpj)}
                                     </span>
-                                )}
-                                <span className="text-slate-500 text-xs flex items-center gap-1">
-                                    <FileText size={10} />
-                                    {formatDocument(c.document || c.cpf || c.cnpj)}
-                                </span>
+                                </div>
                             </div>
                         </div>
                     )

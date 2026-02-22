@@ -375,7 +375,7 @@ export class WhatsappService implements OnModuleInit {
    * Processa mensagens recebidas via webhook (messages.upsert).
    */
   async handleEvolutionMessage(connectionId: string, message: any) {
-    if (message.key?.fromMe) return;
+    // Permite "fromMe" para carregar as mensagens enviadas do aparelho!
     if (message.key?.remoteJid === 'status@broadcast') return;
 
     this.fileLogger.log(`Processing Evolution message for ${connectionId}. JID: ${message.key?.remoteJid}`);
@@ -434,7 +434,6 @@ export class WhatsappService implements OnModuleInit {
       let fullJid = remoteJid.replace(/:[0-9]+/, '');
       let phone = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
       
-      // Buscar ou criar contato
       let contact = await this.prisma.contact.findFirst({
         where: { tenantId, phone }
       });
@@ -449,6 +448,20 @@ export class WhatsappService implements OnModuleInit {
             category: isGroup ? 'Grupo' : 'Lead',
           }
         });
+      }
+
+      // Buscar foto se não existir
+      if (!isGroup && !contact.profilePicUrl && !message.key.fromMe) {
+        try {
+          const evolutionConfig = await this.getEvolutionConfig(connectionId);
+          const pic = await this.evolutionService.fetchProfilePictureUrl(connectionId, fullJid, evolutionConfig);
+          if (pic) {
+            contact = await this.prisma.contact.update({
+              where: { id: contact.id },
+              data: { profilePicUrl: pic }
+            });
+          }
+        } catch(e) {}
       }
 
       // Salvar mídia se houver
@@ -496,12 +509,13 @@ export class WhatsappService implements OnModuleInit {
       }
 
       // Criar mensagem
+      const isFromMe = message.key.fromMe;
       const dbMessage = await this.prisma.ticketMessage.create({
         data: {
           ticketId: ticket.id,
-          senderType: 'CONTACT',
-          senderId: contact.id,
-          content: isGroup && message.pushName ? `__${message.pushName}__: ${text}` : text,
+          senderType: isFromMe ? 'USER' : 'CONTACT',
+          senderId: isFromMe ? null : contact.id,
+          content: isGroup && message.pushName && !isFromMe ? `__${message.pushName}__: ${text}` : text,
           contentType: type === 'VIDEO' || type === 'DOCUMENT' ? 'FILE' : type === 'STICKER' ? 'IMAGE' : type,
           mediaUrl: mediaPath,
           externalId: message.key.id,
@@ -510,10 +524,14 @@ export class WhatsappService implements OnModuleInit {
         }
       });
 
-      // Atualizar timestamp do ticket
+      // Atualizar timestamp do ticket e status de quem deve responder
       await this.prisma.ticket.update({
         where: { id: ticket.id },
-        data: { updatedAt: new Date(), lastMessageAt: new Date(), waitingReply: true }
+        data: { 
+          updatedAt: new Date(), 
+          lastMessageAt: new Date(), 
+          waitingReply: !isFromMe 
+        }
       });
 
       // Emitir eventos via WebSocket
@@ -625,7 +643,67 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async syncContacts(connectionId: string) {
-    return { success: true, message: 'Sincronização iniciada via Evolution API' };
+    try {
+      const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const connection = await this.prisma.connection.findUnique({
+        where: { id: connectionId }
+      });
+      if (!connection) return { success: false, message: 'Conexão não encontrada' };
+
+      const contactsData = await this.evolutionService.findContacts(connectionId, evolutionConfig);
+      
+      let importedCount = 0;
+      const contactsList = Array.isArray(contactsData) ? contactsData : 
+                          Array.isArray(contactsData?.contacts) ? contactsData.contacts : 
+                          Array.isArray(contactsData?.data) ? contactsData.data : [];
+
+      if (contactsList.length > 0) {
+        for (const c of contactsList) {
+          const remoteJid = c.id || c.remoteJid;
+          if (!remoteJid || remoteJid === 'status@broadcast') continue;
+
+          const isGroup = remoteJid.endsWith('@g.us');
+          let phone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+          let pushName = c.name || c.pushName || c.verifiedName || phone;
+          let picUrl = c.profilePictureUrl || c.profilePicUrl || c.imgUrl || null;
+
+          let contact = await this.prisma.contact.findFirst({
+            where: { tenantId: connection.tenantId, phone }
+          });
+
+          if (contact) {
+            const updateData: any = {};
+            if (picUrl && contact.profilePicUrl !== picUrl) updateData.profilePicUrl = picUrl;
+            
+            if (Object.keys(updateData).length > 0) {
+              await this.prisma.contact.update({
+                where: { id: contact.id },
+                data: updateData
+              });
+              importedCount++;
+            }
+          } else {
+            await this.prisma.contact.create({
+              data: {
+                tenantId: connection.tenantId,
+                name: pushName,
+                phone: phone,
+                whatsapp: remoteJid,
+                category: isGroup ? 'Grupo' : 'Lead',
+                profilePicUrl: picUrl
+              }
+            });
+            importedCount++;
+          }
+        }
+      }
+
+      this.logger.log(`Synced ${importedCount} contacts from Evolution API`);
+      return { success: true, message: `${importedCount} de ${contactsList.length} contatos sincronizados ou atualizados com sucesso!` };
+    } catch (e) {
+      this.logger.error(`Error syncing contacts: ${e.message}`);
+      return { success: false, message: `Erro ao sincronizar: ${e.message}` };
+    }
   }
 
   async getDetailedDiagnostics() {
