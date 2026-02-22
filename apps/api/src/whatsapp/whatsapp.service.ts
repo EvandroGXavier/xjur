@@ -432,7 +432,7 @@ export class WhatsappService implements OnModuleInit {
     try {
       const tenantId = connection.tenantId;
       let fullJid = remoteJid.replace(/:[0-9]+/, '');
-      let phone = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+      let phone = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
       
       let contact = await this.prisma.contact.findFirst({
         where: { tenantId, phone }
@@ -663,7 +663,7 @@ export class WhatsappService implements OnModuleInit {
           if (!remoteJid || remoteJid === 'status@broadcast') continue;
 
           const isGroup = remoteJid.endsWith('@g.us');
-          let phone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+          let phone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
           let pushName = c.name || c.pushName || c.verifiedName || phone;
           let picUrl = c.profilePictureUrl || c.profilePicUrl || c.imgUrl || null;
 

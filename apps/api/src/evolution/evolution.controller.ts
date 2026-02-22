@@ -18,7 +18,13 @@ export class EvolutionController {
     const instance = data.instance;
     
     this.logger.debug(`Webhook received: ${event} from instance ${instance}`);
-    this.logger.debug(`Webhook payload: ${JSON.stringify(data)}`);
+    
+    // Prevent terminal flooding with huge base64 files
+    const payloadStr = JSON.stringify(data, (key, value) => {
+      if (key === 'base64') return '[REDACTED_BASE64]';
+      return value;
+    });
+    this.logger.debug(`Webhook payload: ${payloadStr.length > 2000 ? payloadStr.substring(0, 2000) + '... [TRUNCATED]' : payloadStr}`);
 
     switch (event) {
       case 'qrcode.updated':
