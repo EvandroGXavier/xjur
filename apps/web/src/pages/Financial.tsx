@@ -183,6 +183,9 @@ export function Financial() {
     monetaryCorrection: '',
     discount: '',
     discountType: 'VALUE' as 'VALUE' | 'PERCENTAGE',
+    // Parcelamento
+    totalInstallments: '1',
+    periodicity: 'MONTHLY' as 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY' | 'CUSTOM',
     // Seções colapsáveis
     showCharges: false,
     parties: [] as { contactId: string; role: 'CREDITOR' | 'DEBTOR'; amount?: number }[],
@@ -677,6 +680,8 @@ export function Financial() {
         monetaryCorrection: record.monetaryCorrection ? record.monetaryCorrection.toString() : '',
         discount: record.discount ? record.discount.toString() : '',
         discountType: (record.discountType as 'VALUE' | 'PERCENTAGE') || 'VALUE',
+        totalInstallments: record.totalInstallments ? record.totalInstallments.toString() : '1',
+        periodicity: (record.periodicity as 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY' | 'CUSTOM') || 'MONTHLY',
         showCharges: !!(record.fine || record.interest || record.monetaryCorrection || record.discount),
         parties: record.parties?.map(p => ({
           contactId: p.contactId,
@@ -710,6 +715,8 @@ export function Financial() {
         monetaryCorrection: '',
         discount: '',
         discountType: 'VALUE',
+        totalInstallments: '1',
+        periodicity: 'MONTHLY',
         showCharges: false,
         parties: [],
         splits: [],
@@ -796,6 +803,8 @@ export function Financial() {
         notes: formData.notes.trim() || undefined,
         parties: formData.parties.length > 0 ? formData.parties : undefined,
         splits: formData.splits.length > 0 ? formData.splits : undefined,
+        totalInstallments: parseInt(formData.totalInstallments) || 1,
+        periodicity: formData.periodicity,
         tenantId,
       };
 
@@ -1418,8 +1427,8 @@ export function Financial() {
                     className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     required
                   >
-                    <option value="INCOME">Receita</option>
-                    <option value="EXPENSE">Despesa</option>
+                    <option value="INCOME">Receita (Contas a Receber)</option>
+                    <option value="EXPENSE">Despesa (Contas a Pagar)</option>
                   </select>
                 </div>
 
@@ -1432,9 +1441,48 @@ export function Financial() {
                     required
                   >
                     <option value="PENDING">Pendente</option>
-                    <option value="PAID">Pago</option>
+                    <option value="PAID">Pago / Recebido</option>
                     <option value="CANCELLED">Cancelado</option>
                     <option value="OVERDUE">Vencido</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Nº Parcelas</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={formData.totalInstallments}
+                    onChange={(e) => setFormData({ ...formData, totalInstallments: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="1"
+                  />
+                  {!editingRecord && parseInt(formData.totalInstallments) > 1 && (
+                    <p className="text-[10px] text-indigo-400 mt-1">
+                      Serão criadas {formData.totalInstallments} parcelas de R$ {(parseFloat(formData.amount) / parseInt(formData.totalInstallments) || 0).toFixed(2)}
+                    </p>
+                  )}
+                  {editingRecord && (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Alterar aqui apenas atualiza este registro.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Periodicidade</label>
+                  <select
+                    value={formData.periodicity}
+                    onChange={(e) => setFormData({ ...formData, periodicity: e.target.value as any })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="MONTHLY">Mensal</option>
+                    <option value="BIWEEKLY">Quinzenal</option>
+                    <option value="WEEKLY">Semanal</option>
+                    <option value="CUSTOM">Personalizada</option>
                   </select>
                 </div>
               </div>
