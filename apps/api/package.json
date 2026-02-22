@@ -12,6 +12,7 @@
     "dev": "nest start --watch"
   },
   "dependencies": {
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^10.0.0",
@@ -31,6 +32,8 @@
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
+    "html-to-docx": "^1.8.0",
+    "isomorphic-fetch": "^3.0.0",
     "jimp": "^1.6.0",
     "link-preview-js": "^3.2.0",
     "multer": "^2.0.2",
