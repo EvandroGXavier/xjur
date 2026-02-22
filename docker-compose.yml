@@ -56,6 +56,11 @@ services:
       SERVER_PORT: 8080
       SERVER_URL: http://localhost:8080
       
+      # Fix para QR Code: versão do WhatsApp aceita pelo servidor
+      CONFIG_SESSION_PHONE_VERSION: "2.3000.1028355510"
+      CONFIG_SESSION_PHONE_CLIENT: "Evolution API"
+      NODE_OPTIONS: "--network-family-autoselection-attempt-timeout=1000"
+      
       # Database
       DATABASE_ENABLED: "true"
       DATABASE_PROVIDER: postgresql

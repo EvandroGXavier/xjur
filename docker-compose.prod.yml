@@ -102,6 +102,11 @@ services:
       SERVER_PORT: 8080
       SERVER_URL: "${EVOLUTION_SERVER_URL:-https://evolution.evandroadvogado.com}"
       
+      # Fix para QR Code: versão do WhatsApp aceita pelo servidor
+      CONFIG_SESSION_PHONE_VERSION: "2.3000.1028355510"
+      CONFIG_SESSION_PHONE_CLIENT: "Evolution API"
+      NODE_OPTIONS: "--network-family-autoselection-attempt-timeout=1000"
+      
       # Database (banco separado para Evolution)
       DATABASE_ENABLED: "true"
       DATABASE_PROVIDER: postgresql
@@ -118,6 +123,7 @@ services:
       # Webhook Global (aponta para API dentro da rede Docker)
       WEBHOOK_GLOBAL_ENABLED: "true"
       WEBHOOK_GLOBAL_URL: "http://api:3000/api/evolution/webhook"
+      WEBHOOK_GLOBAL_WEBHOOK_BASE64: "true"
       WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
       WEBHOOK_EVENTS_QRCODE_UPDATED: "true"
       WEBHOOK_EVENTS_MESSAGES_SET: "true"
