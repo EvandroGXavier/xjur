@@ -132,17 +132,24 @@ export class FinancialService {
 
       for (let i = 0; i < dto.totalInstallments; i++) {
         const d = new Date(dto.dueDate);
-        const periodicity = dto.periodicity || 'MONTHLY';
+        const periodicity = (dto.periodicity || 'Mensal').toUpperCase();
         
         switch (periodicity) {
           case 'WEEKLY':
+          case 'SEMANAL':
             d.setDate(d.getDate() + (7 * i));
             break;
           case 'BIWEEKLY':
+          case 'QUINZENAL':
             d.setDate(d.getDate() + (14 * i));
+            break;
+          case 'YEARLY':
+          case 'ANUAL':
+            d.setFullYear(d.getFullYear() + i);
             break;
           case 'CUSTOM':
           case 'MONTHLY':
+          case 'MENSAL':
           default:
             d.setMonth(d.getMonth() + i);
             break;
@@ -465,14 +472,21 @@ export class FinancialService {
   private calculateNextDueDate(firstDueDate: string, periodicity: string, index: number): Date {
     const date = new Date(firstDueDate);
 
-    switch (periodicity) {
+    switch (periodicity?.toUpperCase() || 'MENSAL') {
       case 'WEEKLY':
+      case 'SEMANAL':
         date.setDate(date.getDate() + (7 * index));
         break;
       case 'BIWEEKLY':
+      case 'QUINZENAL':
         date.setDate(date.getDate() + (14 * index));
         break;
+      case 'YEARLY':
+      case 'ANUAL':
+        date.setFullYear(date.getFullYear() + index);
+        break;
       case 'MONTHLY':
+      case 'MENSAL':
       default:
         date.setMonth(date.getMonth() + index);
         break;

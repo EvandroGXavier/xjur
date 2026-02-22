@@ -22,6 +22,8 @@ import { MagicProcessModal } from './MagicProcessModal';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { Badge } from '../../components/ui/Badge';
 import { InlineTags } from '../../components/ui/InlineTags';
+import { HelpModal, useHelpModal } from '../../components/HelpModal';
+import { helpProcesses } from '../../data/helpManuals';
 
 interface Process {
     id: string;
@@ -57,6 +59,7 @@ export function ProcessList() {
     const [sortConfig, setSortConfig] = useState<{ key: keyof Process | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
     // GID: Selection State
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
     useEffect(() => {
         const controller = new AbortController();
@@ -296,6 +299,7 @@ export function ProcessList() {
                 )}
             </div>
             <MagicProcessModal isOpen={isMagicModalOpen} onClose={() => setIsMagicModalOpen(false)} onSuccess={fetchProcesses} />
+            <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Processos" sections={helpProcesses} />
         </div>
     );
 }

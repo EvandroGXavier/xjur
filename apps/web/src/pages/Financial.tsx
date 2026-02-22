@@ -29,8 +29,9 @@ import {
   Paperclip,
   Image,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { api } from '../services/api';
+import { HelpModal, useHelpModal } from '../components/HelpModal';
+import { helpFinancial } from '../data/helpManuals';
 
 interface FinancialRecord {
   id: string;
@@ -140,6 +141,7 @@ interface Dashboard {
 }
 
 export function Financial() {
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -185,7 +187,7 @@ export function Financial() {
     discountType: 'VALUE' as 'VALUE' | 'PERCENTAGE',
     // Parcelamento
     totalInstallments: '1',
-    periodicity: 'MONTHLY' as 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY' | 'CUSTOM',
+    periodicity: 'Mensal',
     // Seções colapsáveis
     showCharges: false,
     parties: [] as { contactId: string; role: 'CREDITOR' | 'DEBTOR'; amount?: number }[],
@@ -195,7 +197,7 @@ export function Financial() {
   const [installmentData, setInstallmentData] = useState({
     totalAmount: '',
     numInstallments: '2',
-    periodicity: 'MONTHLY' as 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY',
+    periodicity: 'Mensal',
     type: 'INCOME' as 'INCOME' | 'EXPENSE',
     description: '',
     firstDueDate: new Date().toISOString().split('T')[0],
@@ -576,7 +578,7 @@ export function Financial() {
     await fetchContacts();
     await fetchCategories();
     setInstallmentData({
-      totalAmount: '', numInstallments: '2', periodicity: 'MONTHLY', type: 'INCOME',
+      totalAmount: '', numInstallments: '2', periodicity: 'Mensal', type: 'INCOME',
       description: '', firstDueDate: new Date().toISOString().split('T')[0],
       category: '', categoryId: '', bankAccountId: '', paymentMethod: '', notes: '',
     });
@@ -681,7 +683,7 @@ export function Financial() {
         discount: record.discount ? record.discount.toString() : '',
         discountType: (record.discountType as 'VALUE' | 'PERCENTAGE') || 'VALUE',
         totalInstallments: record.totalInstallments ? record.totalInstallments.toString() : '1',
-        periodicity: (record.periodicity as 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY' | 'CUSTOM') || 'MONTHLY',
+        periodicity: record.periodicity || 'Mensal',
         showCharges: !!(record.fine || record.interest || record.monetaryCorrection || record.discount),
         parties: record.parties?.map(p => ({
           contactId: p.contactId,
@@ -716,7 +718,7 @@ export function Financial() {
         discount: '',
         discountType: 'VALUE',
         totalInstallments: '1',
-        periodicity: 'MONTHLY',
+        periodicity: 'Mensal',
         showCharges: false,
         parties: [],
         splits: [],
@@ -1474,16 +1476,20 @@ export function Financial() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Periodicidade</label>
-                  <select
+                  <input
+                    type="text"
+                    list="periodicity-list"
                     value={formData.periodicity}
                     onChange={(e) => setFormData({ ...formData, periodicity: e.target.value as any })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="MONTHLY">Mensal</option>
-                    <option value="BIWEEKLY">Quinzenal</option>
-                    <option value="WEEKLY">Semanal</option>
-                    <option value="CUSTOM">Personalizada</option>
-                  </select>
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Ex: Mensal, Anual"
+                  />
+                  <datalist id="periodicity-list">
+                    <option value="Mensal" />
+                    <option value="Quinzenal" />
+                    <option value="Semanal" />
+                    <option value="Anual" />
+                  </datalist>
                 </div>
               </div>
 
@@ -1517,11 +1523,17 @@ export function Financial() {
                   <label className="block text-sm font-medium text-slate-300 mb-2">Categoria</label>
                   <input
                     type="text"
+                    list="category-list"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     placeholder="Ex: Honorários"
                   />
+                  <datalist id="category-list">
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -1912,12 +1924,20 @@ export function Financial() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Periodicidade</label>
-                  <select value={installmentData.periodicity} onChange={e => setInstallmentData({...installmentData, periodicity: e.target.value as any})}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
-                    <option value="MONTHLY">Mensal</option>
-                    <option value="BIWEEKLY">Quinzenal</option>
-                    <option value="WEEKLY">Semanal</option>
-                  </select>
+                  <input
+                    type="text"
+                    list="installment-periodicity-list"
+                    value={installmentData.periodicity}
+                    onChange={e => setInstallmentData({...installmentData, periodicity: e.target.value as any})}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Ex: Mensal, Anual"
+                  />
+                  <datalist id="installment-periodicity-list">
+                    <option value="Mensal" />
+                    <option value="Quinzenal" />
+                    <option value="Semanal" />
+                    <option value="Anual" />
+                  </datalist>
                 </div>
               </div>
 
@@ -2335,6 +2355,7 @@ export function Financial() {
           </div>
         </div>
       )}
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Financeiro" sections={helpFinancial} />
     </div>
   );
 }

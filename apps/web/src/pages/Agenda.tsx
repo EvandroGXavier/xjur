@@ -7,6 +7,8 @@ import { Badge } from '../components/ui/Badge';
 import { AppointmentModal } from '../components/agenda/AppointmentModal';
 import { CalendarMonthView } from '../components/agenda/CalendarMonthView';
 import { startOfMonth, endOfMonth } from 'date-fns';
+import { HelpModal, useHelpModal } from '../components/HelpModal';
+import { helpAgenda } from '../data/helpManuals';
 
 interface Appointment {
   id: string;
@@ -28,6 +30,7 @@ export function Agenda() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Appointment | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
   useEffect(() => {
     fetchAppointments();
@@ -270,6 +273,7 @@ export function Agenda() {
         onSave={fetchAppointments}
         appointment={selectedAppointment}
       />
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Agenda" sections={helpAgenda} />
     </div>
   );
 }

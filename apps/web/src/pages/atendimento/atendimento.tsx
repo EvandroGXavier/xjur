@@ -48,6 +48,8 @@ import { NewTicketModal } from './components/NewTicketModal';
 import { AudioRecorder } from './components/AudioRecorder';
 import { MessageBubble } from './components/MessageBubble';
 import { InfoPanel } from './components/InfoPanel';
+import { HelpModal, useHelpModal } from '../../components/HelpModal';
+import { helpAtendimento } from '../../data/helpManuals';
 
 // =========================
 // INTERFACES
@@ -138,6 +140,7 @@ export function AtendimentoPage() {
   const [messageInput, setMessageInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<'all' | 'unread' | 'waiting' | 'mine'>('all');
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
   // Data States
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -571,6 +574,7 @@ export function AtendimentoPage() {
       </div>
       {renderCurrentModule()}
       <NewTicketModal open={showNewTicketModal} onClose={() => setShowNewTicketModal(false)} onSuccess={(id) => { fetchTickets(); setSelectedTicketId(id); }} />
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Atendimento (Chat CRM)" sections={helpAtendimento} />
     </div>
   );
 }

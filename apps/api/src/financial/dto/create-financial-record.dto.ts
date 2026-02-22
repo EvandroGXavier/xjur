@@ -141,8 +141,7 @@ export class CreateFinancialRecordDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['MONTHLY', 'BIWEEKLY', 'WEEKLY', 'CUSTOM'], { message: 'Periodicidade inválida' })
-  periodicity?: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY' | 'CUSTOM';
+  periodicity?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -178,9 +177,9 @@ export class CreateInstallmentsDto {
   @Min(2, { message: 'Mínimo de 2 parcelas' })
   numInstallments: number;
 
+  @IsOptional()
   @IsString()
-  @IsIn(['MONTHLY', 'BIWEEKLY', 'WEEKLY'])
-  periodicity: 'MONTHLY' | 'BIWEEKLY' | 'WEEKLY';
+  periodicity?: string;
 
   @IsString()
   @IsIn(['INCOME', 'EXPENSE'])

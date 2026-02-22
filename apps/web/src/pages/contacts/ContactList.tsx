@@ -7,6 +7,8 @@ import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { InlineTags } from '../../components/ui/InlineTags';
+import { HelpModal, useHelpModal } from '../../components/HelpModal';
+import { helpContacts } from '../../data/helpManuals';
 
 interface Contact {
   id: string;
@@ -27,6 +29,7 @@ export function ContactList() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Contact | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   
   useEffect(() => {
     const controller = new AbortController();
@@ -201,6 +204,7 @@ export function ContactList() {
             ]}
           />
       </div>
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Contatos" sections={helpContacts} />
     </div>
   );
 }
