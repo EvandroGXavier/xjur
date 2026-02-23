@@ -8,8 +8,23 @@
   font-weight: 400;
 
   color-scheme: dark;
-  background-color: #0f172a; /* Slate 900 */
-  color: rgba(255, 255, 255, 0.87);
+  
+  --color-slate-950: 2 6 23;
+  --color-slate-900: 15 23 42;
+  --color-slate-800: 30 41 59;
+  --color-slate-700: 51 65 85;
+  --color-slate-600: 71 85 105;
+  --color-slate-500: 100 116 139;
+  --color-slate-400: 148 163 184;
+  --color-slate-300: 203 213 225;
+  --color-slate-200: 226 232 240;
+  --color-slate-100: 241 245 249;
+  --color-slate-50: 248 250 252;
+  --color-white: 255 255 255;
+  --color-black: 0 0 0;
+
+  background-color: rgb(var(--color-slate-950));
+  color: rgb(var(--color-white));
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -21,6 +36,27 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+}
+
+html.light {
+  color-scheme: light;
+  
+  --color-slate-950: 248 250 252; /* Slate 50 as backmost */
+  --color-slate-900: 255 255 255; /* White as main panels */
+  --color-slate-800: 241 245 249; /* Slate 100 as borders/hovers */
+  --color-slate-700: 226 232 240; /* Slate 200 */
+  --color-slate-600: 148 163 184; /* Slate 400 for inputs/borders */
+  --color-slate-500: 100 116 139; /* Slate 500 */
+  --color-slate-400: 71 85 105;   /* Slate 600 text medium */
+  --color-slate-300: 51 65 85;    /* Slate 700 text dark */
+  --color-slate-200: 30 41 59;    /* Slate 800 */
+  --color-slate-100: 15 23 42;    /* Slate 900 */
+  --color-slate-50: 2 6 23;       /* Slate 950 */
+  
+  --color-white: 15 23 42; /* Text White inverts to dark text */
+  --color-black: 255 255 255; /* Black inverts to white */
+  
+  background-color: rgb(var(--color-slate-950));
 }
 
 #root {

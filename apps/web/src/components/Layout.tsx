@@ -76,8 +76,17 @@ const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
 export function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    const isLight = localStorage.getItem('theme') === 'light';
+    if (isLight) {
+        document.documentElement.classList.add('light');
+    } else {
+        document.documentElement.classList.remove('light');
+    }
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-[Inter] overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-[Inter] overflow-x-hidden transition-colors duration-300">
       <Sidebar isOpen={isSidebarOpen} closeSidebar={() => setIsSidebarOpen(false)} />
       
       {/* Overlay for mobile */}
