@@ -15,7 +15,6 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           script: |
-            # 1. Preparar Ambiente
             source /etc/profile
             [ -f ~/.bashrc ] && source ~/.bashrc
             
@@ -23,47 +22,39 @@ jobs:
             set -e 
 
             echo "========================================="
-            echo "🚀 DR.X SUPREMO DEPLOY - $(date)"
+            echo "🚀 DR.X SUPREMO DEPLOY (V2 CORRIGIDA) - $(date)"
             echo "========================================="
 
-            echo "1️⃣ Sincronizando código do GitHub..."
+            echo "1️⃣ Sincronizando código..."
             git fetch --all
             git reset --hard origin/main
-            echo "✅ Código: $(git log --oneline -1)"
 
-            echo "2️⃣ Limpando processos legados PM2..."
+            echo "2️⃣ Limpando PM2..."
             pm2 delete all 2>/dev/null || true
-            pm2 save --force 2>/dev/null || true
 
-            echo "3️⃣ Configurando Variáveis PRD 2026..."
-            # Definindo a URL de conexão do banco conforme o PRD
+            echo "3️⃣ Configurando Variáveis..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=public"
-            export APP_URL="https://dr-x.xtd.com.br"
-            export API_URL="https://api.dr-x.xtd.com.br"
-            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
             
-            echo "4️⃣ Reconstruindo Containers (API + Web)..."
-            # Usando --build-arg se necessário ou garantindo o .env interno
-            docker compose -f docker-compose.prod.yml pull
+            echo "4️⃣ Reconstruindo Containers..."
             docker compose -f docker-compose.prod.yml build --no-cache api web
             
-            echo "5️⃣ Subindo a Stack DR.X..."
+            echo "5️⃣ Subindo a Stack..."
             docker compose -f docker-compose.prod.yml up -d
             
-            echo "6️⃣ Sincronizando Schema do Banco (Prisma)..."
-            sleep 10
-            # Rodando o push através do container da API
-            docker exec drx_api_prod npx prisma db push --accept-data-loss
+            echo "6️⃣ Sincronizando Banco de Dados (Caminho Monorepo)..."
+            sleep 12
+            # Correção aqui: apontando o caminho exato do schema no monorepo
+            docker exec drx_api_prod npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
             
             echo "========================================="
-            echo "📊 STATUS DOS SERVIÇOS:"
+            echo "📊 STATUS FINAL:"
             echo "========================================="
             docker compose -f docker-compose.prod.yml ps
 
             echo ""
-            echo "🩺 HEALTH CHECK (Domínios 2026):"
+            echo "🩺 HEALTH CHECK:"
             sleep 5
             curl -I https://dr-x.xtd.com.br | grep "HTTP" || echo "Web: ❌ Offline"
-            curl -I https://api.dr-x.xtd.com.br/health | grep "HTTP" || echo "API: ❌ Offline"
+            curl -I https://api.dr-x.xtd.com.br/app | grep "HTTP" || echo "API: ❌ Offline"
             
             echo "🚀 DEPLOY FINALIZADO COM SUCESSO!"
