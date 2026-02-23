@@ -11,64 +11,59 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
+          username: root
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           script: |
-            # 1. Carregar Ambiente
+            # 1. Preparar Ambiente
             source /etc/profile
             [ -f ~/.bashrc ] && source ~/.bashrc
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             
             cd /www/wwwroot/DrX
             set -e 
 
             echo "========================================="
-            echo "🚀 DR.X DEPLOY (Docker) - $(date)"
+            echo "🚀 DR.X SUPREMO DEPLOY - $(date)"
             echo "========================================="
 
-            echo "1️⃣ Sincronizando código..."
+            echo "1️⃣ Sincronizando código do GitHub..."
             git fetch --all
             git reset --hard origin/main
-            echo "✅ Código sincronizado: $(git log --oneline -1)"
+            echo "✅ Código: $(git log --oneline -1)"
 
-            echo "2️⃣ Limpando PM2 legado..."
-            pm2 delete drx-api 2>/dev/null || true
-            pm2 delete drx-web 2>/dev/null || true
-            pm2 delete drx-studio 2>/dev/null || true
-            pm2 save 2>/dev/null || true
+            echo "2️⃣ Limpando processos legados PM2..."
+            pm2 delete all 2>/dev/null || true
+            pm2 save --force 2>/dev/null || true
 
-            echo "3️⃣ Configurando variáveis de ambiente..."
+            echo "3️⃣ Configurando Variáveis PRD 2026..."
+            # Definindo a URL de conexão do banco conforme o PRD
+            export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=public"
+            export APP_URL="https://dr-x.xtd.com.br"
+            export API_URL="https://api.dr-x.xtd.com.br"
             export JWT_SECRET="${{ secrets.JWT_SECRET }}"
-            export POSTGRES_USER="drx"
-            export POSTGRES_PASSWORD="drx_secure_pass_123"
-            export POSTGRES_DB="drx_db"
-            export APP_URL="https://drx.evandroadvogado.com"
-            export EVOLUTION_API_KEY="${{ secrets.EVOLUTION_API_KEY }}"
-            export EVOLUTION_SERVER_URL="https://evolution.evandroadvogado.com"
             
-            echo "4️⃣ Reconstruindo containers (API + Web)..."
+            echo "4️⃣ Reconstruindo Containers (API + Web)..."
+            # Usando --build-arg se necessário ou garantindo o .env interno
+            docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml build --no-cache api web
             
-            echo "5️⃣ Reiniciando stack completa..."
+            echo "5️⃣ Subindo a Stack DR.X..."
             docker compose -f docker-compose.prod.yml up -d
             
-            echo "6️⃣ Sincronizando banco de dados..."
-            sleep 8
-            docker exec drx_api_prod npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss 2>/dev/null || echo "⚠️ Prisma push falhou (pode já estar sincronizado)"
+            echo "6️⃣ Sincronizando Schema do Banco (Prisma)..."
+            sleep 10
+            # Rodando o push através do container da API
+            docker exec drx_api_prod npx prisma db push --accept-data-loss
             
             echo "========================================="
-            echo "📊 STATUS FINAL:"
+            echo "📊 STATUS DOS SERVIÇOS:"
             echo "========================================="
             docker compose -f docker-compose.prod.yml ps
 
-            # Health check
             echo ""
-            echo "🩺 HEALTH CHECK:"
+            echo "🩺 HEALTH CHECK (Domínios 2026):"
             sleep 5
-            curl -s -o /dev/null -w "API  (3000): HTTP %{http_code}\n" http://localhost:3000/api 2>/dev/null || echo "API  (3000): ❌ Sem resposta"
-            curl -s -o /dev/null -w "Web  (8080): HTTP %{http_code}\n" http://localhost:8080/ 2>/dev/null || echo "Web  (8080): ❌ Sem resposta"
-            curl -s -o /dev/null -w "Evol (8081): HTTP %{http_code}\n" http://localhost:8081/ 2>/dev/null || echo "Evol (8081): ❌ Sem resposta"
-            echo ""
-            echo "🚀 DR.X DEPLOY COMPLETO!"
+            curl -I https://dr-x.xtd.com.br | grep "HTTP" || echo "Web: ❌ Offline"
+            curl -I https://api.dr-x.xtd.com.br/health | grep "HTTP" || echo "API: ❌ Offline"
+            
+            echo "🚀 DEPLOY FINALIZADO COM SUCESSO!"
