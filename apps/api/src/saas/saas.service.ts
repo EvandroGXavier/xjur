@@ -130,6 +130,13 @@ export class SaasService {
       });
   }
 
+  async getTenantById(id: string) {
+      return this.prisma.tenant.findUnique({
+          where: { id },
+          include: { plan: true }
+      });
+  }
+
   // --- PLANS CRUD ---
 
   async createPlan(data: any) {

@@ -63,6 +63,7 @@ export function Settings() {
   // DATA
   const [tenants, setTenants] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
+  const [myTenant, setMyTenant] = useState<any>(null);
 
   // MODAL STATE
   const [modalOpen, setModalOpen] = useState(false);
@@ -78,6 +79,7 @@ export function Settings() {
         fetchPlans();
     }
     if (activeTab === 'plans') fetchPlans();
+    if (activeTab === 'my-tenant') fetchMyTenant();
   }, [activeTab]);
 
   // --- FETCHING ---
@@ -107,6 +109,42 @@ export function Settings() {
   };
 
   // --- ACTIONS ---
+
+  const fetchMyTenant = async () => {
+      try {
+          setLoading(true);
+          const res = await api.get('/saas/my-tenant');
+          setMyTenant(res.data);
+          setFormData({
+              name: res.data.name,
+              document: res.data.document,
+              msTenantId: res.data.msTenantId || '',
+              msClientId: res.data.msClientId || '',
+              msClientSecret: res.data.msClientSecret || '',
+              msFolderId: res.data.msFolderId || '',
+              msStorageActive: res.data.msStorageActive || false,
+          });
+      } catch (error) {
+          console.error('Erro ao carregar minha empresa', error);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleSaveMyTenant = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!myTenant) return;
+      try {
+          setLoading(true);
+          await api.post(`/saas/tenants/update/${myTenant.id}`, formData);
+          alert('Configurações salvas com sucesso!');
+          fetchMyTenant();
+      } catch (error: any) {
+          alert('Erro ao salvar: ' + (error.response?.data?.message || error.message));
+      } finally {
+          setLoading(false);
+      }
+  };
 
   const handleOpenModal = (type: 'tenant' | 'plan', item?: any) => {
       setModalType(type);
@@ -218,6 +256,7 @@ export function Settings() {
       {/* TABS */}
       <div className="flex border-b border-slate-800 overflow-x-auto">
         <TabButton active={activeTab === 'options'} onClick={() => setActiveTab('options')} icon={SettingsIcon} label="Opções" />
+        <TabButton active={activeTab === 'my-tenant'} onClick={() => setActiveTab('my-tenant')} icon={Building2} label="Minha Empresa" />
         
         {/* SAAS TABS - SUPER ADMIN ONLY */}
         {JSON.parse(localStorage.getItem('user') || '{}')?.email === 'evandro@conectionmg.com.br' && (
@@ -252,6 +291,128 @@ export function Settings() {
                         </div>
                     </div>
                 </div>
+            </div>
+        )}
+
+        {/* === MY TENANT TAB === */}
+        {activeTab === 'my-tenant' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-6">Configurações da Minha Empresa</h3>
+                
+                {loading && !myTenant ? (
+                    <div className="text-slate-500">Carregando...</div>
+                ) : (
+                    <form onSubmit={handleSaveMyTenant} className="space-y-6 max-w-2xl">
+                        <div className="grid grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-400 mb-1">Nome do Escritório</label>
+                                <input
+                                    type="text"
+                                    value={formData.name || ''}
+                                    onChange={e => setFormData({...formData, name: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-400 mb-1">CNPJ/CPF</label>
+                                <input
+                                    type="text"
+                                    value={formData.document || ''}
+                                    disabled
+                                    className="w-full bg-slate-950/50 border border-slate-800/50 rounded-lg px-4 py-2 text-slate-500 cursor-not-allowed"
+                                />
+                                <p className="text-[10px] text-slate-500 mt-1">O documento não pode ser alterado.</p>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 pt-6 border-t border-slate-800">
+                            <h4 className="text-md font-semibold text-white mb-4 flex items-center gap-2">
+                                <svg className="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
+                                </svg>
+                                Integração com Microsoft 365
+                            </h4>
+                            <p className="text-sm text-slate-400 mb-6">
+                                Configure as credenciais do seu aplicativo no Azure para ativar o salvamento automático de documentos no seu OneDrive/SharePoint.
+                            </p>
+                            
+                            <div className="space-y-4 bg-slate-950 p-5 rounded-lg border border-slate-800">
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.msStorageActive || false}
+                                        onChange={e => setFormData({...formData, msStorageActive: e.target.checked})}
+                                        id="myMsStorageActive"
+                                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <label htmlFor="myMsStorageActive" className="text-sm font-medium text-white cursor-pointer">
+                                        Ativar Armazenamento OneDrive/SharePoint
+                                    </label>
+                                </div>
+
+                                {formData.msStorageActive && (
+                                    <div className="space-y-4 mt-4 pt-4 border-t border-slate-800/50 animate-in fade-in duration-300">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-1">Tenant ID (Diretório Azure)</label>
+                                            <input
+                                                type="text"
+                                                value={formData.msTenantId || ''}
+                                                onChange={e => setFormData({...formData, msTenantId: e.target.value})}
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
+                                                placeholder="Ex: 8a7b6c5d..."
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-400 mb-1">Client ID (App)</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.msClientId || ''}
+                                                    onChange={e => setFormData({...formData, msClientId: e.target.value})}
+                                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-400 mb-1">Client Secret</label>
+                                                <input
+                                                    type="password"
+                                                    value={formData.msClientSecret || ''}
+                                                    onChange={e => setFormData({...formData, msClientSecret: e.target.value})}
+                                                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-400 mb-1">ID da Pasta Raiz (Drive ID base)</label>
+                                            <input
+                                                type="text"
+                                                value={formData.msFolderId || ''}
+                                                onChange={e => setFormData({...formData, msFolderId: e.target.value})}
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
+                                                placeholder="Ex: b!ABCD_XYZ123..."
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                ID da pasta ou drive onde serão salvas as informações.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="pt-6 border-t border-slate-800 flex justify-end">
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                <Save size={18} />
+                                {loading ? 'Salvando...' : 'Salvar Configurações'}
+                            </button>
+                        </div>
+                    </form>
+                )}
             </div>
         )}
 

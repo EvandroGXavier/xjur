@@ -20,6 +20,12 @@ export class SaasController {
     return this.saasService.getTenants();
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('my-tenant')
+  async getMyTenant(@Request() req: any) {
+    return this.saasService.getTenantById(req.user.tenantId);
+  }
+
   // @UseGuards(JwtAuthGuard)
   @Post('tenants/:id') // Using Post for update if Put has issues on some proxies, but standard is Put. Let's use PUT and PATCH.
   // Actually NestJS uses @Put
@@ -30,6 +36,9 @@ export class SaasController {
   @UseGuards(JwtAuthGuard)
   @Post('tenants/update/:id') // Safe fallback
   async updateTenantPost(@Request() req: any, @Body() body: any) {
+    if (req.user.email !== 'evandro@conectionmg.com.br' && req.user.tenantId !== req.params.id) {
+        throw new Error('Unauthorized');
+    }
     return this.saasService.updateTenant(req.params.id, body);
   }
   
