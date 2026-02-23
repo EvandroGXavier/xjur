@@ -30,6 +30,7 @@ import {
   Image,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { toast } from 'sonner';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpFinancial } from '../data/helpManuals';
 

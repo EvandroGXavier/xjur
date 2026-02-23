@@ -1,13 +1,10 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { 
-  Users,
+import {
   UserPlus,
   Trash2,
-  Shield,
   User,
-  MoreVertical,
   X,
   Save
 } from 'lucide-react';

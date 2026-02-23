@@ -297,7 +297,7 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
                                         className={inputClass} 
                                         placeholder="CPF/CNPJ" 
                                         value={quickContact.document}
-                                        onChange={e => setQuickContact({...quickContact, document: masks.document(e.target.value)})}
+                                        onChange={e => setQuickContact({...quickContact, document: e.target.value})}
                                     />
                                 </div>
                             </div>

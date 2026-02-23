@@ -85,7 +85,6 @@ export class ContactsService {
   async findAll(tenantId: string, search?: string, includedTags?: string, excludedTags?: string) {
     const whereClause: any = {
       tenantId,
-      deletedAt: null,
     };
 
     if (search) {
@@ -127,6 +126,8 @@ export class ContactsService {
     const contacts = await this.prisma.contact.findMany({
       where: whereClause,
       include: {
+        pfDetails: true,
+        pjDetails: true,
         tags: {
           include: {
             tag: true
@@ -140,11 +141,7 @@ export class ContactsService {
       },
     });
 
-    // Formatting tags for frontend
-    return contacts.map(c => ({
-       ...c,
-       tags: c.tags.map(t => t.tag)
-    }));
+    return contacts.map(c => this.flattenContact(c));
   }
 
   async findOne(id: string) {

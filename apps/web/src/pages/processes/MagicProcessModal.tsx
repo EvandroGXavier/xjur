@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, FileText, Check, AlertCircle, Loader2, Upload, User, DollarSign } from 'lucide-react';
+import { Search, FileText, Check, Loader2, Upload, User, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';

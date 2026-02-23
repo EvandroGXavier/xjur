@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import { Tag, Check, X, TagIcon } from 'lucide-react';
+import { Check, X, Tag as TagIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 
