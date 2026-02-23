@@ -4,16 +4,16 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Dashboard</h1>
-          <p className="text-slate-400 mt-1">Visão geral da sua operação jurídica.</p>
+          <p className="text-slate-400 mt-1 text-sm sm:text-base">Visão geral da sua operação jurídica.</p>
         </div>
-        <div className="flex gap-3">
-          <button className="p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition">
+        <div className="flex gap-3 w-full sm:w-auto">
+          <button className="p-2 flex-shrink-0 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition flex items-center justify-center">
             <Bell size={20} />
           </button>
-          <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20">
+          <button className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 text-center">
             Novo Caso
           </button>
         </div>

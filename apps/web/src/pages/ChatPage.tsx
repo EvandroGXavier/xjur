@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Search, Plus, Filter, MessageCircle, Phone, Mail, 
     MoreVertical, Paperclip, Mic, Send, Check, CheckCheck,
-    User, Archive, Clock, MoreHorizontal, X
+    User, Archive, Clock, MoreHorizontal, X, ChevronLeft
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -52,6 +52,7 @@ export const ChatPage: React.FC = () => {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // ... (useEffects and functions unchanged down to line 155)
   // Load Tickets
   useEffect(() => {
     if (isConnected) fetchTickets();
@@ -171,7 +172,10 @@ export const ChatPage: React.FC = () => {
     <div className="flex h-full bg-slate-950 overflow-hidden animate-in fade-in">
       
       {/* 1. LEFT SIDEBAR: LIST */}
-      <div className="w-80 border-r border-slate-800 bg-slate-900 flex flex-col">
+      <div className={clsx(
+          "w-full md:w-80 border-r border-slate-800 bg-slate-900 flex-col",
+          selectedTicket ? "hidden md:flex" : "flex"
+      )}>
           {/* Header */}
           <div className="p-4 border-b border-slate-800 flex justify-between items-center">
              <h2 className="text-lg font-bold text-white">Tickets</h2>
@@ -190,7 +194,7 @@ export const ChatPage: React.FC = () => {
           </div>
 
           {/* List */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
               {loading && tickets.length === 0 && <div className="p-4 text-center text-slate-500">Carregando...</div>}
               {tickets.map(ticket => (
                   <div 
@@ -221,13 +225,19 @@ export const ChatPage: React.FC = () => {
       </div>
 
       {/* 2. CENTER: CHAT WINDOW */}
-      <div className="flex-1 flex flex-col bg-slate-950 relative">
+      <div className={clsx(
+          "flex-1 flex-col bg-slate-950 relative",
+          selectedTicket ? "flex" : "hidden md:flex"
+      )}>
           {selectedTicket ? (
               <>
                   {/* Header */}
                   <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-                      <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                          <button onClick={() => setSelectedTicketId(null)} className="md:hidden p-1.5 -ml-2 mr-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
+                              <ChevronLeft size={24} />
+                          </button>
+                          <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold flex-shrink-0">
                               {selectedTicket.contact?.name?.substring(0,2).toUpperCase() || 'CX'}
                           </div>
                           <div>

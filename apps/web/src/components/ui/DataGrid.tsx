@@ -100,8 +100,7 @@ export function DataGrid<T extends { id: string }>({
                 </th>
               ))}
               
-              {/* Actions Column */}
-              <th className="px-6 py-4 text-right">Ações</th>
+              {/* End Data Columns */}
             </tr>
           </thead>
           
@@ -109,14 +108,14 @@ export function DataGrid<T extends { id: string }>({
             {isLoading ? (
               [...Array(pageSize)].map((_, i) => (
                 <tr key={i} className="animate-pulse">
-                  <td colSpan={columns.length + 2} className="px-6 py-4">
+                  <td colSpan={columns.length + 1} className="px-6 py-4">
                     <div className="h-4 bg-slate-800 rounded w-full opacity-50"></div>
                   </td>
                 </tr>
               ))
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + 2} className="px-6 py-12 text-center text-slate-500">
+                <td colSpan={columns.length + 1} className="px-6 py-12 text-center text-slate-500">
                   Nenhum registro encontrado.
                 </td>
               </tr>
@@ -140,12 +139,6 @@ export function DataGrid<T extends { id: string }>({
                       {col.render ? col.render(item) : (item as any)[col.key]}
                     </td>
                   ))}
-                  
-                  <td className="px-6 py-4 text-right">
-                    <button className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
-                      <MoreHorizontal size={18} />
-                    </button>
-                  </td>
                 </tr>
               ))
             )}
@@ -154,7 +147,7 @@ export function DataGrid<T extends { id: string }>({
       </div>
 
       {/* Pagination Footer */}
-      <div className="bg-slate-950 border-t border-slate-800 p-4 flex items-center justify-between text-sm text-slate-400 select-none">
+      <div className="bg-slate-950 border-t border-slate-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400 select-none">
         
         {/* Page Size Selector */}
         <div className="flex items-center gap-2">

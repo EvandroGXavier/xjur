@@ -50,13 +50,17 @@ export class ContactsController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: CurrentUserData, @Query('search') search?: string) {
-    // console.log('GET /contacts - User:', user);
+  findAll(
+      @CurrentUser() user: CurrentUserData, 
+      @Query('search') search?: string,
+      @Query('includedTags') includedTags?: string,
+      @Query('excludedTags') excludedTags?: string,
+  ) {
     if (!user || !user.tenantId) {
       console.error('User or tenantId missing in GET /contacts');
       throw new Error('User context invalid');
     }
-    return this.contactsService.findAll(user.tenantId, search);
+    return this.contactsService.findAll(user.tenantId, search, includedTags, excludedTags);
   }
 
   @Get(':id')

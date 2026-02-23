@@ -208,18 +208,7 @@ export function ProcessList() {
                                     </div>
                                 )
                             },
-                            {
-                                key: 'tags' as any,
-                                label: 'Etiquetas',
-                                render: (p: any) => (
-                                    <InlineTags 
-                                        tags={p.tags || []} 
-                                        entityId={p.id} 
-                                        entityType="process" 
-                                        onRefresh={() => fetchProcesses()} 
-                                    />
-                                )
-                            },
+
                             { key: 'client', label: 'Cliente', sortable: true, render: (process) => <span className="text-slate-300 hover:text-white cursor-pointer transition-colors">{process.client || '-'}</span> },
                             {
                                 key: 'status',

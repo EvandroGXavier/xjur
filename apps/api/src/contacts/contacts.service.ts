@@ -82,35 +82,69 @@ export class ContactsService {
     }
   }
 
-  async findAll(tenantId: string, search?: string) {
-    const where: any = { tenantId };
+  async findAll(tenantId: string, search?: string, includedTags?: string, excludedTags?: string) {
+    const whereClause: any = {
+      tenantId,
+      deletedAt: null,
+    };
 
-    if (search && search.trim().length > 0) {
-        const searchTerm = search.trim();
-        where.OR = [
-            { name: { contains: searchTerm, mode: 'insensitive' } },
-            { document: { contains: searchTerm, mode: 'insensitive' } },
-            { email: { contains: searchTerm, mode: 'insensitive' } },
-            // Also search in PF/PJ details if needed, but usually flattened document covers it.
-            // Let's stick to main fields for performance first.
-        ];
+    if (search) {
+      whereClause.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { document: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { whatsapp: { contains: search, mode: 'insensitive' } },
+        { cpf: { contains: search, mode: 'insensitive' } },
+        { cnpj: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (includedTags || excludedTags) {
+       if (!whereClause.AND) whereClause.AND = [];
+       
+       if (includedTags) {
+          const incArray = includedTags.split(',');
+          // Must have AT LEAST ONE of the included tags (OR logic for inclusion)
+          whereClause.AND.push({
+             tags: {
+                some: { tagId: { in: incArray } }
+             }
+          });
+       }
+
+       if (excludedTags) {
+          const excArray = excludedTags.split(',');
+          // Must NOT have ANY of the excluded tags
+          whereClause.AND.push({
+             tags: {
+                none: { tagId: { in: excArray } }
+             }
+          });
+       }
     }
 
     const contacts = await this.prisma.contact.findMany({
-      where,
+      where: whereClause,
       include: {
-        pfDetails: true,
-        pjDetails: true,
         tags: {
           include: {
             tag: true
           }
-        }
+        },
+        addresses: true,
+        additionalContacts: true,
       },
-      orderBy: { createdAt: 'desc' },
-      take: search ? 50 : undefined // Limit results if searching to avoid overload
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
-    return contacts.map(c => this.flattenContact(c));
+
+    // Formatting tags for frontend
+    return contacts.map(c => ({
+       ...c,
+       tags: c.tags.map(t => t.tag)
+    }));
   }
 
   async findOne(id: string) {
