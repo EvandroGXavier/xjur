@@ -37,8 +37,20 @@ npx prisma generate
 **Saída esperada:**
 ```
 ✔ Generated Prisma Client
-✔ Applied migration: 20260127_add_contact_fields
+✔ Applied migration: ...
 ```
+
+---
+
+### 4.5️⃣ Fazer a Build do Frontend (MUITO IMPORTANTE)
+Como a interface (Web) é feita em React e Vite, é **obrigatório** gerar os arquivos estáticos após cada mudança de UI (como novas telas ou abas).
+```bash
+cd /www/wwwroot/DrX
+npx turbo run build --filter=web
+# OU, se o turbo der pau:
+# cd apps/web && npm install && npm run build
+```
+*(Esse é o motivo principal pelas novas telas como "Minha Empresa" não estarem no ar: as páginas atualizadas precisam ser compiladas na VPS).*
 
 ---
 
