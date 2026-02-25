@@ -190,6 +190,7 @@ export function ContactForm() {
   }, [formData.personType]);
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [requireOneInfo, setRequireOneInfo] = useState(true);
   
   // Address form states
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -472,10 +473,28 @@ export function ContactForm() {
     fetchRelationTypes();
     fetchAssetTypes();
     fetchAvailableContacts();
+
+    // Buscar configurações do Tenant
+    api.get('/saas/my-tenant')
+      .then(res => setRequireOneInfo(res.data.contactRequireOneInfo ?? true))
+      .catch(err => console.error("Failed to fetch tenant settings", err));
   }, [id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validação
+    if (requireOneInfo) {
+      const hasPhone = !!formData.phone?.trim();
+      const hasWhatsapp = !!formData.whatsapp?.trim();
+      const hasEmail = !!formData.email?.trim();
+      
+      if (!hasPhone && !hasWhatsapp && !hasEmail) {
+        toast.warning('Você deve preencher pelo menos um meio de contato: Celular, Telefone ou E-mail.');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
         const toISO = (dateStr: any) => {
@@ -930,11 +949,12 @@ export function ContactForm() {
                                  />
                              </div>
 
-                             {/* Celular / WhatsApp (Mandatory) */}
+                             {/* Celular / WhatsApp */}
                              <div className="space-y-2">
-                                 <label className="text-sm font-medium text-slate-400">Celular / WhatsApp *</label>
+                                 <label className="text-sm font-medium text-slate-400">
+                                     Celular / WhatsApp {requireOneInfo ? '*' : ''}
+                                 </label>
                                  <input 
-                                    required
                                     value={formData.whatsapp || ''}
                                     onChange={e => setFormData({...formData, whatsapp: masks.phone(e.target.value)})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"

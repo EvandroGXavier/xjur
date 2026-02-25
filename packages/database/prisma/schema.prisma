@@ -60,6 +60,9 @@ model Tenant {
   partyRoles        PartyRole[]
   processParties    ProcessParty[]
 
+  // Preferences
+  contactRequireOneInfo Boolean @default(true) // Se false, celular/telefone/email ficam não-obrigatórios
+
   @@map("tenants")
 }
 

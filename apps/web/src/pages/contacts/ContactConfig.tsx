@@ -1,7 +1,8 @@
-
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings, Upload, Tags, Columns, Database, FileSpreadsheet, ChevronRight, Users } from 'lucide-react';
-
+import { ArrowLeft, Settings, Upload, Tags, Columns, Database, FileSpreadsheet, ChevronRight, Users, Check } from 'lucide-react';
+import { api } from '../../services/api';
+import { toast } from 'sonner';
 interface ConfigCard {
   id: string;
   icon: React.ReactNode;
@@ -14,6 +15,38 @@ interface ConfigCard {
 
 export function ContactConfig() {
   const navigate = useNavigate();
+  const [tenantInfo, setTenantInfo] = useState<any>(null);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+
+  useEffect(() => {
+    fetchTenant();
+  }, []);
+
+  const fetchTenant = async () => {
+    try {
+      const { data } = await api.get('/saas/my-tenant');
+      setTenantInfo(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const toggleRequireOneInfo = async () => {
+    if (!tenantInfo) return;
+    try {
+      setLoadingConfig(true);
+      const newValue = !tenantInfo.contactRequireOneInfo;
+      // We assume /saas/tenants/update/:id is available since the backend was updated for it.
+      await api.post(`/saas/tenants/update/${tenantInfo.id}`, { contactRequireOneInfo: newValue });
+      
+      setTenantInfo({ ...tenantInfo, contactRequireOneInfo: newValue });
+      toast.success(newValue ? 'Obrigatório preencher ao menos 1 contato' : 'Nenhum meio de contato é obrigatório mais');
+    } catch (err) {
+      toast.error('Erro ao salvar configuração');
+    } finally {
+      setLoadingConfig(false);
+    }
+  };
 
   const configCards: ConfigCard[] = [
     {
@@ -142,6 +175,34 @@ export function ContactConfig() {
             </button>
           );
         })}
+      </div>
+
+      {/* General Settings */}
+      <div className="mt-8 bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <Settings className="text-indigo-400 w-5 h-5" /> Configurações Gerais
+        </h2>
+        
+        <div className="flex items-center justify-between p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg">
+          <div>
+            <h3 className="font-medium text-white">Exigir ao menos 1 meio de contato</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Ao criar ou editar um contato, obrigar que pelo menos (Telefone, Celular/WhatsApp ou E-mail) esteja preenchido.
+            </p>
+          </div>
+          
+          <button 
+            onClick={toggleRequireOneInfo}
+            disabled={loadingConfig || !tenantInfo}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tenantInfo?.contactRequireOneInfo !== false ? 'bg-indigo-600' : 'bg-slate-700'}`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                tenantInfo?.contactRequireOneInfo !== false ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Footer info */}
