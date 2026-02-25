@@ -15,9 +15,17 @@ export class EvolutionController {
   @HttpCode(HttpStatus.OK)
   async handleWebhook(@Body() data: any) {
     const event = data.event;
-    const instance = data.instance;
     
-    this.logger.debug(`Webhook received: ${event} from instance ${instance}`);
+    // Extrai o connectionId original do instanceName dinâmico
+    let instance = data.instance;
+    if (instance && instance.includes('-')) {
+      const parts = instance.split('-');
+      if (parts.length > 5) { // UUID tem 5 partes
+        instance = parts.slice(0, 5).join('-');
+      }
+    }
+    
+    this.logger.debug(`Webhook received: ${event} from instance ${instance} (evo_id: ${data.instance})`);
     
     // Prevent terminal flooding with huge base64 files
     const payloadStr = JSON.stringify(data, (key, value) => {

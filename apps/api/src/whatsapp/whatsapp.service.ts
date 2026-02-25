@@ -72,6 +72,12 @@ export class WhatsappService implements OnModuleInit {
   // SESSION MANAGEMENT
   // ==========================================
 
+  private async getEvolutionInstanceName(connectionId: string): Promise<string> {
+    const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+    const config = conn?.config as any || {};
+    return config.evolutionInstanceName || connectionId;
+  }
+
   /**
    * Restaura sessões ativas ao iniciar o módulo.
    * Verifica o estado real na Evolution e atualiza o banco.
@@ -90,16 +96,17 @@ export class WhatsappService implements OnModuleInit {
       try {
         this.logger.log(`Restoring session for connection ${connection.id}`);
         const evolutionConfig = await this.getEvolutionConfig(connection.id);
+        const evolutionInstanceName = await this.getEvolutionInstanceName(connection.id);
         
-        const status = await this.evolutionService.getInstanceStatus(connection.id, evolutionConfig);
+        const status = await this.evolutionService.getInstanceStatus(evolutionInstanceName, evolutionConfig);
         const state = status.instance?.state;
         
         if (state === 'open') {
           // Instância conectada — atualizar webhook
-          this.logger.log(`Instance ${connection.id} is OPEN. Refreshing webhook...`);
+          this.logger.log(`Instance ${evolutionInstanceName} is OPEN. Refreshing webhook...`);
           const apiUrl = process.env.APP_URL || 'http://host.docker.internal:3000';
           const webhookUrl = `${apiUrl}/api/evolution/webhook`;
-          await this.evolutionService.setWebhook(connection.id, webhookUrl, evolutionConfig);
+          await this.evolutionService.setWebhook(evolutionInstanceName, webhookUrl, evolutionConfig);
           
           await this.prisma.connection.update({
             where: { id: connection.id },
@@ -143,31 +150,43 @@ export class WhatsappService implements OnModuleInit {
     
     try {
       const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const oldInstanceName = await this.getEvolutionInstanceName(connectionId);
       
       // 1. Limpar instância antiga (se existir) para garantir sessão limpa
-      try {
-        await this.evolutionService.deleteInstance(connectionId, evolutionConfig);
-        this.logger.log(`Cleaned up old instance for ${connectionId}`);
-      } catch (e) {
-        // Ignorar — pode não existir
+      if (oldInstanceName) {
+        try {
+          await this.evolutionService.logoutInstance(oldInstanceName, evolutionConfig).catch(() => null);
+          await this.evolutionService.deleteInstance(oldInstanceName, evolutionConfig);
+          this.logger.log(`Cleaned up old instance for ${connectionId} (was ${oldInstanceName})`);
+        } catch (e) {
+          // Ignorar — pode não existir
+        }
       }
 
       // Pequeno delay para a Evolution processar a deleção
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      const newInstanceName = `${connectionId}-${Date.now().toString(36)}`;
+      const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+      const currentConfig = conn?.config as any || {};
+      await this.prisma.connection.update({
+        where: { id: connectionId },
+        data: { config: { ...currentConfig, evolutionInstanceName: newInstanceName } }
+      });
+
       // 2. Criar nova instância
-      const createResult = await this.evolutionService.createInstance(connectionId, evolutionConfig);
-      this.logger.log(`Instance created: ${JSON.stringify(createResult?.instance?.instanceName || 'ok')}`);
+      const createResult = await this.evolutionService.createInstance(newInstanceName, evolutionConfig);
+      this.logger.log(`Instance created: ${JSON.stringify(createResult?.instance?.instanceName || newInstanceName)}`);
 
       // 3. Configurar Webhook (usar URL interna Docker para comunicação container-a-container)
       const webhookBaseUrl = process.env.WEBHOOK_INTERNAL_URL || process.env.APP_URL || 'http://host.docker.internal:3000';
       const webhookUrl = `${webhookBaseUrl}/api/evolution/webhook`;
       this.logger.log(`Setting webhook URL: ${webhookUrl}`);  
-      const webhookResult = await this.evolutionService.setWebhook(connectionId, webhookUrl, evolutionConfig);
+      const webhookResult = await this.evolutionService.setWebhook(newInstanceName, webhookUrl, evolutionConfig);
       this.logger.log(`Webhook result: ${JSON.stringify(webhookResult)}`);
 
       // 4. Conectar instância (isso gera o QR Code)
-      const connectResponse = await this.evolutionService.connectInstance(connectionId, evolutionConfig);
+      const connectResponse = await this.evolutionService.connectInstance(newInstanceName, evolutionConfig);
       
       // 5. Processar QR Code se veio na resposta direta
       if (connectResponse?.base64 || connectResponse?.code) {
@@ -200,10 +219,11 @@ export class WhatsappService implements OnModuleInit {
   async logout(connectionId: string) {
     try {
       const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
       
       // Tenta logout primeiro, depois deleta
-      await this.evolutionService.logoutInstance(connectionId, evolutionConfig);
-      await this.evolutionService.deleteInstance(connectionId, evolutionConfig);
+      await this.evolutionService.logoutInstance(evolutionInstanceName, evolutionConfig);
+      await this.evolutionService.deleteInstance(evolutionInstanceName, evolutionConfig);
       
       await this.prisma.connection.update({
         where: { id: connectionId },
@@ -227,7 +247,8 @@ export class WhatsappService implements OnModuleInit {
 
   async getConnectionStatus(connectionId: string) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
-    const status = await this.evolutionService.getInstanceStatus(connectionId, evolutionConfig);
+    const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
+    const status = await this.evolutionService.getInstanceStatus(evolutionInstanceName, evolutionConfig);
     return { 
       status: status.instance?.state === 'open' ? 'CONNECTED' : 'DISCONNECTED',
       sessionName: connectionId
@@ -294,8 +315,10 @@ export class WhatsappService implements OnModuleInit {
       try {
         // Deletar instância na Evolution para que ela pare de reconectar
         const evolutionConfig = await this.getEvolutionConfig(connectionId);
-        await this.evolutionService.deleteInstance(connectionId, evolutionConfig);
-        this.logger.log(`Instance ${connectionId} deleted from Evolution after 405/401`);
+        const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
+        await this.evolutionService.logoutInstance(evolutionInstanceName, evolutionConfig).catch(() => {});
+        await this.evolutionService.deleteInstance(evolutionInstanceName, evolutionConfig);
+        this.logger.log(`Instance ${evolutionInstanceName} deleted from Evolution after 405/401`);
       } catch (e) {
         this.logger.error(`Failed to delete instance after expiry: ${e.message}`);
       }
@@ -481,7 +504,8 @@ export class WhatsappService implements OnModuleInit {
       if (!isGroup && !contact.profilePicUrl && !message.key.fromMe) {
         try {
           const evolutionConfig = await this.getEvolutionConfig(connectionId);
-          const pic = await this.evolutionService.fetchProfilePictureUrl(connectionId, fullJid, evolutionConfig);
+          const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
+          const pic = await this.evolutionService.fetchProfilePictureUrl(evolutionInstanceName, fullJid, evolutionConfig);
           if (pic) {
             contact = await this.prisma.contact.update({
               where: { id: contact.id },
@@ -639,7 +663,8 @@ export class WhatsappService implements OnModuleInit {
 
   async sendText(connectionId: string, to: string, text: string) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
-    const response = await this.evolutionService.sendText(connectionId, to, text, {}, evolutionConfig);
+    const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
+    const response = await this.evolutionService.sendText(evolutionInstanceName, to, text, {}, evolutionConfig);
     return response?.key?.id;
   }
 
@@ -653,31 +678,35 @@ export class WhatsappService implements OnModuleInit {
     fileName?: string
   ) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
+    const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
     const absoluteUrl = url.startsWith('http') ? url : `${process.env.APP_URL || 'http://host.docker.internal:3000'}/${url}`;
-    const response = await this.evolutionService.sendMedia(connectionId, to, type, absoluteUrl, caption, fileName, evolutionConfig);
+    const response = await this.evolutionService.sendMedia(evolutionInstanceName, to, type, absoluteUrl, caption, fileName, evolutionConfig);
     return response?.key?.id;
   }
 
   async markRead(connectionId: string, jid: string, messageIds: string[]) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
+    const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
     const phone = jid.split('@')[0];
-    await this.evolutionService.markRead(connectionId, phone, evolutionConfig);
+    await this.evolutionService.markRead(evolutionInstanceName, phone, evolutionConfig);
   }
 
   async deleteMessage(connectionId: string, jid: string, messageId: string, fromMe: boolean) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
-    await this.evolutionService.deleteMessage(connectionId, jid, messageId, fromMe, evolutionConfig);
+    const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
+    await this.evolutionService.deleteMessage(evolutionInstanceName, jid, messageId, fromMe, evolutionConfig);
   }
 
   async syncContacts(connectionId: string) {
     try {
       const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const evolutionInstanceName = await this.getEvolutionInstanceName(connectionId);
       const connection = await this.prisma.connection.findUnique({
         where: { id: connectionId }
       });
       if (!connection) return { success: false, message: 'Conexão não encontrada' };
 
-      const contactsData = await this.evolutionService.findContacts(connectionId, evolutionConfig);
+      const contactsData = await this.evolutionService.findContacts(evolutionInstanceName, evolutionConfig);
       
       let importedCount = 0;
       let updatedCount = 0;
