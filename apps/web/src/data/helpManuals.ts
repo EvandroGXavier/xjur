@@ -86,3 +86,22 @@ export const helpFinancial: HelpSection[] = [
     content: 'Acesse a visão "Contas Bancárias" para cadastrar caixas, cofre e contas reais. Ao liquidar uma transação, o valor entra ou sai diretamente do saldo dessa conta.',
   }
 ];
+
+export const helpMicrosoft365: HelpSection[] = [
+  {
+    title: 'Integração OneDrive / SharePoint (Visão Geral)',
+    content: 'A integração com o <b>Microsoft 365</b> permite que os arquivos e documentos (PDFs, petições geradas) de processos e contatos sejam salvos automaticamente na nuvem da Microsoft.',
+  },
+  {
+    title: 'Como Configurar (Azure Portal)',
+    content: '1. Acesse o portal do <b>Microsoft Entra ID (Azure AD)</b>.<br/>2. Vá em `Registros de Aplicativo` e crie um novo.<br/>3. Anote o <b>Client ID</b> e o <b>Tenant ID</b>.<br/>4. Crie um <b>Segredo do Cliente (Client Secret)</b> e copie o <i>Valor</i>.<br/>5. Conceda permissões de API tipo `Application` (Files.ReadWrite.All e Sites.ReadWrite.All) com <b>consentimento do administrador</b>.',
+  },
+  {
+    title: 'ID da Pasta Raiz (Folder ID)',
+    content: 'O sistema criará as pastas dos processos dentro de uma pasta base do seu OneDrive. Para pegar o ID dessa pasta:<br/>1. Acesse a pasta raiz pelo navegador.<br/>2. Na URL, procure pela sequência após <code>id=</code> (frequentemente contendo <i>%252</i> que pode precisar ser decodificada, ou apenas copie a partir de algo como b! ou 01...).<br/>3. Cole essa sequência no campo <b>ID da Pasta Raiz no OneDrive</b>.',
+  },
+  {
+    title: 'Mecânica das Pastas',
+    content: '<ul><li><b>Processos:</b> É criada a pasta "Nome do Cliente > Número do Processo". Os documentos adicionados via painel do processo são carregados fisicamente no OneDrive.</li><li>Se você alterar o nome/número do processo na plataforma, o OneDrive será notificado para <b>renomear a pasta</b> correspondente automaticamente.</li></ul>',
+  }
+];

@@ -17,6 +17,8 @@ import {
   Mail
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { HelpModal, useHelpModal } from '../components/HelpModal';
+import { helpMicrosoft365 } from '../data/helpManuals';
 
 // --- COMPONENTS ---
 
@@ -59,6 +61,7 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
 export function Settings() {
   const [activeTab, setActiveTab] = useState('options'); 
   const [loading, setLoading] = useState(false);
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   
   // DATA
   const [tenants, setTenants] = useState<any[]>([]);
@@ -880,6 +883,7 @@ export function Settings() {
           </form>
       </Modal>
 
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Integração Microsoft 365" sections={helpMicrosoft365} />
     </div>
   );
 }

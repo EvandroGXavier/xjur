@@ -656,6 +656,7 @@ export class WhatsappService implements OnModuleInit {
       const contactsData = await this.evolutionService.findContacts(connectionId, evolutionConfig);
       
       let importedCount = 0;
+      let updatedCount = 0;
       const contactsList = Array.isArray(contactsData) ? contactsData : 
                           Array.isArray(contactsData?.contacts) ? contactsData.contacts : 
                           Array.isArray(contactsData?.data) ? contactsData.data : [];
@@ -675,6 +676,7 @@ export class WhatsappService implements OnModuleInit {
           });
 
           if (contact) {
+            // Conta como sucesso de sincronismo de qualquer forma, mesmo que não altere
             const updateData: any = {};
             if (picUrl && contact.profilePicUrl !== picUrl) updateData.profilePicUrl = picUrl;
             
@@ -683,7 +685,7 @@ export class WhatsappService implements OnModuleInit {
                 where: { id: contact.id },
                 data: updateData
               });
-              importedCount++;
+              updatedCount++;
             }
           } else {
             await this.prisma.contact.create({
@@ -696,7 +698,7 @@ export class WhatsappService implements OnModuleInit {
                 profilePicUrl: picUrl,
                 email: 'nt@nt.com.br',
                 document: null,
-                notes: `Adicionado automaticamente via WhatsApp Sync. Dados adicionais: ${JSON.stringify(c)}`
+                notes: `Adicionado automaticamente via WhatsApp Sync.`
               }
             });
             importedCount++;
@@ -704,8 +706,8 @@ export class WhatsappService implements OnModuleInit {
         }
       }
 
-      this.logger.log(`Synced ${importedCount} contacts from Evolution API`);
-      return { success: true, message: `${importedCount} de ${contactsList.length} contatos sincronizados ou atualizados com sucesso!` };
+      this.logger.log(`Synced: ${importedCount} imported, ${updatedCount} updated from Evolution API`);
+      return { success: true, message: `${importedCount} novos contatos criados e ${updatedCount} atualizados (de um total de ${contactsList.length} do WhatsApp).` };
     } catch (e) {
       this.logger.error(`Error syncing contacts: ${e.message}`);
       return { success: false, message: `Erro ao sincronizar: ${e.message}` };
