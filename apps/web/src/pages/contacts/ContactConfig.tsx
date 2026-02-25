@@ -48,6 +48,22 @@ export function ContactConfig() {
     }
   };
 
+  const handleCleanup = async () => {
+    if (!window.confirm('Atenção: Esta ação apagará definitivamente contatos repetidos, com e-mails inválidos, telefones contendo letras ou totalmente sem meios de contato. Deseja continuar?')) {
+      return;
+    }
+
+    try {
+      toast.info('Iniciando limpeza da base de contatos...');
+      const response = await api.post('/contacts/cleanup');
+      const count = response.data?.deletedCount || 0;
+      toast.success(`Limpeza concluída! ${count} contatos irregulares foram removidos.`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao realizar a limpeza de contatos.');
+    }
+  };
+
   const configCards: ConfigCard[] = [
     {
       id: 'import',
@@ -101,6 +117,14 @@ export function ContactConfig() {
       action: () => {},
       badge: 'Em breve',
       gradient: 'from-cyan-500 to-teal-600',
+    },
+    {
+      id: 'cleanup',
+      icon: <Database className="w-6 h-6" />,
+      title: 'Limpeza de Base',
+      description: 'Apague contatos irregulares, repetidos ou com informações inválidas.',
+      action: handleCleanup,
+      gradient: 'from-red-500 to-rose-600',
     },
   ];
 

@@ -581,5 +581,84 @@ export class ContactsService {
       where: { id: assetId },
     });
   }
+
+  // --- Manutenção e Limpeza de Contatos ---
+  async cleanupContacts(tenantId: string) {
+    const contacts = await this.prisma.contact.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'asc' } // Manter os mais antigos
+    });
+
+    const toDelete = new Set<string>();
+    const seenNames = new Set<string>();
+    const seenPhones = new Set<string>();
+    const seenEmails = new Set<string>();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const hasLetterRegex = /[a-zA-Z]/;
+
+    for (const contact of contacts) {
+      let isIrregular = false;
+
+      // 1. Verificar se Celular, Email, e Telefone estão TODOS simultaneamente em branco
+      if (!contact.whatsapp?.trim() && !contact.phone?.trim() && !contact.email?.trim()) {
+        isIrregular = true;
+      }
+
+      // 2. Com letras no lugar do número de celular/telefone
+      if (!isIrregular && contact.whatsapp && hasLetterRegex.test(contact.whatsapp)) {
+        isIrregular = true;
+      }
+      if (!isIrregular && contact.phone && hasLetterRegex.test(contact.phone)) {
+        isIrregular = true;
+      }
+
+      // 3. Com e-mail inválido
+      if (!isIrregular && contact.email && contact.email.trim() && !emailRegex.test(contact.email.trim())) {
+        isIrregular = true;
+      }
+
+      // 4. Repetidos (mesmo nome OU mesmo celular/telefone OU mesmo email, mas só marcamos como duplicado se já vimos antes)
+      if (!isIrregular) {
+        const nameKey = contact.name?.toLowerCase().trim();
+        // Pega os últimos 8 dígitos do whatsapp ou phone (como no findDuplicateContact)
+        const waClean = contact.whatsapp ? contact.whatsapp.replace(/\D/g, '') : '';
+        const phClean = contact.phone ? contact.phone.replace(/\D/g, '') : '';
+        const phoneKey = waClean ? waClean.slice(-8) : (phClean ? phClean.slice(-8) : null);
+        const emailKey = contact.email?.toLowerCase().trim();
+
+        let isDuplicate = false;
+
+        // Trata como duplicado se o mesmo nome já ocorreu
+        if (nameKey && seenNames.has(nameKey)) isDuplicate = true;
+        // Ou se o mesmo celular (últimos 8 dígitos) ocorrer
+        if (phoneKey && seenPhones.has(phoneKey)) isDuplicate = true;
+        // Ou se o mesmo email ocorrer
+        if (emailKey && seenEmails.has(emailKey)) isDuplicate = true;
+
+        if (isDuplicate) {
+          isIrregular = true;
+        } else {
+          // Marca como visto
+          if (nameKey) seenNames.add(nameKey);
+          if (phoneKey) seenPhones.add(phoneKey);
+          if (emailKey) seenEmails.add(emailKey);
+        }
+      }
+
+      if (isIrregular) {
+        toDelete.add(contact.id);
+      }
+    }
+
+    const deletedCount = toDelete.size;
+    if (deletedCount > 0) {
+      await this.prisma.contact.deleteMany({
+        where: { id: { in: Array.from(toDelete) } }
+      });
+    }
+
+    return { deletedCount };
+  }
 }
 

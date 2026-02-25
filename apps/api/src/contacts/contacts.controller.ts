@@ -69,6 +69,12 @@ export class ContactsController {
     return this.contactsService.lookupContactExact(user.tenantId, query);
   }
 
+  @Post('cleanup')
+  async cleanupContacts(@CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.contactsService.cleanupContacts(user.tenantId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.contactsService.findOne(id);
