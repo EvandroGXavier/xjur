@@ -644,6 +644,24 @@ export function ContactForm() {
     }
   };
 
+  const handleBlurLookup = async (field: keyof ContactData, value: string | undefined) => {
+      // Somente valida se preencheu algo, e ignoramos se já estiver salvo e o valor encontrado for de outro? 
+      // Se encontrarmos, redirecionamos.
+      if (!value || !value.trim()) return;
+      if (id !== 'new') return; // Se já estamos editando um contato existente, evitar redirecionamentos surpresa (ou podemos redirecionar se for diferente do id atual). A regra faz mais sentido na criação.
+      
+      try {
+          // Send only the current field being typed to check specifically
+          const params = new URLSearchParams({ [field]: value });
+          const res = await api.get(`/contacts/lookup/exact?${params.toString()}`);
+          if (res.data && res.data.id && res.data.id !== id) {
+               navigate(`/contacts/${res.data.id}`);
+          }
+      } catch (err) {
+          // Ignora abertamente, se falhar ou não achar só segue a vida
+      }
+  };
+
   // Enriquecimento de CEP
   const handleEnrichCEP = async () => {
     if (!addressForm.zipCode) {
@@ -944,6 +962,7 @@ export function ContactForm() {
                                     required
                                     value={formData.name}
                                     onChange={e => setFormData({...formData, name: e.target.value})}
+                                    onBlur={e => handleBlurLookup('name', e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder={formData.personType === 'PJ' ? "Nome Fantasia da Empresa" : "Nome do Contato"}
                                  />
@@ -957,6 +976,7 @@ export function ContactForm() {
                                  <input 
                                     value={formData.whatsapp || ''}
                                     onChange={e => setFormData({...formData, whatsapp: masks.phone(e.target.value)})}
+                                    onBlur={e => handleBlurLookup('whatsapp', e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="(00) 00000-0000"
                                     maxLength={15}
@@ -969,6 +989,7 @@ export function ContactForm() {
                                  <input 
                                     value={formData.phone || ''}
                                     onChange={e => setFormData({...formData, phone: masks.phone(e.target.value)})}
+                                    onBlur={e => handleBlurLookup('phone', e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="(00) 0000-0000"
                                     maxLength={14}
@@ -982,6 +1003,7 @@ export function ContactForm() {
                                     type="email"
                                     value={formData.email || ''}
                                     onChange={e => setFormData({...formData, email: e.target.value})}
+                                    onBlur={e => handleBlurLookup('email', e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                     placeholder="email@exemplo.com"
                                  />
@@ -1044,6 +1066,7 @@ export function ContactForm() {
                                             }
                                             setFormData(newData);
                                         }}
+                                        onBlur={e => handleBlurLookup('document', e.target.value)}
                                         className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                         placeholder="CPF ou CNPJ"
                                         maxLength={18}

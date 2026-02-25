@@ -63,6 +63,12 @@ export class ContactsController {
     return this.contactsService.findAll(user.tenantId, search, includedTags, excludedTags);
   }
 
+  @Get('lookup/exact')
+  async lookupExact(@CurrentUser() user: CurrentUserData, @Query() query: any) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.contactsService.lookupContactExact(user.tenantId, query);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.contactsService.findOne(id);

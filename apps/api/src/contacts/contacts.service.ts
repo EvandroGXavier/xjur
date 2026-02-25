@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
@@ -13,6 +13,25 @@ export class ContactsService {
 
   async create(createContactDto: CreateContactDto, tenantId: string) {
     try {
+      // 1. Validar preenchimento mínimo (nome é obrigatório via DTO/Schema? assumimos que sim)
+      const data: any = createContactDto;
+      if (!data.name?.trim()) {
+        throw new BadRequestException('O nome do contato é obrigatório.');
+      }
+      if (!data.whatsapp?.trim() && !data.phone?.trim() && !data.email?.trim() && !data.document?.trim() && !data.cpf?.trim() && !data.cnpj?.trim()) {
+        throw new BadRequestException('Você deve fornecer pelo menos um dos seguintes: Celular, Telefone, E-mail ou Documento (CPF/CNPJ).');
+      }
+
+      // 2. Verificar duplicidade real
+      const duplicate = await this.findDuplicateContact(tenantId, data);
+      if (duplicate) {
+        throw new ConflictException({
+           message: 'Contato já cadastrado com os mesmos dados únicos.',
+           contactId: duplicate.id, 
+           duplicateField: duplicate.matchedField 
+        });
+      }
+
       console.log('Creating contact:', { ...createContactDto, tenantId });
       
       const { 
@@ -164,6 +183,40 @@ export class ContactsService {
   }
 
   async update(id: string, updateContactDto: UpdateContactDto) {
+    const data: any = updateContactDto;
+    
+    // Buscar o contato original para saber o tenant
+    const existingContact = await this.prisma.contact.findUnique({ where: { id } });
+    if (!existingContact) throw new BadRequestException('Contato não encontrado');
+
+    if (data.name !== undefined && !data.name?.trim()) {
+      throw new BadRequestException('O nome do contato não pode ficar em branco.');
+    }
+
+    // Checking 4 fields (but we need to consider merged state if doing full validation. 
+    // Usually frontend sends all data on update, so we can check `data` directly)
+    if (data.whatsapp !== undefined || data.phone !== undefined || data.email !== undefined || data.document !== undefined) {
+      const w = data.whatsapp ?? existingContact.whatsapp;
+      const p = data.phone ?? existingContact.phone;
+      const e = data.email ?? existingContact.email;
+      const d = data.document ?? existingContact.document;
+      // Note: Not blocking if empty because tenant config could be off, but requirement says "backend deve rejeitar". 
+      // User says: "O backend deve rejeitar cadastros onde os quatro campos estejam nulos ou vazios simultaneamente."
+      if (!w?.trim() && !p?.trim() && !e?.trim() && !d?.trim()) {
+         throw new BadRequestException('Não é possível deixar todos estes campos vazios: Celular, Telefone, E-mail e Documento.');
+      }
+    }
+
+    // Verificar Duplicidade excluindo o ID atual
+    const duplicate = await this.findDuplicateContact(existingContact.tenantId, data, id);
+    if (duplicate) {
+      throw new ConflictException({
+         message: 'Atualização causaria duplicidade com outro contato baseada nas chaves únicas.',
+         contactId: duplicate.id, 
+         duplicateField: duplicate.matchedField 
+      });
+    }
+
     const { 
       // PF Fields
       cpf, rg, birthDate,
@@ -178,7 +231,7 @@ export class ContactsService {
       addresses, additionalContacts,
       
       ...commonData 
-    } = updateContactDto as any;
+    } = data;
 
     // FIX: Manual cleanup to ensure PF fields are NOT in commonData (destructuring edge cases)
     const pfFieldsToRemove = [
@@ -256,6 +309,76 @@ export class ContactsService {
          flat = { ...flat, ...pjFields };
      }
      return flat;
+  }
+
+  // --- Duplicate Detection Logic ---
+  async findDuplicateContact(tenantId: string, data: any, excludeId?: string) {
+    const clean = (str: string) => str ? str.trim() : '';
+
+    const name = clean(data.name).toLowerCase();
+    const document = clean(data.document).replace(/\D/g, '');
+    const cpf = clean(data.cpf).replace(/\D/g, '');
+    const cnpj = clean(data.cnpj).replace(/\D/g, '');
+    const whatsapp = clean(data.whatsapp).replace(/\D/g, '');
+    const phone = clean(data.phone).replace(/\D/g, '');
+    const email = clean(data.email).toLowerCase();
+
+    // Monta as condições OR baseadas nos valores preenchidos
+    const conditions: any[] = [];
+    if (name) conditions.push({ name: { equals: name, mode: 'insensitive' } });
+    if (whatsapp) conditions.push({ whatsapp: { endsWith: whatsapp.slice(-8) } }); // Simplificação para celular 
+    if (phone) conditions.push({ phone: { endsWith: phone.slice(-8) } });
+    if (email) conditions.push({ email: { equals: email, mode: 'insensitive' } });
+    
+    // Base documents
+    if (document) conditions.push({ document: { endsWith: document } });
+
+    // Details search for PF / PJ
+    if (cpf) {
+       conditions.push({ pfDetails: { cpf: { endsWith: cpf } } });
+    }
+    if (cnpj) {
+       conditions.push({ pjDetails: { cnpj: { endsWith: cnpj } } });
+    }
+
+    if (conditions.length === 0) return null;
+
+    const query: any = {
+       where: {
+          tenantId,
+          OR: conditions,
+       },
+       include: {
+         pfDetails: true,
+         pjDetails: true
+       }
+    };
+    
+    if (excludeId) {
+        query.where.id = { not: excludeId };
+    }
+
+    const matches = await this.prisma.contact.findMany(query);
+    if (!matches || matches.length === 0) return null;
+
+    const hit: any = matches[0];
+    
+    let matchedField = 'unknown';
+    if (name && hit.name?.toLowerCase() === name) matchedField = 'nome';
+    if (email && hit.email?.toLowerCase() === email) matchedField = 'e-mail';
+    // Removemos non-digits também nos do banco para comparar perfeitamente
+    if (whatsapp && clean(hit.whatsapp).replace(/\D/g, '').endsWith(whatsapp.slice(-8))) matchedField = 'celular/whatsapp';
+    if (phone && clean(hit.phone).replace(/\D/g, '').endsWith(phone.slice(-8))) matchedField = 'telefone';
+    if (document && clean(hit.document).replace(/\D/g, '').endsWith(document)) matchedField = 'documento';
+    if (cpf && hit.pfDetails?.cpf && clean(hit.pfDetails.cpf).replace(/\D/g, '').endsWith(cpf)) matchedField = 'cpf';
+    if (cnpj && hit.pjDetails?.cnpj && clean(hit.pjDetails.cnpj).replace(/\D/g, '').endsWith(cnpj)) matchedField = 'cnpj';
+
+    return { id: hit.id, matchedField };
+  }
+
+  async lookupContactExact(tenantId: string, searchParams: any) {
+      // Usado pelo frontend `onBlur` via ContactsController 
+      return this.findDuplicateContact(tenantId, searchParams);
   }
 
   remove(id: string) {
