@@ -15,18 +15,9 @@ export class EvolutionController {
   @HttpCode(HttpStatus.OK)
   async handleWebhook(@Body() data: any) {
     const event = data.event;
+    const instance = data.instance;
     
-    // Extrai o connectionId original do instanceName dinâmico
-    let instance = data.instance;
-    if (instance && typeof instance === 'string' && instance.includes('-')) {
-      const parts = instance.split('-');
-      if (parts.length > 5) { // UUID tem 5 partes
-        instance = parts.slice(0, 5).join('-');
-        data.instance = instance; // <-- Essa é a linha chave para propagar pro WhatsappService
-      }
-    }
-    
-    this.logger.debug(`Webhook received: ${event} from instance ${instance} (evo_id: ${data.instance})`);
+    this.logger.debug(`Webhook received: ${event} from instance ${instance}`);
     
     // Prevent terminal flooding with huge base64 files
     const payloadStr = JSON.stringify(data, (key, value) => {
@@ -37,19 +28,19 @@ export class EvolutionController {
 
     switch (event) {
       case 'qrcode.updated':
-        await this.handleQrCodeUpdated(instance, data);
+        await this.handleQrCodeUpdated(data);
         break;
       case 'messages.upsert':
-        await this.handleMessagesUpsert(instance, data);
+        await this.handleMessagesUpsert(data);
         break;
       case 'connection.update':
-        await this.handleConnectionUpdate(instance, data);
+        await this.handleConnectionUpdate(data);
         break;
       case 'messages.update':
-        await this.handleMessagesUpdate(instance, data);
+        await this.handleMessagesUpdate(data);
         break;
       case 'presence.update':
-        await this.handlePresenceUpdate(instance, data);
+        await this.handlePresenceUpdate(data);
         break;
       default:
         // this.logger.debug(`Unhandled event type: ${event}`);
@@ -59,12 +50,14 @@ export class EvolutionController {
     return { status: 'success' };
   }
 
-  private async handleQrCodeUpdated(instance: string, data: any) {
+  private async handleQrCodeUpdated(data: any) {
+    const instance = data.instance;
     const qrcode = data.data.qrcode;
     await (this.whatsappService as any).handleEvolutionQrCode(instance, qrcode);
   }
 
-  private async handleMessagesUpsert(instance: string, data: any) {
+  private async handleMessagesUpsert(data: any) {
+    const instance = data.instance;
     const message = data.data;
 
     // We proxy this to the existing WhatsApp service logic for processing
@@ -75,7 +68,8 @@ export class EvolutionController {
     await (this.whatsappService as any).handleEvolutionMessage(instance, message);
   }
 
-  private async handleConnectionUpdate(instance: string, data: any) {
+  private async handleConnectionUpdate(data: any) {
+    const instance = data.instance;
     const connection = data.data;
     
     // connection.status can be 'open', 'connecting', 'close'
@@ -84,13 +78,13 @@ export class EvolutionController {
     await (this.whatsappService as any).handleEvolutionConnectionUpdate(instance, connection);
   }
 
-  private async handleMessagesUpdate(instance: string, data: any) {
+  private async handleMessagesUpdate(data: any) {
     // Handle message status (sent/delivered/read)
-    await (this.whatsappService as any).handleEvolutionMessageUpdate(instance, data.data);
+    await (this.whatsappService as any).handleEvolutionMessageUpdate(data.instance, data.data);
   }
 
-  private async handlePresenceUpdate(instance: string, data: any) {
+  private async handlePresenceUpdate(data: any) {
     // Handle typing status
-    await (this.whatsappService as any).handleEvolutionPresenceUpdate(instance, data.data);
+    await (this.whatsappService as any).handleEvolutionPresenceUpdate(data.instance, data.data);
   }
 }

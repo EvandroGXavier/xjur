@@ -161,8 +161,8 @@ export class EvolutionService {
         webhook: {
           enabled: true,
           url: webhookUrl,
-          webhookByEvents: false,
-          webhookBase64: true,
+          webhook_by_events: false,
+          webhook_base64: true,
           events: [
             "QRCODE_UPDATED",
             "MESSAGES_UPSERT",
