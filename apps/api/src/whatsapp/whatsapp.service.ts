@@ -442,10 +442,13 @@ export class WhatsappService implements OnModuleInit {
         contact = await this.prisma.contact.create({
           data: {
             tenantId,
-            name: pushName,
-            phone: phone,
-            whatsapp: fullJid,
+            name: pushName || 'Sem Nome',
+            phone: phone || '99 99999999',
+            whatsapp: phone || '99 99999999',
             category: isGroup ? 'Grupo' : 'Lead',
+            email: 'nt@nt.com.br',
+            document: null,
+            notes: `Adicionado automaticamente via WhatsApp. ${fullJid}`
           }
         });
       }
@@ -686,11 +689,14 @@ export class WhatsappService implements OnModuleInit {
             await this.prisma.contact.create({
               data: {
                 tenantId: connection.tenantId,
-                name: pushName,
-                phone: phone,
-                whatsapp: remoteJid,
+                name: pushName || 'Sem Nome',
+                phone: phone || '99 99999999',
+                whatsapp: phone || '99 99999999',
                 category: isGroup ? 'Grupo' : 'Lead',
-                profilePicUrl: picUrl
+                profilePicUrl: picUrl,
+                email: 'nt@nt.com.br',
+                document: null,
+                notes: `Adicionado automaticamente via WhatsApp Sync. Dados adicionais: ${JSON.stringify(c)}`
               }
             });
             importedCount++;
