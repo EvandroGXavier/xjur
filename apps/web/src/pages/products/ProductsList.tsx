@@ -109,7 +109,7 @@ export function ProductsList() {
           <DataGrid<Product>
             data={sortedProducts}
             onSort={(key, direction) => setSortConfig({ key: key as keyof Product, direction })}
-            totalItems={products.length}
+            totalItems={sortedProducts.length}
             isLoading={loading}
             columns={[
                 {

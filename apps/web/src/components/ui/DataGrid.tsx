@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowUp, ArrowDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, MoreHorizontal, Check } from 'lucide-react';
 
 interface Column<T> {
@@ -35,6 +35,12 @@ export function DataGrid<T extends { id: string }>({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [internalPageSize, setInternalPageSize] = useState(pageSize);
+
+  // If the parent updates `pageSize`, reflect it, though `internalPageSize` controls view
+  useEffect(() => {
+    setInternalPageSize(pageSize);
+  }, [pageSize]);
   
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -64,9 +70,25 @@ export function DataGrid<T extends { id: string }>({
   };
 
   // Pagination Logic
-  const totalPages = Math.ceil(totalItems / pageSize);
-  const startItem = (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
+  // If data.length is greater than what's expected for a page, or if caller specifically passed it.
+  // When 'totalItems' is not explicitly larger than data length, it means we have all items.
+  const isClientSidePagination = Array.isArray(data) && (data.length > internalPageSize || totalItems === data.length || totalItems === 0);
+  
+  // Calculate final numbers
+  const calculatedTotalItems = isClientSidePagination ? data.length : totalItems;
+  const totalPages = Math.ceil(calculatedTotalItems / internalPageSize);
+  
+  // Adjust current page if it's out of bounds after a filter or sizing change
+  if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+  }
+
+  const startItem = (currentPage - 1) * internalPageSize + 1;
+  const endItem = Math.min(currentPage * internalPageSize, calculatedTotalItems);
+
+  const displayedData = isClientSidePagination 
+    ? data.slice((currentPage - 1) * internalPageSize, currentPage * internalPageSize)
+    : data;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col h-full shadow-lg">
@@ -106,21 +128,21 @@ export function DataGrid<T extends { id: string }>({
           
           <tbody className="divide-y divide-slate-800/50">
             {isLoading ? (
-              [...Array(pageSize)].map((_, i) => (
+              [...Array(internalPageSize)].map((_, i) => (
                 <tr key={i} className="animate-pulse">
                   <td colSpan={columns.length + 1} className="px-6 py-4">
                     <div className="h-4 bg-slate-800 rounded w-full opacity-50"></div>
                   </td>
                 </tr>
               ))
-            ) : data.length === 0 ? (
+            ) : displayedData.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + 1} className="px-6 py-12 text-center text-slate-500">
                   Nenhum registro encontrado.
                 </td>
               </tr>
             ) : (
-              data.map((item) => (
+              displayedData.map((item) => (
                 <tr 
                   key={item.id} 
                   className={`hover:bg-slate-800/30 transition-colors group ${selectedIds.includes(item.id) ? 'bg-indigo-500/5' : ''}`}
@@ -154,8 +176,11 @@ export function DataGrid<T extends { id: string }>({
             <span>Mostrar</span>
             <select 
                 className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white focus:outline-none focus:border-indigo-500"
-                value={pageSize}
-                onChange={(e) => {/* Callback for page size change not implemented in this simplified grid */}}
+                value={internalPageSize}
+                onChange={(e) => {
+                    setInternalPageSize(Number(e.target.value));
+                    setCurrentPage(1); // Reset to page 1 on size change
+                }}
             >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
@@ -168,7 +193,7 @@ export function DataGrid<T extends { id: string }>({
         {/* Pagination Info */}
         <div className="flex items-center gap-4">
             <span>
-                {startItem}-{endItem} de {totalItems}
+                {calculatedTotalItems > 0 ? startItem : 0}-{endItem} de {calculatedTotalItems}
             </span>
             
             <div className="flex items-center gap-1">

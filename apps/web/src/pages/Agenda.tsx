@@ -171,7 +171,7 @@ export function Agenda() {
              <DataGrid<Appointment>
                 data={sortedAppointments}
                 onSort={(key, direction) => setSortConfig({ key: key as keyof Appointment, direction })}
-                totalItems={appointments.length}
+                totalItems={sortedAppointments.length}
                 isLoading={loading}
                 columns={[
                     {

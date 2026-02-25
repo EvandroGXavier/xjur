@@ -153,7 +153,7 @@ export function ContactList() {
           <DataGrid<Contact>
             data={sortedContacts}
             onSort={(key, direction) => setSortConfig({ key: key as keyof Contact, direction })}
-            totalItems={contacts.length}
+            totalItems={sortedContacts.length}
             isLoading={loading}
             columns={[
                 {

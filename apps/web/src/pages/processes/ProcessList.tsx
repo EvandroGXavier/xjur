@@ -155,7 +155,7 @@ export function ProcessList() {
                 {viewMode === 'LIST' ? (
                     <DataGrid<Process>
                         data={sortedProcesses}
-                        totalItems={processes.length}
+                        totalItems={sortedProcesses.length}
                         isLoading={loading}
                         onSort={(key, direction) => setSortConfig({ key: key as keyof Process, direction })}
                         onSelect={setSelectedIds}
