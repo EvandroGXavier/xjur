@@ -1,3 +1,5 @@
+import * as dotenv from 'dotenv';
+dotenv.config({ path: __dirname + '/../../.env' }); // carrega o .env da raiz do app/api
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -32,7 +34,7 @@ async function main() {
           where: { id: contact.id }
         });
         deletedCount++;
-      } catch (err) {
+      } catch (err: any) {
         console.log(`Erro ao deletar ${contact.whatsapp}:`, err.message);
       }
     }
