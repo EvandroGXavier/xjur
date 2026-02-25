@@ -171,8 +171,13 @@ export class WhatsappService implements OnModuleInit {
       const currentConfig = conn?.config as any || {};
       await this.prisma.connection.update({
         where: { id: connectionId },
-        data: { config: { ...currentConfig, evolutionInstanceName: newInstanceName } }
+        data: { 
+          config: { ...currentConfig, evolutionInstanceName: newInstanceName },
+          status: 'PAIRING',
+          qrCode: null
+        }
       });
+      this.whatsappGateway.emitConnectionStatus(connectionId, 'PAIRING');
 
       // 2. Criar nova instância
       const createResult = await this.evolutionService.createInstance(newInstanceName, evolutionConfig);
