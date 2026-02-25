@@ -29,10 +29,16 @@ jobs:
             git fetch --all
             git reset --hard origin/main
 
-            echo "2️⃣ Limpando PM2..."
+            echo "2️⃣ Gerando a Interface Web (Frontend) na VPS..."
+            # Força o build do novo código TypeScript para a pasta /dist
+            # É necessário caso o Nginx ou aaPanel sirvam a pasta localmente em vez do Docker
+            npm install
+            npx turbo run build --filter=web
+
+            echo "3️⃣ Limpando PM2..."
             pm2 delete all 2>/dev/null || true
 
-            echo "3️⃣ Configurando Variáveis..."
+            echo "4️⃣ Configurando Variáveis..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=public"
             
             echo "4️⃣ Reconstruindo Containers..."

@@ -1,5 +1,5 @@
 {
-  "name": "drx-monorepo",
+  "name": "dr-x-monorepo",
   "private": true,
   "version": "1.0.0",
   "description": "DR.X - Ecossistema Jurídico Comercial",
@@ -8,14 +8,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=api --filter=web",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "db:studio": "turbo run db:studio",
     "db:push": "turbo run db:push",
     "db:backup:local": "docker exec drx_db_local pg_dump -U drx_dev drx_local > backups/backup.sql",
-    "db:restore:local": "docker exec -i drx_db_local psql -U drx_dev drx_local < backups/backup.sql"
+    "db:restore:local": "docker exec -i drx_db_local psql -U drx_dev drx_local < backups/backup.sql",
+    "clean": "turbo run clean"
   },
   "devDependencies": {
     "prettier": "^3.0.0",
