@@ -407,6 +407,18 @@ model ProcessTimeline {
   aiSummary   String?  // Resumo simplificado para o cliente
   clientMessage String? // Texto formatado para envio via WhatsApp
 
+  // --- MOTOR DE WORKFLOW ---
+  category          String?  @default("REGISTRO") // REGISTRO, ACAO, AGENDA
+  status            String?  @default("PENDENTE") // PENDENTE, EM_TRATAMENTO, CONCLUIDO
+  priority          String?  @default("MEDIA")    // BAIXA, MEDIA, ALTA, URGENTE
+  requesterName     String?  // Quem solicitou o andamento
+  responsibleName   String?  // Quem deve tratar a ação
+  templateCode      String?  // Identificador do Template que gerou este andamento
+  parentTimelineId  String?  // FK para o andamento "Pai"
+  
+  parentTimeline    ProcessTimeline?  @relation("WorkflowSequence", fields: [parentTimelineId], references: [id])
+  childTimelines    ProcessTimeline[] @relation("WorkflowSequence")
+
   process     Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
 
   @@map("process_timelines")

@@ -28,6 +28,14 @@ interface TimelineItem {
     clientMessage?: string;
     date: string;
     metadata?: any;
+    // Workflow
+    category?: 'REGISTRO' | 'ACAO' | 'AGENDA';
+    status?: 'PENDENTE' | 'EM_TRATAMENTO' | 'CONCLUIDO';
+    priority?: 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE';
+    templateCode?: string;
+    parentTimelineId?: string;
+    requesterName?: string;
+    responsibleName?: string;
     // Legacy fields
     title: string;
     type: string;
@@ -44,17 +52,26 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<TimelineItem | null>(null);
     const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
-
     const [attachments, setAttachments] = useState<any[]>([]);
+    
+    // Workflow Tabs State
+    const [activeTab, setActiveTab] = useState<'REGISTRO' | 'ACAO' | 'AGENDA'>('REGISTRO');
+    
+    // Conclude Modal State
+    const [concludeItemId, setConcludeItemId] = useState<string | null>(null);
+    const [concludeFiles, setConcludeFiles] = useState<FileList | null>(null);
 
-    // Form State
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         date: '',
         internalDate: '',
         fatalDate: '',
-        type: 'MOVEMENT'
+        type: 'MOVEMENT',
+        category: 'REGISTRO',
+        status: 'PENDENTE',
+        priority: 'MEDIA',
+        templateCode: ''
     });
 
     const resetForm = () => {
@@ -64,7 +81,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             date: new Date().toISOString().slice(0, 16),
             internalDate: '',
             fatalDate: '',
-            type: 'MOVEMENT'
+            type: 'MOVEMENT',
+            category: 'REGISTRO',
+            status: 'PENDENTE',
+            priority: 'MEDIA',
+            templateCode: ''
         });
         setEditingItem(null);
         setSelectedFiles(null);
@@ -154,6 +175,37 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     };
 
+    const handleConcludeAction = async () => {
+        if (!concludeItemId) return;
+        try {
+            const data = new FormData();
+            data.append('status', 'CONCLUIDO');
+            if (concludeFiles) {
+                Array.from(concludeFiles).forEach((file) => {
+                    data.append('files', file);
+                });
+            }
+            // Fetch existing to append attachments
+            const existing = timelines.find(t => t.id === concludeItemId);
+            if (existing && existing.metadata && existing.metadata.attachments) {
+                // Keep existing attachments
+                const newMeta = { ...existing.metadata };
+                data.append('metadata', JSON.stringify(newMeta));
+            }
+
+            await api.patch(`/processes/${processId}/timelines/${concludeItemId}`, data, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success('Tarefa concluída com sucesso!');
+            setConcludeItemId(null);
+            setConcludeFiles(null);
+            fetchTimelines();
+        } catch (error) {
+            console.error(error);
+            toast.error('Erro ao concluir tarefa.');
+        }
+    };
+
     const openEdit = (item: TimelineItem) => {
         setEditingItem(item);
         setSelectedFiles(null);
@@ -164,7 +216,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             date: item.date ? new Date(item.date).toISOString().slice(0, 16) : '',
             internalDate: item.internalDate ? new Date(item.internalDate).toISOString().slice(0, 16) : '',
             fatalDate: item.fatalDate ? new Date(item.fatalDate).toISOString().slice(0, 16) : '',
-            type: item.type
+            type: item.type,
+            category: item.category || 'REGISTRO',
+            status: item.status || 'PENDENTE',
+            priority: item.priority || 'MEDIA',
+            templateCode: item.templateCode || ''
         });
         setIsFormOpen(true);
     };
@@ -312,6 +368,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     };
 
+    const filteredTimelines = timelines.filter(t => (t.category || 'REGISTRO') === activeTab);
+
     return (
         <div className="space-y-4 animate-in fade-in relative">
             {/* Document Preview Modal (Mini Browser) */}
@@ -359,37 +417,48 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             )}
 
             {/* Header Actions */}
-            <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-                <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-semibold text-slate-200">Andamentos & Prazos</h2>
-                    <Badge variant="info">{timelines.length}</Badge>
+            <div className="flex flex-col gap-4 bg-slate-900/50 p-4 rounded-lg border border-slate-800">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-semibold text-slate-200">Andamentos & Prazos</h2>
+                        <Badge variant="info">{timelines.length}</Badge>
+                    </div>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => {
+                                resetForm();
+                                setIsFormOpen(true);
+                            }}
+                            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition"
+                        >
+                            <Plus size={16} />
+                            Novo
+                        </button>
+                        <button 
+                            onClick={fetchTimelines} 
+                            className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition"
+                            title="Atualizar"
+                        >
+                            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <button 
-                        onClick={() => {
-                            setEditingItem(null);
-                            setFormData({
-                                title: '',
-                                description: '',
-                                date: new Date().toISOString().slice(0, 16),
-                                internalDate: '',
-                                fatalDate: '',
-                                type: 'MOVEMENT'
-                            });
-                            setIsFormOpen(true);
-                        }}
-                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-2 text-sm font-medium transition"
-                    >
-                        <Plus size={16} />
-                        Novo Andamento
-                    </button>
-                    <button 
-                        onClick={fetchTimelines} 
-                        className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition"
-                        title="Atualizar"
-                    >
-                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                    </button>
+
+                {/* Tabs */}
+                <div className="flex gap-2 border-b border-slate-800">
+                    {(['REGISTRO', 'ACAO', 'AGENDA'] as const).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                activeTab === tab 
+                                    ? 'border-indigo-500 text-indigo-400' 
+                                    : 'border-transparent text-slate-500 hover:text-slate-300'
+                            }`}
+                        >
+                            {tab === 'REGISTRO' ? 'Histórico Geral' : tab === 'ACAO' ? 'Ações & Tarefas' : 'Agenda & Prazos'}
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -416,14 +485,14 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         </td>
                                     </tr>
                                 ))
-                            ) : timelines.length === 0 ? (
+                            ) : filteredTimelines.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                                        Nenhum andamento registrado.
+                                        Nenhum andamento na aba atual.
                                     </td>
                                 </tr>
                             ) : (
-                                timelines.map((item, idx) => (
+                                filteredTimelines.map((item, idx) => (
                                     <tr 
                                         key={item.id} 
                                         className={`hover:bg-yellow-50 transition-colors group ${
@@ -442,9 +511,15 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                     {item.title}
                                                 </span>
                                                 {/* Eproc style origin/type */}
-                                                <div className="flex gap-1 mt-0.5">
+                                                <div className="flex gap-1 mt-0.5 items-center flex-wrap">
                                                     {getOriginBadge(item.origin)}
                                                     {item.type && <span className="text-[10px] bg-slate-100 px-1 rounded border border-slate-200">{item.type}</span>}
+                                                    {item.status === 'CONCLUIDO' && (
+                                                        <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1 rounded border border-emerald-200 font-bold">CONCLUÍDO</span>
+                                                    )}
+                                                    {item.templateCode && (
+                                                        <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1 rounded border border-indigo-200 font-medium break-all">Workflow</span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
@@ -481,6 +556,16 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                     {item.clientMessage && (
                                                         <button onClick={() => handleSendWhatsapp(item)} className="text-[10px] text-emerald-600 hover:underline flex items-center gap-0.5 font-medium" title="Mensagem Cliente">
                                                             <MessageCircle size={10} /> Whats
+                                                        </button>
+                                                    )}
+                                                    {activeTab === 'ACAO' && item.status !== 'CONCLUIDO' && (
+                                                        <button 
+                                                            onClick={async () => {
+                                                                setConcludeItemId(item.id);
+                                                            }}
+                                                            className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded shadow-sm hover:bg-emerald-600 font-bold"
+                                                        >
+                                                            Tratar / Concluir
                                                         </button>
                                                     )}
                                                 </div>
@@ -526,6 +611,69 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                     </table>
                 </div>
             </div>
+
+            {/* Modal de Concluir Ação */}
+            {concludeItemId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center gap-3 text-emerald-400">
+                            <AlertTriangle size={24} />
+                            <h3 className="text-lg font-bold text-white">Concluir Tarefa</h3>
+                        </div>
+                        
+                        <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-4">
+                            <p className="text-slate-300 text-sm">
+                                Para concluir esta ação, você pode anexar o documento finalizado ou gerar um a partir do template.
+                            </p>
+                            
+                            <div className="border border-slate-800 rounded p-3 bg-slate-900/50">
+                                <label className="block text-sm font-medium text-slate-400 mb-2">1. Anexar Arquivo Final</label>
+                                <input 
+                                    type="file" 
+                                    multiple
+                                    onChange={e => {
+                                        if (e.target.files) {
+                                            setConcludeFiles(e.target.files);
+                                        }
+                                    }}
+                                    className="text-xs text-slate-400 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 w-full"
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <span className="text-slate-500 text-xs font-bold uppercase">Ou</span>
+                                <div className="h-px bg-slate-800 flex-1"></div>
+                            </div>
+
+                            <div className="border border-slate-800 rounded p-3 bg-slate-900/50">
+                                <label className="block text-sm font-medium text-slate-400 mb-2">2. Gerar via Template M365</label>
+                                <button className="w-full text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded font-medium border border-slate-700 transition flex items-center justify-center gap-2">
+                                    <FileText size={14} className="text-blue-400" />
+                                    Abrir Word Online (Em Breve)
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button 
+                                onClick={() => {
+                                    setConcludeItemId(null);
+                                    setConcludeFiles(null);
+                                }}
+                                className="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={handleConcludeAction}
+                                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-2 transition shadow-lg shadow-emerald-900/20 text-sm"
+                            >
+                                Confirmar Conclusão
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Confirmação WhatsApp */}
             {selectedMessage && (
@@ -594,6 +742,36 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:border-indigo-500 outline-none"
                                         required
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Bucket (Aba)</label>
+                                    <select 
+                                        value={formData.category}
+                                        onChange={e => setFormData({...formData, category: e.target.value})}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:border-indigo-500 outline-none"
+                                    >
+                                        <option value="REGISTRO">Histórico Geral (Registro)</option>
+                                        <option value="ACAO">Ação & Tarefa</option>
+                                        <option value="AGENDA">Agenda (Prazo)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-emerald-400 mb-1">Workflow Template</label>
+                                    <select 
+                                        value={formData.templateCode}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setFormData({...formData, templateCode: val, title: val === 'WF_NOVA_DEMANDA' ? 'Início: Demanda' : formData.title});
+                                        }}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:border-emerald-500 outline-none"
+                                        disabled={!!editingItem} // Cannot change template after creation
+                                    >
+                                        <option value="">Nenhum</option>
+                                        <option value="WF_NOVA_DEMANDA">Nova Demanda (Gera 4 Andamentos)</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-400 mb-1">Tipo</label>

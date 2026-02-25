@@ -1,4 +1,3 @@
-
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
 
@@ -49,6 +48,13 @@ export class ProcessTimelinesService {
             data.type = 'FILE'; 
         }
 
+        // --- Workflow Fields ---
+        const category = data.category || 'REGISTRO';
+        const status = data.status || 'PENDENTE';
+        const priority = data.priority || 'MEDIA';
+        const templateCode = data.templateCode || null;
+        const parentTimelineId = data.parentTimelineId || null;
+
         // Enforce manual origin for user-created items
         const newItem = await this.prisma.processTimeline.create({
             data: {
@@ -65,9 +71,117 @@ export class ProcessTimelinesService {
                 metadata: metadata,
                 // Defaults
                 source: 'MANUAL',
+                
+                // Workflow Fields
+                category,
+                status,
+                priority,
+                templateCode,
+                parentTimelineId,
+                requesterName: user,
+                responsibleName: data.responsibleName || null,
             },
         });
+
+        // Trigger Workflow Sequence Generation
+        if (templateCode === 'WF_NOVA_DEMANDA' && !parentTimelineId) {
+            await this.generateWorkflowNovaDemanda(processId, newItem.id, user);
+        }
+
+        // Trigger Appointment sync if category is AGENDA
+        if (category === 'AGENDA') {
+            await this.syncAppointment(newItem);
+        }
+
         return newItem;
+    }
+
+    private async generateWorkflowNovaDemanda(processId: string, parentId: string, user?: string) {
+        const now = new Date();
+        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
+
+        const sequence = [
+            {
+                title: "Triagem de Documentos",
+                category: "REGISTRO",
+                status: "PENDENTE",
+                type: "MOVEMENT",
+                priority: "ALTA",
+                date: now
+            },
+            {
+                title: "Resumo Estratégico IA",
+                category: "REGISTRO",
+                status: "PENDENTE",
+                type: "MOVEMENT",
+                priority: "MEDIA",
+                date: now
+            },
+            {
+                title: "Elaborar Proposta de Honorários",
+                category: "ACAO",
+                status: "PENDENTE",
+                type: "MOVEMENT",
+                priority: "ALTA",
+                internalDate: tomorrow,
+                date: now
+            },
+            {
+                title: "Coletar Assinatura do Cliente",
+                category: "ACAO",
+                status: "PENDENTE",
+                type: "MOVEMENT",
+                priority: "ALTA",
+                date: now
+            }
+        ];
+
+        for (const item of sequence) {
+            await this.prisma.processTimeline.create({
+                data: {
+                    processId,
+                    parentTimelineId: parentId,
+                    title: item.title,
+                    description: `Gerado via template WF_NOVA_DEMANDA`,
+                    date: item.date,
+                    type: item.type,
+                    origin: 'INTERNO',
+                    source: 'MANUAL',
+                    category: item.category,
+                    status: item.status,
+                    priority: item.priority,
+                    internalDate: item.internalDate || null,
+                    templateCode: 'WF_NOVA_DEMANDA',
+                    requesterName: user || 'sistema',
+                }
+            });
+        }
+    }
+
+    private async syncAppointment(timeline: any) {
+        // Fetch the process to get the tenantId
+        const process = await this.prisma.process.findUnique({
+            where: { id: timeline.processId }
+        });
+
+        if (!process) return;
+
+        // If it's AGENDA, create an appointment
+        const startAt = timeline.internalDate || timeline.fatalDate || timeline.date;
+        const endAt = timeline.fatalDate || new Date(new Date(startAt).getTime() + 60 * 60 * 1000); // Default 1 hour duration
+
+        await this.prisma.appointment.create({
+            data: {
+                tenantId: process.tenantId,
+                processId: process.id,
+                title: timeline.title,
+                description: timeline.description,
+                type: 'PRAZO', 
+                startAt: new Date(startAt),
+                endAt: new Date(endAt),
+                status: 'SCHEDULED'
+            }
+        });
     }
 
     async update(id: string, data: any, files?: any[]) {
@@ -82,7 +196,6 @@ export class ProcessTimelinesService {
         }
 
         if (data.metadata) {
-             // If we want to support updating other metadata fields passed as JSON string
              try {
                  const newMeta = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata;
                  metadata = { ...metadata, ...newMeta };
@@ -113,12 +226,11 @@ export class ProcessTimelinesService {
                 });
             }
 
-            // Append to existing attachments
             const existingAttachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
             metadata.attachments = [...existingAttachments, ...newAttachments];
         }
 
-        return this.prisma.processTimeline.update({
+        const updated = await this.prisma.processTimeline.update({
             where: { id },
             data: {
                 title: data.title,
@@ -130,8 +242,19 @@ export class ProcessTimelinesService {
                 displayId: data.displayId,
                 responsibleAdvogado: data.responsibleAdvogado,
                 metadata: metadata,
+                category: data.category,
+                status: data.status,
+                priority: data.priority,
             },
         });
+
+        // Trigger sync if category changed to AGENDA or if dates updated and it's already an AGENDA
+        // This is a naive sync. For robust usage, you would track existing appointments and update them.
+        if (data.category === 'AGENDA' && existing.category !== 'AGENDA') {
+             await this.syncAppointment(updated);
+        }
+
+        return updated;
     }
 
     async remove(id: string) {
@@ -148,3 +271,4 @@ export class ProcessTimelinesService {
         return path.join(process.cwd(), 'uploads', 'timelines', fileName);
     }
 }
+
