@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-dotenv.config({ path: __dirname + '/../../.env' }); // carrega o .env da raiz do app/api
+dotenv.config({ path: __dirname + '/../.env', override: true }); // carrega o .env de apps/api
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
