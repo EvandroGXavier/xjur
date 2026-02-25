@@ -432,19 +432,43 @@ export class WhatsappService implements OnModuleInit {
     try {
       const tenantId = connection.tenantId;
       let fullJid = remoteJid.replace(/:[0-9]+/, '');
-      let phone = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
+      let phoneRaw = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
       
-      let contact = await this.prisma.contact.findFirst({
-        where: { tenantId, phone }
-      });
+      // Validação de número - não importar contatos anômalos com letras (evita lixo no banco)
+      if (/[a-zA-Z]/.test(phoneRaw)) {
+         this.fileLogger.log(`Skipping contact creation for ${phoneRaw}: Contains letters`);
+         // We still can't just return here, because we want to save the ticket/message
+         // But we shouldn't create a fake contact for them. We will create a fallback "Unknown" contact if a valid one isn't found, 
+         // BUT wait, a user sending a message must be attached to a contact.
+         // Let's at least clean the letters for the phone field, or leave it blank and rely on email fallback.
+      }
+      
+      let phoneClean = phoneRaw.replace(/\D/g, '');
+      const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
+      
+      let contact: any = null;
+      
+      if (phoneTail) {
+        // Busca inteligente considerando os 8 dígitos finais, tanto em celular quanto telefone
+         contact = await this.prisma.contact.findFirst({
+           where: { 
+             tenantId, 
+             OR: [
+               { whatsapp: { endsWith: phoneTail } },
+               { phone: { endsWith: phoneTail } },
+               { whatsapp: { equals: phoneRaw } } // Literal fallback
+             ]
+           }
+         });
+      }
 
       if (!contact) {
         contact = await this.prisma.contact.create({
           data: {
             tenantId,
-            name: pushName || 'Sem Nome',
-            phone: phone || '99 99999999',
-            whatsapp: phone || '99 99999999',
+            name: pushName || phoneClean || 'Sem Nome',
+            // Salva em whatsapp; phone fica null conforme regra
+            whatsapp: phoneClean || '99 99999999',
             category: isGroup ? 'Grupo' : 'Lead',
             email: 'nt@nt.com.br',
             document: null,
@@ -667,13 +691,32 @@ export class WhatsappService implements OnModuleInit {
           if (!remoteJid || remoteJid === 'status@broadcast') continue;
 
           const isGroup = remoteJid.endsWith('@g.us');
-          let phone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
-          let pushName = c.name || c.pushName || c.verifiedName || phone;
+          let phoneRaw = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
+          
+          if (/[a-zA-Z]/.test(phoneRaw) && !isGroup) {
+             // Ignora e não importa contatos irregulares (ex: canais, status, bots mal formados)
+             continue;
+          }
+
+          let phoneClean = phoneRaw.replace(/\D/g, '');
+          const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
+          
+          let pushName = c.name || c.pushName || c.verifiedName || phoneClean;
           let picUrl = c.profilePictureUrl || c.profilePicUrl || c.imgUrl || null;
 
-          let contact = await this.prisma.contact.findFirst({
-            where: { tenantId: connection.tenantId, phone }
-          });
+          let contact: any = null;
+          if (phoneTail) {
+            contact = await this.prisma.contact.findFirst({
+              where: { 
+                 tenantId: connection.tenantId, 
+                 OR: [
+                   { whatsapp: { endsWith: phoneTail } },
+                   { phone: { endsWith: phoneTail } },
+                   { whatsapp: { equals: phoneRaw } }
+                 ]
+              }
+            });
+          }
 
           if (contact) {
             // Conta como sucesso de sincronismo de qualquer forma, mesmo que não altere
@@ -691,9 +734,8 @@ export class WhatsappService implements OnModuleInit {
             await this.prisma.contact.create({
               data: {
                 tenantId: connection.tenantId,
-                name: pushName || 'Sem Nome',
-                phone: phone || '99 99999999',
-                whatsapp: phone || '99 99999999',
+                name: pushName || phoneClean || 'Sem Nome',
+                whatsapp: phoneClean || '99 99999999', // Phone é mantido como opcional agora
                 category: isGroup ? 'Grupo' : 'Lead',
                 profilePicUrl: picUrl,
                 email: 'nt@nt.com.br',

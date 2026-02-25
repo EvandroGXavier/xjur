@@ -380,6 +380,12 @@ export class TicketsService {
         this.logger.log(`✅ WhatsApp message sent to ${phone}`);
     } catch (error) {
         this.logger.error(`❌ WhatsApp Send Error: ${error.message}`);
+        
+        await this.prisma.ticketMessage.update({
+             where: { id: message.id },
+             data: { status: 'FAILED' }
+        }).catch(e => this.logger.error(`Failed to mark message as FAILED: ${e.message}`));
+        
         this.ticketsGateway.emitTicketError(tenantId, {
             ticketId: ticket.id,
             message: `Falha no envio: ${error.message}`,
