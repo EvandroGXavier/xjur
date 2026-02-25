@@ -155,6 +155,13 @@ export class WhatsappService implements OnModuleInit {
       // Pequeno delay para a Evolution processar a deleção
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // Antecipamos o registro de PAIRING para evitar que o "ghost 405 / logout" bloqueie as instâncias logo após a criação da porta
+      await this.prisma.connection.update({
+        where: { id: connectionId },
+        data: { status: 'PAIRING', qrCode: null }
+      });
+      this.whatsappGateway.emitConnectionStatus(connectionId, 'PAIRING');
+
       // 2. Criar nova instância
       const createResult = await this.evolutionService.createInstance(connectionId, evolutionConfig);
       this.logger.log(`Instance created: ${JSON.stringify(createResult?.instance?.instanceName || 'ok')}`);
