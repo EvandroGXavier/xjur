@@ -42,7 +42,7 @@ services:
   # ACESSO DIRETO A EVOLUTION DA VPS: http://185.202.223.115:8081/manager - ServerUrl= http://185.202.223.115:8081 - key= JaJyX0tc3DvmPScDDRojSsguMSddVGeO   
    # ACESSO DIRETO A EVOLUTION LOCAL: http://localhost:8080/manager - ServerUrl= http://localhost:8080 key= JaJyX0tc3DvmPScDDRojSsguMSddVGeO   
   evolution:
-    image: atendai/evolution-api:v2.1.1
+    image: atendai/evolution-api:v2.2.1
     container_name: drx_evolution_local
     restart: always
     ports:
@@ -56,29 +56,27 @@ services:
       # Server
       SERVER_TYPE: http
       SERVER_PORT: 8080
-      SERVER_URL: http://localhost:8080
-      
-      # Fix para QR Code: versão do WhatsApp aceita pelo servidor
-      CONFIG_SESSION_PHONE_VERSION: "2.3000.1028355510"
-      CONFIG_SESSION_PHONE_CLIENT: "Evolution API"
-      NODE_OPTIONS: "--network-family-autoselection-attempt-timeout=1000"
-      
+      # Configuração Limpa (v2.2.1)
       # Database
       DATABASE_ENABLED: "true"
       DATABASE_PROVIDER: postgresql
-      # Usando banco isolado 'drx_evolution'
-      DATABASE_CONNECTION_URI: "postgresql://drx_dev:drx_local_pass@db:5432/drx_evolution"
-      DATABASE_URL: "postgresql://drx_dev:drx_local_pass@db:5432/drx_evolution"
+      DATABASE_CONNECTION_URI: "postgresql://drx_dev:drx_local_pass@db:5432/drx_evolution_v3"
+      DATABASE_URL: "postgresql://drx_dev:drx_local_pass@db:5432/drx_evolution_v3"
       
       # Redis
       CACHE_REDIS_ENABLED: "true"
-      CACHE_REDIS_URI: "redis://redis:6379/0"
+      CACHE_REDIS_URI: "redis://redis:6379/1"
+      
+      # Fix para QR Code e Loop de Reconexão (Versão exata fornecida pelo usuário)
+      CONFIG_SESSION_PHONE_VERSION: "2.3000.1034111545"
+      CONFIG_SESSION_PHONE_CLIENT: "Ubuntu"
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
       
       # Auth
       AUTHENTICATION_API_KEY: "JaJyX0tc3DvmPScDDRojSsguMSddVGeO"
       
-      # Webhook (Aponta para o Host onde a API Nest roda)
-      WEBHOOK_GLOBAL_ENABLED: "true"
+      # Webhook (Desativado para isolamento)
+      WEBHOOK_GLOBAL_ENABLED: "false"
       WEBHOOK_GLOBAL_URL: "http://host.docker.internal:3000/api/evolution/webhook"
       WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
       WEBHOOK_EVENTS_QRCODE_UPDATED: "true"
@@ -99,6 +97,8 @@ services:
       WEBHOOK_EVENTS_GROUPS_UPDATE: "true"
       WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE: "true"
       WEBHOOK_EVENTS_CONNECTION_UPDATE: "true"
+      # Nível de Log
+      WA_LOGGER_LEVEL: "info"
     volumes:
       - drx_evolution_instances:/evolution/instances
       - drx_evolution_store:/evolution/store
