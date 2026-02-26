@@ -8,6 +8,7 @@ import { ProcessPartiesService } from './process-parties.service';
 import { ProcessTimelinesService } from './process-timelines.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
+import { Public } from '../auth/public.decorator';
 
 @Controller('processes')
 @UseGuards(JwtAuthGuard)
@@ -75,6 +76,7 @@ export class ProcessesController {
 
     // --- TIMELINES (Andamentos) ---
 
+    @Public()
     @Get('timelines/attachments/:filename')
     async downloadAttachment(@Param('filename') filename: string, @Res() res: Response) {
         const filePath = this.timelinesService.getAttachmentPath(filename);

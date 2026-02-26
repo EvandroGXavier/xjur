@@ -60,6 +60,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     // Conclude Modal State
     const [concludeItemId, setConcludeItemId] = useState<string | null>(null);
     const [concludeFiles, setConcludeFiles] = useState<FileList | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     const [formData, setFormData] = useState({
         title: '',
@@ -122,6 +123,14 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Basic validation for workflow categories
+        if (!formData.title) {
+            toast.error('Por favor, informe um título / resumo.');
+            return;
+        }
+
+        setIsSaving(true);
         try {
             const data = new FormData();
             Object.entries(formData).forEach(([key, value]) => {
@@ -161,6 +170,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         } catch (error) {
             console.error(error);
             toast.error('Erro ao salvar andamento.');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -177,6 +188,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
 
     const handleConcludeAction = async () => {
         if (!concludeItemId) return;
+        setIsSaving(true);
         try {
             const data = new FormData();
             data.append('status', 'CONCLUIDO');
@@ -203,6 +215,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         } catch (error) {
             console.error(error);
             toast.error('Erro ao concluir tarefa.');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -666,9 +680,10 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                             </button>
                             <button 
                                 onClick={handleConcludeAction}
-                                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-2 transition shadow-lg shadow-emerald-900/20 text-sm"
+                                disabled={isSaving}
+                                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-2 transition shadow-lg shadow-emerald-900/20 text-sm disabled:opacity-50"
                             >
-                                Confirmar Conclusão
+                                {isSaving ? 'Enviando...' : 'Confirmar Conclusão'}
                             </button>
                         </div>
                     </div>
@@ -866,9 +881,10 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                 </button>
                                 <button 
                                     type="submit"
-                                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-900/20"
+                                    disabled={isSaving}
+                                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-900/20 disabled:opacity-50"
                                 >
-                                    Salvar Andamento
+                                    {isSaving ? 'Salvando...' : 'Salvar Andamento'}
                                 </button>
                             </div>
                         </form>
