@@ -9,9 +9,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
   // CORREÇÃO CRÍTICA: Aumenta o limite para suportar Webhooks pesados da Evolution API
-  // Isso resolve o erro "request entity too large" que vimos nos logs.
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  // e uploads reais de PDFs pesados (ex: 100MB+) em Andamentos.
+  app.use(json({ limit: '500mb' }));
+  app.use(urlencoded({ extended: true, limit: '500mb' }));
 
   app.enableCors();
   
