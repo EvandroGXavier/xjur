@@ -39,6 +39,8 @@ services:
       retries: 5
 
   # 3. Evolution API (Motor WhatsApp)
+  # ACESSO DIRETO A EVOLUTION DA VPS: http://185.202.223.115:8081/manager - ServerUrl= http://185.202.223.115:8081 - key= JaJyX0tc3DvmPScDDRojSsguMSddVGeO   
+   # ACESSO DIRETO A EVOLUTION LOCAL: http://localhost:8080/manager - ServerUrl= http://localhost:8080 key= JaJyX0tc3DvmPScDDRojSsguMSddVGeO   
   evolution:
     image: atendai/evolution-api:v2.1.1
     container_name: drx_evolution_local

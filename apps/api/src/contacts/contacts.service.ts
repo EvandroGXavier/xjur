@@ -113,8 +113,8 @@ export class ContactsService {
         { email: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search, mode: 'insensitive' } },
         { whatsapp: { contains: search, mode: 'insensitive' } },
-        { cpf: { contains: search, mode: 'insensitive' } },
-        { cnpj: { contains: search, mode: 'insensitive' } },
+        { pfDetails: { cpf: { contains: search, mode: 'insensitive' } } },
+        { pjDetails: { cnpj: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
