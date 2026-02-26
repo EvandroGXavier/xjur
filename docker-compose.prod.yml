@@ -88,7 +88,7 @@ services:
 
   # 5. Evolution API (Motor WhatsApp)
   evolution:
-    image: atendai/evolution-api:v2.1.1
+    image: atendai/evolution-api:v2.2.1
     container_name: drx_evolution_prod
     restart: always
     depends_on:
@@ -103,9 +103,9 @@ services:
       SERVER_URL: "${EVOLUTION_SERVER_URL:-https://evolution.evandroadvogado.com}"
       
       # Fix para QR Code: versão do WhatsApp aceita pelo servidor
-      CONFIG_SESSION_PHONE_VERSION: "2.3000.1028355510"
+      CONFIG_SESSION_PHONE_VERSION: "2.3000.1034111545"
       CONFIG_SESSION_PHONE_CLIENT: "Evolution API"
-      NODE_OPTIONS: "--network-family-autoselection-attempt-timeout=1000"
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
       
       # Database (banco separado para Evolution)
       DATABASE_ENABLED: "true"
