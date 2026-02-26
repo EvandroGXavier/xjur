@@ -27,7 +27,7 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsDateString()
-  @Transform(({ value }) => value === "" ? null : value)
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === "") ? null : value)
   birthDate?: string;
   
   @IsOptional()
@@ -37,7 +37,7 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsDateString()
-  @Transform(({ value }) => value === "" ? null : value)
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === "") ? null : value)
   rgIssueDate?: string;
 
   @IsOptional()
@@ -108,12 +108,12 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsDateString()
-  @Transform(({ value }) => value === "" ? null : value)
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === "") ? null : value)
   cnhIssueDate?: string;
 
   @IsOptional()
   @IsDateString()
-  @Transform(({ value }) => value === "" ? null : value)
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === "") ? null : value)
   cnhExpirationDate?: string;
 
   @IsOptional()

@@ -525,17 +525,18 @@ export function ContactForm() {
     setLoading(true);
     try {
         const toISO = (dateStr: any) => {
-            if (!dateStr || typeof dateStr !== 'string') return dateStr;
+            if (!dateStr || typeof dateStr !== 'string' || dateStr.trim() === '') return null;
+            const trimmed = dateStr.trim();
             // Check if dd/mm/yyyy
-            if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-                const [d, m, y] = dateStr.split('/');
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+                const [d, m, y] = trimmed.split('/');
                 return `${y}-${m}-${d}T00:00:00.000Z`;
             }
             // Check if yyyy-mm-dd (Input date format)
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-                return `${dateStr}T00:00:00.000Z`;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+                return `${trimmed}T00:00:00.000Z`;
             }
-            return dateStr;
+            return trimmed;
         };
 
         const rawPayload = { ...formData };
@@ -560,7 +561,7 @@ export function ContactForm() {
         const payload = Object.fromEntries(
           Object.entries(rawPayload).map(([key, value]) => [
             key,
-            value === '' ? null : value
+            (typeof value === 'string' && value.trim() === '') ? null : value
           ])
         );
 
