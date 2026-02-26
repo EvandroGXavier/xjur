@@ -46,7 +46,9 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
     // Form state
     const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<ContactOption[]>([]);
+    const [hasSearched, setHasSearched] = useState(false);
     const [selectedContact, setSelectedContact] = useState<ContactOption | null>(null);
     
     const [newParty, setNewParty] = useState({
@@ -73,17 +75,20 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
     useEffect(() => {
         if (searchTerm.length < 3) {
             setSearchResults([]);
+            setHasSearched(false);
             return;
         }
         const timer = setTimeout(async () => {
             try {
-                // TODO: Implementar endpoint de busca de contatos se não houver um genérico
-                // Por enquanto simulando com o endpoint geral de automação ou lista de contatos
-                // Assumindo que podemos buscar contatos via query param na rota /contacts
-                const res = await api.get(`/contacts?search=${searchTerm}`);
+                setIsSearching(true);
+                const res = await api.get(`/contacts?search=${encodeURIComponent(searchTerm)}`);
                 setSearchResults(res.data?.data || res.data || []);
+                setHasSearched(true);
             } catch (err) {
-                console.error(err);
+                console.error('Erro na busca de contatos:', err);
+                toast.error('Erro ao buscar contatos no servidor');
+            } finally {
+                setIsSearching(false);
             }
         }, 500);
         return () => clearTimeout(timer);
@@ -253,22 +258,36 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
                                     }}
                                     disabled={loading}
                                 />
-                                {searchTerm.length > 2 && !selectedContact && searchResults.length > 0 && (
+                                {searchTerm.length > 2 && !selectedContact && (
                                     <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                                        {searchResults.map(c => (
-                                            <button 
-                                                key={c.id}
-                                                className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-slate-200 border-b border-slate-700/50 last:border-0"
-                                                onClick={() => {
-                                                    setSelectedContact(c);
-                                                    setSearchTerm('');
-                                                    setSearchResults([]);
-                                                }}
-                                            >
-                                                <div className="font-medium">{c.name}</div>
-                                                <div className="text-xs text-slate-500">{c.document}</div>
-                                            </button>
-                                        ))}
+                                        {isSearching ? (
+                                            <div className="p-4 flex items-center justify-center text-slate-400 gap-2 text-sm text-center">
+                                                <Loader2 size={16} className="animate-spin" /> Buscando...
+                                            </div>
+                                        ) : searchResults.length > 0 ? (
+                                            searchResults.map(c => (
+                                                <button 
+                                                    key={c.id}
+                                                    className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-slate-200 border-b border-slate-700/50 last:border-0"
+                                                    onClick={() => {
+                                                        setSelectedContact(c);
+                                                        setSearchTerm('');
+                                                        setSearchResults([]);
+                                                        setHasSearched(false);
+                                                    }}
+                                                >
+                                                    <div className="font-medium flex justify-between items-center">
+                                                        <span>{c.name}</span>
+                                                        {c.document && <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">{c.document}</span>}
+                                                    </div>
+                                                </button>
+                                            ))
+                                        ) : hasSearched && (
+                                            <div className="p-4 text-center text-slate-400 text-sm">
+                                                Nenhum contato encontrado com "{searchTerm}".<br />
+                                                <span className="text-xs text-slate-500 block mt-1">Use o botão + ao lado para cadastrar.</span>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 {selectedContact && (
