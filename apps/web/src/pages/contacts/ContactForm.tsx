@@ -31,7 +31,6 @@ interface ContactData {
   naturality?: string; // Naturalidade
   gender?: string; // Gênero
   civilStatus?: string; // Estado Civil
-  civilStatus?: string; // Estado Civil
   
   // CNH
   fullName?: string; // Nome Completo Legal
@@ -55,6 +54,7 @@ interface ContactData {
   shareCapital?: string; // or number, keeping basic for form
   status?: string;
   statusDate?: string;
+  statusReason?: string; // Motivo da Situação
   specialStatus?: string;
   specialStatusDate?: string;
   pjQsa?: any[];
@@ -75,8 +75,11 @@ interface ContactData {
 // ...
 interface Address {
   id?: string;
+  type: string;
   street: string;
   number: string;
+  complement?: string;
+  district?: string;
   city: string;
   state: string;
   zipCode: string;
@@ -196,8 +199,11 @@ export function ContactForm() {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
   const [addressForm, setAddressForm] = useState<Address>({
+    type: 'Principal',
     street: '',
     number: '',
+    complement: '',
+    district: '',
     city: '',
     state: '',
     zipCode: ''
@@ -598,33 +604,36 @@ export function ContactForm() {
              return dateStr; // Assume already correct or ISO
         };
 
-        setFormData({
-          ...formData,
-          companyName: companyName,
-          name: tradeName,
-          email: data.email || formData.email,
-          phone: data.telefone || data.ddd_telefone_1 || formData.phone,
-          
-          // Mapeamento Dados PJ Estendidos (Normalizando datas)
-          openingDate: normalizeDate(data.abertura),
-          size: data.porte,
-          legalNature: data.natureza_juridica,
-          mainActivity: data.atividade_principal ? data.atividade_principal[0] : null,
-          sideActivities: data.atividades_secundarias || [],
-          shareCapital: data.capital_social,
-          status: data.situacao,
-          statusDate: normalizeDate(data.data_situacao),
-          statusReason: data.motivo_situacao,
-          specialStatus: data.situacao_especial,
-          specialStatusDate: normalizeDate(data.data_situacao_especial),
-          pjQsa: data.qsa || []
-        });
+         setFormData({
+           ...formData,
+           companyName: companyName,
+           name: tradeName,
+           email: data.email || formData.email,
+           phone: data.telefone || data.ddd_telefone_1 || formData.phone,
+           
+           // Mapeamento Dados PJ Estendidos (Normalizando datas)
+           openingDate: normalizeDate(data.abertura) ?? undefined,
+           size: data.porte,
+           legalNature: data.natureza_juridica,
+           mainActivity: data.atividade_principal ? data.atividade_principal[0] : null,
+           sideActivities: data.atividades_secundarias || [],
+           shareCapital: data.capital_social,
+           status: data.situacao,
+           statusDate: normalizeDate(data.data_situacao) ?? undefined,
+           statusReason: data.motivo_situacao,
+           specialStatus: data.situacao_especial,
+           specialStatusDate: normalizeDate(data.data_situacao_especial) ?? undefined,
+           pjQsa: data.qsa || []
+         });
         
         // Auto-fill address if available and form is empty or user confirms
         if (data.logradouro) {
              setAddressForm({
+                 type: 'Principal',
                  street: data.logradouro,
                  number: data.numero || '',
+                 complement: data.complemento || '',
+                 district: data.bairro || '',
                  city: data.municipio,
                  state: data.uf,
                  zipCode: data.cep ? data.cep.replace(/\D/g, '') : ''
@@ -663,28 +672,31 @@ export function ContactForm() {
   };
 
   // Enriquecimento de CEP
-  const handleEnrichCEP = async () => {
-    if (!addressForm.zipCode) {
-      toast.warning('Digite um CEP para consultar');
+  const handleEnrichCEP = async (cepValue?: string) => {
+    const zipToConsult = cepValue || addressForm.zipCode;
+    if (!zipToConsult) {
       return;
     }
 
+    const cleanZip = zipToConsult.replace(/\D/g, '');
+    if (cleanZip.length < 8) return;
+
     setEnriching(true);
     try {
-      const response = await api.get(`/contacts/enrich/cep?cep=${addressForm.zipCode}`);
+      const response = await api.get(`/contacts/enrich/cep?cep=${cleanZip}`);
       const data = response.data;
 
-        setAddressForm({
-          ...addressForm,
-          street: data.logradouro || addressForm.street,
-          city: data.localidade || addressForm.city,
-          state: data.uf || addressForm.state,
-        });
-        toast.success('Endereço carregado com sucesso!');
+        setAddressForm(prev => ({
+          ...prev,
+          street: data.logradouro || prev.street,
+          city: data.localidade || prev.city,
+          state: data.uf || prev.state,
+          district: data.bairro || prev.district,
+        }));
+        toast.success('Endereço carregado via CEP!');
     } catch (err: any) {
       console.error(err);
-      const message = err.response?.data?.message || 'CEP não encontrado';
-      toast.error(`Erro: ${message}`);
+      // Quiet fail if automatic
     } finally {
       setEnriching(false);
     }
@@ -702,7 +714,7 @@ export function ContactForm() {
       await api.post(`/contacts/${id}/addresses`, addressForm);
 
       await fetchContact();
-      setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
+      setAddressForm({ type: 'Principal', street: '', number: '', city: '', state: '', zipCode: '', complement: '', district: '' });
       setShowAddressForm(false);
       toast.success('Endereço adicionado!');
     } catch (err) {
@@ -721,7 +733,7 @@ export function ContactForm() {
       await api.patch(`/contacts/${id}/addresses/${editingAddress.id}`, addressForm);
 
       await fetchContact();
-      setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
+      setAddressForm({ type: 'Principal', street: '', number: '', city: '', state: '', zipCode: '', complement: '', district: '' });
       setEditingAddress(null);
       setShowAddressForm(false);
       toast.success('Endereço atualizado!');
@@ -760,7 +772,7 @@ export function ContactForm() {
   const cancelAddressForm = () => {
     setShowAddressForm(false);
     setEditingAddress(null);
-    setAddressForm({ street: '', number: '', city: '', state: '', zipCode: '' });
+    setAddressForm({ type: 'Principal', street: '', number: '', city: '', state: '', zipCode: '', complement: '', district: '' });
   };
 
   // Additional Contact form states
@@ -1369,39 +1381,21 @@ export function ContactForm() {
                         <>
                             {/* Address Form */}
                             {showAddressForm && (
-                                <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
+                                <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800 animate-fadeIn">
                                     <h4 className="text-md font-semibold text-white mb-4">
                                         {editingAddress ? 'Editar Endereço' : 'Novo Endereço'}
                                     </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-2 md:col-span-2">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {/* Linha 1: CEP, Número, Complemento */}
+                                        <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">CEP</label>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    value={addressForm.zipCode}
-                                                    onChange={e => setAddressForm({...addressForm, zipCode: masks.cep(e.target.value)})}
-                                                    className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                                    placeholder="00000-000"
-                                                    maxLength={9}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={handleEnrichCEP}
-                                                    disabled={enriching || !addressForm.zipCode}
-                                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 flex items-center gap-2"
-                                                >
-                                                    <Search size={16} />
-                                                    {enriching ? 'Consultando...' : 'Consultar'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-2 md:col-span-2">
-                                            <label className="text-sm font-medium text-slate-400">Logradouro</label>
                                             <input
-                                                value={addressForm.street}
-                                                onChange={e => setAddressForm({...addressForm, street: e.target.value})}
+                                                value={addressForm.zipCode}
+                                                onChange={e => setAddressForm({...addressForm, zipCode: masks.cep(e.target.value)})}
+                                                onBlur={e => handleEnrichCEP(e.target.value)}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                                placeholder="Rua, Avenida, etc."
+                                                placeholder="00000-000"
+                                                maxLength={9}
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -1414,29 +1408,76 @@ export function ContactForm() {
                                             />
                                         </div>
                                         <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Complemento</label>
+                                            <input
+                                                value={addressForm.complement || ''}
+                                                onChange={e => setAddressForm({...addressForm, complement: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Apto, Sala, KM..."
+                                            />
+                                        </div>
+
+                                        {/* Linha 2: Logradouro, Bairro */}
+                                        <div className="space-y-2 md:col-span-2">
+                                            <label className="text-sm font-medium text-slate-400">Logradouro</label>
+                                            <input
+                                                value={addressForm.street}
+                                                onChange={e => setAddressForm({...addressForm, street: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Rua, Avenida, etc."
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Bairro</label>
+                                            <input
+                                                value={addressForm.district || ''}
+                                                onChange={e => setAddressForm({...addressForm, district: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Nome do Bairro"
+                                            />
+                                        </div>
+
+                                        {/* Linha 3: Cidade, Estado, Tipo */}
+                                        <div className="space-y-2 md:col-span-2">
                                             <label className="text-sm font-medium text-slate-400">Cidade</label>
                                             <input
                                                 value={addressForm.city}
                                                 onChange={e => setAddressForm({...addressForm, city: e.target.value})}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                                placeholder="São Paulo"
+                                                placeholder="Ex: São Paulo"
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-slate-400">Estado</label>
+                                            <label className="text-sm font-medium text-slate-400">Estado (UF)</label>
                                             <input
                                                 value={addressForm.state}
-                                                onChange={e => setAddressForm({...addressForm, state: e.target.value})}
+                                                onChange={e => setAddressForm({...addressForm, state: e.target.value.toUpperCase()})}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="SP"
                                                 maxLength={2}
                                             />
                                         </div>
+
+                                        <div className="space-y-2 md:col-span-3">
+                                            <label className="text-sm font-medium text-slate-400">Tipo de Endereço</label>
+                                            <select
+                                                value={addressForm.type}
+                                                onChange={e => setAddressForm({...addressForm, type: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="Principal">Principal</option>
+                                                <option value="Residencial">Residencial</option>
+                                                <option value="Comercial">Comercial</option>
+                                                <option value="Cobrança">Cobrança</option>
+                                                <option value="Outro">Outro</option>
+                                            </select>
+                                        </div>
                                     </div>
+
                                     <div className="flex gap-2 mt-6">
                                         <button
                                             onClick={editingAddress ? handleUpdateAddress : handleAddAddress}
-                                            disabled={loading}
+                                            disabled={loading || enriching}
                                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
                                         >
                                             {loading ? 'Salvando...' : editingAddress ? 'Atualizar' : 'Adicionar'}
@@ -1453,20 +1494,37 @@ export function ContactForm() {
                             )}
 
                             {/* Address List */}
-                            <div className="space-y-3">
+                             <div className="space-y-3">
                                 {formData.addresses && formData.addresses.length > 0 ? (
                                     formData.addresses.map((address) => (
                                         <div key={address.id} className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                                             <div className="flex items-start justify-between">
                                                 <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-2">
+                                                    <div className="flex items-center gap-2 mb-1">
                                                         <Home size={16} className="text-indigo-400" />
-                                                        <span className="font-medium text-white">{address.street}, {address.number}</span>
+                                                        <span className="font-medium text-white">
+                                                            {address.street}, {address.number}
+                                                            {address.complement && ` - ${address.complement}`}
+                                                        </span>
+                                                        <span className="text-[10px] px-2 py-0.5 bg-indigo-900/50 text-indigo-300 rounded-full border border-indigo-700/50">
+                                                            {address.type}
+                                                        </span>
                                                     </div>
-                                                    <p className="text-sm text-slate-400">{address.city} - {address.state}</p>
+                                                    <p className="text-sm text-slate-400">
+                                                        {address.district ? `${address.district}, ` : ''}{address.city} - {address.state}
+                                                    </p>
                                                     <p className="text-sm text-slate-400">CEP: {address.zipCode}</p>
+                                                    
+                                                    <a 
+                                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${address.street}, ${address.number} - ${address.district || ''}, ${address.city} - ${address.state}, ${address.zipCode}`)}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 mt-2 transition"
+                                                    >
+                                                        <MapPin size={12} /> Ver no Google Maps
+                                                    </a>
                                                 </div>
-                                                <div className="flex gap-2">
+                                                <div className="flex gap-1">
                                                     <button
                                                         onClick={() => startEditAddress(address)}
                                                         className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded transition"

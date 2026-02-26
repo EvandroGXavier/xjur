@@ -268,14 +268,17 @@ model ContactAsset {
 }
 
 model Address {
-  id        String  @id @default(uuid())
-  contactId String
-  street    String
-  number    String
-  city      String
-  state     String
-  zipCode   String
-  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  id         String  @id @default(uuid())
+  contactId  String
+  type       String  @default("Principal") // Principal, Comercial, Residencial, etc.
+  zipCode    String
+  street     String
+  number     String
+  complement String?
+  district   String? // Bairro
+  city       String
+  state      String
+  contact    Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@map("addresses")
 }
