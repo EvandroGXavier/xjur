@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -208,6 +208,27 @@ export function ContactForm() {
     state: '',
     zipCode: ''
   });
+  const [creatingAddressType, setCreatingAddressType] = useState(false);
+  const [newAddressType, setNewAddressType] = useState('');
+  const zipCodeRef = useRef<HTMLInputElement>(null);
+
+  // Focus on zipCode when address form opens
+  useEffect(() => {
+    if (showAddressForm) {
+      setTimeout(() => {
+        zipCodeRef.current?.focus();
+      }, 100);
+    }
+  }, [showAddressForm]);
+
+  const handleAddressKeyDown = (e: React.KeyboardEvent, nextFieldId?: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (nextFieldId) {
+        document.getElementById(nextFieldId)?.focus();
+      }
+    }
+  };
 
   // Relations state
   const [relations, setRelations] = useState<ContactRelation[]>([]);
@@ -1390,9 +1411,12 @@ export function ContactForm() {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">CEP</label>
                                             <input
+                                                id="addr-zip"
+                                                ref={zipCodeRef}
                                                 value={addressForm.zipCode}
                                                 onChange={e => setAddressForm({...addressForm, zipCode: masks.cep(e.target.value)})}
                                                 onBlur={e => handleEnrichCEP(e.target.value)}
+                                                onKeyDown={e => handleAddressKeyDown(e, 'addr-number')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="00000-000"
                                                 maxLength={9}
@@ -1401,8 +1425,10 @@ export function ContactForm() {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">Número</label>
                                             <input
+                                                id="addr-number"
                                                 value={addressForm.number}
                                                 onChange={e => setAddressForm({...addressForm, number: e.target.value})}
+                                                onKeyDown={e => handleAddressKeyDown(e, 'addr-complement')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="123"
                                             />
@@ -1410,8 +1436,10 @@ export function ContactForm() {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">Complemento</label>
                                             <input
+                                                id="addr-complement"
                                                 value={addressForm.complement || ''}
                                                 onChange={e => setAddressForm({...addressForm, complement: e.target.value})}
+                                                onKeyDown={e => handleAddressKeyDown(e, 'addr-street')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="Apto, Sala, KM..."
                                             />
@@ -1421,8 +1449,10 @@ export function ContactForm() {
                                         <div className="space-y-2 md:col-span-2">
                                             <label className="text-sm font-medium text-slate-400">Logradouro</label>
                                             <input
+                                                id="addr-street"
                                                 value={addressForm.street}
                                                 onChange={e => setAddressForm({...addressForm, street: e.target.value})}
+                                                onKeyDown={e => handleAddressKeyDown(e, 'addr-district')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="Rua, Avenida, etc."
                                             />
@@ -1430,8 +1460,10 @@ export function ContactForm() {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">Bairro</label>
                                             <input
+                                                id="addr-district"
                                                 value={addressForm.district || ''}
                                                 onChange={e => setAddressForm({...addressForm, district: e.target.value})}
+                                                onKeyDown={e => handleAddressKeyDown(e, 'addr-city')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="Nome do Bairro"
                                             />
@@ -1441,8 +1473,10 @@ export function ContactForm() {
                                         <div className="space-y-2 md:col-span-2">
                                             <label className="text-sm font-medium text-slate-400">Cidade</label>
                                             <input
+                                                id="addr-city"
                                                 value={addressForm.city}
                                                 onChange={e => setAddressForm({...addressForm, city: e.target.value})}
+                                                onKeyDown={e => handleAddressKeyDown(e, 'addr-state')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="Ex: São Paulo"
                                             />
@@ -1450,8 +1484,10 @@ export function ContactForm() {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">Estado (UF)</label>
                                             <input
+                                                id="addr-state"
                                                 value={addressForm.state}
                                                 onChange={e => setAddressForm({...addressForm, state: e.target.value.toUpperCase()})}
+                                                onKeyDown={e => handleAddressKeyDown(e, 'addr-type')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                                                 placeholder="SP"
                                                 maxLength={2}
@@ -1460,17 +1496,55 @@ export function ContactForm() {
 
                                         <div className="space-y-2 md:col-span-3">
                                             <label className="text-sm font-medium text-slate-400">Tipo de Endereço</label>
-                                            <select
-                                                value={addressForm.type}
-                                                onChange={e => setAddressForm({...addressForm, type: e.target.value})}
-                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                            >
-                                                <option value="Principal">Principal</option>
-                                                <option value="Residencial">Residencial</option>
-                                                <option value="Comercial">Comercial</option>
-                                                <option value="Cobrança">Cobrança</option>
-                                                <option value="Outro">Outro</option>
-                                            </select>
+                                            {!creatingAddressType ? (
+                                                <select
+                                                    id="addr-type"
+                                                    value={addressForm.type}
+                                                    onChange={e => {
+                                                        if (e.target.value === 'NEW') {
+                                                            setCreatingAddressType(true);
+                                                        } else {
+                                                            setAddressForm({...addressForm, type: e.target.value});
+                                                        }
+                                                    }}
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                >
+                                                    <option value="Principal">Principal</option>
+                                                    <option value="Residencial">Residencial</option>
+                                                    <option value="Comercial">Comercial</option>
+                                                    <option value="Cobrança">Cobrança</option>
+                                                    <option value="Outro">Outro</option>
+                                                    <option value="NEW">+ Adicionar Novo Tipo...</option>
+                                                </select>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        autoFocus
+                                                        value={newAddressType}
+                                                        onChange={e => setNewAddressType(e.target.value)}
+                                                        className="flex-1 bg-slate-950 border border-indigo-500 rounded px-3 py-2 text-white focus:outline-none"
+                                                        placeholder="Digite o novo tipo..."
+                                                    />
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (newAddressType) {
+                                                                setAddressForm({...addressForm, type: newAddressType});
+                                                                setNewAddressType('');
+                                                            }
+                                                            setCreatingAddressType(false);
+                                                        }}
+                                                        className="px-4 bg-indigo-600 text-white rounded"
+                                                    >
+                                                        Ok
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => setCreatingAddressType(false)}
+                                                        className="px-2 text-slate-400"
+                                                    >
+                                                        X
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -1516,12 +1590,12 @@ export function ContactForm() {
                                                     <p className="text-sm text-slate-400">CEP: {address.zipCode}</p>
                                                     
                                                     <a 
-                                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${address.street}, ${address.number} - ${address.district || ''}, ${address.city} - ${address.state}, ${address.zipCode}`)}`}
+                                                        href={`https://www.google.com/maps/dir/?api=1&origin=My+Location&destination=${encodeURIComponent(`${address.street}, ${address.number} - ${address.district || ''}, ${address.city} - ${address.state}, ${address.zipCode}`)}`}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 mt-2 transition"
                                                     >
-                                                        <MapPin size={12} /> Ver no Google Maps
+                                                        <MapPin size={12} /> Ver Rota no Google Maps
                                                     </a>
                                                 </div>
                                                 <div className="flex gap-1">
