@@ -1,7 +1,7 @@
 {
   "name": "dr-x-monorepo",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.0.0.1",
   "description": "DR.X - Ecossistema Jurídico Comercial",
   "workspaces": [
     "apps/*",
