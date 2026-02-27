@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
@@ -139,6 +139,9 @@ const CATEGORIES = [
 export function ContactForm() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
+  
   const [activeTab, setActiveTab] = useState('contact');
   const [formData, setFormData] = useState<ContactData>({
     name: '',
@@ -574,7 +577,11 @@ export function ContactForm() {
         }
 
         setTimeout(() => {
-          navigate('/contacts');
+          if (returnTo) {
+            navigate(decodeURIComponent(returnTo));
+          } else {
+            navigate('/contacts');
+          }
         }, 1000);
     } catch (err: any) {
         console.error(err);
@@ -2155,6 +2162,16 @@ export function ContactForm() {
 
         </div>
       </div>
+      {/* Botão Flutuante de Retorno */}
+      {returnTo && (
+        <button
+          onClick={() => navigate(decodeURIComponent(returnTo))}
+          className="fixed bottom-8 right-8 z-[100] flex items-center gap-2 px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-[0_0_30px_rgba(79,70,229,0.5)] border border-indigo-400/50 font-bold transition-all hover:scale-105 active:scale-95 animate-in slide-in-from-bottom-8 duration-500"
+        >
+          <ArrowLeft size={20} />
+          <span>Voltar para o Local Anterior</span>
+        </button>
+      )}
     </div>
   );
 }

@@ -166,6 +166,12 @@ export class ProcessPartiesService implements OnModuleInit {
                         name: true,
                         category: true,
                     }
+                },
+                qualification: {
+                    select: {
+                        id: true,
+                        name: true,
+                    }
                 }
             },
             orderBy: [
@@ -179,6 +185,7 @@ export class ProcessPartiesService implements OnModuleInit {
         processId: string;
         contactId: string;
         roleId: string;
+        qualificationId?: string;
         isClient?: boolean;
         isOpposing?: boolean;
         notes?: string;
@@ -211,6 +218,7 @@ export class ProcessPartiesService implements OnModuleInit {
                     processId: data.processId,
                     contactId: data.contactId,
                     roleId: data.roleId,
+                    qualificationId: data.qualificationId,
                     isClient: data.isClient || false,
                     isOpposing: data.isOpposing || false,
                     notes: data.notes,
@@ -221,6 +229,9 @@ export class ProcessPartiesService implements OnModuleInit {
                     },
                     role: {
                         select: { id: true, name: true, category: true }
+                    },
+                    qualification: {
+                        select: { id: true, name: true }
                     }
                 }
             });
@@ -237,6 +248,7 @@ export class ProcessPartiesService implements OnModuleInit {
 
     async updateParty(id: string, data: {
         roleId?: string;
+        qualificationId?: string;
         isClient?: boolean;
         isOpposing?: boolean;
         notes?: string;
@@ -248,6 +260,7 @@ export class ProcessPartiesService implements OnModuleInit {
             where: { id },
             data: {
                 roleId: data.roleId !== undefined ? data.roleId : undefined,
+                qualificationId: data.qualificationId !== undefined ? data.qualificationId : undefined,
                 isClient: data.isClient !== undefined ? data.isClient : undefined,
                 isOpposing: data.isOpposing !== undefined ? data.isOpposing : undefined,
                 notes: data.notes !== undefined ? data.notes : undefined,
@@ -258,6 +271,9 @@ export class ProcessPartiesService implements OnModuleInit {
                 },
                 role: {
                     select: { id: true, name: true, category: true }
+                },
+                qualification: {
+                    select: { id: true, name: true }
                 }
             }
         });
@@ -284,6 +300,7 @@ export class ProcessPartiesService implements OnModuleInit {
         email?: string;
         personType?: string;
         roleId: string;
+        qualificationId?: string;
         isClient?: boolean;
         isOpposing?: boolean;
     }) {
@@ -311,6 +328,7 @@ export class ProcessPartiesService implements OnModuleInit {
             processId: data.processId,
             contactId: contact.id,
             roleId: data.roleId,
+            qualificationId: data.qualificationId,
             isClient: data.isClient,
             isOpposing: data.isOpposing,
         });

@@ -33,6 +33,7 @@ import { api } from '../services/api';
 import { toast } from 'sonner';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpFinancial } from '../data/helpManuals';
+import { ContactPickerGlobal } from '../components/contacts/ContactPickerGlobal';
 
 interface FinancialRecord {
   id: string;
@@ -1599,54 +1600,40 @@ export function Financial() {
               <div className="bg-slate-700/30 p-4 rounded-lg border border-slate-700 space-y-4">
                 <h3 className="text-sm font-medium text-slate-300">Partes Envolvidas (Credores/Devedores)</h3>
                 
-                <div className="flex gap-2 items-end">
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">Contato</label>
-                    <select
-                      value={newParty.contactId}
-                      onChange={(e) => setNewParty({ ...newParty, contactId: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    >
-                      <option value="">Selecione...</option>
-                      {contacts.map((contact) => (
-                        <option key={contact.id} value={contact.id}>
-                          {contact.name} ({contact.personType === 'PF' ? contact.cpf : contact.cnpj})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="w-32">
-                    <label className="block text-xs text-slate-400 mb-1">Papel</label>
-                    <select
-                      value={newParty.role}
-                      onChange={(e) => setNewParty({ ...newParty, role: e.target.value as 'CREDITOR' | 'DEBTOR' })}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    >
-                      <option value="CREDITOR">Credor</option>
-                      <option value="DEBTOR">Devedor</option>
-                    </select>
-                  </div>
-
-                  <div className="w-24">
-                    <label className="block text-xs text-slate-400 mb-1">Valor (Opc)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={newParty.amount}
-                      onChange={(e) => setNewParty({ ...newParty, amount: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleAddParty}
-                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-sm transition-colors mb-0.5 h-[38px]"
-                  >
-                    <Plus size={16} />
-                  </button>
+                <div className="flex flex-col gap-4">
+                   <ContactPickerGlobal 
+                    onAdd={async (data) => {
+                      if (!data.contactId && !data.isQuickAdd) return;
+                      
+                      setFormData(prev => ({
+                        ...prev,
+                        parties: [
+                          ...prev.parties,
+                          {
+                            contactId: data.contactId,
+                            role: data.roleId as 'CREDITOR' | 'DEBTOR',
+                            amount: data.amount ? parseFloat(data.amount) : undefined,
+                            isQuickAdd: data.isQuickAdd,
+                            quickContact: data.quickContact
+                          }
+                        ]
+                      }));
+                      setNewParty({ ...newParty, contactId: '', amount: '' });
+                    }}
+                     roleLabel="Papel"
+                     customRoles={[
+                       { label: 'Credor', value: 'CREDITOR' },
+                       { label: 'Devedor', value: 'DEBTOR' }
+                     ]}
+                     hideQualification={true}
+                     context="financial"
+                     showAmount={true}
+                     amount={newParty.amount}
+                     onAmountChange={(val) => setNewParty({...newParty, amount: val})}
+                     contactLabel="Partes"
+                     hideQuickAdd={true}
+                     className="!bg-transparent !p-0 !border-0 !shadow-none"
+                   />
                 </div>
 
                 {/* Lista de Partes */}
@@ -1657,14 +1644,14 @@ export function Financial() {
                       return (
                         <div key={index} className="flex items-center justify-between p-2 bg-slate-800 rounded border border-slate-700">
                           <div className="flex items-center gap-2">
-                            <span className={`text-xs px-2 py-0.5 rounded font-bold border ${
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
                               party.role === 'CREDITOR' 
                                 ? 'bg-green-500/10 text-green-400 border-green-500/20' 
                                 : 'bg-red-500/10 text-red-400 border-red-500/20'
                             }`}>
                               {party.role === 'CREDITOR' ? 'Credor' : 'Devedor'}
                             </span>
-                            <span className="text-sm text-slate-200 font-medium">
+                            <span className="text-xs text-slate-200 font-medium">
                               {contact?.name || 'Carregando...'}
                             </span>
                             {party.amount && (
@@ -1819,19 +1806,20 @@ export function Financial() {
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Titular da Conta (Opcional)
                 </label>
-                <select
-                  value={bankFormData.contactId}
-                  onChange={(e) => setBankFormData({ ...bankFormData, contactId: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  disabled={loadingContacts}
-                >
-                  <option value="">Nenhum titular</option>
-                  {contacts.map((contact) => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.name} ({contact.personType === 'PF' ? contact.cpf : contact.cnpj})
-                    </option>
-                  ))}
-                </select>
+                <ContactPickerGlobal 
+                  onAdd={async () => {}} // Campo único, não usa onAdd
+                  onSelectContact={(id) => setBankFormData({ ...bankFormData, contactId: id })}
+                  hideRole={true}
+                  hideQualification={true}
+                  showAction={false}
+                  className="!bg-transparent !p-0 !border-0 !shadow-none"
+                  context="financial"
+                />
+                {bankFormData.contactId && (
+                   <p className="text-xs text-indigo-400 mt-2 flex items-center gap-1">
+                     <User size={12}/> Selecionado: {contacts.find(c => c.id === bankFormData.contactId)?.name || 'ID: ' + bankFormData.contactId}
+                   </p>
+                )}
                 {loadingContacts && (
                   <p className="text-xs text-slate-400 mt-1">Carregando contatos...</p>
                 )}

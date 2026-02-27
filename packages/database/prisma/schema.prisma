@@ -58,6 +58,7 @@ model Tenant {
   waInstances       WaInstance[]
   connections       Connection[]
   partyRoles        PartyRole[]
+  partyQualifications PartyQualification[]
   processParties    ProcessParty[]
 
   // Preferences
@@ -368,22 +369,39 @@ model PartyRole {
   @@map("party_roles")
 }
 
+model PartyQualification {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String   // Ex: CLIENTE, CONTRÁRIO, TESTEMUNHA, TERCEIRO
+  isDefault   Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  processParties ProcessParty[]
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+  @@map("party_qualifications")
+}
+
 model ProcessParty {
   id          String   @id @default(uuid())
   tenantId    String
   processId   String
   contactId   String
   roleId      String
+  qualificationId String?
   isClient    Boolean  @default(false)  // É nosso cliente neste processo?
   isOpposing  Boolean  @default(false)  // É parte contrária?
   notes       String?  // Observações sobre a parte
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  process     Process   @relation(fields: [processId], references: [id], onDelete: Cascade)
-  contact     Contact   @relation(fields: [contactId], references: [id])
-  role        PartyRole @relation(fields: [roleId], references: [id])
-  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  process       Process   @relation(fields: [processId], references: [id], onDelete: Cascade)
+  contact       Contact   @relation(fields: [contactId], references: [id])
+  role          PartyRole @relation(fields: [roleId], references: [id])
+  qualification PartyQualification? @relation(fields: [qualificationId], references: [id])
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
 
   @@unique([processId, contactId, roleId]) // Evita duplicata exata
   @@map("process_parties")

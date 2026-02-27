@@ -6,6 +6,7 @@ import { ProcessesService } from './processes.service';
 import { ProcessPdfService } from './process-pdf.service';
 import { ProcessPartiesService } from './process-parties.service';
 import { ProcessTimelinesService } from './process-timelines.service';
+import { PartyQualificationsService } from './party-qualifications.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Public } from '../auth/public.decorator';
@@ -19,6 +20,7 @@ export class ProcessesController {
         private readonly pdfService: ProcessPdfService,
         private readonly partiesService: ProcessPartiesService,
         private readonly timelinesService: ProcessTimelinesService,
+        private readonly qualificationsService: PartyQualificationsService,
     ) {}
     
     // --- IMPORT VIA PDF ---
@@ -45,6 +47,23 @@ export class ProcessesController {
     @Delete('party-roles/:id')
     async deleteRole(@Param('id') id: string) {
         return this.partiesService.deleteRole(id);
+    }
+
+    // --- PARTY QUALIFICATIONS (Qualificações - Cadastrável) ---
+
+    @Get('party-qualifications')
+    async findAllQualifications(@CurrentUser() user: CurrentUserData) {
+        return this.qualificationsService.findAll(user.tenantId);
+    }
+
+    @Post('party-qualifications')
+    async createQualification(@Body() body: { name: string }, @CurrentUser() user: CurrentUserData) {
+        return this.qualificationsService.create(user.tenantId, body.name);
+    }
+
+    @Delete('party-qualifications/:id')
+    async deleteQualification(@Param('id') id: string) {
+        return this.qualificationsService.delete(id);
     }
 
     // --- CRUD PROCESS ---
