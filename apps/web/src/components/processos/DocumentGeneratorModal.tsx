@@ -1,9 +1,10 @@
-
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { FileText, Loader2, Save, X, RefreshCw } from 'lucide-react';
 import { RichTextEditor } from '../ui/RichTextEditor';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
 
 interface Template {
     id: string;
@@ -14,7 +15,7 @@ interface DocumentGeneratorModalProps {
     processId: string;
     contactId: string; // The main client contact
     onClose: () => void;
-    onSuccess: (generatedContent: string, title: string) => void;
+    onSuccess: (file: File) => void;
 }
 
 export function DocumentGeneratorModal({ processId, contactId, onClose, onSuccess }: DocumentGeneratorModalProps) {
@@ -67,12 +68,45 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!generatedContent) {
             toast.error('O conteúdo do documento está vazio');
             return;
         }
-        onSuccess(generatedContent, docTitle);
+
+        setRendering(true);
+        try {
+            // Create a temporary container for rendering
+            const element = document.createElement('div');
+            element.innerHTML = generatedContent;
+            element.style.padding = '40px';
+            element.style.color = 'black';
+            element.style.backgroundColor = 'white';
+            
+            // PDF Options
+            const opt = {
+                margin: 10,
+                filename: `${docTitle}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, logging: false },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            // Generate PDF as Blob
+            const worker = html2pdf().from(element).set(opt);
+            const pdfBlob = await worker.output('blob');
+            
+            // Create File from Blob
+            const fileName = `${docTitle.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+            
+            onSuccess(file);
+        } catch (error) {
+            console.error(error);
+            toast.error('Erro ao gerar arquivo PDF');
+        } finally {
+            setRendering(false);
+        }
     };
 
     return (
@@ -86,7 +120,15 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-white">Gerar Documento DrX</h3>
-                            {step === 'EDIT' && <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">{docTitle}</p>}
+                            {step === 'EDIT' && (
+                                <input 
+                                    type="text"
+                                    value={docTitle}
+                                    onChange={e => setDocTitle(e.target.value)}
+                                    className="bg-transparent border-b border-indigo-500/30 text-xs text-indigo-400 font-bold focus:border-indigo-400 outline-none w-full"
+                                    placeholder="Título do Documento"
+                                />
+                            )}
                         </div>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-white transition p-2">
@@ -170,9 +212,11 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                             </button>
                             <button 
                                 onClick={handleSave}
-                                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-900/20"
+                                disabled={rendering}
+                                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-900/20"
                             >
-                                <Save size={18} /> Confirmar & Anexar
+                                {rendering ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                                {rendering ? 'Gerando PDF...' : 'Confirmar & Anexar PDF'}
                             </button>
                         </div>
                     </div>

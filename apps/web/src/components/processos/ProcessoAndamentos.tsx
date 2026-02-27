@@ -312,15 +312,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     };
 
-    const handleGenerateDocSuccess = async (content: string, title: string) => {
+    const handleGenerateDocSuccess = async (file: File) => {
         if (!targetTimelineId || !processId) return;
         
         setIsSaving(true);
         try {
-            const blob = new Blob([content], { type: 'text/html' });
-            const fileName = `${title.replace(/\s+/g, '_')}_${Date.now()}.html`;
-            const file = new File([blob], fileName, { type: 'text/html' });
-
             const data = new FormData();
             data.append('files', file);
 
@@ -328,13 +324,13 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            toast.success('Documento gerado e anexado com sucesso!');
+            toast.success('Documento PDF gerado e anexado com sucesso!');
             setIsDocGenOpen(false);
             setTargetTimelineId(null);
             fetchTimelines();
         } catch (error) {
             console.error(error);
-            toast.error('Erro ao salvar documento gerado.');
+            toast.error('Erro ao salvar documento PDF.');
         } finally {
             setIsSaving(false);
         }
