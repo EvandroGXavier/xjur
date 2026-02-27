@@ -5,6 +5,15 @@ import axios, { AxiosInstance } from 'axios';
 export interface EvolutionConfig {
   apiUrl: string;
   apiKey: string;
+  settings?: {
+    rejectCall?: boolean;
+    msgCall?: string;
+    groupsIgnore?: boolean;
+    alwaysOnline?: boolean;
+    readMessages?: boolean;
+    readStatus?: boolean;
+    syncFullHistory?: boolean;
+  };
 }
 
 @Injectable()
@@ -56,11 +65,13 @@ export class EvolutionService {
         token: config?.apiKey || this.defaultApiKey,
         qrcode: true,
         integration: 'WHATSAPP-BAILEYS',
-        reject_call: false,
-        groupsIgnore: false,
-        alwaysOnline: true,
-        readMessages: true,
-        readStatus: false,
+        rejectCall: config?.settings?.rejectCall ?? false,
+        msgCall: config?.settings?.msgCall ?? '',
+        groupsIgnore: config?.settings?.groupsIgnore ?? false,
+        alwaysOnline: config?.settings?.alwaysOnline ?? true,
+        readMessages: config?.settings?.readMessages ?? true,
+        readStatus: config?.settings?.readStatus ?? false,
+        syncFullHistory: config?.settings?.syncFullHistory ?? false,
       });
 
       this.logger.log(`Instance "${instanceName}" created successfully`);
@@ -184,6 +195,29 @@ export class EvolutionService {
       this.logger.error(`Webhook error data: ${JSON.stringify(errorData)}`);
       // Não lançamos o erro — o webhook global pode cobrir isso
       return { success: false, error: error.message };
+    }
+  }
+
+  async updateSettings(instanceName: string, settings: any, config?: EvolutionConfig) {
+    try {
+      this.logger.log(`Updating settings for "${instanceName}"`);
+      const client = this.getClient(config);
+      
+      const payload = {
+        rejectCall: settings.rejectCall,
+        msgCall: settings.msgCall,
+        groupsIgnore: settings.groupsIgnore,
+        alwaysOnline: settings.alwaysOnline,
+        readMessages: settings.readMessages,
+        readStatus: settings.readStatus,
+        syncFullHistory: settings.syncFullHistory,
+      };
+
+      const response = await client.post(`/settings/set/${instanceName}`, payload);
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Error updating settings for "${instanceName}": ${error.message}`);
+      throw error;
     }
   }
 

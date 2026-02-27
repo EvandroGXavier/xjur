@@ -59,9 +59,17 @@ export class WhatsappService implements OnModuleInit {
       if (config.evolutionUrl && config.evolutionApiKey) {
         return {
           apiUrl: config.evolutionUrl,
-          apiKey: config.evolutionApiKey
+          apiKey: config.evolutionApiKey,
+          settings: config.evolutionSettings || {}
         };
       }
+      
+      // Mesmo sem URL/Key customizada, podemos ter settings customizadas para os defaults
+      return {
+        apiUrl: this.evolutionService['defaultApiUrl'],
+        apiKey: this.evolutionService['defaultApiKey'],
+        settings: config.evolutionSettings || {}
+      };
     } catch (e) {
       this.logger.error(`Failed to fetch evolution config for ${connectionId}: ${e.message}`);
     }
@@ -169,7 +177,8 @@ export class WhatsappService implements OnModuleInit {
       // 3. Configurar Webhook (usar URL interna Docker para comunicação container-a-container)
       const webhookBaseUrl = process.env.WEBHOOK_INTERNAL_URL || process.env.APP_URL || 'http://host.docker.internal:3000';
       const webhookUrl = `${webhookBaseUrl}/api/evolution/webhook`;
-      this.logger.log(`Setting webhook URL: ${webhookUrl}`);  
+      this.logger.log(`Setting default webhook URL: ${webhookUrl}`);  
+      
       const webhookResult = await this.evolutionService.setWebhook(connectionId, webhookUrl, evolutionConfig);
       this.logger.log(`Webhook result: ${JSON.stringify(webhookResult)}`);
 
@@ -674,6 +683,44 @@ export class WhatsappService implements OnModuleInit {
   async deleteMessage(connectionId: string, jid: string, messageId: string, fromMe: boolean) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
     await this.evolutionService.deleteMessage(connectionId, jid, messageId, fromMe, evolutionConfig);
+  }
+
+  async updateSettings(connectionId: string, settings: any) {
+    const evolutionConfig = await this.getEvolutionConfig(connectionId);
+    
+    // Atualizar no banco de dados primeiro
+    const connection = await this.prisma.connection.findUnique({ where: { id: connectionId } });
+    const currentConfig = connection?.config as any || {};
+    
+    // Separar o que é behavior setting do que é webhook
+    const { evolutionSettings, webhookUrl, webhookEnabled } = settings;
+
+    await this.prisma.connection.update({
+      where: { id: connectionId },
+      data: {
+        config: {
+          ...currentConfig,
+          evolutionSettings: evolutionSettings || currentConfig.evolutionSettings,
+          webhookUrl: webhookUrl !== undefined ? webhookUrl : currentConfig.webhookUrl,
+          webhookEnabled: webhookEnabled !== undefined ? webhookEnabled : currentConfig.webhookEnabled
+        }
+      }
+    });
+
+    // Se estiver conectado, aplicar na Evolution API
+    if (connection?.status === 'CONNECTED') {
+      if (evolutionSettings) {
+        await this.evolutionService.updateSettings(connectionId, evolutionSettings, evolutionConfig);
+      }
+      
+      // Sempre garantimos que o webhook da DR.X está ativo na Evolution
+      // O encaminhamento é feito via Controller (proxy)
+      const webhookBaseUrl = process.env.WEBHOOK_INTERNAL_URL || process.env.APP_URL || 'http://host.docker.internal:3000';
+      const defaultWebhookUrl = `${webhookBaseUrl}/api/evolution/webhook`;
+      await this.evolutionService.setWebhook(connectionId, defaultWebhookUrl, evolutionConfig);
+    }
+
+    return { success: true };
   }
 
   async syncContacts(connectionId: string) {

@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Logger, HttpCode, HttpStatus } from '@nestjs/common';
 import { EvolutionService } from './evolution.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import axios from 'axios';
 
 @Controller('evolution')
 export class EvolutionController {
@@ -47,7 +48,32 @@ export class EvolutionController {
         break;
     }
 
+    // Encaminhar para webhook externo se configurado
+    await this.forwardWebhook(instance, data);
+
     return { status: 'success' };
+  }
+
+  private async forwardWebhook(instanceName: string, data: any) {
+    try {
+      // @ts-ignore - Acessando PrismaService do WhatsappService ou injetando se necessário
+      const prisma = this.whatsappService['prisma'];
+      const connection = await prisma.connection.findUnique({
+        where: { id: instanceName },
+        select: { config: true }
+      });
+
+      const config = connection?.config as any || {};
+      if (config.webhookEnabled && config.webhookUrl) {
+        this.logger.debug(`Forwarding webhook from ${instanceName} to ${config.webhookUrl}`);
+        
+        axios.post(config.webhookUrl, data, { timeout: 5000 }).catch(e => {
+          this.logger.warn(`Failed to forward webhook to ${config.webhookUrl}: ${e.message}`);
+        });
+      }
+    } catch (e) {
+      this.logger.error(`Error in forwardWebhook: ${e.message}`);
+    }
   }
 
   private async handleQrCodeUpdated(data: any) {

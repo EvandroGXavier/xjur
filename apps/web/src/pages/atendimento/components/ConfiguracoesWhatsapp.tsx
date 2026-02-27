@@ -12,6 +12,25 @@ interface Connection {
   config: any;
 }
 
+function Switch({ checked, onChange }: { checked: boolean, onChange: (val: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+        checked ? "bg-indigo-600" : "bg-slate-800"
+      )}
+    >
+      <span
+        className={clsx(
+          "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out",
+          checked ? "translate-x-6" : "translate-x-1"
+        )}
+      />
+    </button>
+  );
+}
+
 export function ConfiguracoesWhatsapp() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedConnId, setSelectedConnId] = useState<string>('');
@@ -20,6 +39,16 @@ export function ConfiguracoesWhatsapp() {
   const [whitelist, setWhitelist] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Evolution Specific Settings
+  const [rejectCall, setRejectCall] = useState(false);
+  const [msgCall, setMsgCall] = useState('');
+  const [alwaysOnline, setAlwaysOnline] = useState(true);
+  const [readMessages, setReadMessages] = useState(true);
+  const [readStatus, setReadStatus] = useState(false);
+  const [syncFullHistory, setSyncFullHistory] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookEnabled, setWebhookEnabled] = useState(true);
 
   useEffect(() => {
     fetchConnections();
@@ -32,9 +61,7 @@ export function ConfiguracoesWhatsapp() {
       setConnections(waConns);
       if (waConns.length > 0) {
         setSelectedConnId(waConns[0].id);
-        const config = waConns[0].config || {};
-        setBloquearGrupos(config.blockGroups ?? true);
-        setWhitelist(config.groupWhitelist || []);
+        applyConfig(waConns[0]);
       }
     } catch (error) {
       toast.error('Erro ao carregar conexões');
@@ -43,13 +70,28 @@ export function ConfiguracoesWhatsapp() {
     }
   };
 
+  const applyConfig = (conn: Connection) => {
+    const config = conn.config || {};
+    setBloquearGrupos(config.blockGroups ?? true);
+    setWhitelist(config.groupWhitelist || []);
+
+    const evoSettings = config.evolutionSettings || {};
+    setRejectCall(evoSettings.rejectCall ?? false);
+    setMsgCall(evoSettings.msgCall ?? '');
+    setAlwaysOnline(evoSettings.alwaysOnline ?? true);
+    setReadMessages(evoSettings.readMessages ?? true);
+    setReadStatus(evoSettings.readStatus ?? false);
+    setSyncFullHistory(evoSettings.syncFullHistory ?? false);
+    
+    setWebhookEnabled(config.webhookEnabled ?? true);
+    setWebhookUrl(config.webhookUrl || '');
+  };
+
   const handleConnChange = (id: string) => {
     setSelectedConnId(id);
     const conn = connections.find(c => c.id === id);
     if (conn) {
-      const config = conn.config || {};
-      setBloquearGrupos(config.blockGroups ?? true);
-      setWhitelist(config.groupWhitelist || []);
+      applyConfig(conn);
     }
   };
 
@@ -57,13 +99,41 @@ export function ConfiguracoesWhatsapp() {
     if (!selectedConnId) return;
     setSaving(true);
     try {
+      const evolutionSettings = {
+        rejectCall,
+        msgCall,
+        alwaysOnline,
+        readMessages,
+        readStatus,
+        syncFullHistory
+      };
+
+      // 1. Atualizar config básica da conexão
       await api.patch(`/connections/${selectedConnId}`, {
         config: {
           blockGroups: bloquearGrupos,
-          groupWhitelist: whitelist
+          groupWhitelist: whitelist,
+          evolutionSettings,
+          webhookEnabled,
+          webhookUrl
         }
       });
-      toast.success('Configurações do DR.X atualizadas com sucesso!');
+
+      // 2. Aplicar configurações na Evolution API
+      await api.post(`/whatsapp/${selectedConnId}/settings`, {
+        evolutionSettings,
+        webhookUrl,
+        webhookEnabled
+      });
+
+      toast.success('Configurações aplicadas com sucesso!');
+      
+      // Atualizar lista local
+      setConnections(prev => prev.map(c => 
+        c.id === selectedConnId 
+          ? { ...c, config: { ...c.config, blockGroups: bloquearGrupos, groupWhitelist: whitelist, evolutionSettings } }
+          : c
+      ));
     } catch (error) {
       toast.error('Erro ao salvar configurações');
     } finally {
@@ -183,6 +253,91 @@ export function ConfiguracoesWhatsapp() {
                         )}
                       />
                     </button>
+                  </div>
+                </div>
+                
+                {/* Evolution API Settings */}
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield size={16} className="text-indigo-400" />
+                      <h2 className="text-lg font-bold text-white">Comportamento da Instância (Evolution API)</h2>
+                    </div>
+                    <p className="text-slate-400 text-sm leading-relaxed">
+                      Configurações técnicas que controlam como a conexão do WhatsApp se comporta perante o servidor da Evolution.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Mark as Read */}
+                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 hover:border-indigo-500/30 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white font-bold text-sm">Marcar como Lido</span>
+                        <Switch checked={readMessages} onChange={setReadMessages} />
+                      </div>
+                      <p className="text-slate-500 text-[11px]">Marca automaticamente as mensagens recebidas como lidas no aparelho.</p>
+                    </div>
+
+                    {/* Always Online */}
+                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 hover:border-indigo-500/30 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white font-bold text-sm">Sempre Online</span>
+                        <Switch checked={alwaysOnline} onChange={setAlwaysOnline} />
+                      </div>
+                      <p className="text-slate-500 text-[11px]">Mantém o status "Online" mesmo quando o Atendimento está fechado.</p>
+                    </div>
+
+                    {/* Reject Calls */}
+                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 hover:border-indigo-500/30 transition-colors">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-white font-bold text-sm">Rejeitar Chamadas</span>
+                        <Switch checked={rejectCall} onChange={setRejectCall} />
+                      </div>
+                      {rejectCall && (
+                        <input 
+                          type="text" 
+                          placeholder="Mensagem de rejeição (ex: Atendemos apenas via chat)"
+                          value={msgCall}
+                          onChange={(e) => setMsgCall(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white text-[11px] focus:border-indigo-500 outline-none"
+                        />
+                      )}
+                    </div>
+
+                    {/* Read Status */}
+                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 hover:border-indigo-500/30 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white font-bold text-sm">Marcar Status como Visualizado</span>
+                        <Switch checked={readStatus} onChange={setReadStatus} />
+                      </div>
+                      <p className="text-slate-500 text-[11px]">Ao visualizar um status/story no WhatsApp, marca como visto automaticamente.</p>
+                    </div>
+                  </div>
+
+                  {/* Webhook Configuration */}
+                  <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Save size={18} className="text-blue-400" />
+                        <h3 className="text-white font-bold">Webhook Customizado</h3>
+                      </div>
+                      <Switch checked={webhookEnabled} onChange={setWebhookEnabled} />
+                    </div>
+                    
+                    {webhookEnabled && (
+                      <div className="space-y-3">
+                        <p className="text-slate-500 text-xs">
+                          O DR.X já configura um webhook automaticamente. Use este campo apenas se desejar enviar eventos para outro sistema simultaneamente.
+                        </p>
+                        <input 
+                          type="text" 
+                          placeholder="https://seu-sistema.com/webhook"
+                          value={webhookUrl}
+                          onChange={(e) => setWebhookUrl(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:border-blue-500 outline-none transition shadow-inner"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 

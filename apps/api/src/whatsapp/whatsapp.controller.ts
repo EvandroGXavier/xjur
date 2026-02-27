@@ -27,6 +27,11 @@ export class WhatsappController {
       return this.whatsappService.syncContacts(id);
   }
 
+  @Post(':id/settings')
+  async updateSettings(@Param('id') id: string, @Body() settings: any) {
+      return this.whatsappService.updateSettings(id, settings);
+  }
+
   @Get('debug')
   getDebugInfo() {
       // @ts-ignore
