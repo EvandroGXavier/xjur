@@ -26,8 +26,10 @@ interface ContactPickerGlobalProps {
         isQuickAdd: boolean;
         quickContact?: any;
         amount?: string;
+        contactName?: string;
     }) => Promise<void>;
     loading?: boolean;
+    actionIcon?: React.ReactNode;
     defaultRoleId?: string;
     defaultQualificationId?: string;
     context?: string;
@@ -37,7 +39,6 @@ interface ContactPickerGlobalProps {
     roleLabel?: string;
     qualificationLabel?: string;
     onAmountChange?: (val: string) => void;
-    hideQuickAdd?: boolean;
     contactLabel?: string;
     hideContactLabel?: boolean;
     showAction?: boolean;
@@ -66,9 +67,9 @@ export function ContactPickerGlobal({
     showAmount = false,
     amount = '',
     onAmountChange,
-    hideQuickAdd = false,
     contactLabel = 'Contato',
-    hideContactLabel = false
+    hideContactLabel = false,
+    actionIcon
 }: ContactPickerGlobalProps) {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
@@ -170,12 +171,8 @@ export function ContactPickerGlobal({
     };
 
     const handleAction = async () => {
-        if (!showQuickAdd && !selectedContact) {
-            toast.warning('Selecione um contato');
-            return;
-        }
-        if (showQuickAdd && !quickContact.name) {
-            toast.warning('O nome é obrigatório para criação rápida');
+        if (!selectedContact && !showQuickAdd) {
+            toast.warning('Selecione ou cadastre um contato');
             return;
         }
         if (!hideRole && !roleId) {
@@ -195,7 +192,8 @@ export function ContactPickerGlobal({
                 qualificationId: qualificationId || undefined,
                 isQuickAdd: showQuickAdd,
                 quickContact: showQuickAdd ? quickContact : undefined,
-                amount: showAmount ? amount : undefined
+                amount: showAmount ? amount : undefined,
+                contactName: showQuickAdd ? quickContact.name : (selectedContact?.name || '')
             });
             
             // Reset
@@ -213,88 +211,106 @@ export function ContactPickerGlobal({
         navigate(`/contacts/new?returnTo=${returnUrl}`);
     };
 
-    const inputClass = "w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition placeholder-slate-600";
-    const labelClass = "block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1";
+    const inputClass = "w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500 transition-colors text-xs placeholder-slate-600 shadow-inner";
+    const labelClass = "text-[10px] font-bold text-slate-500 uppercase mb-1 block tracking-wider";
 
     return (
-        <div className={`bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-2x ${className}`}>
-            <div className="flex flex-col gap-2">
-                
-                {/* LINE 1: CONTACT (INLINE) */}
-                <div className="w-full flex items-center gap-3">
+        <div className={`bg-slate-900/50 border border-slate-800 rounded-xl p-3 shadow-lg ${className}`}>
+            <div className="flex flex-col gap-3">
+                {/* LINE 1: SEARCH & QUICK ADD */}
+                <div className="flex flex-col md:flex-row gap-2 items-start">
                     {!hideContactLabel && (
-                        <label className={`${labelClass} mb-0 shrink-0 min-w-[45px]`}>
-                            {contactLabel}
-                        </label>
+                        <div className="shrink-0 pt-2 min-w-[60px]">
+                            <label className={`${labelClass} text-indigo-400`}>{contactLabel}</label>
+                        </div>
                     )}
-                    <div className="flex-1 flex gap-1.5">
-                        {!showQuickAdd ? (
-                            <div className="relative flex-1">
-                                <Search className="absolute left-2.5 top-2.5 text-slate-500" size={14} />
-                                <input 
-                                    className={`${inputClass} pl-9 !h-[34px] !text-sm`}
-                                    placeholder="Nome, CPF/CPNJ, E-mail..."
-                                    value={selectedContact ? selectedContact.name : searchTerm}
-                                    onChange={e => {
-                                        setSearchTerm(e.target.value);
-                                        setSelectedContact(null);
-                                    }}
-                                    disabled={loading || parentLoading}
-                                />
-                                {searchTerm.length > 2 && !selectedContact && (
-                                    <div className="absolute z-50 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto ring-1 ring-black/50">
-                                        {isSearching ? (
-                                            <div className="p-4 flex items-center justify-center text-slate-400 gap-2 text-xs">
-                                                <Loader2 size={14} className="animate-spin" /> Buscando...
-                                            </div>
-                                        ) : searchResults.length > 0 ? (
-                                            searchResults.map(c => (
-                                                <button 
-                                                    key={c.id}
-                                                    className="w-full text-left px-3 py-2 hover:bg-slate-700 text-xs text-slate-200 border-b border-slate-700/50 last:border-0 transition"
-                                                    onClick={() => {
-                                                        setSelectedContact(c);
-                                                        setSearchTerm('');
-                                                        setSearchResults([]);
-                                                        setHasSearched(false);
-                                                        if (onSelectContact) onSelectContact(c.id);
-                                                    }}
-                                                >
-                                                    <div className="font-medium flex justify-between items-center">
-                                                        <span>{c.name}</span>
-                                                        {c.document && <span className="text-[9px] bg-slate-900/50 px-1.5 py-0.5 rounded text-slate-400 border border-slate-700">{c.document}</span>}
-                                                    </div>
-                                                </button>
-                                            ))
-                                        ) : hasSearched && (
-                                            <div className="p-4 text-center text-slate-400 text-xs">
-                                                Nenhum contato encontrado.
-                                                <button 
-                                                    onClick={() => setShowQuickAdd(true)}
-                                                    className="text-indigo-400 hover:underline block w-full mt-2 font-medium"
-                                                >
-                                                    + Criar Novo Contato
-                                                </button>
-                                            </div>
-                                        )}
+                    
+                    <div className="flex-1 flex gap-2 w-full">
+                        <div className="flex-1 relative">
+                            {selectedContact ? (
+                                <div className="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/30 rounded-lg px-3 py-1.5 text-xs text-indigo-300 animate-in zoom-in-95 h-[34px]">
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        <div className="w-5 h-5 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px] font-bold text-indigo-400 shrink-0 uppercase">
+                                            {selectedContact.name.charAt(0)}
+                                        </div>
+                                        <span className="font-medium truncate">{selectedContact.name}</span>
+                                        {selectedContact.document && <span className="text-[10px] opacity-50 font-mono">({selectedContact.document})</span>}
                                     </div>
-                                )}
-                                {selectedContact && (
                                     <button 
-                                        onClick={() => { setSelectedContact(null); setSearchTerm(''); }}
-                                        className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
+                                        onClick={() => {
+                                            setSelectedContact(null);
+                                            if (onSelectContact) onSelectContact('');
+                                        }}
+                                        className="p-1 hover:bg-indigo-500/20 rounded-full transition text-indigo-400"
                                     >
-                                        <X size={16} />
+                                        <X size={14} />
                                     </button>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="flex-1 p-2 bg-slate-950 border border-slate-700 rounded-lg relative animate-in slide-in-from-top-1 duration-200">
-                                <div className="flex justify-between items-center mb-1.5">
-                                    <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest">Novo Contato</span>
-                                    <button onClick={() => setShowQuickAdd(false)} className="text-slate-500 hover:text-white transition"><X size={10}/></button>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            ) : (
+                                <div className="relative">
+                                    <input 
+                                        type="text"
+                                        className={`${inputClass} !h-[34px] pl-8 !text-sm`}
+                                        placeholder="Buscar por Nome, CPF, CNPJ, E-mail..."
+                                        value={searchTerm}
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                        autoComplete="off"
+                                    />
+                                    <Search className="absolute left-2.5 top-2.5 text-slate-600" size={14} />
+                                    
+                                    {/* SEARCH RESULTS DROPDOWN */}
+                                    {isSearching && (
+                                        <div className="absolute right-3 top-2.5">
+                                            <Loader2 size={14} className="animate-spin text-slate-500" />
+                                        </div>
+                                    )}
+
+                                    {hasSearched && !isSearching && (
+                                        <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2">
+                                            {searchResults.length === 0 ? (
+                                                <div className="p-4 text-center">
+                                                    <p className="text-xs text-slate-500 mb-2">Nenhum contato encontrado.</p>
+                                                    <button 
+                                                        onClick={() => setShowQuickAdd(true)}
+                                                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest flex items-center gap-2 mx-auto"
+                                                    >
+                                                        <Plus size={12} /> Cadastro Rápido
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                searchResults.map(contact => (
+                                                    <button 
+                                                        key={contact.id}
+                                                        onClick={() => {
+                                                            setSelectedContact(contact);
+                                                            setSearchResults([]);
+                                                            setSearchTerm('');
+                                                            if (onSelectContact) onSelectContact(contact.id);
+                                                        }}
+                                                        className="w-full text-left px-4 py-3 hover:bg-slate-800 transition flex items-center justify-between group border-b border-slate-800 last:border-0"
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500 group-hover:bg-indigo-500/20 group-hover:text-indigo-400 transition uppercase">
+                                                                {contact.name.charAt(0)}
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-medium text-slate-200 group-hover:text-white transition">{contact.name}</div>
+                                                                {contact.document && <div className="text-[10px] text-slate-500 font-mono">{contact.document}</div>}
+                                                            </div>
+                                                        </div>
+                                                        <Plus size={14} className="text-slate-600 opacity-0 group-hover:opacity-100 group-hover:text-indigo-500 transition" />
+                                                    </button>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {showQuickAdd ? (
+                            <div className="flex-1 flex gap-2 animate-in slide-in-from-right-2">
+                                <div className="flex-1 grid grid-cols-2 gap-2">
                                     <input 
                                         className={`${inputClass} !bg-slate-900 !h-[30px]`} 
                                         placeholder="Nome *" 
@@ -309,8 +325,7 @@ export function ContactPickerGlobal({
                                     />
                                 </div>
                             </div>
-                        )}
-                        {!showQuickAdd && (
+                        ) : (
                             <button 
                                 onClick={handleFullAdd}
                                 className="shrink-0 p-2.5 rounded-lg border border-indigo-500/30 text-indigo-400 hover:text-white hover:bg-indigo-600 transition flex items-center justify-center w-[44px] h-[34px]"
@@ -327,14 +342,27 @@ export function ContactPickerGlobal({
                     
                     <div className="flex-1 flex gap-2 w-full justify-between items-end">
                         {!hideRole && (
-                            <div className="w-[160px]">
+                            <div className="w-[140px]">
                                 <CreatableSelect 
-                                    label="Qualificação"
+                                    label={roleLabel}
                                     placeholder={rolePlaceholder}
                                     value={roleId}
                                     onChange={setRoleId}
                                     options={roles}
                                     onCreate={customRoles ? undefined : handleCreateRole}
+                                    className="!text-[10px]"
+                                />
+                            </div>
+                        )}
+                        {!hideQualification && (
+                            <div className="w-[140px]">
+                                <CreatableSelect 
+                                    label={qualificationLabel}
+                                    placeholder="Sub-tipo..."
+                                    value={qualificationId}
+                                    onChange={setQualificationId}
+                                    options={qualifications}
+                                    onCreate={handleCreateQualification}
                                     className="!text-[10px]"
                                 />
                             </div>
@@ -364,7 +392,7 @@ export function ContactPickerGlobal({
                                 disabled={loading || parentLoading || (!selectedContact && !showQuickAdd)}
                                 className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-indigo-600/10 active:scale-95 whitespace-nowrap text-[10px] uppercase tracking-wider h-[34px]"
                             >
-                                {loading || parentLoading ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />}
+                                {loading || parentLoading ? <Loader2 className="animate-spin" size={14} /> : (actionIcon || <Plus size={14} />)}
                                 {showQuickAdd ? 'Salvar' : 'Adicionar'}
                             </button>
                         </div>
@@ -374,3 +402,4 @@ export function ContactPickerGlobal({
         </div>
     );
 }
+

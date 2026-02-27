@@ -1,9 +1,9 @@
 
-import { useState, useRef, useEffect } from "react";
-import { User, X, Search, Plus, Check, CreditCard, Mail, Phone, Instagram } from "lucide-react";
-import { clsx } from "clsx";
+import { useState, useEffect } from "react";
+import { X, Plus } from "lucide-react";
 import { api } from "../../../services/api";
 import { toast } from "sonner";
+import { ContactPickerGlobal } from "../../../components/contacts/ContactPickerGlobal";
 
 interface NewTicketModalProps {
   open: boolean;
@@ -21,22 +21,9 @@ interface Contact {
 }
 
 export function NewTicketModal({ open, onClose, onSuccess }: NewTicketModalProps) {
-  const [step, setStep] = useState<"SEARCH" | "CREATE_CONTACT" | "TICKET_DETAILS">("SEARCH");
+  const [step, setStep] = useState<"CONTACT" | "TICKET_DETAILS">("CONTACT");
   
-  // Search State
-  const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState<Contact[]>([]);
-  const [searching, setSearching] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-
-  // New Contact State
-  const [newContact, setNewContact] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    whatsapp: "", // Auto-filled from phone usually
-    instagram: ""
-  });
 
   // Ticket Details
   const [ticketDetails, setTicketDetails] = useState({
@@ -47,64 +34,48 @@ export function NewTicketModal({ open, onClose, onSuccess }: NewTicketModalProps
   });
 
   const [loading, setLoading] = useState(false);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     if (open) {
-      setStep("SEARCH");
-      setSearchTerm("");
-      setSearchResults([]);
+      setStep("CONTACT");
       setSelectedContact(null);
-      setNewContact({ name: "", phone: "", email: "", whatsapp: "", instagram: "" });
       setTicketDetails({ title: "", channel: "WHATSAPP", queue: "COMERCIAL", initialMessage: "" });
     }
   }, [open]);
 
-  // Debounced Search
-  useEffect(() => {
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    
-    if (searchTerm.length > 2 && step === "SEARCH") {
-      setSearching(true);
-      searchTimeoutRef.current = setTimeout(async () => {
+  const handleContactSelected = async (data: any) => {
+    if (data.contactId) {
+        // Buscar detalhes do contato se necessário, ou apenas usar o ID
         try {
-          const res = await api.get('/contacts', { params: { search: searchTerm } });
-          setSearchResults(Array.isArray(res.data) ? res.data : []);
+            const res = await api.get(`/contacts/${data.contactId}`);
+            setSelectedContact(res.data);
+            setStep("TICKET_DETAILS");
         } catch (err) {
-          console.error(err);
-        } finally {
-          setSearching(false);
+            toast.error("Erro ao carregar contato");
         }
-      }, 500);
-    } else {
-      setSearchResults([]);
-    }
-  }, [searchTerm, step]);
-
-  const handleSelectContact = (contact: Contact) => {
-    setSelectedContact(contact);
-    setSearchTerm(contact.name);
-    setStep("TICKET_DETAILS");
-  };
-
-  const handleCreateContact = async () => {
-    try {
-        setLoading(true);
-        // Ensure whatsapp is filled if phone provided
-        const data = {
-            ...newContact,
-            whatsapp: newContact.whatsapp || newContact.phone?.replace(/\D/g, '') || undefined,
-            phone: newContact.phone?.replace(/\D/g, '')
-        };
-
-        const res = await api.post('/contacts', data);
-        setSelectedContact(res.data);
-        toast.success("Contato criado com sucesso!");
-        setStep("TICKET_DETAILS");
-    } catch (error: any) {
-        toast.error("Erro ao criar contato: " + (error.response?.data?.message || error.message));
-    } finally {
-        setLoading(false);
+    } else if (data.isQuickAdd && data.quickContact) {
+        // ContactPickerGlobal já salvou ou retornou os dados? 
+        // Por padrão o onAdd é chamado após o salvamento se isQuickAdd for true e implementado no componente
+        // Na verdade o ContactPickerGlobal no handleAction chama o onAdd com os dados.
+        // Se for QuickAdd, precisamos garantir que o contato foi criado.
+        // O ContactPickerGlobal atual NÃO cria o contato automaticamente no handleAction se for quickAdd,
+        // ele apenas passa os dados para o pai decidir.
+        
+        try {
+            setLoading(true);
+            const res = await api.post('/contacts', {
+                name: data.quickContact.name,
+                document: data.quickContact.document,
+                whatsapp: data.quickContact.phone?.replace(/\D/g, '') || undefined,
+                personType: 'PF'
+            });
+            setSelectedContact(res.data);
+            setStep("TICKET_DETAILS");
+        } catch (err) {
+            toast.error("Erro ao criar contato rápido");
+        } finally {
+            setLoading(false);
+        }
     }
   };
 
@@ -167,103 +138,17 @@ export function NewTicketModal({ open, onClose, onSuccess }: NewTicketModalProps
         {/* Content */}
         <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
           
-          {/* STEP 1: SEARCH CONTACT */}
-          {step === "SEARCH" && (
-            <div className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 text-slate-500" size={18} />
-                <input
-                  type="text"
-                  placeholder="Buscar contato por nome, telefone ou email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  autoFocus
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                />
-                {searching && (
-                    <div className="absolute right-3 top-3">
-                        <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                )}
-              </div>
-
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {searchResults.map(contact => (
-                  <div 
-                    key={contact.id} 
-                    onClick={() => handleSelectContact(contact)}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-800 cursor-pointer border border-transparent hover:border-slate-700 transition-colors group"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold group-hover:bg-indigo-900/30 group-hover:text-indigo-300 transition-colors">
-                      {contact.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-medium text-slate-200">{contact.name}</p>
-                      <p className="text-xs text-slate-500">{contact.phone || contact.email || "Sem contato"}</p>
-                    </div>
-                  </div>
-                ))}
-                
-                {searchTerm.length > 2 && !searching && searchResults.length === 0 && (
-                    <div className="text-center py-6 text-slate-500">
-                        <p>Nenhum contato encontrado.</p>
-                        <button 
-                            onClick={() => { setNewContact(prev => ({ ...prev, name: searchTerm })); setStep("CREATE_CONTACT"); }}
-                            className="mt-2 text-indigo-400 hover:text-indigo-300 text-sm font-medium hover:underline"
-                        >
-                            + Cadastrar "{searchTerm}"
-                        </button>
-                    </div>
-                )}
-
-                {!searchTerm && (
-                    <button 
-                        onClick={() => setStep("CREATE_CONTACT")}
-                        className="w-full py-3 border border-dashed border-slate-700 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-indigo-400 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2"
-                    >
-                        <Plus size={16} /> Cadastrar Novo Contato Manualmente
-                    </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: CREATE CONTACT */}
-          {step === "CREATE_CONTACT" && (
-            <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-                <div className="space-y-3">
-                    <label className="text-sm font-medium text-slate-400">Nome Completo</label>
-                    <input 
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-indigo-500"
-                        value={newContact.name}
-                        onChange={e => setNewContact({...newContact, name: e.target.value})}
-                        placeholder="Ex: João Silva"
-                    />
-
-                    <label className="text-sm font-medium text-slate-400">Telefone / WhatsApp</label>
-                    <input 
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-indigo-500"
-                        value={newContact.phone}
-                        onChange={e => setNewContact({...newContact, phone: e.target.value})}
-                        placeholder="Ex: 11999999999"
-                    />
-
-                    <label className="text-sm font-medium text-slate-400">E-mail (Opcional)</label>
-                    <input 
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-indigo-500"
-                        value={newContact.email}
-                        onChange={e => setNewContact({...newContact, email: e.target.value})}
-                        placeholder="email@exemplo.com"
-                    />
-
-                    <label className="text-sm font-medium text-slate-400">Instagram (Opcional)</label>
-                    <input 
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-indigo-500"
-                        value={newContact.instagram}
-                        onChange={e => setNewContact({...newContact, instagram: e.target.value})}
-                        placeholder="@usuario"
-                    />
-                </div>
+          {/* STEP 1: CONTACT PICKER */}
+          {step === "CONTACT" && (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <ContactPickerGlobal 
+                onAdd={handleContactSelected}
+                hideRole={true}
+                hideQualification={true}
+                contactLabel="Cliente"
+                hideQuickAdd={false}
+                className="!bg-transparent !p-0 !border-0 !shadow-none"
+              />
             </div>
           )}
 
@@ -277,7 +162,7 @@ export function NewTicketModal({ open, onClose, onSuccess }: NewTicketModalProps
                     </div>
                     <div>
                         <p className="font-medium text-slate-200">{selectedContact.name}</p>
-                        <button onClick={() => setStep("SEARCH")} className="text-xs text-indigo-400 hover:underline">Trocar contato</button>
+                        <button onClick={() => setStep("CONTACT")} className="text-xs text-indigo-400 hover:underline">Trocar contato</button>
                     </div>
                 </div>
 
@@ -339,25 +224,15 @@ export function NewTicketModal({ open, onClose, onSuccess }: NewTicketModalProps
 
         {/* Footer Actions */}
         <div className="p-4 border-t border-slate-800 bg-slate-900 flex justify-end gap-3">
-            {step === "SEARCH" ? (
+            {step === "CONTACT" ? (
                 <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white transition">Cancelar</button>
             ) : (
                 <button 
-                    onClick={() => setStep(step === "TICKET_DETAILS" ? "SEARCH" : "SEARCH")}
+                    onClick={() => setStep("CONTACT")}
                     className="px-4 py-2 text-slate-400 hover:text-white transition"
                     disabled={loading}
                 >
                     Voltar
-                </button>
-            )}
-
-            {step === "CREATE_CONTACT" && (
-                <button 
-                    onClick={handleCreateContact}
-                    disabled={loading || !newContact.name}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center gap-2"
-                >
-                    {loading ? "Salvando..." : "Salvar Contato"}
                 </button>
             )}
 

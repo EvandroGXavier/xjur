@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, FileText, Check, Loader2, Upload, User, DollarSign } from 'lucide-react';
+import { Search, FileText, Check, Loader2, Upload, User, DollarSign, Plus } from 'lucide-react';
+import { ContactPickerGlobal } from '../../components/contacts/ContactPickerGlobal';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
@@ -21,7 +22,8 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
     // Formulário manual para Casos
     const [caseForm, setCaseForm] = useState({
         title: '',
-        client: '',
+        contactId: '',
+        clientName: '',
         description: '',
         folder: '',
         value: ''
@@ -41,7 +43,8 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
             setIsDragging(false);
             setCaseForm({
                 title: '',
-                client: '',
+                contactId: '',
+                clientName: '',
                 description: '',
                 folder: '',
                 value: ''
@@ -162,6 +165,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
         }
     };
 
+
     const handleSaveCase = async () => {
         if (!caseForm.title) {
             toast.warning('O título do caso é obrigatório');
@@ -188,6 +192,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
 
             const payload = {
                 title: caseForm.title.trim(),
+                contactId: caseForm.contactId,
                 category: 'EXTRAJUDICIAL',
                 subject: caseForm.description, 
                 description: caseForm.description,
@@ -369,15 +374,41 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                     {/* MODE: EXTRAJUDICIAL */}
                     {mode === 'EXTRAJUDICIAL' && (
                         <div className="space-y-4 animate-fadeIn">
-                             <div className="space-y-2">
+                              <div className="space-y-2">
                                 <label className="text-sm font-medium text-slate-300">Título do Caso *</label>
                                 <input 
                                     value={caseForm.title}
                                     onChange={e => setCaseForm({...caseForm, title: e.target.value})}
                                     placeholder="Ex: Análise Contratual - Empresa X"
                                     className="w-full bg-slate-800 border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                                    autoFocus
                                 />
+                             </div>
+
+                             <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-300">Cliente Principal</label>
+                                <ContactPickerGlobal 
+                                    onAdd={async (data) => {
+                                        setCaseForm({
+                                            ...caseForm,
+                                            contactId: data.contactId,
+                                            clientName: data.contactName || ''
+                                        });
+                                    }}
+                                    onSelectContact={(id) => {
+                                        setCaseForm({ ...caseForm, contactId: id });
+                                    }}
+                                    contactLabel="Buscar Cliente"
+                                    hideRole={true}
+                                    hideQualification={true}
+                                    className="!bg-transparent !p-0 !border-0 !shadow-none"
+                                    actionIcon={<Plus size={18} />}
+                                    showAction={false}
+                                />
+                                {caseForm.contactId && (
+                                    <p className="text-xs text-amber-500 flex items-center gap-1">
+                                        <User size={12}/> Selecionado: {caseForm.clientName || 'ID: ' + caseForm.contactId}
+                                    </p>
+                                )}
                              </div>
 
                              <div className="space-y-2">

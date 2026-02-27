@@ -1,9 +1,9 @@
-
 import { useState, useEffect } from 'react';
-import { X, Calendar, Clock, MapPin, AlignLeft, Plus, Trash2, Search } from 'lucide-react';
+import { X, Calendar, Clock, MapPin, AlignLeft, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { CreatableSelect } from '../ui/CreatableSelect';
+import { ContactPickerGlobal } from '../contacts/ContactPickerGlobal';
 
 interface Participant {
     id?: string;
@@ -67,14 +67,8 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
 
     // Participants State
     const [participants, setParticipants] = useState<Participant[]>([]);
-    const [newParticipant, setNewParticipant] = useState<Participant>({
-        name: '',
-        role: 'CLIENT'
-    });
     
-    // Search State for Participants
-    const [searchTerm, setSearchTerm] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
+    // Search State for Participants (Now handled by ContactPickerGlobal)
 
     useEffect(() => {
         if (appointment) {
@@ -123,41 +117,21 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
         }
     }, [appointment, isOpen]);
 
-    // Search Debounce
-    useEffect(() => {
-        if (searchTerm.length < 3) {
-            setSearchResults([]);
+
+    const handleGlobalAdd = async (data: any) => {
+        const nameToAdd = data.isQuickAdd ? data.quickContact?.name : data.name;
+        const contactId = data.contactId;
+        
+        if (!nameToAdd && !contactId) {
+            toast.warning('Informe um nome ou selecione um contato.');
             return;
         }
-        const timer = setTimeout(async () => {
-            try {
-                const res = await api.get(`/contacts?search=${searchTerm}`);
-                setSearchResults(res.data?.data || res.data || []);
-            } catch (err) {
-                console.error(err);
-            }
-        }, 500);
-        return () => clearTimeout(timer);
-    }, [searchTerm]);
 
-    const handleAddParticipant = () => {
-        // If we have a search term but no contact selected, treat as ad-hoc name
-        if (!newParticipant.name && !searchTerm) {
-             toast.warning('Informe um nome ou selecione um contato.');
-             return;
-        }
-
-        const nameToAdd = newParticipant.name || searchTerm;
-        
         setParticipants([...participants, {
-            ...newParticipant,
-            name: nameToAdd
+            name: nameToAdd || 'Sem nome',
+            role: data.roleId || 'CLIENT', // Use role from picker if available
+            contactId: contactId
         }]);
-        
-        // Reset
-        setNewParticipant({ name: '', role: 'CLIENT', contactId: undefined });
-        setSearchTerm('');
-        setSearchResults([]);
     };
 
     const handleRemoveParticipant = (index: number) => {
@@ -334,74 +308,20 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
                     ) : (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                             {/* ADD PARTICIPANT FORM */}
-                            <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4 space-y-3">
-                                <h3 className="text-sm font-semibold text-slate-300">Adicionar Participante</h3>
-                                <div className="flex flex-col md:flex-row gap-3">
-                                    {/* Name/Search */}
-                                    <div className="flex-1 relative">
-                                        <label className="text-xs text-slate-500 mb-1 block">Nome ou Contato</label>
-                                        <div className="relative">
-                                            <Search className="absolute left-3 top-2.5 text-slate-500" size={14} />
-                                            <input 
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-md pl-9 pr-3 py-2 text-sm text-white focus:border-indigo-500 outline-none placeholder-slate-600"
-                                                placeholder="Buscar contato ou digitar nome..."
-                                                value={newParticipant.contactId ? newParticipant.name : searchTerm}
-                                                onChange={(e) => {
-                                                    setSearchTerm(e.target.value);
-                                                    if (newParticipant.contactId) {
-                                                        // If changing after selection, clear selection
-                                                        setNewParticipant({...newParticipant, contactId: undefined, name: ''});
-                                                    }
-                                                }}
-                                            />
-                                            {/* Results Dropdown */}
-                                            {searchTerm.length > 2 && !newParticipant.contactId && searchResults.length > 0 && (
-                                                <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-40 overflow-y-auto">
-                                                    {searchResults.map(c => (
-                                                        <button 
-                                                            key={c.id}
-                                                            className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm text-slate-200 border-b border-slate-700/50 last:border-0"
-                                                            onClick={() => {
-                                                                setNewParticipant({
-                                                                    ...newParticipant,
-                                                                    name: c.name,
-                                                                    contactId: c.id
-                                                                });
-                                                                setSearchTerm('');
-                                                            }}
-                                                        >
-                                                            <div className="font-medium">{c.name}</div>
-                                                            <div className="text-xs text-slate-500">{c.document}</div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Role */}
-                                    <div className="w-full md:w-1/3">
-                                        <CreatableSelect 
-                                            label="Papel / Função"
-                                            value={newParticipant.role}
-                                            options={ROLE_OPTIONS}
-                                            onChange={(val) => setNewParticipant({...newParticipant, role: val})}
-                                            placeholder="Selecione..."
-                                        />
-                                    </div>
-                                    
-                                    {/* Action */}
-                                    <div className="flex items-end">
-                                        <button 
-                                            onClick={handleAddParticipant}
-                                            className="h-[38px] px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center justify-center transition"
-                                        >
-                                            <Plus size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                    * Se o contato não for encontrado na busca, o nome digitado será salvo como participante avulso.
+                            {/* ADD PARTICIPANT VIA GLOBAL PICKER */}
+                            <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4">
+                                <h3 className="text-sm font-semibold text-slate-300 mb-3">Adicionar Participante</h3>
+                                <ContactPickerGlobal 
+                                    onAdd={handleGlobalAdd}
+                                    onSelectContact={() => {}}
+                                    contactLabel="Nome ou Contato"
+                                    rolePlaceholder="Papel / Função"
+                                    className="!bg-transparent !p-0 !border-0 !shadow-none"
+                                    actionIcon={<Plus size={18} />}
+                                    customRoles={ROLE_OPTIONS}
+                                />
+                                <p className="text-[10px] text-slate-500 mt-3">
+                                    * Busque contatos existentes ou use o "+" para cadastrar um novo participante rapidamente.
                                 </p>
                             </div>
 
