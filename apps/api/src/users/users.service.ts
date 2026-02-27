@@ -43,9 +43,15 @@ export class UsersService {
     });
   }
 
-  async findAll(tenantId: string) {
+  async findAll(tenantId: string, search?: string) {
     return this.prisma.user.findMany({
-        where: { tenantId },
+        where: { 
+            tenantId,
+            OR: search ? [
+                { name: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
+            ] : undefined
+        },
         select: {
             id: true,
             name: true,

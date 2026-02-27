@@ -660,5 +660,90 @@ export class ContactsService {
 
     return { deletedCount };
   }
+
+  // --- Bulk Actions ---
+  async bulkAction(tenantId: string, dto: any) {
+    const { action, tagId, category, contactIds, search, includedTags, excludedTags } = dto;
+    const whereClause: any = { tenantId };
+    
+    // If specific IDs provided, only act on them
+    if (contactIds && contactIds.length > 0) {
+      whereClause.id = { in: contactIds };
+    } else {
+      // Use the same filtering logic as findAll
+      if (search) {
+        whereClause.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { document: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+          { whatsapp: { contains: search, mode: 'insensitive' } },
+          { pfDetails: { cpf: { contains: search, mode: 'insensitive' } } },
+          { pjDetails: { cnpj: { contains: search, mode: 'insensitive' } } },
+        ];
+      }
+
+      if (includedTags || excludedTags) {
+        if (!whereClause.AND) whereClause.AND = [];
+        if (includedTags) {
+          const incArray = includedTags.split(',');
+          whereClause.AND.push({ tags: { some: { tagId: { in: incArray } } } });
+        }
+        if (excludedTags) {
+          const excArray = excludedTags.split(',');
+          whereClause.AND.push({ tags: { none: { tagId: { in: excArray } } } });
+        }
+      }
+    }
+
+    const contacts = await this.prisma.contact.findMany({
+      where: whereClause,
+      select: { id: true }
+    });
+
+    const ids = contacts.map(c => c.id);
+    if (ids.length === 0) return { updatedCount: 0 };
+
+    switch (action) {
+      case 'ADD_TAG':
+        if (!tagId) throw new BadRequestException('Tag ID is required');
+        const tagOperations = ids.map(id => ({
+          contactId: id,
+          tagId: tagId
+        }));
+        await this.prisma.contactTag.createMany({
+          data: tagOperations,
+          skipDuplicates: true
+        });
+        return { updatedCount: ids.length };
+
+      case 'REMOVE_TAG':
+        if (!tagId) throw new BadRequestException('Tag ID is required');
+        await this.prisma.contactTag.deleteMany({
+          where: {
+            contactId: { in: ids },
+            tagId: tagId
+          }
+        });
+        return { updatedCount: ids.length };
+
+      case 'UPDATE_CATEGORY':
+        if (!category) throw new BadRequestException('Category is required');
+        await this.prisma.contact.updateMany({
+          where: { id: { in: ids } },
+          data: { category }
+        });
+        return { updatedCount: ids.length };
+
+      case 'DELETE_ALL':
+        await this.prisma.contact.deleteMany({
+          where: { id: { in: ids } }
+        });
+        return { updatedCount: ids.length };
+
+      default:
+        throw new BadRequestException('Invalid bulk action');
+    }
+  }
 }
 

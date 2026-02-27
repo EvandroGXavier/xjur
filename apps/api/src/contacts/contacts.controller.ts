@@ -215,5 +215,11 @@ export class ContactsController {
   async enrichCEP(@Query('cep') cep: string) {
     return this.enrichmentService.consultCEP(cep);
   }
+
+  @Post('bulk-action')
+  async bulkAction(@Body() dto: any, @CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.contactsService.bulkAction(user.tenantId, dto);
+  }
 }
 

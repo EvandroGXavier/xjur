@@ -12,7 +12,8 @@ import {
     MoreHorizontal,
     Pencil,
     Trash,
-    ExternalLink
+    ExternalLink,
+    Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -131,6 +132,19 @@ export function ProcessList() {
                         <button onClick={() => setViewMode('LIST')} className={clsx("p-2 rounded-md transition-all", viewMode === 'LIST' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-white")} title="Visualização em Lista"><List size={18} /></button>
                     </div>
                     <button onClick={() => setIsMagicModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 whitespace-nowrap"><Plus size={20} /> Novo Processo</button>
+                    <button 
+                        onClick={() => navigate('/processes/config', { 
+                            state: { 
+                                filters: { 
+                                    search: searchTerm 
+                                } 
+                            } 
+                        })} 
+                        className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition" 
+                        title="Configurações de Processos"
+                    >
+                        <Settings size={20} />
+                    </button>
                 </div>
             </div>
 

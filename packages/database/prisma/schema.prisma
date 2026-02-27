@@ -319,6 +319,7 @@ model Process {
   vars           String?     // Vara / Órgão Julgador
   district       String?     // Comarca
   status         String      // OPORTUNIDADE, ATIVO, SUSPENSO, ARQUIVADO
+  responsibleLawyer String?  // Advogado Responsável (Nome ou ID)
   
   // Classificação
   area           String?     // Cível, Trabalhista, Criminal

@@ -188,4 +188,10 @@ export class ProcessesController {
     async search(@Body() body: { term: string }) {
         return this.crawlerService.search(body.term);
     }
+
+    @Post('bulk-action')
+    async bulkAction(@Body() dto: any, @CurrentUser() user: CurrentUserData) {
+        if (!user || !user.tenantId) throw new Error('User context invalid');
+        return this.processesService.bulkAction(user.tenantId, dto);
+    }
 }

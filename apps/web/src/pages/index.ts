@@ -15,3 +15,4 @@ export * from './ForgotPassword';
 export * from './ResetPassword';
 export * from './atendimento/atendimento';
 export { Kanban } from './Kanban';
+export { ProcessConfig } from './processes/ProcessConfig';

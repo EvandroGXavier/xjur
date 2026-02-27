@@ -14,7 +14,10 @@ import {
   Save,
   Trash2,
   Check,
-  Mail
+  Mail,
+  Zap,
+  Tags,
+  Database
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
@@ -52,6 +55,308 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
                     {children}
                 </div>
             </div>
+        </div>
+    );
+};
+
+// --- BULK ACTIONS TAB ---
+
+const BulkActionsTab = () => {
+    const [loading, setLoading] = useState(false);
+    const [tags, setTags] = useState<any[]>([]);
+    const [users, setUsers] = useState<any[]>([]);
+    const [activeSubTab, setActiveSubTab] = useState<'contacts' | 'processes'>('contacts');
+
+    // Action States
+    const [selectedTag, setSelectedTag] = useState('');
+    const [selectedLawyer, setSelectedLawyer] = useState('');
+    const [processCategory, setProcessCategory] = useState('');
+    const [processStatus, setProcessStatus] = useState('');
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [tagsRes, usersRes] = await Promise.all([
+                api.get('/tags'),
+                api.get('/users')
+            ]);
+            setTags(tagsRes.data);
+            setUsers(usersRes.data);
+        } catch (err) {
+            console.error('Erro ao carregar dados para ações em massa', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleBatchAction = async (module: 'contacts' | 'processes', action: string) => {
+        const confirmMsg = module === 'contacts' 
+            ? `Deseja aplicar esta ação a TODOS os contatos da sua base?` 
+            : `Deseja aplicar esta ação a todos os processos filtrados?`;
+
+        if (!window.confirm(confirmMsg)) return;
+
+        try {
+            setLoading(true);
+            const endpoint = module === 'contacts' ? '/contacts/bulk-action' : '/processes/bulk-action';
+            const payload: any = { action };
+
+            if (action.includes('TAG')) payload.tagId = selectedTag;
+            if (action === 'UPDATE_LAWYER') payload.lawyerName = selectedLawyer;
+            if (module === 'processes') {
+                if (processCategory) payload.category = processCategory;
+                if (processStatus) payload.status = processStatus;
+            }
+
+            const res = await api.post(endpoint, payload);
+            alert(`Ação concluída! Itens afetados: ${res.data.updatedCount}`);
+        } catch (err: any) {
+            alert('Erro ao executar ação: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="flex gap-4 p-1 bg-slate-950 rounded-lg w-fit border border-slate-800">
+                <button 
+                  onClick={() => setActiveSubTab('contacts')}
+                  className={clsx(
+                    "px-6 py-2 rounded-md font-medium transition-all",
+                    activeSubTab === 'contacts' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                  )}
+                >
+                    Contatos
+                </button>
+                <button 
+                  onClick={() => setActiveSubTab('processes')}
+                  className={clsx(
+                    "px-6 py-2 rounded-md font-medium transition-all",
+                    activeSubTab === 'processes' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                  )}
+                >
+                    Processos
+                </button>
+            </div>
+
+            {activeSubTab === 'contacts' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* TAGS CONTACTS */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-indigo-500/20 rounded-lg border border-indigo-500/20">
+                                <Tags className="text-indigo-400" size={20} />
+                            </div>
+                            <h3 className="text-lg font-semibold text-white">Etiquetagem Global</h3>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-2">Selecione uma Etiqueta</label>
+                                <select 
+                                    value={selectedTag}
+                                    onChange={(e) => setSelectedTag(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-white outline-none focus:border-indigo-500"
+                                >
+                                    <option value="">Selecione...</option>
+                                    {tags.filter(t => !t.scope || t.scope.includes('CONTACT')).map(tag => (
+                                        <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                <button 
+                                    disabled={loading || !selectedTag}
+                                    onClick={() => handleBatchAction('contacts', 'ADD_TAG')}
+                                    className="bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-600/30 font-medium py-3 rounded-lg transition-all disabled:opacity-30 flex items-center justify-center gap-2"
+                                >
+                                    <Plus size={16} /> Atribuir a Todos
+                                </button>
+                                <button 
+                                    disabled={loading || !selectedTag}
+                                    onClick={() => handleBatchAction('contacts', 'REMOVE_TAG')}
+                                    className="bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/30 font-medium py-3 rounded-lg transition-all disabled:opacity-30 flex items-center justify-center gap-2"
+                                >
+                                    <Trash2 size={16} /> Remover de Todos
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* CATEGORY CONTACTS */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-emerald-500/20 rounded-lg border border-emerald-500/20">
+                                <Database className="text-emerald-400" size={20} />
+                            </div>
+                            <h3 className="text-lg font-semibold text-white">Categorização em Massa</h3>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-2">Nova Categoria</label>
+                                <select 
+                                    value={processCategory}
+                                    onChange={(e) => setProcessCategory(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-white outline-none focus:border-emerald-500"
+                                >
+                                    <option value="">Selecione...</option>
+                                    <option value="Cliente">Cliente</option>
+                                    <option value="Fornecedor">Fornecedor</option>
+                                    <option value="Parte Contrária">Parte Contrária</option>
+                                    <option value="Perito">Perito</option>
+                                    <option value="Funcionário">Funcionário</option>
+                                </select>
+                            </div>
+
+                            <button 
+                                disabled={loading || !processCategory}
+                                onClick={() => handleBatchAction('contacts', 'UPDATE_CATEGORY')}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Save size={18} /> Atualizar Todos os Contatos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeSubTab === 'processes' && (
+                <div className="space-y-6">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                        <div className="p-6 border-b border-slate-800 bg-slate-800/20">
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <Zap className="text-yellow-500" size={20} />
+                                Ação em Lote para Processos
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">Defina os filtros e a ação que deseja aplicar.</p>
+                        </div>
+
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* FILTERS */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">1. Filtros (Opcional)</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs text-slate-400 mb-2">Categoria</label>
+                                        <select 
+                                            value={processCategory}
+                                            onChange={(e) => setProcessCategory(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        >
+                                            <option value="">Todos</option>
+                                            <option value="JUDICIAL">Judicial</option>
+                                            <option value="EXTRAJUDICIAL">Extrajudicial</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-400 mb-2">Status</label>
+                                        <select 
+                                            value={processStatus}
+                                            onChange={(e) => setProcessStatus(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                        >
+                                            <option value="">Todos</option>
+                                            <option value="ATIVO">Ativo</option>
+                                            <option value="SUSPENSO">Suspenso</option>
+                                            <option value="ARQUIVADO">Arquivado</option>
+                                            <option value="OPORTUNIDADE">Oportunidade</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-slate-500 italic">Deixe "Todos" para atingir toda a base.</p>
+                            </div>
+
+                            {/* ACTION TO APPLY */}
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">2. Ação a Aplicar</h4>
+                                <div className="space-y-6">
+                                    {/* TAG ACTION */}
+                                    <div className="p-4 bg-slate-950/50 rounded-xl border border-slate-800/50">
+                                        <label className="block text-xs text-slate-400 mb-2">Atribuir Etiqueta</label>
+                                        <div className="flex gap-2">
+                                            <select 
+                                                value={selectedTag}
+                                                onChange={(e) => setSelectedTag(e.target.value)}
+                                                className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="">Selecione...</option>
+                                                {tags.filter(t => !t.scope || t.scope.includes('PROCESS')).map(tag => (
+                                                    <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                                ))}
+                                            </select>
+                                            <button 
+                                                disabled={loading || !selectedTag}
+                                                onClick={() => handleBatchAction('processes', 'ADD_TAG')}
+                                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                                            >
+                                                Aplicar
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* LAWYER ACTION */}
+                                    <div className="p-4 bg-slate-950/50 rounded-xl border border-slate-800/50">
+                                        <label className="block text-xs text-slate-400 mb-2">Atribuir Advogado Responsável</label>
+                                        <div className="flex gap-2">
+                                            <select 
+                                                value={selectedLawyer}
+                                                onChange={(e) => setSelectedLawyer(e.target.value)}
+                                                className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="">Selecione...</option>
+                                                {users.map(u => (
+                                                    <option key={u.id} value={u.name}>{u.name}</option>
+                                                ))}
+                                            </select>
+                                            <button 
+                                                disabled={loading || !selectedLawyer}
+                                                onClick={() => handleBatchAction('processes', 'UPDATE_LAWYER')}
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                                            >
+                                                Atribuir
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                     {/* STATUS ACTION */}
+                                     <div className="p-4 bg-slate-950/50 rounded-xl border border-slate-800/50">
+                                        <label className="block text-xs text-slate-400 mb-2">Mudar Status em Massa</label>
+                                        <div className="flex gap-2">
+                                            <select 
+                                                id="bulk-status-update"
+                                                className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="ATIVO">Ativo</option>
+                                                <option value="SUSPENSO">Suspenso</option>
+                                                <option value="ARQUIVADO">Arquivado</option>
+                                                <option value="OPORTUNIDADE">Oportunidade</option>
+                                            </select>
+                                            <button 
+                                                disabled={loading}
+                                                onClick={() => {
+                                                    const val = (document.getElementById('bulk-status-update') as HTMLSelectElement).value;
+                                                    setProcessStatus(val); 
+                                                    handleBatchAction('processes', 'UPDATE_STATUS');
+                                                }}
+                                                className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                                            >
+                                                Mudar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

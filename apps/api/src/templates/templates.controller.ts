@@ -33,7 +33,11 @@ export class TemplatesController {
   }
 
   @Post(':id/render')
-  render(@Param('id') id: string, @Body('contactId') contactId: string) {
-    return this.templatesService.render(id, contactId);
+  render(
+    @Param('id') id: string, 
+    @Body('contactId') contactId: string,
+    @Body('processId') processId?: string
+  ) {
+    return this.templatesService.render(id, contactId, processId);
   }
 }

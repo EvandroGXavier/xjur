@@ -18,9 +18,10 @@ interface RichTextEditorProps {
     onChange: (value: string) => void;
     placeholder?: string;
     showVariables?: boolean;
+    className?: string;
 }
 
-export function RichTextEditor({ value, onChange, placeholder, showVariables = true }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, showVariables = true, className }: RichTextEditorProps) {
     const editorRef = useRef<HTMLDivElement>(null);
     const [variables, setVariables] = useState<any>(null);
 
@@ -159,7 +160,7 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
     };
 
     return (
-        <div className="flex h-[600px] border border-slate-700 rounded-lg overflow-hidden bg-slate-900">
+        <div className={clsx("flex h-[600px] border border-slate-700 rounded-lg overflow-hidden bg-slate-900", className)}>
             {/* Main Editor Area */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Toolbar */}

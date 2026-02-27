@@ -15,6 +15,7 @@ import {
     Edit3
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 
 interface TimelineItem {
     id: string;
@@ -62,6 +63,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     const [concludeFiles, setConcludeFiles] = useState<FileList | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Document Generation State
+    const [isDocGenOpen, setIsDocGenOpen] = useState(false);
+    const [targetTimelineId, setTargetTimelineId] = useState<string | null>(null);
+    const [processContactId, setProcessContactId] = useState<string | null>(null);
+
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -106,6 +112,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                     return new Date(b.date).getTime() - new Date(a.date).getTime();
                 });
                 setTimelines(sorted);
+                if (res.data.contactId) {
+                    setProcessContactId(res.data.contactId);
+                } else if (res.data.contact?.id) {
+                    setProcessContactId(res.data.contact.id);
+                }
             }
         } catch (error) {
             console.error('Error fetching timelines:', error);
@@ -298,6 +309,34 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             setSelectedMessage(null);
         } catch (error) {
             toast.error('Erro ao enviar mensagem.');
+        }
+    };
+
+    const handleGenerateDocSuccess = async (content: string, title: string) => {
+        if (!targetTimelineId || !processId) return;
+        
+        setIsSaving(true);
+        try {
+            const blob = new Blob([content], { type: 'text/html' });
+            const fileName = `${title.replace(/\s+/g, '_')}_${Date.now()}.html`;
+            const file = new File([blob], fileName, { type: 'text/html' });
+
+            const data = new FormData();
+            data.append('files', file);
+
+            await api.patch(`/processes/${processId}/timelines/${targetTimelineId}`, data, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            toast.success('Documento gerado e anexado com sucesso!');
+            setIsDocGenOpen(false);
+            setTargetTimelineId(null);
+            fetchTimelines();
+        } catch (error) {
+            console.error(error);
+            toast.error('Erro ao salvar documento gerado.');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -575,13 +614,22 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                     {activeTab === 'ACAO' && item.status !== 'CONCLUIDO' && (
                                                         <button 
                                                             onClick={async () => {
-                                                                setConcludeItemId(item.id);
+                                                                    setConcludeItemId(item.id);
                                                             }}
                                                             className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded shadow-sm hover:bg-emerald-600 font-bold"
                                                         >
                                                             Tratar / Concluir
                                                         </button>
                                                     )}
+                                                    <button 
+                                                        onClick={() => {
+                                                            setTargetTimelineId(item.id);
+                                                            setIsDocGenOpen(true);
+                                                        }}
+                                                        className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded shadow-sm hover:bg-indigo-600 font-bold flex items-center gap-1"
+                                                    >
+                                                        <FileText size={10} /> Docs
+                                                    </button>
                                                 </div>
                                             </div>
                                         </td>
@@ -890,6 +938,18 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {isDocGenOpen && processContactId && (
+                <DocumentGeneratorModal 
+                    processId={processId}
+                    contactId={processContactId}
+                    onClose={() => {
+                        setIsDocGenOpen(false);
+                        setTargetTimelineId(null);
+                    }}
+                    onSuccess={handleGenerateDocSuccess}
+                />
             )}
         </div>
     );

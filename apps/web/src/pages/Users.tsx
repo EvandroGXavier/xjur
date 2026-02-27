@@ -6,7 +6,10 @@ import {
   Trash2,
   User,
   X,
-  Save
+  Save,
+  Search,
+  Edit2,
+  Lock
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -35,14 +38,23 @@ export function UsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [formData, setFormData] = useState<any>({ name: '', email: '', password: '', role: 'MEMBER' });
 
+  const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const delayDebounceFn = setTimeout(() => {
+      fetchUsers();
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [search]);
 
   const fetchUsers = async () => {
     try {
         setLoading(true);
-        const res = await api.get('/users');
+        const res = await api.get('/users', {
+            params: { search: search || undefined }
+        });
         setUsers(res.data);
     } catch (error) {
         console.error('Erro ao buscar usuários', error);
@@ -51,17 +63,49 @@ export function UsersPage() {
     }
   };
 
+  const handleOpenModal = (user?: any) => {
+    if (user) {
+      setEditingId(user.id);
+      setFormData({
+        name: user.name,
+        email: user.email,
+        password: '', // Senha opcional na edição
+        role: user.role
+      });
+    } else {
+      setEditingId(null);
+      setFormData({ name: '', email: '', password: '', role: 'MEMBER' });
+    }
+    setModalOpen(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
       e.preventDefault();
       try {
           setLoading(true);
-          await api.post('/users', formData);
+          
+          if (editingId) {
+            // Update
+            const updateProps = { ...formData };
+            if (!updateProps.password) delete updateProps.password;
+            await api.patch(`/users/${editingId}`, updateProps);
+            alert('Usuário atualizado com sucesso!');
+          } else {
+            // Create
+            if (!formData.password) {
+              alert('Senha é obrigatória para novos usuários');
+              return;
+            }
+            await api.post('/users', formData);
+            alert('Usuário criado com sucesso!');
+          }
+          
           setModalOpen(false);
           setFormData({ name: '', email: '', password: '', role: 'MEMBER' });
+          setEditingId(null);
           fetchUsers();
-          alert('Usuário criado com sucesso!');
       } catch (error: any) {
-          alert('Erro ao criar usuário: ' + (error.response?.data?.message || error.message));
+          alert('Erro ao salvar usuário: ' + (error.response?.data?.message || error.message));
       } finally {
           setLoading(false);
       }
@@ -87,13 +131,25 @@ export function UsersPage() {
             <h1 className="text-2xl font-bold text-white">Equipe</h1>
             <p className="text-sm text-slate-400">Gerencie os usuários do seu escritório</p>
         </div>
-        <button 
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-        >
-            <UserPlus size={18} />
-            Novo Usuário
-        </button>
+        <div className="flex items-center gap-4">
+            <div className="relative">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input 
+                    type="text" 
+                    placeholder="Pesquisar por nome ou e-mail..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:border-indigo-500 outline-none w-64 transition-all focus:w-80"
+                />
+            </div>
+            <button 
+                onClick={() => handleOpenModal()}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+                <UserPlus size={18} />
+                Novo Usuário
+            </button>
+        </div>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
@@ -127,15 +183,24 @@ export function UsersPage() {
                             </span>
                         </td>
                         <td className="px-6 py-4 text-right">
-                           {user.role !== 'OWNER' && (
-                               <button 
-                                onClick={() => handleDelete(user.id)}
-                                className="text-slate-500 hover:text-red-400 transition-colors p-2"
-                                title="Remover usuário"
-                               >
-                                   <Trash2 size={16} />
-                               </button>
-                           )}
+                            <div className="flex items-center justify-end gap-1">
+                                <button 
+                                    onClick={() => handleOpenModal(user)}
+                                    className="text-slate-500 hover:text-indigo-400 transition-colors p-2"
+                                    title="Editar usuário"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                                {user.role !== 'OWNER' && (
+                                    <button 
+                                        onClick={() => handleDelete(user.id)}
+                                        className="text-slate-500 hover:text-red-400 transition-colors p-2"
+                                        title="Remover usuário"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                )}
+                            </div>
                         </td>
                     </tr>
                 ))}
@@ -151,7 +216,7 @@ export function UsersPage() {
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Novo Usuário"
+        title={editingId ? "Editar Usuário" : "Novo Usuário"}
       >
           <form onSubmit={handleSave} className="space-y-4">
               <div>
@@ -175,14 +240,19 @@ export function UsersPage() {
                   />
               </div>
               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Senha Provisória</label>
-                  <input
-                    required
-                    type="password"
-                    value={formData.password}
-                    onChange={e => setFormData({...formData, password: e.target.value})}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
-                  />
+                  <label className="block text-sm font-medium text-slate-400 mb-1">
+                      {editingId ? "Nova Senha (deixe em branco para manter)" : "Senha Provisória"}
+                  </label>
+                  <div className="relative">
+                      <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        required={!editingId}
+                        type="password"
+                        value={formData.password}
+                        onChange={e => setFormData({...formData, password: e.target.value})}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-white focus:border-indigo-500 outline-none"
+                      />
+                  </div>
               </div>
               <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Cargo</label>

@@ -234,7 +234,20 @@ export function ContactList() {
                 <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-medium whitespace-nowrap">
                     <Filter size={16} /> Filtros Adicionais
                 </button>
-                <button onClick={() => navigate('/contacts/config')} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition" title="Configurações de Contatos">
+                <button 
+                  onClick={() => navigate('/contacts/config', { 
+                    state: { 
+                      filters: { 
+                        search: searchTerm, 
+                        includedTags: includedTags.join(','), 
+                        excludedTags: excludedTags.join(','),
+                        activeFilter: activeCardFilter 
+                      } 
+                    } 
+                  })} 
+                  className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition" 
+                  title="Configurações de Contatos"
+                >
                     <Settings size={20} />
                 </button>
             </div>
@@ -257,7 +270,6 @@ export function ContactList() {
             onSort={(key, direction) => setSortConfig({ key: key as keyof Contact, direction })}
             totalItems={sortedContacts.length}
             isLoading={loading}
-            emptyMessage={activeCardFilter !== 'ALL' ? `Nenhum contato encontrado no filtro "${statCards.find(c => c.id === activeCardFilter)?.label}".` : "Nenhum contato encontrado."}
             columns={[
                 {
                     key: 'name',

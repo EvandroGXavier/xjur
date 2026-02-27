@@ -451,7 +451,79 @@ export class ProcessesService {
         await this.prisma.processTimeline.deleteMany({ where: { processId: id } });
 
         const deleted = await this.prisma.process.delete({ where: { id } });
-        console.log(`Process deleted: ${id} (${existing.title || existing.cnj})`);
-        return { success: true, deleted: { id: deleted.id, title: deleted.title } };
+    console.log(`Process deleted: ${id} (${existing.title || existing.cnj})`);
+    return { success: true, deleted: { id: deleted.id, title: deleted.title } };
+  }
+
+  // --- Bulk Actions ---
+  async bulkAction(tenantId: string, dto: any) {
+    const { action, tagId, status, lawyerName, category, processIds } = dto;
+    const whereClause: any = { tenantId };
+
+    if (processIds && processIds.length > 0) {
+      whereClause.id = { in: processIds };
+    } else {
+      // Apply filters if no specific IDs provided
+      if (category) whereClause.category = category;
+      if (status) whereClause.status = status;
+      if (dto.search) {
+        whereClause.OR = [
+          { title: { contains: dto.search, mode: 'insensitive' } },
+          { cnj: { contains: dto.search, mode: 'insensitive' } },
+          { client: { contains: dto.search, mode: 'insensitive' } },
+        ];
+      }
     }
+
+    const processes = await this.prisma.process.findMany({
+      where: whereClause,
+      select: { id: true }
+    });
+
+    const ids = processes.map(p => p.id);
+    if (ids.length === 0) return { updatedCount: 0 };
+
+    switch (action) {
+      case 'ADD_TAG':
+        if (!tagId) throw new BadRequestException('Tag ID is required');
+        const tagOperations = ids.map(id => ({
+          processId: id,
+          tagId: tagId
+        }));
+        await this.prisma.processTag.createMany({
+          data: tagOperations,
+          skipDuplicates: true
+        });
+        return { updatedCount: ids.length };
+
+      case 'REMOVE_TAG':
+        if (!tagId) throw new BadRequestException('Tag ID is required');
+        await this.prisma.processTag.deleteMany({
+          where: {
+            processId: { in: ids },
+            tagId: tagId
+          }
+        });
+        return { updatedCount: ids.length };
+
+      case 'UPDATE_STATUS':
+        if (!status) throw new BadRequestException('Status is required');
+        await this.prisma.process.updateMany({
+          where: { id: { in: ids } },
+          data: { status }
+        });
+        return { updatedCount: ids.length };
+
+      case 'UPDATE_LAWYER':
+        if (!lawyerName) throw new BadRequestException('Lawyer name is required');
+        await this.prisma.process.updateMany({
+          where: { id: { in: ids } },
+          data: { responsibleLawyer: lawyerName }
+        });
+        return { updatedCount: ids.length };
+
+      default:
+        throw new BadRequestException('Invalid bulk action');
+    }
+  }
 }

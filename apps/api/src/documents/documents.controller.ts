@@ -67,6 +67,16 @@ export class DocumentsController {
   deleteTemplate(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.documentsService.deleteTemplate(id, user.tenantId);
   }
+  
+  @Post('templates/:id/render')
+  renderTemplate(
+    @Param('id') id: string, 
+    @CurrentUser() user: CurrentUserData,
+    @Body('contactId') contactId: string,
+    @Body('processId') processId?: string
+  ) {
+    return this.documentsService.renderTemplate(id, user.tenantId, contactId, processId);
+  }
 
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
