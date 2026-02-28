@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
+import * as ffmpeg from 'fluent-ffmpeg';
+import * as ffmpegStatic from 'ffmpeg-static';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Configura o fluent-ffmpeg com o binário estático baixado
+ffmpeg.setFfmpegPath(ffmpegStatic as unknown as string);
 
 export interface EvolutionConfig {
   apiUrl: string;
@@ -265,26 +272,54 @@ export class EvolutionService {
       const isGroup = number.includes('@g.us');
       const formattedNumber = isGroup ? number : number.replace(/\D/g, '');
 
-      // Resolve o mediaUrl para base64 se for um caminho local
-      let mediaData = mediaUrl;
-      // Tratar caso de audio sem prefixo
-      if (mediaUrl && !mediaUrl.startsWith('http') && !mediaUrl.startsWith('data:')) {
-         const fs = require('fs');
-         const path = require('path');
-         const fullPath = path.join(process.cwd(), mediaUrl);
-         if (fs.existsSync(fullPath)) {
-            const fileBuffer = fs.readFileSync(fullPath);
-            const ext = path.extname(fullPath).toLowerCase();
-            const mimeTypes: Record<string, string> = {
-                '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif',
-                '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.ogg': 'audio/ogg', '.webm': 'audio/webm', '.mp3': 'audio/mpeg'
-            };
-            const mime = mimeTypes[ext] || 'application/octet-stream';
-            mediaData = `data:${mime};base64,${fileBuffer.toString('base64')}`;
-         } else {
-            this.logger.warn(`Local file not found for sending: ${fullPath}`);
-         }
-      }
+      // Resolve o mediaUrl para base64 se for um caminho local ou recebido via absoluteUrl do próprio APP_URL
+    let mediaData = mediaUrl;
+    let isDirectHttp = mediaUrl.startsWith('http') && !mediaUrl.includes(process.env.APP_URL || 'host.docker.internal');
+    
+    // Tratar caso de audio/arquivo local (inclusive os que já sofreram prefix APP_URL interno)
+    if (!isDirectHttp && !mediaUrl.startsWith('data:')) {
+       const fs = require('fs');
+       const path = require('path');
+       const cleanUrl = mediaUrl.replace(process.env.APP_URL || 'http://host.docker.internal:3000', '').replace(/^\//, '');
+       const fullPath = path.join(process.cwd(), cleanUrl);
+       
+       if (fs.existsSync(fullPath)) {
+          const ext = path.extname(fullPath).toLowerCase();
+          
+          if (type === 'audio') {
+              // Conversão via FFmpeg para garantir o Codec Opus obrigatorio da Evolution/Baileys
+              const tempOggPath = path.join(process.cwd(), `storage/uploads/temp_${Date.now()}.ogg`);
+              
+              await new Promise((resolve, reject) => {
+                  this.logger.debug(`Transcoding audio to OPUS: ${fullPath}`);
+                  ffmpeg(fullPath)
+                      .toFormat('ogg')
+                      .audioCodec('libopus')
+                      .on('error', (err) => reject(err))
+                      .on('end', () => resolve(true))
+                      .save(tempOggPath);
+              });
+              
+              const fileBuffer = fs.readFileSync(tempOggPath);
+              mediaData = `data:audio/ogg;base64,${fileBuffer.toString('base64')}`;
+              
+              // Limpar arquivo temporário de transcode
+              try { fs.unlinkSync(tempOggPath); } catch (e) {}
+              
+          } else {
+             // Mídias normais (imagens, documentos)
+             const fileBuffer = fs.readFileSync(fullPath);
+             const mimeTypes: Record<string, string> = {
+                 '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif',
+                 '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.ogg': 'audio/ogg', '.webm': 'audio/webm', '.mp3': 'audio/mpeg'
+             };
+             const mime = mimeTypes[ext] || 'application/octet-stream';
+             mediaData = `data:${mime};base64,${fileBuffer.toString('base64')}`;
+          }
+       } else {
+          this.logger.warn(`Local file not found for sending: ${fullPath} - URL origin: ${mediaUrl}`);
+       }
+    }
 
       const payload: any = {
         number: formattedNumber,

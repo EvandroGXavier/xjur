@@ -135,7 +135,7 @@ export function AtendimentoPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState<'atendendo' | 'aguardando' | 'finalizados'>('atendendo');
+  const [filterCategory, setFilterCategory] = useState<'aberto' | 'atendendo' | 'fechado'>('aberto');
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
   // Data States
@@ -175,9 +175,9 @@ export function AtendimentoPage() {
     
     if (!matchesSearch) return false;
 
-    if (filterCategory === 'atendendo') return t.status === 'OPEN' || t.status === 'IN_PROGRESS';
-    if (filterCategory === 'aguardando') return t.status === 'WAITING';
-    if (filterCategory === 'finalizados') return t.status === 'RESOLVED' || t.status === 'CLOSED';
+    if (filterCategory === 'atendendo') return t.status === 'IN_PROGRESS';
+    if (filterCategory === 'aberto') return t.status === 'WAITING' || t.status === 'OPEN';
+    if (filterCategory === 'fechado') return t.status === 'RESOLVED' || t.status === 'CLOSED';
 
     return true;
   });
@@ -415,7 +415,7 @@ export function AtendimentoPage() {
         </div>
 
         <div className="flex border-b border-slate-700">
-           {(['atendendo', 'aguardando', 'finalizados'] as const).map(cat => (
+           {(['aberto', 'atendendo', 'fechado'] as const).map(cat => (
              <button 
                 key={cat} onClick={() => setFilterCategory(cat)}
                 className={clsx(
@@ -424,9 +424,9 @@ export function AtendimentoPage() {
                 )}
              >
                <div className="flex items-center justify-center gap-2">
+                 {cat === 'aberto' && <Clock size={14} />}
                  {cat === 'atendendo' && <MessageSquare size={14} />}
-                 {cat === 'aguardando' && <Clock size={14} />}
-                 {cat === 'finalizados' && <CheckSquare size={14} />}
+                 {cat === 'fechado' && <CheckSquare size={14} />}
                  <span className="capitalize">{cat}</span>
                </div>
                {filterCategory === cat && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
@@ -506,7 +506,18 @@ export function AtendimentoPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                       {selectedTicket.status === 'OPEN' && <button onClick={() => handleUpdateStatus(selectedTicket.id, 'IN_PROGRESS')} className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-indigo-700 shadow-lg">Atender</button>}
+                       {(selectedTicket.status === 'WAITING' || selectedTicket.status === 'OPEN') && (
+                           <button onClick={() => handleUpdateStatus(selectedTicket.id, 'IN_PROGRESS')} className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-indigo-700 shadow-lg">Atender</button>
+                       )}
+                       {selectedTicket.status === 'IN_PROGRESS' && (
+                           <>
+                             <button onClick={() => handleUpdateStatus(selectedTicket.id, 'RESOLVED')} className="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-emerald-700 shadow-lg">Finalizar</button>
+                             <button onClick={() => handleUpdateStatus(selectedTicket.id, 'WAITING')} className="bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-slate-600 shadow-lg">Devolver Aberto</button>
+                           </>
+                       )}
+                       {(selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'CLOSED') && (
+                           <button onClick={() => handleUpdateStatus(selectedTicket.id, 'WAITING')} className="bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-slate-600 shadow-lg">Reabrir</button>
+                       )}
                        <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"><Phone size={18} /></button>
                        <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"><Video size={18} /></button>
                        <div className="w-px h-6 bg-slate-800 mx-1" />

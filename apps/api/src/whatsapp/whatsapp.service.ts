@@ -545,7 +545,7 @@ export class WhatsappService implements OnModuleInit {
           data: {
             tenantId,
             contactId: contact.id,
-            status: 'OPEN',
+            status: 'WAITING',
             priority: 'MEDIUM',
             channel: 'WHATSAPP',
             title: isGroup ? pushName : `Chat from ${pushName}`

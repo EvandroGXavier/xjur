@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap } from 'lucide-react';
+import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap, Settings } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
@@ -26,6 +26,7 @@ export function Connections() {
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
     const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
+    const [settingsConnection, setSettingsConnection] = useState<Connection | null>(null);
     const [connectingId, setConnectingId] = useState<string | null>(null);
     const [qrMap, setQrMap] = useState<Record<string, string>>({});
     const socketRef = useRef<Socket | null>(null);
@@ -293,8 +294,9 @@ export function Connections() {
     const isFormOpen = isCreating || editingConnection !== null;
 
     return (
-        <div className="flex-1 flex flex-col bg-slate-950 p-6 md:p-8 animate-in fade-in zoom-in-95 duration-300 h-full overflow-hidden">
-            {/* Header */}
+        <>
+            <div className="flex-1 flex flex-col bg-slate-950 p-6 md:p-8 animate-in fade-in zoom-in-95 duration-300 h-full overflow-hidden">
+                {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -542,6 +544,13 @@ export function Connections() {
                                             >
                                                 <RefreshCw size={10} /> Sincronizar Contatos
                                             </button>
+
+                                            <button 
+                                                onClick={() => setSettingsConnection(conn)}
+                                                className="mt-2 text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/20 transition flex items-center gap-1 font-bold"
+                                            >
+                                                <Settings size={10} /> Ajustes da Instância
+                                            </button>
                                         </div>
                                     ) : isPairing && rawQr ? (
                                         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 w-full">
@@ -666,5 +675,60 @@ export function Connections() {
                 )}
             </div>
         </div>
+
+        {/* Modal Ajustes da Instância */}
+        {settingsConnection && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md animate-in fade-in zoom-in-95">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <Settings className="text-indigo-400" />
+                            Ajustes da Instância
+                        </h3>
+                        <button onClick={() => setSettingsConnection(null)} className="text-slate-500 hover:text-white transition">
+                            <X size={20} />
+                        </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">Nome da Instância</label>
+                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-sm text-slate-300">
+                                {settingsConnection?.name}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">ID da Instância (Identificador DR.X/Evolution)</label>
+                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-sm text-slate-300 font-mono break-all flex justify-between group">
+                                <span>{settingsConnection?.id}</span>
+                                <button onClick={() => { if(settingsConnection?.id) { navigator.clipboard.writeText(settingsConnection.id); toast.success('Copiado'); } }} className="text-slate-500 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition">Copiar</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">API Key (Chave de Acesso)</label>
+                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-sm text-slate-300 font-mono break-all flex justify-between group">
+                                <span>{settingsConnection?.config?.evolutionApiKey || '(Chave Global Padrão do Sistema)'}</span>
+                                {settingsConnection?.config?.evolutionApiKey && <button onClick={() => { if(settingsConnection?.config?.evolutionApiKey) { navigator.clipboard.writeText(settingsConnection.config.evolutionApiKey); toast.success('Copiado'); } }} className="text-slate-500 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition">Copiar</button>}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-1">Webhook URL Configurável</label>
+                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-[11px] text-slate-300 font-mono break-all flex justify-between items-center gap-2 group">
+                                <span className="line-clamp-2">{window.location.origin.replace('5173', '3000')}/evolution/webhook/{settingsConnection?.id}</span>
+                                <button onClick={() => { if(settingsConnection?.id) { navigator.clipboard.writeText(`${window.location.origin.replace('5173', '3000')}/evolution/webhook/${settingsConnection.id}`); toast.success('Copiado'); } }} className="text-slate-500 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition shrink-0">Copiar</button>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-2 font-medium">Esta URL garante o roteamento dos webhook desta instância isoladamente. Já predefinida pelo sistema.</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                        <button onClick={() => setSettingsConnection(null)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold transition shadow-lg shadow-indigo-500/20">
+                            Fechar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 }

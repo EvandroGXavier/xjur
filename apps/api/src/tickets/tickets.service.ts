@@ -127,11 +127,11 @@ export class TicketsService {
     let mediaUrl = createMessageDto.mediaUrl;
 
     if (file) {
-        mediaUrl = file.path;
-        const isAudio = file.mimetype.startsWith('audio/') || file.mimetype.includes('webm');
-        if (file.mimetype.startsWith('image/')) contentType = 'IMAGE';
-        else if (isAudio) contentType = 'AUDIO';
-        else contentType = 'FILE'; 
+      mediaUrl = file.path.replace(/\\/g, '/');
+      const isAudio = file.mimetype.startsWith('audio/') || file.mimetype.includes('webm');
+      if (file.mimetype.startsWith('image/')) contentType = 'IMAGE';
+      else if (isAudio) contentType = 'AUDIO';
+      else contentType = 'FILE'; 
     }
 
     const scheduledAt = createMessageDto.scheduledAt ? new Date(createMessageDto.scheduledAt) : null;
@@ -157,9 +157,7 @@ export class TicketsService {
         data: { 
           updatedAt: new Date(),
           lastMessageAt: new Date(),
-          waitingReply: false,
-          // Auto-update status to IN_PROGRESS when agent responds on OPEN tickets
-          ...(ticket.status === 'OPEN' ? { status: 'IN_PROGRESS' } : {}),
+          waitingReply: false
         } as any
     });
 
