@@ -451,12 +451,9 @@ export class WhatsappService implements OnModuleInit {
       let phoneRaw = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
       
       // Validação de número - não importar contatos anômalos com letras (evita lixo no banco)
-      if (/[a-zA-Z]/.test(phoneRaw)) {
-         this.fileLogger.log(`Skipping contact creation for ${phoneRaw}: Contains letters`);
-         // We still can't just return here, because we want to save the ticket/message
-         // But we shouldn't create a fake contact for them. We will create a fallback "Unknown" contact if a valid one isn't found, 
-         // BUT wait, a user sending a message must be attached to a contact.
-         // Let's at least clean the letters for the phone field, or leave it blank and rely on email fallback.
+      if (/[a-zA-Z]/.test(phoneRaw) && !isGroup) {
+         this.fileLogger.warn(`Skipping message processing for ${phoneRaw}: Invalid WhatsApp ID (contains letters)`);
+         return; // Interrompe para não criar lixo no banco
       }
       
       let phoneClean = phoneRaw.replace(/\D/g, '');
@@ -662,7 +659,8 @@ export class WhatsappService implements OnModuleInit {
   async sendText(connectionId: string, to: string, text: string) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
     const response = await this.evolutionService.sendText(connectionId, to, text, {}, evolutionConfig);
-    return response?.key?.id;
+    // Para v2.1.1, a resposta inclui a chave da mensagem
+    return response?.key?.id || response?.message?.key?.id;
   }
 
   async sendMedia(
@@ -675,9 +673,9 @@ export class WhatsappService implements OnModuleInit {
     fileName?: string
   ) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
-    const absoluteUrl = url.startsWith('http') ? url : `${process.env.APP_URL || 'http://host.docker.internal:3000'}/${url}`;
+    const absoluteUrl = url.startsWith('http') || url.startsWith('data:') ? url : `${process.env.APP_URL || 'http://host.docker.internal:3000'}/${url}`;
     const response = await this.evolutionService.sendMedia(connectionId, to, type, absoluteUrl, caption, fileName, evolutionConfig);
-    return response?.key?.id;
+    return response?.key?.id || response?.message?.key?.id;
   }
 
   async markRead(connectionId: string, jid: string, messageIds: string[]) {

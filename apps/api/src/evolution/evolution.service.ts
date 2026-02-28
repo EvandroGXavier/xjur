@@ -238,7 +238,7 @@ export class EvolutionService {
         number: formattedNumber,
         text: text,
         options: {
-          delay: 0,
+          delay: 1000,
           presence: 'composing'
         }
       });
@@ -289,7 +289,7 @@ export class EvolutionService {
       const payload: any = {
         number: formattedNumber,
         options: {
-          delay: 0,
+          delay: 1000,
           presence: 'composing'
         }
       };

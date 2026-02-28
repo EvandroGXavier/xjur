@@ -20,7 +20,13 @@ import {
   Loader2,
   ShieldCheck,
   X,
-  Info
+  Info,
+  EyeOff,
+  List,
+  CheckSquare,
+  VolumeX,
+  ChevronDown,
+  Clock
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Badge } from '../../components/ui/Badge';
@@ -129,7 +135,7 @@ export function AtendimentoPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState<'all' | 'unread' | 'waiting' | 'mine'>('all');
+  const [filterCategory, setFilterCategory] = useState<'atendendo' | 'aguardando' | 'finalizados'>('atendendo');
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
   // Data States
@@ -169,8 +175,9 @@ export function AtendimentoPage() {
     
     if (!matchesSearch) return false;
 
-    if (filterCategory === 'unread') return (t._count?.messages || 0) > 0;
-    if (filterCategory === 'waiting') return t.waitingReply === true;
+    if (filterCategory === 'atendendo') return t.status === 'OPEN' || t.status === 'IN_PROGRESS';
+    if (filterCategory === 'aguardando') return t.status === 'WAITING';
+    if (filterCategory === 'finalizados') return t.status === 'RESOLVED' || t.status === 'CLOSED';
 
     return true;
   });
@@ -380,30 +387,49 @@ export function AtendimentoPage() {
   const renderTicketList = () => (
     <div className="w-80 lg:w-96 bg-slate-900 border-r border-slate-800 flex flex-col h-full z-10 shrink-0">
       <div className="p-4 border-b border-slate-800 shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-             Atendimentos
-             {loadingTickets && <Loader2 size={16} className="animate-spin text-indigo-400" />}
-          </h2>
-          <button onClick={() => setShowNewTicketModal(true)} className="p-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md transition"><Plus size={20} /></button>
+        <div className="flex items-center gap-2 mb-4 bg-slate-800/50 p-2 rounded-xl">
+           <Search size={16} className="text-slate-500 shrink-0" />
+           <input 
+             type="text" placeholder="Buscar atendimento e mensagens" value={searchTerm} onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+             className="w-full bg-transparent text-sm outline-none text-white placeholder:text-slate-500"
+           />
+           <button className="text-slate-500 hover:text-white transition"><Sliders size={16} /></button>
         </div>
-        <div className="relative group">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-          <input 
-            type="text" placeholder="Buscar..." value={searchTerm} onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
-          />
+
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto custom-scrollbar pb-1">
+            <button className="p-1.5 border border-slate-700 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Ocultar Atendimentos Internos"><EyeOff size={16} /></button>
+            <button onClick={() => setShowNewTicketModal(true)} className="p-1.5 border border-slate-700 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Novo Atendimento"><Plus size={16} /></button>
+            <button className="p-1.5 border border-slate-700 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Listagem em Grade/Lista"><List size={16} /></button>
+            <div className="relative group/btn">
+              <button className="p-1.5 border border-slate-700 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition relative" title="Atendimentos Abertos"><Archive size={16} /></button>
+              <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-white text-black text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg opacity-0 group-hover/btn:opacity-100 transition whitespace-nowrap z-50 pointer-events-none">Abertos</div>
+            </div>
+            <button className="p-1.5 border border-slate-700 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Selecionar Vários"><CheckSquare size={16} /></button>
+            <button className="p-1.5 border border-slate-700 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Mudo"><VolumeX size={16} /></button>
+            <div className="flex-1 min-w-[100px]">
+                <button className="w-full flex items-center justify-between px-3 py-1.5 border border-slate-700 rounded text-sm text-slate-300 hover:bg-slate-800 transition">
+                    Filas
+                    <ChevronDown size={14} />
+                </button>
+            </div>
         </div>
-        <div className="flex items-center gap-1 mt-4 p-1 bg-black/20 rounded-lg">
-           {(['all', 'unread', 'waiting'] as const).map(cat => (
+
+        <div className="flex border-b border-slate-700">
+           {(['atendendo', 'aguardando', 'finalizados'] as const).map(cat => (
              <button 
                 key={cat} onClick={() => setFilterCategory(cat)}
                 className={clsx(
-                  "flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all",
-                  filterCategory === cat ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-slate-300"
+                  "flex-1 py-3 text-xs font-bold transition-all relative",
+                  filterCategory === cat ? "text-indigo-400" : "text-slate-500 hover:text-slate-300"
                 )}
              >
-               {cat === 'all' ? 'Todos' : cat === 'unread' ? 'Novos' : 'Espera'}
+               <div className="flex items-center justify-center gap-2">
+                 {cat === 'atendendo' && <MessageSquare size={14} />}
+                 {cat === 'aguardando' && <Clock size={14} />}
+                 {cat === 'finalizados' && <CheckSquare size={14} />}
+                 <span className="capitalize">{cat}</span>
+               </div>
+               {filterCategory === cat && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
              </button>
            ))}
         </div>
@@ -411,9 +437,9 @@ export function AtendimentoPage() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {filteredTickets.length === 0 && !loadingTickets && (
-           <div className="p-12 text-center text-slate-600 flex flex-col items-center">
-              <Archive size={40} className="mb-2 opacity-20" />
-              <p className="text-sm font-medium">Vazio</p>
+           <div className="p-12 text-center text-slate-500 flex flex-col items-center">
+              <h3 className="text-white font-bold mb-1">Nada aqui!</h3>
+              <p className="text-xs">Nenhum atendimento encontrado com esse status ou termo pesquisado</p>
            </div>
         )}
         {filteredTickets.map(ticket => (
