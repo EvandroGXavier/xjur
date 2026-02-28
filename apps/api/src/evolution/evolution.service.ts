@@ -203,20 +203,23 @@ export class EvolutionService {
       this.logger.log(`Updating settings for "${instanceName}"`);
       const client = this.getClient(config);
       
+      // Evolutions v2.x é bem rigorosa com os tipos. 
+      // Garantimos que tudo seja boolean ou string limpa.
       const payload = {
-        rejectCall: settings.rejectCall,
-        msgCall: settings.msgCall,
-        groupsIgnore: settings.groupsIgnore,
-        alwaysOnline: settings.alwaysOnline,
-        readMessages: settings.readMessages,
-        readStatus: settings.readStatus,
-        syncFullHistory: settings.syncFullHistory,
+        rejectCall: !!settings.rejectCall,
+        msgCall: settings.msgCall || "",
+        groupsIgnore: !!settings.groupsIgnore,
+        alwaysOnline: !!settings.alwaysOnline,
+        readMessages: !!settings.readMessages,
+        readStatus: !!settings.readStatus,
+        syncFullHistory: !!settings.syncFullHistory,
       };
 
       const response = await client.post(`/settings/set/${instanceName}`, payload);
       return response.data;
     } catch (error) {
-      this.logger.error(`Error updating settings for "${instanceName}": ${error.message}`);
+      const errorData = error.response?.data;
+      this.logger.error(`Error updating settings for "${instanceName}" [${error.response?.status}]: ${JSON.stringify(errorData)}`);
       throw error;
     }
   }
@@ -228,15 +231,15 @@ export class EvolutionService {
   async sendText(instanceName: string, number: string, text: string, options?: any, config?: EvolutionConfig) {
     try {
       const client = this.getClient(config);
+      const isGroup = number.includes('@g.us');
+      const formattedNumber = isGroup ? number : number.replace(/\D/g, '');
+
       const response = await client.post(`/message/sendText/${instanceName}`, {
-        number,
+        number: formattedNumber,
+        text: text,
         options: {
-          delay: 1200,
-          presence: 'composing',
-          ...options
-        },
-        textMessage: {
-          text
+          delay: 0,
+          presence: 'composing'
         }
       });
       return response.data;
@@ -257,20 +260,50 @@ export class EvolutionService {
   ) {
     try {
       const client = this.getClient(config);
-      const endpoint = type === 'image' ? 'sendImage' : type === 'video' ? 'sendVideo' : type === 'audio' ? 'sendAudio' : 'sendDocument';
+      const endpoint = type === 'image' ? 'sendImage' : type === 'video' ? 'sendVideo' : type === 'audio' ? 'sendWhatsAppAudio' : 'sendDocument';
       
+      const isGroup = number.includes('@g.us');
+      const formattedNumber = isGroup ? number : number.replace(/\D/g, '');
+
+      // Resolve o mediaUrl para base64 se for um caminho local
+      let mediaData = mediaUrl;
+      // Tratar caso de audio sem prefixo
+      if (mediaUrl && !mediaUrl.startsWith('http') && !mediaUrl.startsWith('data:')) {
+         const fs = require('fs');
+         const path = require('path');
+         const fullPath = path.join(process.cwd(), mediaUrl);
+         if (fs.existsSync(fullPath)) {
+            const fileBuffer = fs.readFileSync(fullPath);
+            const ext = path.extname(fullPath).toLowerCase();
+            const mimeTypes: Record<string, string> = {
+                '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif',
+                '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.ogg': 'audio/ogg', '.webm': 'audio/webm', '.mp3': 'audio/mpeg'
+            };
+            const mime = mimeTypes[ext] || 'application/octet-stream';
+            mediaData = `data:${mime};base64,${fileBuffer.toString('base64')}`;
+         } else {
+            this.logger.warn(`Local file not found for sending: ${fullPath}`);
+         }
+      }
+
       const payload: any = {
-        number,
+        number: formattedNumber,
         options: {
-          delay: 1200,
-          presence: 'composing',
-        },
+          delay: 0,
+          presence: 'composing'
+        }
       };
 
-      if (type === 'image') payload.imageMessage = { image: mediaUrl, caption };
-      else if (type === 'video') payload.videoMessage = { video: mediaUrl, caption };
-      else if (type === 'audio') payload.audioMessage = { audio: mediaUrl };
-      else if (type === 'document') payload.documentMessage = { document: mediaUrl, fileName, caption };
+      if (type === 'audio') {
+         payload.audio = mediaData;
+      } else {
+         payload.media = mediaData;
+         payload.mediatype = type === 'document' ? 'document' : type;
+         payload.caption = caption || '';
+         if (type === 'document' || fileName) {
+            payload.fileName = fileName || 'Documento';
+         }
+      }
 
       const response = await client.post(`/message/${endpoint}/${instanceName}`, payload);
       return response.data;
@@ -301,19 +334,14 @@ export class EvolutionService {
   async findContacts(instanceName: string, config?: EvolutionConfig) {
     try {
       const client = this.getClient(config);
-      // Tentativa POST (Padrão Evolution v2.1.x)
-      const response = await client.post(`/chat/findContacts/${instanceName}`, {});
+      // Na v2.x, findContacts é POST e pode aceitar filtros
+      const response = await client.post(`/chat/findContacts/${instanceName}`, {
+        where: {}
+      });
       return response.data;
     } catch (error) {
-      // Fallback para GET (v1.x ou outras configs)
-      try {
-        const client = this.getClient(config);
-        const response = await client.get(`/chat/findContacts/${instanceName}`);
-        return response.data;
-      } catch (err2) {
-        this.logger.error(`Error finding contacts via "${instanceName}": ${error.message} / ${err2.message}`);
-        throw error;
-      }
+      this.logger.error(`Error finding contacts via "${instanceName}": ${error.message}`);
+      throw error;
     }
   }
 

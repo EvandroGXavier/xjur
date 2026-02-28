@@ -511,7 +511,13 @@ export class WhatsappService implements OnModuleInit {
       let mediaPath: string | null = null;
       if (type !== 'TEXT' && message.base64) {
         try {
-          const buffer = Buffer.from(message.base64, 'base64');
+          // Remover prefixo "data:mime/type;base64," se existir
+          let base64Data = message.base64;
+          if (base64Data.includes('base64,')) {
+            base64Data = base64Data.split('base64,')[1];
+          }
+
+          const buffer = Buffer.from(base64Data, 'base64');
           const uploadsDir = path.join(process.cwd(), 'storage', 'uploads');
           if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
@@ -741,18 +747,23 @@ export class WhatsappService implements OnModuleInit {
 
       if (contactsList.length > 0) {
         for (const c of contactsList) {
-          const remoteJid = c.id || c.remoteJid;
+          const remoteJid = c.id || c.remoteJid || c.jid;
           if (!remoteJid || remoteJid === 'status@broadcast') continue;
 
           const isGroup = remoteJid.endsWith('@g.us');
-          let phoneRaw = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
+          // Limpa o JID para pegar só o número
+          let phoneRaw = remoteJid.split('@')[0].split(':')[0];
           
           if (/[a-zA-Z]/.test(phoneRaw) && !isGroup) {
-             // Ignora e não importa contatos irregulares (ex: canais, status, bots mal formados)
              continue;
           }
 
           let phoneClean = phoneRaw.replace(/\D/g, '');
+          // Para o Brasil, garantir que tenha o código do país se não tiver
+          if (phoneClean.length <= 11 && !phoneClean.startsWith('55')) {
+              phoneClean = '55' + phoneClean;
+          }
+          
           const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
           
           let pushName = c.name || c.pushName || c.verifiedName || phoneClean;

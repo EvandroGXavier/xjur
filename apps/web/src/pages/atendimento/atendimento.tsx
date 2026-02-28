@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, ChangeEvent } from 'react';
 import { 
   Search, 
   MoreVertical, 
@@ -8,11 +7,6 @@ import {
   Paperclip, 
   Send, 
   Mic, 
-  CheckCheck, 
-  User,
-  Gavel,
-  FileText,
-  Clock,
   Sparkles,
   Archive,
   MessageSquare,
@@ -24,13 +18,9 @@ import {
   Bot,
   Plus,
   Loader2,
-  Trash2,
-  ExternalLink,
-  Shield,
-  Calendar,
+  ShieldCheck,
   X,
-  Info,
-  ChevronRight
+  Info
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Badge } from '../../components/ui/Badge';
@@ -319,7 +309,7 @@ export function AtendimentoPage() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]);
   };
 
@@ -340,7 +330,7 @@ export function AtendimentoPage() {
   useEffect(() => {
     const u1 = onSocketEvent('ticket:new', (ticket: Ticket) => setTickets(p => p.find(t => t.id === ticket.id) ? p : [ticket, ...p]));
     const u2 = onSocketEvent('ticket:updated', (ticket: Ticket) => setTickets(p => p.map(t => t.id === ticket.id ? { ...t, ...ticket } : t)));
-    const u3 = onSocketEvent('ticket:message', (d: any) => {
+    const u3 = onSocketEvent('ticket:message', (d: { ticketId: string; message: TicketMessage }) => {
         if (d.ticketId === selectedTicketId) {
             setMessages(p => {
                 const filtered = p.filter(m => m.id !== d.message.id && !m.id.startsWith('temp-'));
@@ -348,10 +338,10 @@ export function AtendimentoPage() {
             });
         }
     });
-    const u4 = onSocketEvent('ticket:error', (e: any) => (!selectedTicketId || e.ticketId === selectedTicketId) && toast.error(e.message));
-    const u5 = onSocketEvent('message:status', (d: any) => d.ticketId === selectedTicketId && setMessages(p => p.map(m => m.id === d.messageId ? { ...m, status: d.status } : m)));
-    const u6 = onSocketEvent('message:deleted', (d: any) => d.ticketId === selectedTicketId && setMessages(p => p.filter(m => m.id !== d.messageId)));
-    const u7 = onSocketEvent('presence:update', (d: any) => {
+    const u4 = onSocketEvent('ticket:error', (e: { ticketId?: string; message: string }) => (!selectedTicketId || e.ticketId === selectedTicketId) && toast.error(e.message));
+    const u5 = onSocketEvent('message:status', (d: { ticketId: string; messageId: string; status: string }) => d.ticketId === selectedTicketId && setMessages(p => p.map(m => m.id === d.messageId ? { ...m, status: d.status } : m)));
+    const u6 = onSocketEvent('message:deleted', (d: { ticketId: string; messageId: string }) => d.ticketId === selectedTicketId && setMessages(p => p.filter(m => m.id !== d.messageId)));
+    const u7 = onSocketEvent('presence:update', (d: { contactId: string; presence: string }) => {
         if (d.presence === 'composing') {
             setTypingContactIds(p => new Set(p).add(d.contactId));
             setTimeout(() => setTypingContactIds(p => { const n = new Set(p); n.delete(d.contactId); return n; }), 5000);
@@ -400,7 +390,7 @@ export function AtendimentoPage() {
         <div className="relative group">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
           <input 
-            type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            type="text" placeholder="Buscar..." value={searchTerm} onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-800 border border-slate-700 focus:border-indigo-500 rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
           />
         </div>
@@ -521,8 +511,8 @@ export function AtendimentoPage() {
                             <button onClick={() => fileInputRef.current?.click()} className={clsx("p-2 rounded-lg transition", selectedFile ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white")}><Paperclip size={20} /></button>
                             <input 
                                 type="text" placeholder={selectedFile ? `Legenda para ${selectedFile.name}...` : "Digite..."} value={messageInput}
-                                onChange={(e) => setMessageInput(e.target.value)} disabled={sendingMessage}
-                                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => setMessageInput(e.target.value)} disabled={sendingMessage}
+                                onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                                 className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:ring-1 focus:ring-indigo-500 outline-none"
                             />
                             {messageInput.trim() || selectedFile ? (
@@ -567,8 +557,8 @@ export function AtendimentoPage() {
         <div className="h-px w-8 bg-slate-800 my-2" />
         <ModuleButton active={activeModule === 'tags'} icon={Tags} label="Tags" onClick={() => setActiveModule('tags')} color="text-pink-400" />
         <ModuleButton active={activeModule === 'bot'} icon={Bot} label="Bots" onClick={() => setActiveModule('bot')} color="text-cyan-400" />
-        <ModuleButton active={activeModule === 'connections'} icon={QrCode} label="WhatsApp" onClick={() => setActiveModule('connections')} color="text-emerald-400" />
-        <ModuleButton active={activeModule === 'security'} icon={Shield} label="Segurança" onClick={() => setActiveModule('security')} color="text-blue-400" />
+        <ModuleButton active={activeModule === 'connections'} icon={QrCode} label="Conectar (QR)" onClick={() => setActiveModule('connections')} color="text-emerald-400" />
+        <ModuleButton active={activeModule === 'security'} icon={ShieldCheck} label="Ajustes Instância" onClick={() => setActiveModule('security')} color="text-emerald-500" />
         <div className="flex-1" />
         <ModuleButton active={activeModule === 'settings'} icon={Sliders} label="Config" onClick={() => setActiveModule('settings')} />
       </div>
