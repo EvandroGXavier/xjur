@@ -22,6 +22,12 @@ export class WhatsappController {
       return { success: true, message: 'Desconectado com sucesso' };
   }
 
+  @Post(':id/test-message')
+  async sendTestMessage(@Param('id') id: string, @Body() body: { to: string; text: string }) {
+      await this.whatsappService.sendText(id, body.to, body.text);
+      return { success: true };
+  }
+
   @Post(':id/sync-contacts')
   async syncContacts(@Param('id') id: string) {
       return this.whatsappService.syncContacts(id);

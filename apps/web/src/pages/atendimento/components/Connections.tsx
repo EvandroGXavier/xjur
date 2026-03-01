@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap, Settings } from 'lucide-react';
+import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap, Settings, Users, Shield, Instagram, Send } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
@@ -29,6 +29,7 @@ export function Connections() {
     const [settingsConnection, setSettingsConnection] = useState<Connection | null>(null);
     const [connectingId, setConnectingId] = useState<string | null>(null);
     const [qrMap, setQrMap] = useState<Record<string, string>>({});
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'configurations' | 'test' | 'events' | 'integrations'>('dashboard');
     const socketRef = useRef<Socket | null>(null);
     
     // Form State
@@ -38,7 +39,8 @@ export function Connections() {
     const [waConfig, setWaConfig] = useState({ 
         evolutionChannel: 'baileys', 
         evolutionToken: '',
-        evolutionNumber: ''
+        evolutionNumber: '',
+        evolutionVersion: '2.3000.x'
     });
 
     const fetchConnections = useCallback(async () => {
@@ -250,7 +252,8 @@ export function Connections() {
         setWaConfig({ 
             evolutionChannel: conn.config?.evolutionChannel ?? 'baileys',
             evolutionToken: conn.config?.evolutionToken ?? '',
-            evolutionNumber: conn.config?.evolutionNumber ?? ''
+            evolutionNumber: conn.config?.evolutionNumber ?? '',
+            evolutionVersion: conn.config?.evolutionVersion ?? '2.3000.x'
         });
         setIsCreating(false);
     };
@@ -264,17 +267,62 @@ export function Connections() {
         setWaConfig({ 
             evolutionChannel: 'baileys',
             evolutionToken: '',
-            evolutionNumber: ''
+            evolutionNumber: '',
+            evolutionVersion: '2.3000.x'
         });
     };
 
-    const getIcon = (type: string) => {
-        switch(type) {
-            case 'WHATSAPP': return <MessageCircle className="text-emerald-500" />;
-            case 'INSTAGRAM': return <div className="text-pink-500 font-bold">IG</div>;
-            case 'EMAIL': return <Mail className="text-blue-500" />;
-            default: return <Smartphone />;
+    const renderQrCode = (qrData: string | undefined | null) => {
+        if (!qrData) return null;
+        if (qrData.startsWith('data:image')) {
+            return <img src={qrData} alt="QR Code Base64" className="w-[280px] h-[280px] object-contain rounded-xl bg-white p-2" />;
         }
+        if (qrData.length > 500 && !qrData.includes('http') && !qrData.startsWith('{')) {
+            // It might be raw base64 without prefix
+            return <img src={`data:image/png;base64,${qrData}`} alt="QR Code Raw" className="w-[280px] h-[280px] object-contain rounded-xl bg-white p-2" />;
+        }
+        return (
+            <div className="bg-white p-5 rounded-xl mb-4 shadow-xl shadow-black/20 ring-2 ring-amber-500/20">
+                <QRCodeSVG 
+                    value={qrData} 
+                    size={280}
+                    level="H" 
+                    includeMargin={true}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                />
+            </div>
+        );
+    };
+
+    const handleSaveSettings = async () => {
+        if (!settingsConnection) return;
+        const versionInput = document.getElementById('configVersionInput') as HTMLInputElement;
+        const newVersion = versionInput ? versionInput.value : '';
+        
+        try {
+            const updatedConfig = {
+                ...(settingsConnection.config || {}),
+                evolutionVersion: newVersion
+            };
+            await api.put(`/connections/${settingsConnection.id}`, { config: updatedConfig });
+            
+            setConnections(prev => prev.map(c => 
+                c.id === settingsConnection.id ? { ...c, config: updatedConfig } : c
+            ));
+            
+            toast.success('Configurações salvas!');
+        } catch (error) {
+            toast.error('Erro ao salvar configurações.');
+        }
+    };
+
+    const getIcon = (type: string) => {
+        if (type === 'WHATSAPP') return <MessageCircle size={24} className="text-emerald-500" />;
+        if (type === 'INSTAGRAM') return <Instagram size={24} className="text-pink-500" />;
+        if (type === 'EMAIL') return <Mail size={24} className="text-blue-500" />;
+        if (type === 'TELEGRAM') return <Send size={24} className="text-sky-500" />;
+        return <Smartphone size={24} className="text-slate-400" />;
     };
 
     const getStatusBadge = (status: string) => {
@@ -510,18 +558,8 @@ export function Connections() {
                                         </div>
                                     ) : isPairing && rawQr ? (
                                         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 w-full">
-                                            {/* QR Code — Large and clear using SVG */}
-                                            <div className="bg-white p-5 rounded-xl mb-4 shadow-xl shadow-black/20 ring-2 ring-amber-500/20">
-                                                <QRCodeSVG 
-                                                    value={rawQr} 
-                                                    size={280}
-                                                    level="H" 
-                                                    includeMargin={true}
-                                                    bgColor="#ffffff"
-                                                    fgColor="#000000"
-                                                />
-                                            </div>
-                                            <span className="text-amber-400 text-sm font-semibold animate-pulse">
+                                            {renderQrCode(rawQr)}
+                                            <span className="text-amber-400 text-sm font-semibold animate-pulse mt-2">
                                                 Escaneie o QR Code
                                             </span>
                                             <span className="text-[11px] text-slate-500 mt-1">
@@ -529,12 +567,9 @@ export function Connections() {
                                             </span>
                                         </div>
                                     ) : isPairing && conn.qrCode ? (
-                                        /* Fallback: use base64 QR from database (polling) */
                                         <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 w-full">
-                                            <div className="bg-white p-5 rounded-xl mb-4 shadow-xl shadow-black/20 ring-2 ring-amber-500/20">
-                                                <img src={conn.qrCode} alt="QR Code" className="w-[280px] h-[280px] object-contain" />
-                                            </div>
-                                            <span className="text-amber-400 text-sm font-semibold animate-pulse">
+                                            {renderQrCode(conn.qrCode)}
+                                            <span className="text-amber-400 text-sm font-semibold animate-pulse mt-2">
                                                 Escaneie o QR Code
                                             </span>
                                             <span className="text-[11px] text-slate-500 mt-1">
@@ -559,7 +594,7 @@ export function Connections() {
                                                 <WifiOff size={28} className="opacity-40" />
                                             </div>
                                             <span className="text-sm font-medium">Desconectado</span>
-                                            <span className="text-[11px] text-slate-600 mt-1">Clique em "Conectar" para iniciar</span>
+                                            <span className="text-[11px] text-slate-600 mt-1">Clique em "Conectar" para gerar QR Code</span>
                                         </div>
                                     )}
                                 </div>
@@ -632,56 +667,228 @@ export function Connections() {
             </div>
         </div>
 
-        {/* Modal Ajustes da Instância */}
+        {/* Modal Ajustes da Instância (EVOLUTION STYLE) */}
         {settingsConnection && (
             <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md animate-in fade-in zoom-in-95">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                            <Settings className="text-indigo-400" />
-                            Ajustes da Instância
-                        </h3>
-                        <button onClick={() => setSettingsConnection(null)} className="text-slate-500 hover:text-white transition">
-                            <X size={20} />
-                        </button>
+                <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-4xl h-[80vh] flex overflow-hidden animate-in fade-in zoom-in-95 shadow-2xl flex-col">
+                    
+                    {/* Header Evolutivo */}
+                    <div className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex justify-between items-center shrink-0">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-indigo-500/10 p-2 rounded-lg">
+                                <Smartphone className="text-indigo-400" size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white leading-tight">
+                                    {settingsConnection.name}
+                                </h3>
+                                <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
+                                    <span>Client: DR.X_Exchange</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            {getStatusBadge(settingsConnection.status)}
+                            <button onClick={() => setSettingsConnection(null)} className="text-slate-500 hover:text-white transition bg-slate-800 p-2 rounded-lg">
+                                <X size={20} />
+                            </button>
+                        </div>
                     </div>
                     
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-400 mb-1">Nome da Instância</label>
-                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-sm text-slate-300">
-                                {settingsConnection?.name}
-                            </div>
+                    {/* Layout Body (Sidebar + Content) */}
+                    <div className="flex-1 flex overflow-hidden">
+                        
+                        {/* Sidebar Tabs */}
+                        <div className="w-64 bg-slate-950/50 border-r border-slate-800 flex flex-col p-4 shrink-0 overflow-y-auto">
+                            <button 
+                                onClick={() => setActiveTab('dashboard')} 
+                                className={clsx("flex items-center gap-3 w-full p-3 rounded-lg text-sm font-medium transition-all mb-1", activeTab === 'dashboard' ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-300")}
+                            >
+                                <Zap size={18} /> Dashboard
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('configurations')} 
+                                className={clsx("flex items-center gap-3 w-full p-3 rounded-lg text-sm font-medium transition-all mb-1", activeTab === 'configurations' ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-300")}
+                            >
+                                <Settings size={18} /> Configurations
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('test')} 
+                                className={clsx("flex items-center gap-3 w-full p-3 rounded-lg text-sm font-medium transition-all mb-1", activeTab === 'test' ? "bg-emerald-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-300")}
+                            >
+                                <MessageCircle size={18} /> Aba de Teste
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('events')} 
+                                className={clsx("flex items-center gap-3 w-full p-3 rounded-lg text-sm font-medium transition-all mb-1", activeTab === 'events' ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-300")}
+                            >
+                                <Zap size={18} /> Events (Webhooks)
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('integrations')} 
+                                className={clsx("flex items-center gap-3 w-full p-3 rounded-lg text-sm font-medium transition-all mb-1", activeTab === 'integrations' ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-300")}
+                            >
+                                <Zap size={18} /> Integrations
+                            </button>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-400 mb-1">ID da Instância (Identificador DR.X/Evolution)</label>
-                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-sm text-slate-300 font-mono break-all flex justify-between group">
-                                <span>{settingsConnection?.id}</span>
-                                <button onClick={() => { if(settingsConnection?.id) { navigator.clipboard.writeText(settingsConnection.id); toast.success('Copiado'); } }} className="text-slate-500 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition">Copiar</button>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-400 mb-1">API Key (Chave de Acesso)</label>
-                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-sm text-slate-300 font-mono break-all flex justify-between group">
-                                <span>{settingsConnection?.config?.evolutionApiKey || '(Chave Global Padrão do Sistema)'}</span>
-                                {settingsConnection?.config?.evolutionApiKey && <button onClick={() => { if(settingsConnection?.config?.evolutionApiKey) { navigator.clipboard.writeText(settingsConnection.config.evolutionApiKey); toast.success('Copiado'); } }} className="text-slate-500 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition">Copiar</button>}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-400 mb-1">Webhook URL Configurável</label>
-                            <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-[11px] text-slate-300 font-mono break-all flex justify-between items-center gap-2 group">
-                                <span className="line-clamp-2">{window.location.origin.replace('5173', '3000')}/evolution/webhook/{settingsConnection?.id}</span>
-                                <button onClick={() => { if(settingsConnection?.id) { navigator.clipboard.writeText(`${window.location.origin.replace('5173', '3000')}/evolution/webhook/${settingsConnection.id}`); toast.success('Copiado'); } }} className="text-slate-500 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition shrink-0">Copiar</button>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-2 font-medium">Esta URL garante o roteamento dos webhook desta instância isoladamente. Já predefinida pelo sistema.</p>
+                        
+                        {/* Tab Content */}
+                        <div className="flex-1 bg-slate-900 p-8 overflow-y-auto custom-scrollbar relative">
+                            {activeTab === 'dashboard' && (
+                                <div className="space-y-6 animate-in fade-in">
+                                    <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl flex flex-col gap-4 relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-bl-full pointer-events-none" />
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">ID da Instância (Identificador DR.X)</label>
+                                        <div className="bg-slate-900 border border-slate-700/50 p-3 rounded-lg text-sm text-indigo-300 font-mono flex justify-between group cursor-copy" onClick={() => { navigator.clipboard.writeText(settingsConnection.id); toast.success('Copiado'); }}>
+                                            <span>{settingsConnection.id}</span>
+                                            <span className="text-slate-500 opacity-0 group-hover:opacity-100 transition">Copiar</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl flex flex-col gap-4">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                            Status da Conexão
+                                        </label>
+                                        <div className="flex justify-between items-center bg-slate-900 border border-slate-700/50 p-4 rounded-lg">
+                                            <div className="flex items-center gap-3">
+                                                <div className={clsx("w-3 h-3 rounded-full animate-pulse", settingsConnection.status === 'CONNECTED' ? "bg-emerald-500" : "bg-red-500")} />
+                                                <span className="text-white font-medium">Current Status: {settingsConnection.status}</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    onClick={() => handleDisconnect(settingsConnection)}
+                                                    className="bg-red-500/10 text-red-400 hover:bg-red-500/20 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2"
+                                                >
+                                                    <Power size={14} /> LOGOUT
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleConnect(settingsConnection)}
+                                                    className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2"
+                                                >
+                                                    <RefreshCw size={14} /> RECONNECT
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-3 gap-6">
+                                        <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl flex flex-col items-center justify-center text-center">
+                                            <Users size={32} className="text-slate-600 mb-3" />
+                                            <span className="text-3xl font-black text-white">0</span>
+                                            <span className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-wider">Contatos</span>
+                                        </div>
+                                        <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl flex flex-col items-center justify-center text-center">
+                                            <MessageCircle size={32} className="text-slate-600 mb-3" />
+                                            <span className="text-3xl font-black text-white">0</span>
+                                            <span className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-wider">Chats</span>
+                                        </div>
+                                        <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl flex flex-col items-center justify-center text-center">
+                                            <Shield size={32} className="text-slate-600 mb-3" />
+                                            <span className="text-3xl font-black text-white">0</span>
+                                            <span className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-wider">Mensagens</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'configurations' && (
+                                <div className="space-y-6 animate-in fade-in max-w-2xl">
+                                    <h2 className="text-xl font-bold text-white mb-6">Device Configurations</h2>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 mb-2">Versão do WhatsApp (whatsappVersion)</label>
+                                            <input 
+                                                id="configVersionInput"
+                                                type="text"
+                                                defaultValue={settingsConnection.config?.evolutionVersion || "2.3000.x"}
+                                                placeholder="ex: 2.3000.x, ou deixe em branco para default do Baileys"
+                                                className="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-indigo-500 outline-none"
+                                            />
+                                            <p className="text-[10px] text-slate-500 mt-1">
+                                                A configuração exata da Evolution dita que preencher este campo pode evitar loops ou falhas no QR no caso do Baileys exigir versão específica de Device.
+                                            </p>
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 mb-2">Webhook URL Global</label>
+                                            <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-sm text-slate-300 font-mono">
+                                                {window.location.origin.replace('5173', '3000')}/evolution/webhook
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="pt-4 border-t border-slate-800">
+                                            <button 
+                                                onClick={handleSaveSettings}
+                                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg text-sm font-bold transition">
+                                                Salvar Alterações
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'test' && (
+                                <div className="space-y-6 animate-in fade-in h-full flex flex-col">
+                                    <div className="flex items-center gap-3">
+                                        <MessageCircle className="text-emerald-500" />
+                                        <h2 className="text-xl font-bold text-white">Interface de Testes (Simulador N8N)</h2>
+                                    </div>
+                                    <p className="text-sm text-slate-400 bg-emerald-500/10 text-emerald-300 p-3 border border-emerald-500/20 rounded-lg">
+                                        Utilize esta ferramenta de depuração para enviar mensagens forçadas pela instância diretamente, ignorando fluxos complexos para validar envio e conectividade do dispositivo. Eventos recebidos aparecerão nos Event Logs.
+                                    </p>
+                                    
+                                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 mt-4 flex-1">
+                                        <div className="space-y-4 max-w-md">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 mb-2">Número Alvo</label>
+                                                <input 
+                                                    id="testTargetNum"
+                                                    type="text"
+                                                    placeholder="5511999999999"
+                                                    className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-emerald-500 outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 mb-2">Mensagem (Payload TXT)</label>
+                                                <textarea 
+                                                    id="testTargetMsg"
+                                                    rows={4}
+                                                    placeholder="Olá! Esta é uma mensagem de teste de diagnóstico da plataforma."
+                                                    className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-emerald-500 outline-none resize-none"
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={() => {
+                                                    const num = (document.getElementById('testTargetNum') as HTMLInputElement).value;
+                                                    const text = (document.getElementById('testTargetMsg') as HTMLTextAreaElement).value;
+                                                    if(!num || !text) return toast.error('Preencha os dados!');
+                                                    toast.promise(api.post(`/whatsapp/${settingsConnection.id}/test-message`, { text, to: num }), {
+                                                        loading: 'Disparando evento via Evolution...',
+                                                        success: 'Pushed via broker (check seu aparelho)!',
+                                                        error: 'Falha grave no repasse da msg.'
+                                                    });
+                                                }}
+                                                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2"
+                                            >
+                                                < Zap size={16} /> Disparar Teste
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {(activeTab === 'events' || activeTab === 'integrations') && (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                                    <Shield size={48} className="opacity-20 mb-4" />
+                                    <span className="font-bold">Aba em Desenvolvimento</span>
+                                    <span className="text-xs text-slate-600 mt-1 text-center max-w-sm">Esta seção espelhará exatamente as abas da Evolution v2 para controle de roteamentos e webhooks extras.</span>
+                                </div>
+                            )}
+
                         </div>
                     </div>
 
-                    <div className="mt-6 flex justify-end">
-                        <button onClick={() => setSettingsConnection(null)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold transition shadow-lg shadow-indigo-500/20">
-                            Fechar
-                        </button>
-                    </div>
                 </div>
             </div>
         )}

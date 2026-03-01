@@ -56,19 +56,24 @@ export class WhatsappService implements OnModuleInit {
       });
 
       const config = connection?.config as any || {};
+      const settings = config.evolutionSettings || {};
+      if (config.evolutionVersion) {
+        settings.whatsappVersion = config.evolutionVersion;
+      }
+
       if (config.evolutionUrl && config.evolutionApiKey) {
         return {
           apiUrl: config.evolutionUrl,
           apiKey: config.evolutionApiKey,
-          settings: config.evolutionSettings || {}
+          settings
         };
       }
       
       // Mesmo sem URL/Key customizada, podemos ter settings customizadas para os defaults
       return {
-        apiUrl: this.evolutionService['defaultApiUrl'],
-        apiKey: this.evolutionService['defaultApiKey'],
-        settings: config.evolutionSettings || {}
+        apiUrl: this.evolutionService['defaultApiUrl'] || process.env.EVOLUTION_API_URL || 'http://localhost:8080',
+        apiKey: this.evolutionService['defaultApiKey'] || process.env.EVOLUTION_API_KEY || '',
+        settings
       };
     } catch (e) {
       this.logger.error(`Failed to fetch evolution config for ${connectionId}: ${e.message}`);

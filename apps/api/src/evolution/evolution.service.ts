@@ -13,6 +13,7 @@ export interface EvolutionConfig {
   apiUrl: string;
   apiKey: string;
   settings?: {
+    whatsappVersion?: string;
     rejectCall?: boolean;
     msgCall?: string;
     groupsIgnore?: boolean;
@@ -72,6 +73,7 @@ export class EvolutionService {
         token: config?.apiKey || this.defaultApiKey,
         qrcode: true,
         integration: 'WHATSAPP-BAILEYS',
+        whatsappVersion: config?.settings?.whatsappVersion || '2.3000.x',
         rejectCall: config?.settings?.rejectCall ?? false,
         msgCall: config?.settings?.msgCall ?? '',
         groupsIgnore: config?.settings?.groupsIgnore ?? false,
