@@ -1,35 +1,7 @@
-import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  MessageSquare, 
-  Scale, 
-  DollarSign, 
-  Users, 
-  Bot,
-  FileText,
-  Settings,
-  Package,
-  ShieldCheck,
-  Calendar,
-  Columns,
-  X
-} from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { SYSTEM_MODULES } from '../config/modules';
 import { clsx } from 'clsx';
-
-const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', to: '/' },
-  { icon: MessageSquare, label: 'Atendimento', to: '/chat' },
-  { icon: Columns, label: 'Kanban', to: '/kanban' },
-  { icon: Scale, label: 'Processos', to: '/processes' },
-  { icon: Calendar, label: 'Agenda', to: '/agenda' },
-  { icon: DollarSign, label: 'Financeiro', to: '/financial' },
-  { icon: Package, label: 'Produtos', to: '/products' },
-  { icon: Users, label: 'Contatos', to: '/contacts' },
-  { icon: FileText, label: 'Biblioteca', to: '/documents' },
-  { icon: ShieldCheck, label: 'Equipe', to: '/users' },
-  { icon: Bot, label: 'Inteligência Artificial', to: '/ai' },
-  { icon: Settings, label: 'Configuração', to: '/settings' },
-];
+import { X } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -37,6 +9,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
+  const location = useLocation();
   return (
     <aside className={clsx(
       "w-72 lg:w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out",
@@ -59,7 +32,24 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
       </div>
 
       <nav className="flex-1 p-3 lg:p-4 space-y-1.5 lg:space-y-2 overflow-y-auto custom-scrollbar">
-        {menuItems.map((item) => (
+        {SYSTEM_MODULES.filter(item => {
+           try {
+             const userStr = localStorage.getItem('user');
+             if (!userStr) return false;
+             const user = JSON.parse(userStr);
+             if (user.role === 'OWNER') return true;
+             
+             // Por padrão, se não tem a permissão configurada, libera (ou oculta, escolhemos liberar)
+             // Como a instrução diz "QUE ELE NÃO ACESSA, ELE NEM VERÁ", e "QUANDO CRIAR UM NOVO MODULO ELE JA É CRIADO AUTOMATICAMENTE"
+             // A gente pode inferir que acesso padrão é liberado a não ser que revogado explicitamente, ou vice-versa.
+             // Para garantir que coisas novas apareçam automaticamente: o padrão será true, a menos que permission.access === false.
+             const permissions = user.permissions || {};
+             if (permissions[item.id] && permissions[item.id].access === false) return false;
+             return true;
+           } catch {
+             return false;
+           }
+        }).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -79,11 +69,27 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
 
       <div className="p-4 border-t border-slate-800">
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-800">
-          <div className="w-8 h-8 flex-shrink-0 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs">
-            OP
+          <div className="w-8 h-8 flex-shrink-0 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs uppercase">
+            {(() => {
+                const uStr = localStorage.getItem('user');
+                if (uStr) {
+                    const u = JSON.parse(uStr);
+                    return u.name ? u.name.substring(0,2) : 'OP';
+                }
+                return 'OP';
+            })()}
           </div>
           <div className="overflow-hidden">
-            <p className="text-sm font-medium text-white truncate">Operador</p>
+            <p className="text-sm font-medium text-white truncate">
+                {(() => {
+                    const uStr = localStorage.getItem('user');
+                    if (uStr) {
+                        const u = JSON.parse(uStr);
+                        return u.name || 'Operador';
+                    }
+                    return 'Operador';
+                })()}
+            </p>
             <p className="text-xs text-slate-500 truncate">Online</p>
           </div>
         </div>

@@ -9,15 +9,17 @@ import {
   Save,
   Search,
   Edit2,
-  Lock
+  Lock,
+  Check
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { SYSTEM_MODULES } from '../config/modules';
 
 const Modal = ({ isOpen, onClose, title, children }: any) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-800/50">
                     <h3 className="text-lg font-semibold text-white">{title}</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
@@ -36,7 +38,7 @@ export function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [formData, setFormData] = useState<any>({ name: '', email: '', password: '', role: 'MEMBER' });
+  const [formData, setFormData] = useState<any>({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
 
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,13 +72,29 @@ export function UsersPage() {
         name: user.name,
         email: user.email,
         password: '', // Senha opcional na edição
-        role: user.role
+        role: user.role,
+        permissions: user.permissions || {}
       });
     } else {
       setEditingId(null);
-      setFormData({ name: '', email: '', password: '', role: 'MEMBER' });
+      setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
     }
     setModalOpen(true);
+  };
+
+  const handleTogglePermission = (moduleId: string, action: string) => {
+    setFormData((prev: any) => {
+        const currentMod = prev.permissions?.[moduleId] || { access: true, create: true, read: true, update: true, delete: true };
+        const newVal = !currentMod[action];
+        
+        const nextMod = { ...currentMod, [action]: newVal };
+        
+        if (action === 'access' && !newVal) {
+            nextMod.create = false; nextMod.read = false; nextMod.update = false; nextMod.delete = false;
+        }
+
+        return { ...prev, permissions: { ...prev.permissions, [moduleId]: nextMod } };
+    });
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -101,7 +119,7 @@ export function UsersPage() {
           }
           
           setModalOpen(false);
-          setFormData({ name: '', email: '', password: '', role: 'MEMBER' });
+          setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
           setEditingId(null);
           fetchUsers();
       } catch (error: any) {
@@ -265,6 +283,55 @@ export function UsersPage() {
                       <option value="ADMIN">Administrador</option>
                   </select>
               </div>
+
+              {formData.role !== 'OWNER' && formData.role !== 'ADMIN' && (
+                  <div className="mt-6 border-t border-slate-800 pt-6">
+                      <h4 className="text-sm font-bold text-white mb-4">Níveis de Acesso por Módulo</h4>
+                      <div className="overflow-x-auto rounded-lg border border-slate-800">
+                          <table className="w-full text-left text-xs bg-slate-900">
+                              <thead className="bg-slate-950 text-slate-400">
+                                  <tr>
+                                      <th className="px-4 py-2 font-medium border-r border-slate-800">Nome Rotina</th>
+                                      <th className="px-4 py-2 font-medium text-center">Acessar</th>
+                                      <th className="px-4 py-2 font-medium text-center">Cadastrar</th>
+                                      <th className="px-4 py-2 font-medium text-center">Ver</th>
+                                      <th className="px-4 py-2 font-medium text-center">Editar</th>
+                                      <th className="px-4 py-2 font-medium text-center">Deletar</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800 text-slate-300">
+                                  {SYSTEM_MODULES.map(mod => {
+                                      const p = formData.permissions?.[mod.id] || { access: true, create: true, read: true, update: true, delete: true };
+                                      return (
+                                          <tr key={mod.id} className="hover:bg-slate-800/50">
+                                              <td className="px-4 py-2 font-medium flex items-center gap-2 border-r border-slate-800">
+                                                  <mod.icon size={14} className="text-slate-500" />
+                                                  {mod.label}
+                                              </td>
+                                              {(['access', 'create', 'read', 'update', 'delete'] as const).map(action => (
+                                                  <td key={action} className="px-4 py-2 text-center">
+                                                      <button 
+                                                        type="button" 
+                                                        onClick={() => handleTogglePermission(mod.id, action)}
+                                                        className={clsx(
+                                                            "w-5 h-5 rounded flex items-center justify-center mx-auto transition-colors border",
+                                                            p[action] 
+                                                              ? "bg-emerald-500/20 text-emerald-500 border-emerald-500/30" 
+                                                              : "bg-slate-800 text-transparent border-slate-700 hover:border-slate-500"
+                                                        )}
+                                                      >
+                                                          <Check size={12} className={clsx(!p[action] && "opacity-0")} />
+                                                      </button>
+                                                  </td>
+                                              ))}
+                                          </tr>
+                                      );
+                                  })}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              )}
               
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-800 mt-6">
                   <button

@@ -38,7 +38,15 @@ export class UsersService {
             email: data.email,
             password: hashedPassword,
             role: data.role || 'MEMBER',
+            permissions: data.permissions || {},
             tenantId: tenantId
+        },
+        select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            permissions: true
         }
     });
   }
@@ -57,6 +65,7 @@ export class UsersService {
             name: true,
             email: true,
             role: true,
+            permissions: true,
             createdAt: true,
             updatedAt: true
         }
@@ -99,7 +108,8 @@ export class UsersService {
             id: true,
             name: true,
             email: true,
-            role: true
+            role: true,
+            permissions: true
         }
     });
   }

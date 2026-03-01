@@ -86,6 +86,7 @@ model User {
   email       String   @unique
   password    String
   role        String   // OWNER, ADMIN, MEMBER
+  permissions Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
