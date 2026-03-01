@@ -26,7 +26,9 @@ import {
   CheckSquare,
   VolumeX,
   ChevronDown,
-  Clock
+  Clock,
+  Calendar,
+  Layout
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Badge } from '../../components/ui/Badge';
@@ -73,6 +75,8 @@ interface Ticket {
   _count?: { messages: number };
   waitingReply?: boolean;
   lastMessageAt?: string;
+  lastMessageAt?: string;
+  scheduledTo?: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -135,7 +139,7 @@ export function AtendimentoPage() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState<'aberto' | 'atendendo' | 'fechado'>('aberto');
+  const [filterCategory, setFilterCategory] = useState<'aberto' | 'atendendo' | 'agenda' | 'fechado' | 'todos'>('aberto');
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
   // Data States
@@ -174,6 +178,19 @@ export function AtendimentoPage() {
                           (t.contact?.phone || '').includes(searchTerm);
     
     if (!matchesSearch) return false;
+
+    // Se "todos", retorna tudo (menos os search que já foram aplicados)
+    if (filterCategory === 'todos') return true;
+
+    // Se estiver agendado para o futuro
+    const isScheduled = !!t.scheduledTo && new Date(t.scheduledTo) > new Date();
+
+    if (filterCategory === 'agenda') {
+        return isScheduled; // Só aceita os do futuro
+    } else {
+        // Se a aba não for agenda, obrigatoriamente data não chegou ou é nula
+        if (isScheduled) return false;
+    }
 
     if (filterCategory === 'atendendo') return t.status === 'IN_PROGRESS';
     if (filterCategory === 'aberto') return t.status === 'WAITING' || t.status === 'OPEN';
@@ -316,6 +333,16 @@ export function AtendimentoPage() {
     }
   };
 
+  const handleUpdateSchedule = async (ticketId: string, scheduledTo: string | null) => {
+    try {
+      await api.patch(`/tickets/${ticketId}`, { scheduledTo });
+      toast.success(scheduledTo ? 'Atendimento Agendado' : 'Agendamento removido');
+      fetchTickets();
+    } catch {
+      toast.error('Erro ao agendar atendimento');
+    }
+  };
+
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]);
   };
@@ -414,19 +441,21 @@ export function AtendimentoPage() {
             </div>
         </div>
 
-        <div className="flex border-b border-slate-700">
-           {(['aberto', 'atendendo', 'fechado'] as const).map(cat => (
+        <div className="flex border-b border-slate-700 overflow-x-auto custom-scrollbar">
+           {(['aberto', 'atendendo', 'agenda', 'fechado', 'todos'] as const).map(cat => (
              <button 
                 key={cat} onClick={() => setFilterCategory(cat)}
                 className={clsx(
-                  "flex-1 py-3 text-xs font-bold transition-all relative",
+                  "flex-1 min-w-[80px] py-3 text-xs font-bold transition-all relative shrink-0",
                   filterCategory === cat ? "text-indigo-400" : "text-slate-500 hover:text-slate-300"
                 )}
              >
-               <div className="flex items-center justify-center gap-2">
+               <div className="flex items-center justify-center gap-1.5">
                  {cat === 'aberto' && <Clock size={14} />}
                  {cat === 'atendendo' && <MessageSquare size={14} />}
+                 {cat === 'agenda' && <Calendar size={14} />}
                  {cat === 'fechado' && <CheckSquare size={14} />}
+                 {cat === 'todos' && <Layout size={14} />}
                  <span className="capitalize">{cat}</span>
                </div>
                {filterCategory === cat && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500" />}
@@ -506,6 +535,27 @@ export function AtendimentoPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
+                       {/* Input de Data nativo para agendar */}
+                       <div className="flex items-center mr-2 relative group/agenda">
+                         <div className="flex bg-slate-800 rounded-lg overflow-hidden border border-slate-700 hover:border-indigo-500 transition-colors">
+                           <div className="bg-slate-700 p-2 flex items-center justify-center text-slate-300">
+                             <Calendar size={14} />
+                           </div>
+                           <input 
+                              type="datetime-local" 
+                              title="Agendar Retorno / Lembrete"
+                              value={selectedTicket.scheduledTo ? new Date(selectedTicket.scheduledTo).toISOString().slice(0, 16) : ''} 
+                              onChange={(e) => handleUpdateSchedule(selectedTicket.id, e.target.value ? new Date(e.target.value).toISOString() : null)}
+                              className="bg-transparent text-xs text-white p-1.5 outline-none custom-calendar-input"
+                           />
+                           {selectedTicket.scheduledTo && (
+                             <button onClick={() => handleUpdateSchedule(selectedTicket.id, null)} className="p-1 px-2 text-slate-400 hover:text-red-400 bg-slate-800 transition">
+                               <X size={12} />
+                             </button>
+                           )}
+                         </div>
+                       </div>
+
                        {(selectedTicket.status === 'WAITING' || selectedTicket.status === 'OPEN') && (
                            <button onClick={() => handleUpdateStatus(selectedTicket.id, 'IN_PROGRESS')} className="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-indigo-700 shadow-lg">Atender</button>
                        )}

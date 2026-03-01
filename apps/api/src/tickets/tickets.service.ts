@@ -184,13 +184,13 @@ export class TicketsService {
     return message;
   }
 
-  async updateStatus(id: string, status: string, tenantId: string) {
+  async updateTicket(id: string, updateData: any, tenantId: string) {
       // Validate ticket
       await this.findOne(id, tenantId);
 
       const updated = await this.prisma.ticket.update({
           where: { id },
-          data: { status },
+          data: updateData,
           include: {
             contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
             _count: { select: { messages: true } },

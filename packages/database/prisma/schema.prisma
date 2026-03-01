@@ -840,6 +840,7 @@ model Ticket {
   isPinned    Boolean  @default(false)
   waitingReply Boolean @default(false)
   lastMessageAt DateTime? @default(now())
+  scheduledTo DateTime?
   
   messages    TicketMessage[]
   

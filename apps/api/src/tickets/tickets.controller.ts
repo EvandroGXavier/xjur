@@ -59,7 +59,13 @@ export class TicketsController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body('status') status: string, @CurrentUser() user: CurrentUserData) {
     if (!user || !user.tenantId) throw new Error('User context invalid');
-    return this.ticketsService.updateStatus(id, status, user.tenantId);
+    return this.ticketsService.updateTicket(id, { status }, user.tenantId);
+  }
+
+  @Patch(':id')
+  updateTicket(@Param('id') id: string, @Body() data: any, @CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.ticketsService.updateTicket(id, data, user.tenantId);
   }
 
   // Dev only: Simulate incoming message
