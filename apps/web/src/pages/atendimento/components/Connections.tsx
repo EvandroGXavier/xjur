@@ -33,15 +33,13 @@ export function Connections() {
     
     // Form State
     const [formName, setFormName] = useState('');
-    const [formType, setFormType] = useState<'WHATSAPP' | 'INSTAGRAM' | 'EMAIL'>('WHATSAPP');
+    const [formType, setFormType] = useState<'WHATSAPP' | 'INSTAGRAM' | 'EMAIL' | 'TELEGRAM'>('WHATSAPP');
     const [emailConfig, setEmailConfig] = useState({ email: '', password: '' });
     const [waConfig, setWaConfig] = useState({ 
-        blockGroups: true, 
-        groupWhitelist: [] as string[],
-        evolutionUrl: '',
-        evolutionApiKey: ''
+        evolutionChannel: 'baileys', 
+        evolutionToken: '',
+        evolutionNumber: ''
     });
-    const [newGroupJid, setNewGroupJid] = useState('');
 
     const fetchConnections = useCallback(async () => {
         try {
@@ -154,7 +152,11 @@ export function Connections() {
         try {
             const payload: any = { name: formName, type: formType };
             if (formType === 'WHATSAPP') {
-                payload.config = waConfig;
+                payload.config = {
+                    ...waConfig,
+                    blockGroups: true,
+                    groupWhitelist: []
+                };
             }
             if (formType === 'EMAIL') {
                 payload.config = emailConfig;
@@ -177,7 +179,10 @@ export function Connections() {
         try {
             const payload: any = { name: formName, type: formType };
             if (formType === 'WHATSAPP') {
-                payload.config = waConfig;
+                payload.config = {
+                    ...editingConnection.config,
+                    ...waConfig
+                };
             }
             if (formType === 'EMAIL') {
                 payload.config = emailConfig;
@@ -240,13 +245,12 @@ export function Connections() {
     const handleEdit = (conn: Connection) => {
         setEditingConnection(conn);
         setFormName(conn.name);
-        setFormType(conn.type);
+        setFormType(conn.type as any);
         setEmailConfig(conn.config?.email ? { email: conn.config.email, password: '' } : { email: '', password: '' });
         setWaConfig({ 
-            blockGroups: conn.config?.blockGroups ?? true, 
-            groupWhitelist: conn.config?.groupWhitelist ?? [],
-            evolutionUrl: conn.config?.evolutionUrl ?? '',
-            evolutionApiKey: conn.config?.evolutionApiKey ?? ''
+            evolutionChannel: conn.config?.evolutionChannel ?? 'baileys',
+            evolutionToken: conn.config?.evolutionToken ?? '',
+            evolutionNumber: conn.config?.evolutionNumber ?? ''
         });
         setIsCreating(false);
     };
@@ -258,12 +262,10 @@ export function Connections() {
         setFormType('WHATSAPP');
         setEmailConfig({ email: '', password: '' });
         setWaConfig({ 
-            blockGroups: true, 
-            groupWhitelist: [],
-            evolutionUrl: '',
-            evolutionApiKey: ''
+            evolutionChannel: 'baileys',
+            evolutionToken: '',
+            evolutionNumber: ''
         });
-        setNewGroupJid('');
     };
 
     const getIcon = (type: string) => {
@@ -326,109 +328,63 @@ export function Connections() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1">Nome (Identificação)</label>
-                            <input 
-                                value={formName}
-                                onChange={e => setFormName(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition"
-                                placeholder="Ex: WhatsApp Comercial"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1">Tipo de Canal</label>
+                            <label className="block text-xs font-medium text-slate-400 mb-1">Tipo de Canal <span className="text-red-500">*</span></label>
                             <select 
                                 value={formType}
                                 onChange={(e: any) => setFormType(e.target.value)}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition"
                                 disabled={!!editingConnection}
                             >
-                                <option value="WHATSAPP">WhatsApp Business</option>
-                                <option value="INSTAGRAM">Instagram Direct</option>
-                                <option value="EMAIL">Email (IMAP/SMTP)</option>
+                                <option value="WHATSAPP">WhatsApp</option>
+                                <option value="EMAIL">Email</option>
+                                <option value="INSTAGRAM">Instagram</option>
+                                <option value="TELEGRAM">Telegram</option>
                             </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1">Nome da Conexão <span className="text-red-500">*</span></label>
+                            <input 
+                                value={formName}
+                                onChange={e => setFormName(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition"
+                                placeholder="Ex: Financeiro WA"
+                            />
                         </div>
                     </div>
 
                     {formType === 'WHATSAPP' && (
-                        <div className="mb-4 p-4 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-4">
-                            <label className="flex items-center gap-3 cursor-pointer group/check">
-                                <div className="relative">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={!waConfig.blockGroups} 
-                                        onChange={e => setWaConfig({ ...waConfig, blockGroups: !e.target.checked })}
-                                        className="sr-only peer"
-                                    />
-                                    <div className="w-10 h-5 bg-slate-800 rounded-full peer peer-checked:bg-emerald-600 transition-colors"></div>
-                                    <div className="absolute top-1 left-1 w-3 h-3 bg-slate-400 rounded-full peer-checked:translate-x-5 peer-checked:bg-white transition-all"></div>
-                                </div>
+                        <div className="mb-4">
+                            <div className="space-y-4">
                                 <div>
-                                    <span className="text-sm font-medium text-slate-200">Receber mensagens de Grupos</span>
-                                    <p className="text-[11px] text-slate-500">Se desativado, apenas grupos na lista abaixo serão processados.</p>
-                                </div>
-                            </label>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Evolution API URL</label>
-                                    <input 
-                                        value={waConfig.evolutionUrl}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionUrl: e.target.value })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white placeholder:text-slate-600"
-                                        placeholder="Ex: http://vps-ip:8080 (Opcional)"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1">Evolution API Key</label>
-                                    <input 
-                                        type="password"
-                                        value={waConfig.evolutionApiKey}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionApiKey: e.target.value })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white placeholder:text-slate-600"
-                                        placeholder="API Key da instância (Opcional)"
-                                    />
-                                </div>
-                                <p className="text-[10px] text-slate-500 md:col-span-2 italic">
-                                    * Deixe em branco para usar a Evolution API local padrão.
-                                </p>
-                            </div>
-
-                            <div className="border-t border-slate-800 pt-3">
-                                <label className="block text-xs font-medium text-slate-400 mb-2">Whitelist de Grupos (JIDs permitidos)</label>
-                                <div className="flex gap-2 mb-3">
-                                    <input 
-                                        value={newGroupJid}
-                                        onChange={e => setNewGroupJid(e.target.value)}
-                                        placeholder="ex: 123456789@g.us"
-                                        className="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white"
-                                    />
-                                    <button 
-                                        onClick={() => {
-                                            if (newGroupJid && !waConfig.groupWhitelist.includes(newGroupJid)) {
-                                                setWaConfig({ ...waConfig, groupWhitelist: [...waConfig.groupWhitelist, newGroupJid] });
-                                                setNewGroupJid('');
-                                            }
-                                        }}
-                                        className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1 rounded text-sm transition"
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">Channel</label>
+                                    <select 
+                                        value={waConfig.evolutionChannel}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionChannel: e.target.value })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
                                     >
-                                        Adicionar
-                                    </button>
+                                        <option value="baileys">Baileys</option>
+                                        <option value="wo-cloud">API Oficial (Cloud)</option>
+                                    </select>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
-                                    {waConfig.groupWhitelist.map(jid => (
-                                        <div key={jid} className="bg-slate-800 border border-slate-700 px-2 py-1 rounded flex items-center gap-2 group/tag">
-                                            <span className="text-xs text-slate-300">{jid}</span>
-                                            <button 
-                                                onClick={() => setWaConfig({ ...waConfig, groupWhitelist: waConfig.groupWhitelist.filter(x => x !== jid) })}
-                                                className="text-slate-500 hover:text-red-400"
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {waConfig.groupWhitelist.length === 0 && (
-                                        <span className="text-[11px] text-slate-600 italic">Nenhum grupo na lista.</span>
-                                    )}
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">Token <span className="text-red-500">*</span></label>
+                                    <input 
+                                        type="text"
+                                        value={waConfig.evolutionToken}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionToken: e.target.value })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
+                                        placeholder="Ex: A1291CA0CCD6..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">Number</label>
+                                    <input 
+                                        type="text"
+                                        value={waConfig.evolutionNumber}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionNumber: e.target.value })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
+                                        placeholder="Ex: 5511999999999"
+                                    />
                                 </div>
                             </div>
                         </div>

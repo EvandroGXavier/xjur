@@ -5,6 +5,7 @@ export enum ConnectionType {
   WHATSAPP = 'WHATSAPP',
   INSTAGRAM = 'INSTAGRAM',
   EMAIL = 'EMAIL',
+  TELEGRAM = 'TELEGRAM',
 }
 
 export class CreateConnectionDto {
