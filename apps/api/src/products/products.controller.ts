@@ -2,6 +2,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateMovementDto } from './dto/create-movement.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
@@ -30,7 +31,8 @@ export class ProductsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateProductDto: Partial<CreateProductDto>, @CurrentUser() user: CurrentUserData) {
+  update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto, @CurrentUser() user: CurrentUserData) {
+
     if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.productsService.update(id, updateProductDto, user.tenantId);
   }

@@ -9,12 +9,14 @@ export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
   async create(createProductDto: CreateProductDto, tenantId: string) {
+    const { supplierId, ...rest } = createProductDto;
     return this.prisma.product.create({
       data: {
-        ...createProductDto,
+        ...rest,
         tenantId,
-        currentStock: createProductDto.currentStock || 0, // Default to 0 if not provided
-        minStock: createProductDto.minStock || 0,
+        supplierId: supplierId || null,
+        currentStock: rest.currentStock || 0, // Default to 0 if not provided
+        minStock: rest.minStock || 0,
       },
     });
   }
@@ -48,9 +50,13 @@ export class ProductsService {
 
   async update(id: string, updateProductDto: Partial<CreateProductDto>, tenantId: string) {
     await this.findOne(id, tenantId); // Validate existence
+    const { supplierId, ...rest } = updateProductDto;
     return this.prisma.product.update({
       where: { id },
-      data: updateProductDto,
+      data: {
+        ...rest,
+        ...(supplierId !== undefined ? { supplierId: supplierId || null } : {})
+      },
     });
   }
 

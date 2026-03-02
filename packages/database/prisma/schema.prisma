@@ -141,6 +141,7 @@ model Contact {
   tickets                   Ticket[]
   processParties            ProcessParty[]
   financialParties          FinancialParty[]
+  products                  Product[]
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -788,7 +789,7 @@ model Product {
   isActive     Boolean  @default(true)
 
   supplierId String?
-  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  supplier   Contact? @relation(fields: [supplierId], references: [id])
 
   movements     InventoryMovement[]
   proposalItems ProposalItem[]
@@ -806,8 +807,6 @@ model Supplier {
   document String? // CNPJ
   email    String?
   phone    String?
-
-  products Product[]
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
@@ -921,20 +920,27 @@ model Connection {
 
 // 9. CICLO DE VENDA: ORÇAMENTOS E FISCAL
 model Proposal {
-  id          String         @id @default(uuid())
-  tenantId    String
-  contactId   String
-  code        Int            @default(autoincrement())
-  status      String // DRAFT, SENT, APPROVED, REJECTED, INVOICED
-  totalAmount Decimal        @db.Decimal(15, 2)
-  notes       String?        @db.Text
-  validUntil  DateTime?
-  items       ProposalItem[]
-  invoice     Invoice?
-  contact     Contact        @relation(fields: [contactId], references: [id])
-  tenant      Tenant         @relation(fields: [tenantId], references: [id])
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id               String         @id @default(uuid())
+  tenantId         String
+  contactId        String
+  code             Int            @default(autoincrement())
+  status           String // DRAFT, SENT, APPROVED, REJECTED, INVOICED
+  totalAmount      Decimal        @db.Decimal(15, 2)
+  notes            String?        @db.Text
+  
+  // Custom fields for Legacy Layout match
+  validUntil       DateTime?
+  deliveryDate     DateTime?
+  salesperson      String?
+  special          Boolean        @default(false)
+  paymentCondition String?
+
+  items            ProposalItem[]
+  invoice          Invoice?
+  contact          Contact        @relation(fields: [contactId], references: [id])
+  tenant           Tenant         @relation(fields: [tenantId], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   @@map("proposals")
 }

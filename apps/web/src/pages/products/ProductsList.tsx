@@ -1,15 +1,22 @@
 
 import { useState, useEffect, useMemo } from 'react';
-import { Package, Plus, Search, Filter } from 'lucide-react';
+import { Package, Plus, Search, Filter, Edit2, Trash2, Box, Wrench } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { Badge } from '../../components/ui/Badge';
+import { ProductModal } from './ProductModal';
 
 interface Product {
   id: string;
   name: string;
   description?: string;
+  type: 'PRODUCT' | 'SERVICE';
+  sku?: string;
+  barcode?: string;
+  unit: string;
+  ncm?: string;
+  cest?: string;
   currentStock: number;
   minStock: number;
   sellPrice?: number;
@@ -24,6 +31,9 @@ export function ProductsList() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Product | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     fetchProducts();
@@ -36,9 +46,27 @@ export function ProductsList() {
         setProducts(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
         console.error('Error fetching products:', error);
-        toast.error('Erro ao carregar estoque');
+        toast.error('Erro ao carregar catálogo');
     } finally {
         setLoading(false);
+    }
+  };
+
+  const handleEdit = (product: Product) => {
+    setSelectedProduct(product);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este item?')) return;
+    
+    try {
+      await api.delete(`/products/${id}`);
+      toast.success('Item excluído com sucesso');
+      fetchProducts();
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      toast.error('Erro ao excluir item');
     }
   };
 
@@ -49,6 +77,7 @@ export function ProductsList() {
           sortableItems = sortableItems.filter(p => 
               (p.name && p.name.toLowerCase().includes(lowerTerm)) ||
               (p.description && p.description.toLowerCase().includes(lowerTerm)) ||
+              (p.sku && p.sku.toLowerCase().includes(lowerTerm)) ||
               (p.supplier?.name && p.supplier.name.toLowerCase().includes(lowerTerm))
           );
       }
@@ -78,12 +107,18 @@ export function ProductsList() {
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
              <Package className="text-indigo-500" size={32} />
-             Estoque e Produtos
+             Catálogo e Estoque
           </h1>
-          <p className="text-slate-400 mt-1">Gerencie seu inventário de produtos e materiais.</p>
+          <p className="text-slate-400 mt-1">Gerencie seus produtos, serviços e níveis de inventário.</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap">
-            <Plus size={20} /> Novo Produto
+        <button 
+          onClick={() => {
+            setSelectedProduct(null);
+            setIsModalOpen(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap"
+        >
+            <Plus size={20} /> Novo Item
         </button>
       </div>
 
@@ -94,7 +129,7 @@ export function ProductsList() {
                 type="text" 
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Buscar produto ou fornecedor..." 
+                placeholder="Buscar por nome, SKU ou fornecedor..." 
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500 placeholder-slate-500 transition-all" 
               />
           </div>
@@ -113,13 +148,30 @@ export function ProductsList() {
             isLoading={loading}
             columns={[
                 {
+                    key: 'type',
+                    label: 'Tipo',
+                    render: (p) => (
+                      <div className="flex items-center justify-center">
+                        {p.type === 'SERVICE' ? (
+                          <div className="p-1.5 bg-blue-500/10 text-blue-500 rounded-md" title="Serviço">
+                            <Wrench size={16} />
+                          </div>
+                        ) : (
+                          <div className="p-1.5 bg-indigo-500/10 text-indigo-500 rounded-md" title="Produto">
+                            <Box size={16} />
+                          </div>
+                        )}
+                      </div>
+                    )
+                },
+                {
                     key: 'name',
-                    label: 'Produto',
+                    label: 'Item',
                     sortable: true,
                     render: (p) => (
                         <div className="flex flex-col">
                             <span className="font-medium text-white">{p.name}</span>
-                            <span className="text-xs text-slate-500">{p.description || '-'}</span>
+                            <span className="text-xs text-slate-500">{p.sku ? `SKU: ${p.sku}` : (p.description || '-')}</span>
                         </div>
                     )
                 },
@@ -128,25 +180,56 @@ export function ProductsList() {
                     label: 'Estoque',
                     sortable: true,
                     render: (p) => (
+                      p.type === 'PRODUCT' ? (
                         <Badge variant={getStockStatus(p.currentStock, p.minStock)}>
-                            {p.currentStock} un
+                            {p.currentStock} {p.unit || 'un'}
                         </Badge>
+                      ) : (
+                        <span className="text-slate-500 italic text-sm">N/A</span>
+                      )
                     )
                 },
                 {
                     key: 'sellPrice',
-                    label: 'Preço Venda',
+                    label: 'P. Venda',
                     sortable: true,
                     render: (p) => <span className="font-mono text-slate-300">{formatCurrency(p.sellPrice)}</span>
                 },
                 {
                     key: 'supplier',
                     label: 'Fornecedor',
-                    render: (p) => <span className="text-slate-400">{p.supplier?.name || '-'}</span>
+                    render: (p) => <span className="text-slate-400 truncate max-w-[150px] inline-block">{p.supplier?.name || '-'}</span>
+                },
+                {
+                  key: 'actions',
+                  label: '',
+                  render: (p) => (
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => handleEdit(p)}
+                        className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded transition-colors"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(p.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )
                 }
             ]}
           />
       </div>
+
+      <ProductModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={fetchProducts}
+        product={selectedProduct}
+      />
     </div>
   );
 }
