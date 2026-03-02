@@ -19,6 +19,9 @@ import { ConnectionsModule } from './connections/connections.module';
 import { TagsModule } from './tags/tags.module';
 import { EvolutionModule } from './evolution/evolution.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { FiscalModule } from './fiscal/fiscal.module';
+import { StockModule } from './stock/stock.module';
+import { ProposalsModule } from './proposals/proposals.module';
 
 @Module({
   imports: [
@@ -38,7 +41,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     CommunicationsModule, // Webhook de entrada
     ConnectionsModule, // Gestão de Conexões (WhatsApp, Instagram, Email)
     TagsModule,      // Etiquetas Transversais
-    EvolutionModule, // Integração Evolution API
+    EvolutionModule, FiscalModule, StockModule, ProposalsModule, // Integração Evolution API
   ],
   controllers: [AppController],
   providers: [

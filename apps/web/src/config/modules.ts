@@ -20,7 +20,18 @@ export const SYSTEM_MODULES = [
   { id: 'processes', label: 'Processos', icon: Scale, to: '/processes' },
   { id: 'agenda', label: 'Agenda', icon: Calendar, to: '/agenda' },
   { id: 'financial', label: 'Financeiro', icon: DollarSign, to: '/financial' },
-  { id: 'products', label: 'Produtos', icon: Package, to: '/products' },
+  { 
+    id: 'inventory', 
+    label: 'Estoque', 
+    icon: Package, 
+    to: '/inventory',
+    subItems: [
+      { id: 'inventory-dashboard', label: 'Dashboard', to: '/inventory/dashboard' },
+      { id: 'inventory-catalog', label: 'Catálogo', to: '/inventory/catalog' },
+      { id: 'inventory-proposals', label: 'Orçamentos', to: '/inventory/proposals' },
+      { id: 'inventory-fiscal', label: 'Fiscal', to: '/inventory/fiscal' },
+    ]
+  },
   { id: 'contacts', label: 'Contatos', icon: Users, to: '/contacts' },
   { id: 'documents', label: 'Biblioteca', icon: FileText, to: '/documents' },
   { id: 'users', label: 'Equipe', icon: ShieldCheck, to: '/users' },

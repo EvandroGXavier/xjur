@@ -1,7 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { SYSTEM_MODULES } from '../config/modules';
 import { clsx } from 'clsx';
-import { X } from 'lucide-react';
+import { X, ChevronDown, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -10,6 +11,13 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
   const location = useLocation();
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+
+  const toggleMenu = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   return (
     <aside className={clsx(
       "w-72 lg:w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out",
@@ -39,32 +47,68 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
              const user = JSON.parse(userStr);
              if (user.role === 'OWNER') return true;
              
-             // Por padrão, se não tem a permissão configurada, libera (ou oculta, escolhemos liberar)
-             // Como a instrução diz "QUE ELE NÃO ACESSA, ELE NEM VERÁ", e "QUANDO CRIAR UM NOVO MODULO ELE JA É CRIADO AUTOMATICAMENTE"
-             // A gente pode inferir que acesso padrão é liberado a não ser que revogado explicitamente, ou vice-versa.
-             // Para garantir que coisas novas apareçam automaticamente: o padrão será true, a menos que permission.access === false.
              const permissions = user.permissions || {};
              if (permissions[item.id] && permissions[item.id].access === false) return false;
              return true;
            } catch {
              return false;
            }
-        }).map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            onClick={closeSidebar}
-            className={({ isActive }) => clsx(
-              'flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg text-sm font-medium transition-all duration-200',
-              isActive 
-                ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-600/20' 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            )}
-          >
-            <item.icon size={20} className={clsx(!location.pathname.startsWith(item.to) && "opacity-80")} />
-            {item.label}
-          </NavLink>
-        ))}
+        }).map((item) => {
+          const isItemActive = location.pathname.startsWith(item.to);
+          const hasSubItems = !!item.subItems && item.subItems.length > 0;
+          const isMenuOpen = openMenus[item.id] || isItemActive;
+
+          return (
+            <div key={item.to} className="flex flex-col">
+              <NavLink
+                to={item.to}
+                onClick={(e) => {
+                  if (hasSubItems) {
+                    toggleMenu(item.id, e);
+                  } else {
+                    closeSidebar();
+                  }
+                }}
+                className={({ isActive }) => clsx(
+                  'flex items-center justify-between px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg text-sm font-medium transition-all duration-200',
+                  (hasSubItems ? isItemActive : isActive)
+                    ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-600/20' 
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon size={20} className={clsx(!isItemActive && "opacity-80")} />
+                  {item.label}
+                </div>
+                {hasSubItems && (
+                  <div className="text-slate-500">
+                    {isMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </div>
+                )}
+              </NavLink>
+
+              {hasSubItems && isMenuOpen && (
+                <div className="mt-1 flex flex-col space-y-1 pl-10">
+                  {item.subItems!.map(sub => (
+                    <NavLink
+                      key={sub.to}
+                      to={sub.to}
+                      onClick={closeSidebar}
+                      className={({ isActive }) => clsx(
+                        'block px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+                        isActive 
+                          ? 'text-indigo-400 bg-indigo-600/5' 
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                      )}
+                    >
+                      {sub.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t border-slate-800">
