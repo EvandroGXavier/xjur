@@ -44,6 +44,18 @@ export class EvolutionService {
   // HTTP CLIENT
   // ==========================================
 
+  private formatNumber(number: string): string {
+    // Remove non-digit characters
+    let cleaned = number.replace(/\D/g, '');
+    
+    // If it's a Brazilian number without country code (8 or 9 digits + DDD)
+    if (cleaned.length >= 10 && cleaned.length <= 11 && !cleaned.startsWith('55')) {
+      cleaned = '55' + cleaned;
+    }
+    
+    return cleaned;
+  }
+
   private getClient(config?: EvolutionConfig): AxiosInstance {
     const baseURL = config?.apiUrl || this.defaultApiUrl;
     const apikey = config?.apiKey || this.defaultApiKey;
@@ -237,7 +249,7 @@ export class EvolutionService {
   // MESSAGING
   // ==========================================
 
-  Text(instanceName: string, number: string, text: string, options?: any, config?: EvolutionConfig) {
+  async sendText(instanceName: string, number: string, text: string, options?: any, config?: EvolutionConfig) {
     try {
       const client = this.getClient(config);
       const formattedNumber = this.formatNumber(number);
