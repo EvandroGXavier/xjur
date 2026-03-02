@@ -35,11 +35,15 @@ export class WhatsappGateway implements OnGatewayInit {
     this.logger.log(`📶 Status ${status} emitted for connection ${connectionId}`);
   }
 
-  /**
-   * Emits connection error.
-   */
   emitConnectionError(connectionId: string, error: string) {
     this.server.emit('connection:error', { connectionId, error });
     this.logger.warn(`❌ Error emitted for connection ${connectionId}: ${error}`);
+  }
+
+  /**
+   * Emits raw events for debugging/testing
+   */
+  emitRawEvent(connectionId: string, payload: any) {
+    this.server.emit('test_event', { connectionId, payload });
   }
 }

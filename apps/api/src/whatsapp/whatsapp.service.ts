@@ -246,6 +246,13 @@ export class WhatsappService implements OnModuleInit {
     return this.logout(connectionId);
   }
 
+  /**
+   * Emite eventos crus recebidos do Webhook para a aba de testes no Front-End
+   */
+  emitRawWebhookEvent(connectionId: string, payload: any) {
+    this.whatsappGateway.emitRawEvent(connectionId, payload);
+  }
+
   async getConnectionStatus(connectionId: string) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
     const status = await this.evolutionService.getInstanceStatus(connectionId, evolutionConfig);
@@ -464,6 +471,10 @@ export class WhatsappService implements OnModuleInit {
       let phoneClean = phoneRaw.replace(/\D/g, '');
       const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
       
+      if (isGroup || fullJid.includes('@lid')) {
+          phoneClean = fullJid;
+      }
+      
       let contact: any = null;
       
       if (phoneTail) {
@@ -473,7 +484,9 @@ export class WhatsappService implements OnModuleInit {
              tenantId, 
              OR: [
                { whatsapp: { endsWith: phoneTail } },
+               { whatsapp: { contains: phoneTail } },
                { phone: { endsWith: phoneTail } },
+               { whatsapp: { equals: fullJid } },
                { whatsapp: { equals: phoneRaw } } // Literal fallback
              ]
            }
@@ -767,6 +780,10 @@ export class WhatsappService implements OnModuleInit {
               phoneClean = '55' + phoneClean;
           }
           
+          if (isGroup || remoteJid.includes('@lid')) {
+              phoneClean = remoteJid;
+          }
+
           const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
           
           let pushName = c.name || c.pushName || c.verifiedName || phoneClean;
@@ -779,7 +796,9 @@ export class WhatsappService implements OnModuleInit {
                  tenantId: connection.tenantId, 
                  OR: [
                    { whatsapp: { endsWith: phoneTail } },
+                   { whatsapp: { contains: phoneTail } },
                    { phone: { endsWith: phoneTail } },
+                   { whatsapp: { equals: remoteJid } },
                    { whatsapp: { equals: phoneRaw } }
                  ]
               }

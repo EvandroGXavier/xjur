@@ -27,6 +27,9 @@ export class EvolutionController {
     });
     this.logger.debug(`Webhook payload: ${payloadStr.length > 2000 ? payloadStr.substring(0, 2000) + '... [TRUNCATED]' : payloadStr}`);
 
+    // Emitir raw target data para o painel de testes (DEBUG)
+    this.whatsappService.emitRawWebhookEvent(instance, data);
+
     switch (event) {
       case 'qrcode.updated':
         await this.handleQrCodeUpdated(data);

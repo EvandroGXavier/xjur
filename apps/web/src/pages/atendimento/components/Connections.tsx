@@ -30,6 +30,7 @@ export function Connections() {
     const [connectingId, setConnectingId] = useState<string | null>(null);
     const [qrMap, setQrMap] = useState<Record<string, string>>({});
     const [activeTab, setActiveTab] = useState<'dashboard' | 'configurations' | 'test' | 'events' | 'integrations'>('dashboard');
+    const [testEvents, setTestEvents] = useState<any[]>([]);
     const socketRef = useRef<Socket | null>(null);
     
     // Form State
@@ -129,6 +130,10 @@ export function Connections() {
         socket.on('connection:error', (data: { connectionId: string; error: string }) => {
             toast.error(`Erro na conexão: ${data.error}`);
             setConnectingId(null);
+        });
+
+        socket.on('test_event', (data: { connectionId: string; payload: any }) => {
+            setTestEvents(prev => [{ ...data.payload, _receivedAt: new Date().toLocaleTimeString() }, ...prev].slice(0, 50));
         });
 
         socket.on('disconnect', () => {
@@ -830,50 +835,85 @@ export function Connections() {
 
                             {activeTab === 'test' && (
                                 <div className="space-y-6 animate-in fade-in h-full flex flex-col">
-                                    <div className="flex items-center gap-3">
-                                        <MessageCircle className="text-emerald-500" />
-                                        <h2 className="text-xl font-bold text-white">Interface de Testes (Simulador N8N)</h2>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <MessageCircle className="text-emerald-500" />
+                                            <h2 className="text-xl font-bold text-white">Interface de Testes e Webhooks</h2>
+                                        </div>
+                                        {testEvents.length > 0 && (
+                                            <button onClick={() => setTestEvents([])} className="text-xs text-slate-400 hover:text-white bg-slate-800 px-3 py-1 rounded">Limpar Logs</button>
+                                        )}
                                     </div>
-                                    <p className="text-sm text-slate-400 bg-emerald-500/10 text-emerald-300 p-3 border border-emerald-500/20 rounded-lg">
-                                        Utilize esta ferramenta de depuração para enviar mensagens forçadas pela instância diretamente, ignorando fluxos complexos para validar envio e conectividade do dispositivo. Eventos recebidos aparecerão nos Event Logs.
+                                    <p className="text-sm text-slate-400 bg-emerald-500/10 text-emerald-300 p-3 border border-emerald-500/20 rounded-lg shrink-0">
+                                        Utilize esta ferramenta para forçar o envio a partir da instância DR.X e receber instantaneamente (à direita) os webhooks gerados de qualquer mensagem recebida no seu celular.
                                     </p>
                                     
-                                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 mt-4 flex-1">
-                                        <div className="space-y-4 max-w-md">
-                                            <div>
-                                                <label className="block text-xs font-bold text-slate-400 mb-2">Número Alvo</label>
-                                                <input 
-                                                    id="testTargetNum"
-                                                    type="text"
-                                                    placeholder="5511999999999"
-                                                    className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-emerald-500 outline-none"
-                                                />
+                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
+                                        
+                                        {/* Painel de Envio */}
+                                        <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 flex flex-col h-full">
+                                            <h3 className="text-sm font-bold text-slate-300 mb-4 uppercase tracking-wider">📤 Enviar Mensagem</h3>
+                                            <div className="space-y-4 flex-1">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-400 mb-2">Número Alvo</label>
+                                                    <input 
+                                                        id="testTargetNum"
+                                                        type="text"
+                                                        placeholder="5511999999999"
+                                                        className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-emerald-500 outline-none"
+                                                    />
+                                                </div>
+                                                <div className="flex-1 flex flex-col">
+                                                    <label className="block text-xs font-bold text-slate-400 mb-2">Mensagem (Payload TXT)</label>
+                                                    <textarea 
+                                                        id="testTargetMsg"
+                                                        placeholder="Olá! Esta é uma mensagem de teste de diagnóstico."
+                                                        className="w-full flex-1 min-h-[150px] bg-slate-900 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-emerald-500 outline-none resize-none"
+                                                    />
+                                                </div>
+                                                <button 
+                                                    onClick={() => {
+                                                        const num = (document.getElementById('testTargetNum') as HTMLInputElement).value;
+                                                        const text = (document.getElementById('testTargetMsg') as HTMLTextAreaElement).value;
+                                                        if(!num || !text) return toast.error('Preencha os dados!');
+                                                        toast.promise(api.post(`/whatsapp/${settingsConnection.id}/test-message`, { text, to: num }), {
+                                                            loading: 'Disparando evento via Evolution...',
+                                                            success: 'Enviado! (Verifique o log de webhook)',
+                                                            error: 'Falha no repasse'
+                                                        });
+                                                    }}
+                                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 mt-auto"
+                                                >
+                                                    <Zap size={16} /> Disparar Teste
+                                                </button>
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-slate-400 mb-2">Mensagem (Payload TXT)</label>
-                                                <textarea 
-                                                    id="testTargetMsg"
-                                                    rows={4}
-                                                    placeholder="Olá! Esta é uma mensagem de teste de diagnóstico da plataforma."
-                                                    className="w-full bg-slate-900 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-emerald-500 outline-none resize-none"
-                                                />
-                                            </div>
-                                            <button 
-                                                onClick={() => {
-                                                    const num = (document.getElementById('testTargetNum') as HTMLInputElement).value;
-                                                    const text = (document.getElementById('testTargetMsg') as HTMLTextAreaElement).value;
-                                                    if(!num || !text) return toast.error('Preencha os dados!');
-                                                    toast.promise(api.post(`/whatsapp/${settingsConnection.id}/test-message`, { text, to: num }), {
-                                                        loading: 'Disparando evento via Evolution...',
-                                                        success: 'Pushed via broker (check seu aparelho)!',
-                                                        error: 'Falha grave no repasse da msg.'
-                                                    });
-                                                }}
-                                                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2"
-                                            >
-                                                < Zap size={16} /> Disparar Teste
-                                            </button>
                                         </div>
+
+                                        {/* Painel de Recepção (Log) */}
+                                        <div className="bg-slate-950 border border-slate-800 rounded-xl p-0 flex flex-col h-full overflow-hidden">
+                                            <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">📥 Webhoook Listener</h3>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-[#0d1117] font-mono text-[11px] text-emerald-400 leading-relaxed space-y-4">
+                                                {testEvents.length === 0 ? (
+                                                    <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-50">
+                                                        <Wifi size={32} className="mb-2" />
+                                                        <p>Aguardando eventos...</p>
+                                                    </div>
+                                                ) : (
+                                                    testEvents.map((evt, idx) => (
+                                                        <div key={idx} className="border-l-2 border-emerald-500/50 pl-3">
+                                                            <div className="text-slate-500 mb-1">[{evt._receivedAt}] Event: {evt.event}</div>
+                                                            <pre className="whitespace-pre-wrap break-all pl-2 text-slate-300">
+                                                                {JSON.stringify(evt, null, 2)}
+                                                            </pre>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+
                                     </div>
                                 </div>
                             )}

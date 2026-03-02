@@ -350,6 +350,8 @@ export class TicketsService {
 
         let externalId: string | undefined;
 
+        this.logger.log(`Attempting to send to WhatsApp via connection ${connection.id} to phone ${phone}`);
+
         if (message.contentType === 'TEXT') {
             externalId = await this.whatsappService.sendText(connection.id, phone, message.content);
         } else {
@@ -368,10 +370,19 @@ export class TicketsService {
             );
         }
 
+        this.logger.log(`WhatsApp API responded with externalId: ${typeof externalId} - ${externalId}`);
+
         if (externalId && typeof externalId === 'string') {
             await this.prisma.ticketMessage.update({
                 where: { id: message.id },
                 data: { externalId, status: 'SENT' }
+            });
+            this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
+        } else {
+            this.logger.warn(`Message sent but no valid externalId returned. Setting status to SENT anyway.`);
+            await this.prisma.ticketMessage.update({
+                where: { id: message.id },
+                data: { status: 'SENT' }
             });
             this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
         }

@@ -46,6 +46,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   // Parse reactions if string
   const reactions = typeof msg.reactions === 'string' ? JSON.parse(msg.reactions) : (msg.reactions || []);
 
+  const userStr = localStorage.getItem('user');
+  const userObj = userStr ? JSON.parse(userStr) : null;
+  const canDelete = userObj?.role === 'OWNER' || userObj?.role === 'ADMIN';
+
   return (
     <div className={clsx("flex gap-3 mb-4", isMe ? "justify-end" : "justify-start items-end animate-in slide-in-from-left-2")}>
       {!isMe && (
@@ -68,10 +72,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         
         {/* Camada de Ações Rápidas (Diferencial DR.X) */}
         {!isSystem && (
-          <div className={clsx(
-            "absolute -top-8 flex gap-1 opacity-0 group-hover:opacity-100 transition-all z-20",
-            isMe ? "right-0" : "left-0"
-          )}>
+           <div className={clsx(
+             "absolute -top-8 flex gap-1 opacity-0 group-hover:opacity-100 transition-all z-20",
+             isMe ? "right-0" : "left-0"
+           )}>
             {onLinkToProcess && (
                 <button 
                   onClick={() => onLinkToProcess(msg)}
@@ -81,7 +85,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <Gavel size={12} />
                 </button>
             )}
-            {isMe && (
+            {canDelete && (
                 <button 
                   onClick={() => onDelete(msg.id)}
                   className="bg-red-500 text-white rounded-full p-1.5 shadow-lg hover:bg-red-600 transition-transform hover:scale-110"
