@@ -11,6 +11,20 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 export class TicketsService {
   private readonly logger = new Logger(TicketsService.name);
 
+  // Helper to format phone numbers for WhatsApp/Evolution
+  private formatNumber(number: string): string {
+    // Keep group JIDs intact
+    if (number.includes('@g.us')) return number;
+    // Strip any suffix after '@' or ':'
+    const base = number.split('@')[0].split(':')[0];
+    const cleaned = base.replace(/\D/g, '');
+    if (cleaned.startsWith('55')) return cleaned;
+    if (cleaned.length >= 10 && cleaned.length <= 11) {
+      return '55' + cleaned;
+    }
+    return cleaned;
+  }
+
   constructor(
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
@@ -203,6 +217,23 @@ export class TicketsService {
       return updated;
   }
 
+  async remove(id: string, tenantId: string) {
+      await this.findOne(id, tenantId); // validate existence
+      
+      // Delete will cascade to messages automatically thanks to Prisma `onDelete: Cascade`
+      await this.prisma.ticket.delete({
+          where: { id }
+      });
+
+      // Emita um evento para avisar ao front-end que este ticket foi apagado,
+      // Se necessário, você pode usar um evento similar a `ticketUpdated` mas dizendo q foi deletado,
+      // ou apenas omitir que o front-end via Socket poderá não achar. 
+      // Por enquanto, faremos um fallback com status error ou evento custom.
+      // this.ticketsGateway.emitTicketDeleted(tenantId, id); // opcional se houver
+
+      return { success: true };
+  }
+
   // Helper for simulation: Create a fake incoming message from customer
   async simulateIncomingMessage(id: string, content: string, tenantId: string) {
       const ticket = await this.findOne(id, tenantId);
@@ -323,8 +354,8 @@ export class TicketsService {
   // SHARED SENDING LOGIC (For immediate and scheduled)
   // ==========================================
   private async sendToWhatsApp(tenantId: string, ticket: any, message: any, file?: any) {
-    const phone = ticket.contact?.whatsapp || ticket.contact?.phone;
-    if (!phone) {
+    const rawPhone = ticket.contact?.whatsapp || ticket.contact?.phone;
+    if (!rawPhone) {
         this.ticketsGateway.emitTicketError(tenantId, {
             ticketId: ticket.id,
             message: 'Contato sem telefone/WhatsApp cadastrado.',
@@ -332,6 +363,11 @@ export class TicketsService {
         });
         return;
     }
+    // Strip possible LID or device suffixes (e.g., ":89@lid") and format number
+    const basePhone = rawPhone.split('@')[0].split(':')[0];
+    // Keep group JIDs intact
+    const formattedPhone = rawPhone.includes('@g.us') ? rawPhone : this.formatNumber(basePhone);
+
 
     try {
         const connection = await this.prisma.connection.findFirst({
@@ -350,10 +386,10 @@ export class TicketsService {
 
         let externalId: string | undefined;
 
-        this.logger.log(`Attempting to send to WhatsApp via connection ${connection.id} to phone ${phone}`);
+        this.logger.log(`Attempting to send to WhatsApp via connection ${connection.id} to phone ${formattedPhone}`);
 
         if (message.contentType === 'TEXT') {
-            externalId = await this.whatsappService.sendText(connection.id, phone, message.content);
+            externalId = await this.whatsappService.sendText(connection.id, formattedPhone, message.content);
         } else {
             let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document';
             if (message.contentType === 'IMAGE') mediaType = 'image';
@@ -361,7 +397,7 @@ export class TicketsService {
             // Simple mapping for existing paths
             externalId = await this.whatsappService.sendMedia(
                 connection.id, 
-                phone, 
+                formattedPhone, 
                 mediaType, 
                 message.mediaUrl, 
                 message.content || '',
@@ -386,7 +422,7 @@ export class TicketsService {
             });
             this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
         }
-        this.logger.log(`✅ WhatsApp message sent to ${phone}`);
+        this.logger.log(`✅ WhatsApp message sent to ${formattedPhone}`);
     } catch (error) {
         this.logger.error(`❌ WhatsApp Send Error: ${error.message}`);
         

@@ -1,13 +1,23 @@
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   FileText, 
   Trash2, 
   CheckCheck,
   User,
-  Gavel
+  Gavel,
+  ChevronDown,
+  CornerUpLeft,
+  CornerUpRight,
+  Copy,
+  Edit2,
+  Info,
+  Star,
+  Plus,
+  MoreHorizontal
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { toast } from 'sonner';
 
 interface MessageBubbleProps {
   msg: any;
@@ -50,6 +60,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const userObj = userStr ? JSON.parse(userStr) : null;
   const canDelete = userObj?.role === 'OWNER' || userObj?.role === 'ADMIN';
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMenuOpen]);
+
   return (
     <div className={clsx("flex gap-3 mb-4", isMe ? "justify-end" : "justify-start items-end animate-in slide-in-from-left-2")}>
       {!isMe && (
@@ -70,31 +95,73 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         msg.id.startsWith('temp-') && "opacity-70 animate-pulse"
       )}>
         
-        {/* Camada de Ações Rápidas (Diferencial DR.X) */}
+        {/* Botão de Dropdown visível no Hover - Padrão WhatsApp */}
         {!isSystem && (
-           <div className={clsx(
-             "absolute -top-8 flex gap-1 opacity-0 group-hover:opacity-100 transition-all z-20",
-             isMe ? "right-0" : "left-0"
+            <div className="absolute top-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 hidden md:block">
+               <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-0.5 rounded-full bg-black/20 hover:bg-black/40 text-white shadow backdrop-blur-sm">
+                  <ChevronDown size={16} />
+               </button>
+            </div>
+        )}
+
+        {/* Menu Contextual (Diferencial DR.X) */}
+        {isMenuOpen && !isSystem && (
+           <div ref={menuRef} className={clsx(
+              "absolute top-8 z-30 w-[260px] bg-[#233138] border border-slate-700/50 shadow-xl rounded-xl py-1 text-sm overflow-hidden",
+              isMe ? "right-0" : "left-0"
            )}>
-            {onLinkToProcess && (
-                <button 
-                  onClick={() => onLinkToProcess(msg)}
-                  className="bg-amber-500 text-white rounded-full p-1.5 shadow-lg hover:bg-amber-600 transition-transform hover:scale-110"
-                  title="Vincular ao Processo (DR.X)"
-                >
-                  <Gavel size={12} />
+              {/* Emojis row */}
+              <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 mb-1 bg-slate-800/20">
+                 {['👍','❤️','😂','😮','😢','🙏'].map(emoji => (
+                    <button key={emoji} onClick={() => { setIsMenuOpen(false); toast.info('Reação registrada (em breve)') }} className="text-xl hover:scale-125 transition-transform">{emoji}</button>
+                 ))}
+                 <button onClick={() => { setIsMenuOpen(false); toast.info('Mais reações (em breve)') }} className="text-slate-400 hover:text-white px-1"><Plus size={18}/></button>
+              </div>
+
+              <button onClick={() => { setIsMenuOpen(false); toast.info('Responder (em breve)') }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn">
+                 <span>Responder</span> <CornerUpLeft size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+              <button onClick={() => { setIsMenuOpen(false); toast.info('Encaminhar (em breve)') }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn">
+                 <span>Encaminhar</span> <CornerUpRight size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+              <button onClick={() => { 
+                  navigator.clipboard.writeText(msg.content || ''); 
+                  toast.success('Mensagem copiada'); 
+                  setIsMenuOpen(false); 
+              }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn">
+                 <span>Copiar</span> <Copy size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+              <button onClick={() => { setIsMenuOpen(false); toast.info('Editar (em breve)') }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn">
+                 <span>Editar</span> <Edit2 size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+
+              <button onClick={() => { setIsMenuOpen(false); toast.info('Adicionar às notas (em breve)') }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn border-t border-slate-700/50 mt-1 pt-2">
+                 <span>Adicionar texto às notas</span> <FileText size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+              
+              {onLinkToProcess && (
+                <button onClick={() => { setIsMenuOpen(false); onLinkToProcess(msg) }} className="w-full text-left px-4 py-2.5 hover:bg-amber-500/10 text-amber-500 flex items-center justify-between group/btn">
+                   <span>Vincular ao Processo (DR.X)</span> <Gavel size={16} /> 
                 </button>
-            )}
-            {canDelete && (
-                <button 
-                  onClick={() => onDelete(msg.id)}
-                  className="bg-red-500 text-white rounded-full p-1.5 shadow-lg hover:bg-red-600 transition-transform hover:scale-110"
-                  title="Apagar para todos"
-                >
-                  <Trash2 size={12} />
-                </button>
-            )}
-          </div>
+              )}
+
+              <button onClick={() => { setIsMenuOpen(false); toast.info('Dados (em breve)') }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn">
+                 <span>Dados</span> <Info size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+              <button onClick={() => { setIsMenuOpen(false); toast.info('Favoritar (em breve)') }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn">
+                 <span>Favoritar</span> <Star size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+
+              {canDelete && (
+                  <button onClick={() => { setIsMenuOpen(false); onDelete(msg.id) }} className="w-full text-left px-4 py-2.5 hover:bg-red-500/10 text-red-500 flex items-center justify-between group/btn border-t border-slate-700/50 mt-1 pt-2">
+                     <span>Apagar</span> <Trash2 size={16} /> 
+                  </button>
+              )}
+
+              <button onClick={() => { setIsMenuOpen(false); toast.info('Mais (em breve)') }} className="w-full text-left px-4 py-2.5 hover:bg-slate-700/50 text-slate-200 flex items-center justify-between group/btn border-t border-slate-700/50 mt-1 pt-2">
+                 <span>Mais...</span> <MoreHorizontal size={16} className="text-slate-400 group-hover/btn:text-white" />
+              </button>
+           </div>
         )}
 
         {/* Quoted Message */}

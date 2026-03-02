@@ -323,6 +323,18 @@ export function AtendimentoPage() {
       }
   };
 
+  const handleDeleteTicket = async (ticketId: string) => {
+      if (!window.confirm('Tem certeza que deseja APAGAR este atendimento e TODAS AS SUAS MENSAGENS? Esta ação não pode ser desfeita.')) return;
+      try {
+          await api.delete(`/tickets/${ticketId}`);
+          toast.success("Atendimento apagado com sucesso");
+          setTickets(prev => prev.filter(t => t.id !== ticketId));
+          if (selectedTicketId === ticketId) setSelectedTicketId(null);
+      } catch {
+          toast.error("Erro ao apagar atendimento");
+      }
+  };
+
   const handleUpdateStatus = async (ticketId: string, status: string) => {
     try {
       await api.patch(`/tickets/${ticketId}/status`, { status });
@@ -568,6 +580,22 @@ export function AtendimentoPage() {
                        {(selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'CLOSED') && (
                            <button onClick={() => handleUpdateStatus(selectedTicket.id, 'WAITING')} className="bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-slate-600 shadow-lg">Reabrir</button>
                        )}
+                       {(() => {
+                           const uStr = localStorage.getItem('user');
+                           const uObj = uStr ? JSON.parse(uStr) : null;
+                           if (uObj?.role === 'OWNER' || uObj?.role === 'ADMIN') {
+                               return (
+                                   <button 
+                                       onClick={() => handleDeleteTicket(selectedTicket.id)} 
+                                       className="bg-red-500/10 text-red-500 text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-red-500 hover:text-white shadow-lg transition"
+                                       title="Apagar Atendimento"
+                                   >
+                                       Apagar
+                                   </button>
+                               );
+                           }
+                           return null;
+                       })()}
                        <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"><Phone size={18} /></button>
                        <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"><Video size={18} /></button>
                        <div className="w-px h-6 bg-slate-800 mx-1" />

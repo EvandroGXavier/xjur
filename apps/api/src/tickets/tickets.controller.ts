@@ -79,4 +79,10 @@ export class TicketsController {
     if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.ticketsService.markAsRead(id, user.tenantId);
   }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.ticketsService.remove(id, user.tenantId);
+  }
 }

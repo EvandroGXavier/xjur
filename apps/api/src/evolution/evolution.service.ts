@@ -237,11 +237,10 @@ export class EvolutionService {
   // MESSAGING
   // ==========================================
 
-  async sendText(instanceName: string, number: string, text: string, options?: any, config?: EvolutionConfig) {
+  Text(instanceName: string, number: string, text: string, options?: any, config?: EvolutionConfig) {
     try {
       const client = this.getClient(config);
-      const isGroup = number.includes('@g.us');
-      const formattedNumber = (isGroup || number.includes('@')) ? number : number.replace(/\D/g, '');
+      const formattedNumber = this.formatNumber(number);
 
       const response = await client.post(`/message/sendText/${instanceName}`, {
         number: formattedNumber,
@@ -271,8 +270,7 @@ export class EvolutionService {
       const client = this.getClient(config);
       const endpoint = type === 'image' ? 'sendImage' : type === 'video' ? 'sendVideo' : type === 'audio' ? 'sendWhatsAppAudio' : 'sendDocument';
       
-      const isGroup = number.includes('@g.us');
-      const formattedNumber = (isGroup || number.includes('@')) ? number : number.replace(/\D/g, '');
+      const formattedNumber = this.formatNumber(number);
 
       // Resolve o mediaUrl para base64 se for um caminho local ou recebido via absoluteUrl do próprio APP_URL
     let mediaData = mediaUrl;
