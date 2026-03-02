@@ -425,6 +425,7 @@ export class TicketsService {
         this.logger.log(`✅ WhatsApp message sent to ${formattedPhone}`);
     } catch (error) {
         this.logger.error(`❌ WhatsApp Send Error: ${error.message}`);
+        this.logger.error(`❌ Full error details: ${JSON.stringify(error?.response?.data || error)}`);
         
         await this.prisma.ticketMessage.update({
              where: { id: message.id },
