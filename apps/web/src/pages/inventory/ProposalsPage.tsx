@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../lib/api';
+import { api } from '../../services/api';
 import { FileText, Plus, Search, Printer, Check } from 'lucide-react';
 import { toast } from 'sonner';
 

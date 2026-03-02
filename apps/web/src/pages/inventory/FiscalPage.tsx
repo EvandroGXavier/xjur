@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { UploadCloud, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api } from '../../services/api';
 import { toast } from 'sonner';
 
 export function FiscalPage() {
