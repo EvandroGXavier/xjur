@@ -1,18 +1,29 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
+import { Injectable, BadRequestException } from "@nestjs/common";
+import { PrismaService } from "../prisma.service";
 
 @Injectable()
 export class ProposalsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(tenantId: string, data: any) {
-    const { contactId, totalAmount, notes, validUntil, deliveryDate, salesperson, special, paymentCondition, items } = data;
-    
+    const {
+      contactId,
+      totalAmount,
+      notes,
+      validUntil,
+      deliveryDate,
+      salesperson,
+      special,
+      paymentCondition,
+      paymentConditionId,
+      items,
+    } = data;
+
     return this.prisma.proposal.create({
       data: {
         tenantId,
         contactId,
-        status: 'DRAFT',
+        status: "DRAFT",
         totalAmount,
         notes,
         validUntil: validUntil ? new Date(validUntil) : null,
@@ -20,17 +31,19 @@ export class ProposalsService {
         salesperson,
         special: special || false,
         paymentCondition,
+        paymentConditionId,
         items: {
-          create: items?.map((i: any) => ({
-            productId: i.productId,
-            quantity: i.quantity,
-            unitPrice: i.unitPrice,
-            discount: i.discount || 0,
-            total: i.total,
-          })) || []
-        }
+          create:
+            items?.map((i: any) => ({
+              productId: i.productId,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+              discount: i.discount || 0,
+              total: i.total,
+            })) || [],
+        },
       },
-      include: { items: true }
+      include: { items: true },
     });
   }
 
@@ -38,23 +51,40 @@ export class ProposalsService {
     return this.prisma.proposal.findMany({
       where: { tenantId },
       include: { contact: true },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
   }
 
   async findOne(tenantId: string, id: string) {
     return this.prisma.proposal.findFirst({
-        where: { id, tenantId },
-        include: { items: { include: { product: true } }, contact: true, invoice: true }
+      where: { id, tenantId },
+      include: {
+        items: { include: { product: true } },
+        contact: true,
+        invoice: true,
+      },
     });
   }
 
   async update(tenantId: string, id: string, data: any) {
-    const { contactId, totalAmount, notes, validUntil, deliveryDate, salesperson, special, paymentCondition, items } = data;
-    
+    const {
+      contactId,
+      totalAmount,
+      notes,
+      validUntil,
+      deliveryDate,
+      salesperson,
+      special,
+      paymentCondition,
+      paymentConditionId,
+      items,
+    } = data;
+
     // Verify ownership
-    const existing = await this.prisma.proposal.findFirst({ where: { id, tenantId } });
-    if (!existing) throw new BadRequestException('Orçamento não encontrado');
+    const existing = await this.prisma.proposal.findFirst({
+      where: { id, tenantId },
+    });
+    if (!existing) throw new BadRequestException("Orçamento não encontrado");
 
     return this.prisma.$transaction(async (tx) => {
       // Clear previous items to replace with new ones
@@ -71,24 +101,28 @@ export class ProposalsService {
           salesperson,
           special: special || false,
           paymentCondition,
+          paymentConditionId,
           items: {
-            create: items?.map((i: any) => ({
-              productId: i.productId,
-              quantity: i.quantity,
-              unitPrice: i.unitPrice,
-              discount: i.discount || 0,
-              total: i.total,
-            })) || []
-          }
+            create:
+              items?.map((i: any) => ({
+                productId: i.productId,
+                quantity: i.quantity,
+                unitPrice: i.unitPrice,
+                discount: i.discount || 0,
+                total: i.total,
+              })) || [],
+          },
         },
-        include: { items: true }
+        include: { items: true },
       });
     });
   }
 
   async remove(tenantId: string, id: string) {
-    const existing = await this.prisma.proposal.findFirst({ where: { id, tenantId } });
-    if (!existing) throw new BadRequestException('Orçamento não encontrado');
+    const existing = await this.prisma.proposal.findFirst({
+      where: { id, tenantId },
+    });
+    if (!existing) throw new BadRequestException("Orçamento não encontrado");
     return this.prisma.proposal.delete({ where: { id } });
   }
 
@@ -96,33 +130,73 @@ export class ProposalsService {
     return this.prisma.$transaction(async (tx) => {
       const proposal = await tx.proposal.findFirst({
         where: { id, tenantId },
-        include: { items: true, contact: true }
+        include: { items: true, contact: true },
       });
 
-      if (!proposal) throw new BadRequestException('Orçamento não encontrado');
+      if (!proposal) throw new BadRequestException("Orçamento não encontrado");
 
-      if (proposal.status === 'APPROVED' && status === 'APPROVED') {
-        throw new BadRequestException('Este orçamento já foi aprovado e processado');
+      if (proposal.status === "APPROVED" && status === "APPROVED") {
+        throw new BadRequestException(
+          "Este orçamento já foi aprovado e processado",
+        );
       }
 
       const updated = await tx.proposal.update({
         where: { id },
-        data: { status }
+        data: { status },
       });
 
-      if (status === 'APPROVED') {
-        // 1. Generate Financial Record (Receita)
-        const financialRecord = await tx.financialRecord.create({
-          data: {
-            tenantId,
-            description: `Venda Ref. Orçamento #${proposal.code} - ${proposal.contact.name}`,
-            amount: proposal.totalAmount,
-            dueDate: new Date(),
-            status: 'PENDING',
-            type: 'INCOME',
-            category: 'VENDAS',
+      if (status === "APPROVED") {
+        let customInstallments = null;
+        if (
+          proposal.paymentCondition &&
+          proposal.paymentCondition.startsWith("[")
+        ) {
+          try {
+            customInstallments = JSON.parse(proposal.paymentCondition);
+          } catch (e) {}
+        }
+
+        let mainFinancialId = null;
+
+        if (
+          customInstallments &&
+          Array.isArray(customInstallments) &&
+          customInstallments.length > 0
+        ) {
+          for (let i = 0; i < customInstallments.length; i++) {
+            const inst = customInstallments[i];
+            const fin = await tx.financialRecord.create({
+              data: {
+                tenantId,
+                description: `Venda Ref. Orçamento #${proposal.code} - Parcela ${inst.installment || i + 1}/${customInstallments.length} - ${proposal.contact.name}`,
+                amount: parseFloat(inst.amount),
+                dueDate: new Date(inst.dueDate),
+                status: "PENDING",
+                type: "INCOME",
+                category: "VENDAS",
+                installmentNumber: inst.installment || i + 1,
+                totalInstallments: customInstallments.length,
+                paymentConditionId: proposal.paymentConditionId || null,
+              },
+            });
+            if (i === 0) mainFinancialId = fin.id;
           }
-        });
+        } else {
+          // 1. Generate Financial Record (Receita)
+          const financialRecord = await tx.financialRecord.create({
+            data: {
+              tenantId,
+              description: `Venda Ref. Orçamento #${proposal.code} - ${proposal.contact.name}`,
+              amount: proposal.totalAmount,
+              dueDate: new Date(),
+              status: "PENDING",
+              type: "INCOME",
+              category: "VENDAS",
+            },
+          });
+          mainFinancialId = financialRecord.id;
+        }
 
         // 2. Setup Invoice
         await tx.invoice.create({
@@ -130,31 +204,33 @@ export class ProposalsService {
             tenantId,
             proposalId: proposal.id,
             contactId: proposal.contactId,
-            type: 'OUTPUT',
-            status: 'PENDING',
-            financialId: financialRecord.id,
-          }
+            type: "OUTPUT",
+            status: "PENDING",
+            financialId: mainFinancialId,
+          },
         });
 
         // 3. Inventory movements
         for (const item of proposal.items) {
-          const product = await tx.product.findUnique({ where: { id: item.productId } });
-          if (product && product.type === 'PRODUCT') {
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+          });
+          if (product && product.type === "PRODUCT") {
             await tx.product.update({
               where: { id: product.id },
-              data: { currentStock: product.currentStock - item.quantity }
+              data: { currentStock: product.currentStock - item.quantity },
             });
 
             await tx.inventoryMovement.create({
               data: {
                 tenantId,
                 productId: product.id,
-                type: 'OUT',
+                type: "OUT",
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
                 totalPrice: item.total,
                 reason: `Venda - Automático via Orçamento #${proposal.code}`,
-              }
+              },
             });
           }
         }
