@@ -25,6 +25,7 @@ export function PaymentConditions() {
     active: true,
   });
 
+  const [installmentsCount, setInstallmentsCount] = useState<number | "">("");
   const [installments, setInstallments] = useState<any[]>([]);
 
   useEffect(() => {
@@ -40,10 +41,12 @@ export function PaymentConditions() {
         discount: item.discount.toString(),
         active: item.active,
       });
+      setInstallmentsCount(item.installments?.length || "");
       setInstallments(item.installments || []);
     } else {
       setEditingItem(null);
       setFormData({ name: "", surcharge: "0", discount: "0", active: true });
+      setInstallmentsCount("");
       setInstallments([]);
     }
     setModalOpen(true);
@@ -75,6 +78,8 @@ export function PaymentConditions() {
     const newCount = newArr.length;
     const basePct = newCount > 0 ? 100 / newCount : 0;
 
+    setInstallmentsCount(newCount || "");
+
     setInstallments(
       newArr.map((item, i) => ({
         ...item,
@@ -84,9 +89,36 @@ export function PaymentConditions() {
     );
   };
 
-  const updateInstallment = (index: number, field: string, value: number) => {
+  const updateInstallment = (index: number, field: string, value: number | string) => {
     const newArr = [...installments];
     newArr[index] = { ...newArr[index], [field]: value };
+    setInstallments(newArr);
+  };
+
+  const handleInstallmentsCountChange = (value: string) => {
+    const val = parseInt(value, 10);
+    if (isNaN(val) || val < 0) {
+      setInstallmentsCount("");
+      setInstallments([]);
+      return;
+    }
+    setInstallmentsCount(val);
+
+    if (val === 0) {
+      setInstallments([]);
+      return;
+    }
+
+    const basePct = Number((100 / val).toFixed(2));
+    const newArr = Array.from({ length: val }).map((_, i) => {
+      const isLast = i === val - 1;
+      const pct = isLast ? Number((100 - (basePct * (val - 1))).toFixed(2)) : basePct;
+      return {
+        installment: i + 1,
+        days: i === 0 ? 0 : i * 30,
+        percentage: pct,
+      };
+    });
     setInstallments(newArr);
   };
 
@@ -96,7 +128,7 @@ export function PaymentConditions() {
 
     // Validate percentage total
     const totalPct = installments.reduce(
-      (sum, i) => sum + Number(i.percentage),
+      (sum, i) => sum + (parseFloat(String(i.percentage).replace(',', '.')) || 0),
       0,
     );
     if (installments.length > 0 && Math.abs(totalPct - 100) > 0.01) {
@@ -111,8 +143,8 @@ export function PaymentConditions() {
       active: formData.active,
       installments: installments.map((i) => ({
         installment: Number(i.installment),
-        days: Number(i.days),
-        percentage: Number(i.percentage),
+        days: Number(i.days) || 0,
+        percentage: parseFloat(String(i.percentage).replace(',', '.')) || 0,
       })),
     };
 
@@ -251,7 +283,7 @@ export function PaymentConditions() {
             <form onSubmit={handleSave} className="p-6">
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
+                  <div className="md:col-span-1">
                     <label className="block text-sm font-medium text-slate-400 mb-1">
                       Nome
                     </label>
@@ -264,6 +296,20 @@ export function PaymentConditions() {
                       }
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
                       placeholder="Ex: 5 parcelas"
+                    />
+                  </div>
+
+                  <div className="md:col-span-1">
+                    <label className="block text-sm font-medium text-slate-400 mb-1">
+                      Qtd. Parcelas
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={installmentsCount}
+                      onChange={(e) => handleInstallmentsCountChange(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                      placeholder="Ex: 5"
                     />
                   </div>
 
@@ -368,12 +414,12 @@ export function PaymentConditions() {
                               step="0.01"
                               min="0"
                               max="100"
-                              value={Number(inst.percentage).toFixed(2)}
+                              value={inst.percentage}
                               onChange={(e) =>
                                 updateInstallment(
                                   idx,
                                   "percentage",
-                                  parseFloat(e.target.value),
+                                  e.target.value
                                 )
                               }
                               className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm focus:border-indigo-500 outline-none"
@@ -394,10 +440,10 @@ export function PaymentConditions() {
                       <div className="flex justify-end pt-2 px-2 text-sm">
                         <span className="text-slate-400 mr-2">Total:</span>
                         <span
-                          className={`font-bold ${Math.abs(installments.reduce((sum, i) => sum + Number(i.percentage), 0) - 100) > 0.01 ? "text-amber-500" : "text-emerald-500"}`}
+                          className={`font-bold ${Math.abs(installments.reduce((sum, i) => sum + (parseFloat(String(i.percentage).replace(',', '.')) || 0), 0) - 100) > 0.01 ? "text-amber-500" : "text-emerald-500"}`}
                         >
                           {installments
-                            .reduce((sum, i) => sum + Number(i.percentage), 0)
+                            .reduce((sum, i) => sum + (parseFloat(String(i.percentage).replace(',', '.')) || 0), 0)
                             .toFixed(2)}
                           %
                         </span>

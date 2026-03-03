@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import api from "../api";
-import { useAuth } from "../context/AuthContext";
+import { api } from "../services/api";
+
 
 export interface PaymentConditionInstallment {
   id?: string;
@@ -22,7 +22,8 @@ export interface PaymentCondition {
 export function usePaymentConditions() {
   const [conditions, setConditions] = useState<PaymentCondition[]>([]);
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : null;
 
   const fetchConditions = useCallback(async () => {
     if (!user) return;
