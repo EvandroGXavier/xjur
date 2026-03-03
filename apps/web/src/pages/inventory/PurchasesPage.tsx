@@ -4,37 +4,36 @@ import { Plus, Search, Check, X, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ContactPickerGlobal } from '../../components/contacts/ContactPickerGlobal';
 
-export function ProposalsPage() {
-  const [proposals, setProposals] = useState<any[]>([]);
+export function PurchasesPage() {
+  const [purchases, setPurchases] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   
-  const [selectedProposal, setSelectedProposal] = useState<any | null>(null);
+  const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Form State
   const [formData, setFormData] = useState<any>({
     contactId: '',
-    salesperson: '',
-    validUntil: '',
+    expectedDate: '',
     deliveryDate: '',
-    special: false,
     paymentCondition: '',
     notes: '',
     items: [],
+    xmlData: null,
+    supplierName: '',
   });
 
   useEffect(() => {
-    loadProposals();
+    loadPurchases();
     loadDependencies();
   }, []);
 
-  const loadProposals = async () => {
+  const loadPurchases = async () => {
     try {
-      const res = await api.get('/proposals');
-      setProposals(res.data);
+      const res = await api.get('/purchases');
+      setPurchases(res.data);
     } catch {
-      toast.error('Erro ao buscar orçamentos');
+      toast.error('Erro ao buscar pedidos de compra');
     }
   };
 
@@ -47,43 +46,42 @@ export function ProposalsPage() {
     }
   };
 
-  const loadProposalDetails = async (id: string) => {
+  const loadPurchaseDetails = async (id: string) => {
     try {
-      const res = await api.get(`/proposals/${id}`);
-      setSelectedProposal(res.data);
+      const res = await api.get(`/purchases/${id}`);
+      setSelectedPurchase(res.data);
       setFormData({
         contactId: res.data.contactId,
-        salesperson: res.data.salesperson || '',
-        validUntil: res.data.validUntil ? new Date(res.data.validUntil).toISOString().split('T')[0] : '',
+        expectedDate: res.data.expectedDate ? new Date(res.data.expectedDate).toISOString().split('T')[0] : '',
         deliveryDate: res.data.deliveryDate ? new Date(res.data.deliveryDate).toISOString().split('T')[0] : '',
-        special: res.data.special || false,
         paymentCondition: res.data.paymentCondition || '',
         notes: res.data.notes || '',
         items: res.data.items || [],
       });
     } catch {
-      toast.error('Erro ao carregar detalhes do orçamento');
+      toast.error('Erro ao carregar detalhes do pedido');
     }
   };
 
   const handleApprove = async (id: string) => {
+    if (!confirm('Dar entrada/receber este pedido? O estoque será atualizado e um contas-a-pagar será gerado.')) return;
     try {
-      await api.patch(`/proposals/${id}/status`, { status: 'APPROVED' });
-      toast.success('Orçamento aprovado. Financeiro e estoque atualizados!');
-      loadProposals();
-      loadProposalDetails(id);
+      await api.patch(`/purchases/${id}/status`, { status: 'RECEIVED' });
+      toast.success('Entrada concluída! Financeiro e estoque atualizados!');
+      loadPurchases();
+      loadPurchaseDetails(id);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erro ao aprovar');
+      toast.error(error.response?.data?.message || 'Erro ao processar');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Deseja realmente excluir este orçamento?')) return;
+    if (!confirm('Deseja realmente excluir este pedido?')) return;
     try {
-      await api.delete(`/proposals/${id}`);
-      toast.success('Orçamento excluído com sucesso');
-      setSelectedProposal(null);
-      loadProposals();
+      await api.delete(`/purchases/${id}`);
+      toast.success('Pedido excluído com sucesso');
+      setSelectedPurchase(null);
+      loadPurchases();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao excluir');
     }
@@ -91,7 +89,6 @@ export function ProposalsPage() {
 
   const handleSave = async () => {
     try {
-      // Calcular total baseando-se nos itens
       const totalAmount = formData.items.reduce((acc: number, item: any) => acc + Number(item.total), 0);
       
       const payload = {
@@ -99,19 +96,55 @@ export function ProposalsPage() {
         totalAmount
       };
 
-      if (selectedProposal && selectedProposal.id) {
-        await api.put(`/proposals/${selectedProposal.id}`, payload);
-        toast.success('Orçamento atualizado');
+      if (selectedPurchase && selectedPurchase.id) {
+        await api.put(`/purchases/${selectedPurchase.id}`, payload);
+        toast.success('Pedido atualizado');
       } else {
-        await api.post('/proposals', payload);
-        toast.success('Orçamento criado com sucesso');
+        await api.post('/purchases', payload);
+        if (formData.xmlData) {
+            toast.success('Entrada registrada com sucesso (Financeiro e Estoque alimentados)');
+        } else {
+            toast.success('Pedido de compra registrado com sucesso');
+        }
       }
       setIsEditing(false);
-      setSelectedProposal(null);
-      loadProposals();
+      setSelectedPurchase(null);
+      loadPurchases();
+      loadDependencies(); // Reload products in case XML created new ones
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao salvar');
     }
+  };
+
+  const handleImportXmlFile = async (e: any) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    toast.loading('Lendo XML...');
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+       const xmlStr = event.target?.result as string;
+       try {
+           const res = await api.post('/purchases/parse-xml', { xml: xmlStr });
+           const data = res.data;
+           setFormData({
+               ...formData,
+               contactId: data.contactId,
+               expectedDate: data.expectedDate ? data.expectedDate.split('T')[0] : '',
+               notes: data.notes,
+               items: data.items,
+               xmlData: data.xmlData,
+               supplierName: data.xmlData.supplierName
+           });
+           toast.dismiss();
+           toast.success('XML carregado. Salve para registrar a entrada de vez.');
+       } catch (error: any) {
+           toast.dismiss();
+           toast.error(error.response?.data?.message || 'Erro ao importar XML');
+       }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleAddItem = () => {
@@ -119,7 +152,7 @@ export function ProposalsPage() {
       ...formData,
       items: [
         ...formData.items,
-        { productId: '', quantity: 1, unitPrice: 0, discount: 0, total: 0 }
+        { productId: '', quantity: 1, unitCost: 0, discount: 0, total: 0 }
       ]
     });
   };
@@ -137,34 +170,44 @@ export function ProposalsPage() {
     if (field === 'productId') {
         const prod = products.find(p => p.id === value);
         if (prod) {
-            newItems[index].unitPrice = Number(prod.sellPrice) || 0;
-            // Update total
-            newItems[index].total = newItems[index].unitPrice * newItems[index].quantity - Number(newItems[index].discount || 0);
+            newItems[index].unitCost = Number(prod.costPrice) || 0;
+            newItems[index].total = newItems[index].unitCost * newItems[index].quantity - Number(newItems[index].discount || 0);
         }
     }
     
-    if (['quantity', 'unitPrice', 'discount'].includes(field)) {
-        newItems[index].total = Number(newItems[index].unitPrice) * Number(newItems[index].quantity) - Number(newItems[index].discount || 0);
+    if (['quantity', 'unitCost', 'discount'].includes(field)) {
+        newItems[index].total = Number(newItems[index].unitCost) * Number(newItems[index].quantity) - Number(newItems[index].discount || 0);
     }
     
     setFormData({ ...formData, items: newItems });
   };
 
-  const filteredProposals = proposals.filter(p => 
+  const filteredPurchases = purchases.filter(p => 
     p.contact?.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     p.code.toString().includes(searchQuery)
   );
 
   if (isEditing) {
-    // Tela de Inclusão/Edição Padrão Vencedor (Segundo Anexo)
     const productItems = formData.items;
     const totalItemsAmount = productItems.reduce((acc: number, item: any) => acc + Number(item.total), 0);
 
     return (
       <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
         <div className="bg-slate-800/50 text-white px-4 py-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-teal-400">Novo Orçamento / Pedido</h2>
-          <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-white">
+          <div className="flex items-center gap-4">
+             <h2 className="text-lg font-bold text-teal-400">Novo Pedido de Compra / Cotação</h2>
+             {!selectedPurchase && (
+                <>
+                   <input type="file" accept=".xml" id="importXmlInput" className="hidden" onChange={handleImportXmlFile} />
+                   <button 
+                      onClick={() => document.getElementById('importXmlInput')?.click()}
+                      className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded flex items-center gap-1 shadow">
+                      Importar XML
+                   </button>
+                </>
+             )}
+          </div>
+          <button onClick={() => setIsEditing(false)} className="text-slate-300 hover:text-white">
             <X size={24} />
           </button>
         </div>
@@ -173,11 +216,12 @@ export function ProposalsPage() {
           {/* Top Panel - Info do Pedido */}
           <div className="bg-slate-800/50 border text-xs sm:text-sm border-slate-800 p-3 rounded shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
              <div className="flex items-center gap-2">
-                <label className="font-semibold text-slate-400 w-20">Pedido:</label>
-                <input className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full font-mono font-bold outline-none" disabled value={selectedProposal ? String(selectedProposal.code).padStart(6, '0') : 'NOVO'} />
+                <label className="font-semibold text-slate-400 w-24">Pedido:</label>
+                <input className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full font-mono font-bold outline-none" disabled value={selectedPurchase ? String(selectedPurchase.code).padStart(6, '0') : 'NOVO'} />
              </div>
+             
              <div className="flex items-center gap-2">
-                <label className="font-semibold text-slate-400 w-20 shrink-0">Cliente:</label>
+                <label className="font-semibold text-slate-400 w-24 shrink-0">Fornecedor:</label>
                 <div className="flex-1 w-full relative z-40 bg-slate-950 rounded border border-slate-700 pointer-events-auto shadow-sm">
                    <ContactPickerGlobal 
                        onAdd={async () => {}}
@@ -186,35 +230,33 @@ export function ProposalsPage() {
                        showAction={false}
                        hideContactLabel={true}
                        onSelectContact={(id) => setFormData({...formData, contactId: id})}
-                       defaultContact={selectedProposal?.contact ? {
-                           id: selectedProposal.contact.id,
-                           name: selectedProposal.contact.name,
-                           document: selectedProposal.contact.document
+                       defaultContact={selectedPurchase?.contact ? {
+                           id: selectedPurchase.contact.id,
+                           name: selectedPurchase.contact.name,
+                           document: selectedPurchase.contact.document
+                       } : formData.supplierName ? {
+                           id: formData.contactId,
+                           name: formData.supplierName,
+                           document: ''
                        } : null}
                        className="!p-0 !bg-transparent !border-none !shadow-none"
                    />
                 </div>
              </div>
+             
              <div className="flex items-center gap-2">
-                <label className="font-semibold text-slate-400 w-20">Vendedor:</label>
-                <input className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none" value={formData.salesperson} onChange={e => setFormData({...formData, salesperson: e.target.value})} />
+                <label className="font-semibold text-slate-400 w-20">Previsão:</label>
+                <input type="date" className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none" value={formData.expectedDate} onChange={e => setFormData({...formData, expectedDate: e.target.value})} />
              </div>
              
              <div className="flex items-center gap-2">
-                <label className="font-semibold text-slate-400 w-20">Entrega:</label>
+                <label className="font-semibold text-slate-400 w-24">Data Chegada:</label>
                 <input type="date" className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none" value={formData.deliveryDate} onChange={e => setFormData({...formData, deliveryDate: e.target.value})} />
              </div>
-             <div className="flex items-center gap-2">
-                <label className="font-semibold text-slate-400 w-20">Validade:</label>
-                <input type="date" className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none" value={formData.validUntil} onChange={e => setFormData({...formData, validUntil: e.target.value})} />
-             </div>
+             
              <div className="flex items-center gap-2">
                 <label className="font-semibold text-slate-400 w-20">Cond. Pgto:</label>
                 <input className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none" value={formData.paymentCondition} onChange={e => setFormData({...formData, paymentCondition: e.target.value})} />
-             </div>
-             <div className="flex items-center gap-2 md:col-start-3">
-                <input type="checkbox" id="especial" checked={formData.special} onChange={e => setFormData({...formData, special: e.target.checked})}/>
-                <label htmlFor="especial" className="font-semibold text-slate-400">Especial</label>
              </div>
           </div>
 
@@ -225,7 +267,7 @@ export function ProposalsPage() {
                   {/* Produtos */}
                   <div className="flex-1 bg-slate-800/50 border border-slate-800 rounded shadow-sm flex flex-col">
                       <div className="bg-slate-900 border-b border-slate-800 px-2 py-1 font-semibold text-slate-300 flex justify-between items-center">
-                          Produtos / Serviços
+                          Produtos Adquiridos
                           <button onClick={handleAddItem} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-0.5 rounded text-xs flex items-center gap-1 text-slate-300">
                               <Plus size={14} /> Add
                           </button>
@@ -235,7 +277,7 @@ export function ProposalsPage() {
                               <thead className="bg-slate-900 sticky top-0 text-slate-400">
                                   <tr>
                                       <th className="p-1 px-2 border-r border-slate-800 w-1/2">Produto</th>
-                                      <th className="p-1 px-2 border-r border-slate-800">Valor Un.</th>
+                                      <th className="p-1 px-2 border-r border-slate-800">Custo Un.</th>
                                       <th className="p-1 px-2 border-r border-slate-800">Qtde.</th>
                                       <th className="p-1 px-2 border-r border-slate-800">Desc.</th>
                                       <th className="p-1 px-2 border-r border-slate-800">Total</th>
@@ -246,13 +288,17 @@ export function ProposalsPage() {
                                   {productItems.map((item: any, idx: number) => (
                                       <tr key={idx} className="border-b border-slate-800 hover:bg-slate-800/80 transition-colors text-white">
                                           <td className="p-1 px-2 border-r border-slate-800">
-                                              <select className="w-full bg-transparent outline-none text-white [&>option]:bg-slate-900" value={item.productId} onChange={e => handleItemChange(idx, 'productId', e.target.value)}>
-                                                  <option value="">Selecione...</option>
-                                                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                              </select>
+                                              {item._productName ? (
+                                                  <span className="text-xs">{item._productName}</span>
+                                              ) : (
+                                                  <select className="w-full bg-transparent outline-none text-white [&>option]:bg-slate-900" value={item.productId} onChange={e => handleItemChange(idx, 'productId', e.target.value)}>
+                                                      <option value="">Selecione...</option>
+                                                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                  </select>
+                                              )}
                                           </td>
                                           <td className="p-1 px-2 border-r border-slate-800">
-                                              <input type="number" className="w-full bg-transparent outline-none" value={item.unitPrice} onChange={e => handleItemChange(idx, 'unitPrice', Number(e.target.value))} />
+                                              <input type="number" className="w-full bg-transparent outline-none" value={item.unitCost} onChange={e => handleItemChange(idx, 'unitCost', Number(e.target.value))} />
                                           </td>
                                           <td className="p-1 px-2 border-r border-slate-800">
                                               <input type="number" className="w-full bg-transparent outline-none" value={item.quantity} onChange={e => handleItemChange(idx, 'quantity', Number(e.target.value))} />
@@ -276,7 +322,7 @@ export function ProposalsPage() {
                   {/* Observações */}
                   <div className="h-32 bg-slate-800/50 border border-slate-800 rounded shadow-sm flex flex-col">
                       <div className="bg-slate-900 border-b border-slate-800 px-2 py-1 font-semibold text-slate-300">
-                          Observações
+                          Observações do Pedido
                       </div>
                       <textarea className="flex-1 w-full p-2 outline-none resize-none bg-transparent text-white" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
                   </div>
@@ -284,15 +330,13 @@ export function ProposalsPage() {
 
               {/* Right Side Summary Panel */}
               <div className="w-[300px] flex flex-col gap-4">
-                 
-                  {/* Totais */}
                   <div className="bg-teal-900/20 border border-teal-800/50 p-4 rounded shadow-sm flex flex-col gap-2">
                        <div className="flex justify-between font-semibold text-slate-300">
                            <span>Total Produtos:</span>
                            <span>R$ {totalItemsAmount.toFixed(2)}</span>
                        </div>
                        <div className="flex justify-between font-bold text-lg text-teal-400 border-t border-teal-800/50 pt-2 mt-2">
-                           <span>Valor Total:</span>
+                           <span>Custo Total:</span>
                            <span>R$ {totalItemsAmount.toFixed(2)}</span>
                        </div>
                   </div>
@@ -300,26 +344,25 @@ export function ProposalsPage() {
           </div>
         </div>
 
-        {/* Bottom Actions */}
         <div className="bg-slate-900 border-t border-slate-800 p-3 flex justify-end gap-2">
-              <button className="bg-slate-800 border border-slate-700 text-slate-300 px-4 py-2 font-medium flex items-center gap-2 rounded shadow-sm hover:bg-slate-700 transition-colors"
+              <button className="bg-slate-800 border border-slate-700 text-slate-300 px-4 py-2 font-medium flex items-center gap-2 rounded shadow-sm hover:bg-slate-700"
                   onClick={() => setIsEditing(false)}>
                   <X size={18} className="text-red-400"/> Cancelar
               </button>
-              <button className="bg-teal-600 border border-teal-700 text-white px-6 py-2 font-medium flex items-center gap-2 rounded shadow-sm hover:bg-teal-700 transition-colors"
+              <button className={`${formData.xmlData ? 'bg-purple-600 border-purple-700 hover:bg-purple-700' : 'bg-teal-600 border-teal-700 hover:bg-teal-700'} text-white px-6 py-2 font-medium flex items-center gap-2 rounded shadow-sm`}
                   onClick={handleSave}>
-                  <Check size={18} /> Finalizar
+                  <Check size={18} /> {formData.xmlData ? 'Salvar Entrada (Mover Estoque)' : 'Salvar Pedido'}
               </button>
         </div>
       </div>
     );
   }
 
-  // Tela de Grid Principal (Primeiro Anexo)
+  // Tela de Grid Principal
   return (
     <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
       <div className="bg-slate-800/50 text-white px-4 py-2 flex items-center justify-between border-b-2 border-teal-500">
-        <h1 className="text-lg font-bold text-teal-400">Orçamentos / Pedidos</h1>
+        <h1 className="text-lg font-bold text-teal-400">Compras / Entradas</h1>
         <button className="text-slate-400 hover:text-white" onClick={() => window.history.back()}><X size={20} /></button>
       </div>
       
@@ -327,7 +370,7 @@ export function ProposalsPage() {
       <div className="bg-slate-800/30 px-4 py-3 flex items-center gap-2 border-b border-slate-800">
          <span className="text-sm font-semibold text-slate-400">Busca:</span>
          <div className="relative flex-1 max-w-md">
-            <input type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 pr-8 text-sm text-white outline-none focus:border-teal-500" placeholder="Buscar orçamentos..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 pr-8 text-sm text-white outline-none focus:border-teal-500" placeholder="Buscar pedidos..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             <Search size={16} className="absolute right-3 top-2 text-slate-500" />
          </div>
       </div>
@@ -339,20 +382,19 @@ export function ProposalsPage() {
                  <thead className="bg-slate-800">
                      <tr>
                          <th className="px-3 py-2 border-r border-slate-700 font-semibold text-slate-300 w-24">Pedido</th>
-                         <th className="px-3 py-2 font-semibold text-slate-300">Cliente</th>
+                         <th className="px-3 py-2 font-semibold text-slate-300">Fornecedor</th>
                      </tr>
                  </thead>
                  <tbody className="overflow-y-auto block h-full"> 
-                 {/*  Making only body scrollable is complex with simple table, but good enough for layout demo */}
                  </tbody>
              </table>
              <div className="flex-1 overflow-y-auto w-full">
                  <table className="w-full text-left text-sm table-fixed">
                       <tbody>
-                        {filteredProposals.map(p => (
+                        {filteredPurchases.map(p => (
                              <tr key={p.id} 
-                                 className={`cursor-pointer transition-colors ${selectedProposal?.id === p.id ? 'bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500' : 'text-slate-300 hover:bg-slate-800/50 border-b border-slate-800'}`}
-                                 onClick={() => loadProposalDetails(p.id)}>
+                                 className={`cursor-pointer transition-colors ${selectedPurchase?.id === p.id ? 'bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500' : 'text-slate-300 hover:bg-slate-800/50 border-b border-slate-800'}`}
+                                 onClick={() => loadPurchaseDetails(p.id)}>
                                  <td className="px-3 py-2 w-24 border-r border-slate-800 font-mono">{String(p.code).padStart(6, '0')}</td>
                                  <td className="px-3 py-2 truncate">{p.contact?.name || 'Sem nome'}</td>
                              </tr>
@@ -364,48 +406,51 @@ export function ProposalsPage() {
 
          {/* Right Detail Panel */}
          <div className="w-2/3 bg-slate-900 p-4 overflow-y-auto flex flex-col gap-4">
-             {selectedProposal ? (
+             {selectedPurchase ? (
                  <>
                     {/* Top Info Panel */}
                     <div className="flex gap-4">
                         <div className="flex-1 bg-slate-800/50 border border-slate-800 p-4 shadow-sm rounded-lg">
-                           <h3 className="text-slate-400 font-semibold mb-3 pb-2 border-b border-slate-700 text-xs uppercase tracking-wider">Informações do Pedido/Orçamento</h3>
+                           <h3 className="text-slate-400 font-semibold mb-3 pb-2 border-b border-slate-700 text-xs uppercase tracking-wider">Informações da Compra</h3>
                            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-white">
-                               <div><span className="text-slate-500 mr-2">Data:</span> {new Date(selectedProposal.createdAt).toLocaleDateString()}</div>
-                               <div><span className="text-slate-500 mr-2">Validade:</span> {selectedProposal.validUntil ? new Date(selectedProposal.validUntil).toLocaleDateString() : 'N/A'}</div>
-                               <div><span className="text-slate-500 mr-2">Valor Total:</span> <span className="font-medium text-teal-400">R$ {Number(selectedProposal.totalAmount).toFixed(2)}</span></div>
-                               <div><span className="text-slate-500 mr-2">Status:</span> <strong className={selectedProposal.status === 'APPROVED' ? 'text-teal-400' : 'text-blue-400'}>{selectedProposal.status}</strong></div>
-                               <div className="col-span-2 mt-1">
-                                  {selectedProposal.special && <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 text-xs rounded mr-2 font-bold">Especial</span>}
-                                  <span className="text-slate-500 mr-2">Cliente:</span>
-                                  <span className="font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{selectedProposal.contact?.name}</span>
+                               <div><span className="text-slate-500 mr-2">Data Cotação:</span> {new Date(selectedPurchase.createdAt).toLocaleDateString()}</div>
+                               <div><span className="text-slate-500 mr-2">Data Previsão:</span> {selectedPurchase.expectedDate ? new Date(selectedPurchase.expectedDate).toLocaleDateString() : 'N/A'}</div>
+                               <div><span className="text-slate-500 mr-2">Valor Total:</span> <span className="font-medium text-teal-400">R$ {Number(selectedPurchase.totalAmount).toFixed(2)}</span></div>
+                               <div><span className="text-slate-500 mr-2">Status:</span> 
+                                  <strong className={`${selectedPurchase.status === 'RECEIVED' ? 'text-teal-400' : 'text-blue-400'}`}>
+                                      {selectedPurchase.status === 'RECEIVED' ? 'RECEBIDO (ENTRADA)' : selectedPurchase.status === 'QUOTATION' ? 'COTAÇÃO' : selectedPurchase.status}
+                                  </strong>
                                </div>
-                               <div className="col-span-2"><span className="text-slate-500 mr-2">Vendedor:</span> {selectedProposal.salesperson || 'N/A'}</div>
+                               <div className="col-span-2 mt-1">
+                                  <span className="text-slate-500 mr-2">Fornecedor:</span> 
+                                  <span className="font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{selectedPurchase.contact?.name}</span>
+                               </div>
                            </div>
                         </div>
 
                         <div className="flex flex-col gap-2 w-48">
-                            <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
-                              onClick={() => handleApprove(selectedProposal.id)}>
-                                Aprovar (Faturar)
+                            <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
+                              onClick={() => handleApprove(selectedPurchase.id)}
+                              disabled={selectedPurchase.status === 'RECEIVED'}>
+                                Dar Entrada (Receber)
                             </button>
                             <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
                               onClick={() => { setIsEditing(true); }}>
-                                Editar Orçamento
+                                Editar Pedido
                             </button>
                             <button className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 hover:text-red-400 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
-                              onClick={() => handleDelete(selectedProposal.id)}>
-                                Excluir Orçamento
+                              onClick={() => handleDelete(selectedPurchase.id)}>
+                                Excluir Pedido
                             </button>
                             <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors">
-                                Imprimir
+                                Imprimir Ordem
                             </button>
                         </div>
                     </div>
 
                     {/* Grids Bottom */}
                     <div className="flex-1 bg-slate-800/50 border border-slate-800 shadow-sm rounded-lg flex flex-col overflow-hidden">
-                        <h3 className="text-slate-400 font-semibold px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wider bg-slate-900/50 text-left">Produtos / Serviços da Proposta</h3>
+                        <h3 className="text-slate-400 font-semibold px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wider bg-slate-900/50 text-left">Itens da Compra</h3>
                         <div className="p-0 overflow-auto flex-1">
                              <table className="w-full text-left text-sm border-collapse">
                                  <thead className="bg-[#0078D7] text-white">
@@ -413,21 +458,21 @@ export function ProposalsPage() {
                                          <th className="px-3 py-2 border-b border-blue-800">Código</th>
                                          <th className="px-3 py-2 border-b border-blue-800">Descrição</th>
                                          <th className="px-3 py-2 border-b border-blue-800 w-24 text-right">Qtd</th>
-                                         <th className="px-3 py-2 border-b border-blue-800 w-32 text-right">Valor Un.</th>
+                                         <th className="px-3 py-2 border-b border-blue-800 w-32 text-right">Custo Un.</th>
                                          <th className="px-3 py-2 border-b border-blue-800 w-32 text-right">Total</th>
                                      </tr>
                                  </thead>
                                  <tbody className="text-slate-300">
-                                     {selectedProposal.items && selectedProposal.items.map((item: any) => (
+                                     {selectedPurchase.items && selectedPurchase.items.map((item: any) => (
                                          <tr key={item.id} className="border-b border-slate-800 hover:bg-slate-800 transition-colors">
                                             <td className="px-3 py-2">{item.product?.sku || item.productId.substring(0,6)}</td>
                                             <td className="px-3 py-2">{item.product?.name || 'Desconhecido'}</td>
                                             <td className="px-3 py-2 text-right">{item.quantity}</td>
-                                            <td className="px-3 py-2 text-right">R$ {Number(item.unitPrice).toFixed(2)}</td>
+                                            <td className="px-3 py-2 text-right">R$ {Number(item.unitCost).toFixed(2)}</td>
                                             <td className="px-3 py-2 text-right font-medium text-white">R$ {Number(item.total).toFixed(2)}</td>
                                          </tr>
                                      ))}
-                                     {(!selectedProposal.items || selectedProposal.items.length === 0) && (
+                                     {(!selectedPurchase.items || selectedPurchase.items.length === 0) && (
                                          <tr>
                                              <td colSpan={5} className="text-center p-8 text-slate-500">Nenhum item adicionado</td>
                                          </tr>
@@ -439,7 +484,7 @@ export function ProposalsPage() {
                  </>
              ) : (
                 <div className="flex-1 flex items-center justify-center text-slate-500">
-                    Selecione um pedido/orçamento à esquerda para visualizar detalhes
+                    Selecione um pedido de compra à esquerda para visualizar detalhes
                 </div>
              )}
          </div>
@@ -455,13 +500,11 @@ export function ProposalsPage() {
          </div>
          <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
             onClick={() => {
-                setSelectedProposal(null);
+                setSelectedPurchase(null);
                 setFormData({
                     contactId: '',
-                    salesperson: '',
-                    validUntil: '',
+                    expectedDate: '',
                     deliveryDate: '',
-                    special: false,
                     paymentCondition: '',
                     notes: '',
                     items: [],
@@ -480,7 +523,6 @@ export function ProposalsPage() {
              <span>Sair</span>
          </button>
       </div>
-
     </div>
   );
 }

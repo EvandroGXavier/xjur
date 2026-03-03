@@ -19,7 +19,16 @@ export const SYSTEM_MODULES = [
   { id: 'kanban', label: 'Kanban', icon: Columns, to: '/kanban' },
   { id: 'processes', label: 'Processos', icon: Scale, to: '/processes' },
   { id: 'agenda', label: 'Agenda', icon: Calendar, to: '/agenda' },
-  { id: 'financial', label: 'Financeiro', icon: DollarSign, to: '/financial' },
+  { 
+    id: 'financial', 
+    label: 'Financeiro', 
+    icon: DollarSign, 
+    to: '/financial',
+    subItems: [
+      { id: 'financial-dashboard', label: 'Meu Financeiro', to: '/financial' },
+      { id: 'financial-conditions', label: 'Cond. Pagamento', to: '/financial/payment-conditions' },
+    ]
+  },
   { 
     id: 'inventory', 
     label: 'Estoque', 
@@ -29,6 +38,7 @@ export const SYSTEM_MODULES = [
       { id: 'inventory-dashboard', label: 'Dashboard', to: '/inventory/dashboard' },
       { id: 'inventory-catalog', label: 'Catálogo', to: '/inventory/catalog' },
       { id: 'inventory-proposals', label: 'Orçamentos', to: '/inventory/proposals' },
+      { id: 'inventory-purchases', label: 'Compras', to: '/inventory/purchases' },
       { id: 'inventory-fiscal', label: 'Fiscal', to: '/inventory/fiscal' },
     ]
   },

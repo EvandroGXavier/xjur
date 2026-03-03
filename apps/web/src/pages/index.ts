@@ -17,4 +17,6 @@ export * from './atendimento/atendimento';
 export { Kanban } from './Kanban';
 export { ProcessConfig } from './processes/ProcessConfig';
 export { ProposalsPage } from './inventory/ProposalsPage';
+export { PurchasesPage } from './inventory/PurchasesPage';
 export { FiscalPage } from './inventory/FiscalPage';
+export { PaymentConditions } from './PaymentConditions';

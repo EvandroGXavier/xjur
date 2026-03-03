@@ -6,7 +6,7 @@ export class ProposalsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(tenantId: string, data: any) {
-    const { contactId, totalAmount, notes, validUntil, items } = data;
+    const { contactId, totalAmount, notes, validUntil, deliveryDate, salesperson, special, paymentCondition, items } = data;
     
     return this.prisma.proposal.create({
       data: {
@@ -16,14 +16,18 @@ export class ProposalsService {
         totalAmount,
         notes,
         validUntil: validUntil ? new Date(validUntil) : null,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+        salesperson,
+        special: special || false,
+        paymentCondition,
         items: {
-          create: items.map((i: any) => ({
+          create: items?.map((i: any) => ({
             productId: i.productId,
             quantity: i.quantity,
             unitPrice: i.unitPrice,
             discount: i.discount || 0,
             total: i.total,
-          }))
+          })) || []
         }
       },
       include: { items: true }
@@ -43,6 +47,49 @@ export class ProposalsService {
         where: { id, tenantId },
         include: { items: { include: { product: true } }, contact: true, invoice: true }
     });
+  }
+
+  async update(tenantId: string, id: string, data: any) {
+    const { contactId, totalAmount, notes, validUntil, deliveryDate, salesperson, special, paymentCondition, items } = data;
+    
+    // Verify ownership
+    const existing = await this.prisma.proposal.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new BadRequestException('Orçamento não encontrado');
+
+    return this.prisma.$transaction(async (tx) => {
+      // Clear previous items to replace with new ones
+      await tx.proposalItem.deleteMany({ where: { proposalId: id } });
+
+      return tx.proposal.update({
+        where: { id },
+        data: {
+          contactId,
+          totalAmount,
+          notes,
+          validUntil: validUntil ? new Date(validUntil) : null,
+          deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+          salesperson,
+          special: special || false,
+          paymentCondition,
+          items: {
+            create: items?.map((i: any) => ({
+              productId: i.productId,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+              discount: i.discount || 0,
+              total: i.total,
+            })) || []
+          }
+        },
+        include: { items: true }
+      });
+    });
+  }
+
+  async remove(tenantId: string, id: string) {
+    const existing = await this.prisma.proposal.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new BadRequestException('Orçamento não encontrado');
+    return this.prisma.proposal.delete({ where: { id } });
   }
 
   async updateStatus(tenantId: string, id: string, status: string) {

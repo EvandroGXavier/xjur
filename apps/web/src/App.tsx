@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
-import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ProposalsPage, FiscalPage, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban } from './pages';
+import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ProposalsPage, PurchasesPage, FiscalPage, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions } from './pages';
 import { ProcessForm } from './pages/processes/ProcessForm';
 
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
@@ -29,10 +29,12 @@ function App() {
           <Route path="processes/:id" element={<ProcessForm />} />
           <Route path="agenda" element={<Agenda />} />
           <Route path="financial" element={<Financial />} />
+          <Route path="financial/payment-conditions" element={<PaymentConditions />} />
           <Route path="inventory" element={<Navigate to="/inventory/catalog" replace />} />
           <Route path="inventory/dashboard" element={<ProductsList />} />
           <Route path="inventory/catalog" element={<ProductsList />} />
           <Route path="inventory/proposals" element={<ProposalsPage />} />
+          <Route path="inventory/purchases" element={<PurchasesPage />} />
           <Route path="inventory/fiscal" element={<FiscalPage />} />
           <Route path="contacts" element={<ContactList />} />
           <Route path="contacts/config" element={<ContactConfig />} />

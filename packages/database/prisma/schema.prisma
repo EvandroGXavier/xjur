@@ -63,6 +63,8 @@ model Tenant {
   partyRoles          PartyRole[]
   partyQualifications PartyQualification[]
   processParties      ProcessParty[]
+  purchaseOrders      PurchaseOrder[]
+  paymentConditions   PaymentCondition[]
 
   // Preferences
   contactRequireOneInfo Boolean @default(true) // Se false, celular/telefone/email ficam não-obrigatórios
@@ -142,6 +144,7 @@ model Contact {
   processParties            ProcessParty[]
   financialParties          FinancialParty[]
   products                  Product[]
+  purchaseOrders            PurchaseOrder[]
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -485,6 +488,8 @@ model FinancialRecord {
   periodicity       String? // MONTHLY, BIWEEKLY, WEEKLY, CUSTOM
   isResidual        Boolean @default(false) // Parcela residual de pagamento parcial?
 
+  paymentConditionId String? // Vínculo com a Condição de Pagamento (se gerado via regra)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -494,6 +499,7 @@ model FinancialRecord {
   bankAccount       BankAccount?       @relation(fields: [bankAccountId], references: [id])
   tenant            Tenant             @relation(fields: [tenantId], references: [id])
   financialCategory FinancialCategory? @relation(fields: [categoryId], references: [id])
+  paymentCondition  PaymentCondition?  @relation(fields: [paymentConditionId], references: [id])
   parties           FinancialParty[]
   splits            TransactionSplit[]
 
@@ -793,6 +799,7 @@ model Product {
 
   movements     InventoryMovement[]
   proposalItems ProposalItem[]
+  purchaseOrderItems PurchaseOrderItem[]
   tenant        Tenant              @relation(fields: [tenantId], references: [id])
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
@@ -933,7 +940,10 @@ model Proposal {
   deliveryDate     DateTime?
   salesperson      String?
   special          Boolean        @default(false)
-  paymentCondition String?
+  paymentCondition String?        // Legado (texto)
+  paymentConditionId String?      // FK para a Condição de Pagamento (nova estrutura)
+  
+  paymentConditionRel PaymentCondition? @relation(fields: [paymentConditionId], references: [id])
 
   items            ProposalItem[]
   invoice          Invoice?
@@ -960,21 +970,23 @@ model ProposalItem {
 }
 
 model Invoice {
-  id          String           @id @default(uuid())
-  tenantId    String
-  proposalId  String?          @unique
-  contactId   String
-  number      String?
-  accessKey   String?          @unique
-  xmlContent  String?          @db.Text
-  type        String // INPUT (Compra) ou OUTPUT (Venda)
-  status      String // PENDING, AUTHORIZED, CANCELLED
-  financialId String?          @unique
-  proposal    Proposal?        @relation(fields: [proposalId], references: [id])
-  contact     Contact          @relation(fields: [contactId], references: [id])
-  financial   FinancialRecord? @relation(fields: [financialId], references: [id])
-  tenant      Tenant           @relation(fields: [tenantId], references: [id])
-  createdAt   DateTime         @default(now())
+  id              String           @id @default(uuid())
+  tenantId        String
+  proposalId      String?          @unique
+  purchaseOrderId String?          @unique
+  contactId       String
+  number          String?
+  accessKey       String?          @unique
+  xmlContent      String?          @db.Text
+  type            String // INPUT (Compra) ou OUTPUT (Venda)
+  status          String // PENDING, AUTHORIZED, CANCELLED
+  financialId     String?          @unique
+  proposal        Proposal?        @relation(fields: [proposalId], references: [id])
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
+  contact         Contact          @relation(fields: [contactId], references: [id])
+  financial       FinancialRecord? @relation(fields: [financialId], references: [id])
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  createdAt       DateTime         @default(now())
 
   @@map("invoices")
 }
@@ -988,4 +1000,81 @@ model FiscalConfig {
   tenant          Tenant  @relation(fields: [tenantId], references: [id])
 
   @@map("fiscal_configs")
+}
+
+model PurchaseOrder {
+  id               String              @id @default(uuid())
+  tenantId         String
+  contactId        String // Fornecedor
+  code             Int                 @default(autoincrement())
+  status           String // DRAFT, QUOTATION, APPROVED, RECEIVED, CANCELLED
+  totalAmount      Decimal             @db.Decimal(15, 2)
+  notes            String?             @db.Text
+  
+  expectedDate     DateTime?
+  deliveryDate     DateTime?
+  paymentCondition String?          // Legado (texto)
+  paymentConditionId String?        // FK para a Condição de Pagamento (nova estrutura)
+  
+  paymentConditionRel PaymentCondition? @relation(fields: [paymentConditionId], references: [id])
+
+  items            PurchaseOrderItem[]
+  invoice          Invoice?
+  
+  contact          Contact             @relation(fields: [contactId], references: [id])
+  tenant           Tenant              @relation(fields: [tenantId], references: [id])
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  unitCost        Decimal       @db.Decimal(10, 2)
+  discount        Decimal?      @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+// 10. FORMAS / CONDIÇÕES DE PAGAMENTO
+model PaymentCondition {
+  id          String   @id @default(uuid())
+  tenantId    String
+  code        Int      @default(autoincrement()) // Para listar no UI
+  name        String   // Ex: 5 parcelas
+  surcharge   Decimal  @default(0) @db.Decimal(5, 2) // Acréscimo (%)
+  discount    Decimal  @default(0) @db.Decimal(5, 2) // Desconto (%)
+  active      Boolean  @default(true)
+  
+  installments     PaymentConditionInstallment[]
+  proposals        Proposal[]
+  purchaseOrders   PurchaseOrder[]
+  financialRecords FinancialRecord[]
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@map("payment_conditions")
+}
+
+model PaymentConditionInstallment {
+  id                 String   @id @default(uuid())
+  paymentConditionId String
+  installment        Int      // 1, 2, 3...
+  days               Int      // Prazo em dias: 0 (a vista), 30, 60...
+  percentage         Decimal  @db.Decimal(5, 2) // Percentual do total (%)
+
+  paymentCondition   PaymentCondition @relation(fields: [paymentConditionId], references: [id], onDelete: Cascade)
+
+  @@map("payment_condition_installments")
 }

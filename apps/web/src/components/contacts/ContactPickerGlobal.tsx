@@ -6,7 +6,7 @@ import { CreatableSelect } from '../ui/CreatableSelect';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
-interface ContactOption {
+export interface ContactOption {
     id: string;
     name: string;
     document?: string;
@@ -47,6 +47,8 @@ interface ContactPickerGlobalProps {
     showAmount?: boolean;
     amount?: string;
     rolePlaceholder?: string;
+    hideQuickAdd?: boolean;
+    defaultContact?: ContactOption | null;
 }
 
 export function ContactPickerGlobal({ 
@@ -69,7 +71,9 @@ export function ContactPickerGlobal({
     onAmountChange,
     contactLabel = 'Contato',
     hideContactLabel = false,
-    actionIcon
+    hideQuickAdd = false,
+    actionIcon,
+    defaultContact
 }: ContactPickerGlobalProps) {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
@@ -80,7 +84,14 @@ export function ContactPickerGlobal({
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<ContactOption[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
-    const [selectedContact, setSelectedContact] = useState<ContactOption | null>(null);
+    const [selectedContact, setSelectedContact] = useState<ContactOption | null>(defaultContact || null);
+
+    useEffect(() => {
+        if (defaultContact !== undefined && defaultContact?.id !== selectedContact?.id) {
+            setSelectedContact(defaultContact);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [defaultContact?.id, defaultContact]);
 
     // Form state
     const [roleId, setRoleId] = useState(defaultRoleId || '');
@@ -270,12 +281,14 @@ export function ContactPickerGlobal({
                                             {searchResults.length === 0 ? (
                                                 <div className="p-4 text-center">
                                                     <p className="text-xs text-slate-500 mb-2">Nenhum contato encontrado.</p>
-                                                    <button 
-                                                        onClick={() => setShowQuickAdd(true)}
-                                                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest flex items-center gap-2 mx-auto"
-                                                    >
-                                                        <Plus size={12} /> Cadastro Rápido
-                                                    </button>
+                                                    {!hideQuickAdd && (
+                                                        <button 
+                                                            onClick={() => setShowQuickAdd(true)}
+                                                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest flex items-center gap-2 mx-auto"
+                                                        >
+                                                            <Plus size={12} /> Cadastro Rápido
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 searchResults.map(contact => (
