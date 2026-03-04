@@ -643,7 +643,29 @@ export function PurchasesPage() {
   return (
     <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
       <div className="bg-slate-800/50 text-white px-4 py-2 flex items-center justify-between border-b-2 border-teal-500">
-        <h1 className="text-lg font-bold text-teal-400">Compras / Entradas</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-bold text-teal-400">Compras / Entradas</h1>
+          <button
+            onClick={() => {
+              setSelectedPurchase(null);
+              setFormData({
+                contactId: "",
+                expectedDate: "",
+                deliveryDate: "",
+                paymentCondition: "",
+                notes: "",
+                items: [],
+                financialInstallments: [],
+                xmlData: null,
+                supplierName: "",
+              });
+              setIsEditing(true);
+            }}
+            className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 text-sm rounded flex items-center gap-2"
+          >
+            <Plus size={16} /> Nova Compra / Importar XML
+          </button>
+        </div>
         <button
           className="text-slate-400 hover:text-white"
           onClick={() => window.history.back()}
