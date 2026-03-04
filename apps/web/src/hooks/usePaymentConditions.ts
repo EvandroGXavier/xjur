@@ -22,21 +22,18 @@ export interface PaymentCondition {
 export function usePaymentConditions() {
   const [conditions, setConditions] = useState<PaymentCondition[]>([]);
   const [loading, setLoading] = useState(false);
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : null;
 
   const fetchConditions = useCallback(async () => {
-    if (!user) return;
     setLoading(true);
     try {
       const { data } = await api.get("/payment-conditions");
-      setConditions(data);
+      setConditions(data || []);
     } catch (error) {
       console.error("Error fetching payment conditions:", error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
 
   const createCondition = async (
     conditionData: Omit<PaymentCondition, "id" | "code">,

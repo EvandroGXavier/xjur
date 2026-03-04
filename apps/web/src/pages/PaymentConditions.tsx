@@ -176,6 +176,7 @@ export function PaymentConditions() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      {console.log('Payment Conditions Current State:', { loading, conditionsLength: conditions?.length, conditions })}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-white">
@@ -217,7 +218,17 @@ export function PaymentConditions() {
                 </td>
               </tr>
             )}
-            {!loading &&
+            {!loading && conditions.length === 0 && (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-6 py-8 text-center text-slate-500 font-bold"
+                >
+                  Nenhuma condição de pagamento encontrada.
+                </td>
+              </tr>
+            )}
+            {!loading && conditions.length > 0 &&
               conditions.map((item) => (
                 <tr
                   key={item.id}
@@ -225,7 +236,7 @@ export function PaymentConditions() {
                   onDoubleClick={() => handleOpenModal(item)}
                 >
                   <td className="px-6 py-4 font-mono text-xs">
-                    {item.code.toString().padStart(3, "0")}
+                    {(item.code || 0).toString().padStart(3, "0")}
                   </td>
                   <td className="px-6 py-4 font-medium text-white">
                     {item.name}
