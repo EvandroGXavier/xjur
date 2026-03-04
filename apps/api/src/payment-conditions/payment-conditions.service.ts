@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import { CreatePaymentConditionDto } from "./dto/create-payment-condition.dto";
 import { UpdatePaymentConditionDto } from "./dto/update-payment-condition.dto";
@@ -9,6 +13,16 @@ export class PaymentConditionsService {
 
   async create(createDto: CreatePaymentConditionDto, tenantId: string) {
     const { installments, ...data } = createDto;
+
+    const existing = await this.prisma.paymentCondition.findFirst({
+      where: { tenantId, name: data.name },
+    });
+
+    if (existing) {
+      throw new BadRequestException(
+        "Já existe uma Condição de Pagamento com este nome.",
+      );
+    }
 
     return this.prisma.paymentCondition.create({
       data: {

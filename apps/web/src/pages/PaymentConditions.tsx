@@ -157,8 +157,9 @@ export function PaymentConditions() {
         toast.success("Condição criada com sucesso");
       }
       setModalOpen(false);
-    } catch (error) {
-      // error handled in hook, but we can do extra here if needed
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.message || "Erro ao salvar condição de pagamento");
+      console.error(error);
     }
   };
 
