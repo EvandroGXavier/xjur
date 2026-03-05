@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, Tag as TagIcon, Check } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
-import { clsx } from 'clsx';
 
 interface Tag {
   id: string;
@@ -15,7 +14,7 @@ interface Tag {
 interface InlineTagsProps {
   tags: { tag: Tag }[];
   entityId: string;
-  entityType: 'contact' | 'process';
+  entityType: 'contact' | 'process' | 'financial';
   onRefresh: () => void;
 }
 
@@ -42,7 +41,7 @@ export function InlineTags({ tags, entityId, entityType, onRefresh }: InlineTags
   const fetchAvailableTags = async () => {
     try {
       setLoading(true);
-      const scope = entityType === 'contact' ? 'CONTACT' : 'PROCESS';
+      const scope = entityType === 'contact' ? 'CONTACT' : entityType === 'financial' ? 'FINANCE' : 'PROCESS';
       const response = await api.get(`/tags?scope=${scope}`);
       setAvailableTags(response.data);
     } catch (error) {

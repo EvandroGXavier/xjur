@@ -273,7 +273,19 @@ export function UsersPage() {
                   </div>
               </div>
               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Cargo</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-slate-400">Cargo</label>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const newJob = prompt('Digite o nome do novo cargo:');
+                        if (newJob) setFormData({ ...formData, role: newJob.toUpperCase() });
+                      }}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold uppercase"
+                    >
+                      + Novo Cargo
+                    </button>
+                  </div>
                   <select
                     value={formData.role}
                     onChange={e => setFormData({...formData, role: e.target.value})}
@@ -281,6 +293,9 @@ export function UsersPage() {
                   >
                       <option value="MEMBER">Membro (Advogado/Colaborador)</option>
                       <option value="ADMIN">Administrador</option>
+                      {!['MEMBER', 'ADMIN', 'OWNER'].includes(formData.role) && (
+                        <option value={formData.role}>{formData.role}</option>
+                      )}
                   </select>
               </div>
 

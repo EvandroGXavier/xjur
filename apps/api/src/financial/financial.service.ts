@@ -20,6 +20,9 @@ export class FinancialService {
       include: { contact: true },
     },
     splits: true,
+    tags: {
+      include: { tag: true },
+    },
     parent: {
       select: { id: true, description: true, amount: true, installmentNumber: true },
     },

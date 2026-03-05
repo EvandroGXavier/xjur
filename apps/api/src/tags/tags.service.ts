@@ -63,6 +63,7 @@ export class TagsService {
       // First remove all associations
       await (this.prisma as any).contactTag.deleteMany({ where: { tagId: id } });
       await (this.prisma as any).processTag.deleteMany({ where: { tagId: id } });
+      await (this.prisma as any).financialRecordTag.deleteMany({ where: { tagId: id } });
       // Then delete the tag
       return await this.prisma.tag.delete({
         where: { id, tenantId },
@@ -117,6 +118,30 @@ export class TagsService {
       });
     } catch (error) {
       this.logger.error(`Error detaching tag ${tagId} from process ${processId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async attachToFinancialRecord(financialRecordId: string, tagId: string) {
+    try {
+      return await (this.prisma as any).financialRecordTag.upsert({
+        where: { tagId_financialRecordId: { tagId, financialRecordId } },
+        create: { tagId, financialRecordId },
+        update: {},
+      });
+    } catch (error) {
+      this.logger.error(`Error attaching tag ${tagId} to financial record ${financialRecordId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async detachFromFinancialRecord(financialRecordId: string, tagId: string) {
+    try {
+      return await (this.prisma as any).financialRecordTag.delete({
+        where: { tagId_financialRecordId: { tagId, financialRecordId } },
+      });
+    } catch (error) {
+      this.logger.error(`Error detaching tag ${tagId} from financial record ${financialRecordId}: ${error.message}`);
       throw error;
     }
   }

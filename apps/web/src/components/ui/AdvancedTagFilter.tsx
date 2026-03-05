@@ -12,9 +12,10 @@ export interface TagData {
 
 interface AdvancedTagFilterProps {
   onFilterChange: (includedTags: string[], excludedTags: string[]) => void;
+  scope?: string;
 }
 
-export function AdvancedTagFilter({ onFilterChange }: AdvancedTagFilterProps) {
+export function AdvancedTagFilter({ onFilterChange, scope }: AdvancedTagFilterProps) {
   const [tags, setTags] = useState<TagData[]>([]);
   const [loading, setLoading] = useState(false);
   
@@ -23,12 +24,13 @@ export function AdvancedTagFilter({ onFilterChange }: AdvancedTagFilterProps) {
 
   useEffect(() => {
     fetchTags();
-  }, []);
+  }, [scope]);
 
   const fetchTags = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/tags');
+      const url = scope ? `/tags?scope=${scope}` : '/tags';
+      const res = await api.get(url);
       setTags(Array.isArray(res.data) ? res.data : []);
     } catch (e) {
       console.error('Erro ao carregar tags:', e);

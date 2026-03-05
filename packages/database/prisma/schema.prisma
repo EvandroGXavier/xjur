@@ -66,6 +66,8 @@ model Tenant {
   processParties      ProcessParty[]
   purchaseOrders      PurchaseOrder[]
   paymentConditions   PaymentCondition[]
+  securitySecrets     SecuritySecret[]
+  securitySettings    SecuritySetting[]
 
   // Preferences
   contactRequireOneInfo Boolean @default(true) // Se false, celular/telefone/email ficam não-obrigatórios
@@ -513,6 +515,9 @@ model FinancialRecord {
   parent   FinancialRecord?  @relation("Installments", fields: [parentId], references: [id])
   children FinancialRecord[] @relation("Installments")
 
+  // Tags
+  tags              FinancialRecordTag[]
+
   @@index([parentId])
   @@index([tenantId, status])
   @@index([tenantId, type])
@@ -713,6 +718,7 @@ model Tag {
   tenant    Tenant       @relation(fields: [tenantId], references: [id])
   contacts  ContactTag[]
   processes ProcessTag[]
+  financialRecords FinancialRecordTag[]
 
   @@map("tags")
 }
@@ -739,6 +745,18 @@ model ProcessTag {
 
   @@unique([tagId, processId])
   @@map("tags_on_processes")
+}
+
+model FinancialRecordTag {
+  id                String @id @default(uuid())
+  tagId             String
+  financialRecordId String
+
+  tag             Tag             @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  financialRecord FinancialRecord @relation(fields: [financialRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, financialRecordId])
+  @@map("tags_on_financial_records")
 }
 
 // 6. MÓDULO AGENDA (COMPROMISSOS)
@@ -1109,4 +1127,37 @@ model InventoryConfig {
   updatedAt       DateTime @updatedAt
 
   @@map("inventory_configs")
+}
+model SecuritySecret {
+  id          String   @id @default(uuid())
+  tenantId    String
+  entityType  String   // BANK_ACCOUNT, CONTACT, PROCESS, etc.
+  entityId    String
+  description String
+  username    String?
+  password    String?  // Encrypted / Hash
+  link        String?
+  privateKey  String?  @db.Text
+  publicKey   String?  @db.Text
+  details     String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([entityId, entityType])
+  @@map("security_secrets")
+}
+
+model SecuritySetting {
+  id          String   @id @default(uuid())
+  tenantId    String
+  entityType  String
+  entityId    String
+  observation String?  @db.Text
+  
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, entityType, entityId])
+  @@map("security_settings")
 }

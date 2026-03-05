@@ -10,7 +10,8 @@ import {
   Package,
   ShieldCheck,
   Calendar,
-  Columns 
+  Columns,
+  Lock
 } from 'lucide-react';
 
 export const SYSTEM_MODULES = [
@@ -23,11 +24,7 @@ export const SYSTEM_MODULES = [
     id: 'financial', 
     label: 'Financeiro', 
     icon: DollarSign, 
-    to: '/financial',
-    subItems: [
-      { id: 'financial-dashboard', label: 'Meu Financeiro', to: '/financial' },
-      { id: 'financial-conditions', label: 'Cond. Pagamento', to: '/financial/payment-conditions' },
-    ]
+    to: '/financial'
   },
   { 
     id: 'inventory', 
@@ -47,4 +44,5 @@ export const SYSTEM_MODULES = [
   { id: 'users', label: 'Equipe', icon: ShieldCheck, to: '/users' },
   { id: 'ai', label: 'Inteligência Artificial', icon: Bot, to: '/ai' },
   { id: 'settings', label: 'Configuração', icon: Settings, to: '/settings' },
+  { id: 'security_financial', label: 'Segurança_Contas Bancarias', icon: Lock, to: '#' },
 ];

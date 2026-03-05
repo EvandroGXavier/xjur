@@ -52,4 +52,15 @@ export class TagsController {
   detachFromProcess(@Param('processId') processId: string, @Param('tagId') tagId: string) {
     return this.tagsService.detachFromProcess(processId, tagId);
   }
+
+  // Vinculação em Financeiro
+  @Post('financial/:recordId/:tagId')
+  attachToFinancialRecord(@Param('recordId') recordId: string, @Param('tagId') tagId: string) {
+    return this.tagsService.attachToFinancialRecord(recordId, tagId);
+  }
+
+  @Delete('financial/:recordId/:tagId')
+  detachFromFinancialRecord(@Param('recordId') recordId: string, @Param('tagId') tagId: string) {
+    return this.tagsService.detachFromFinancialRecord(recordId, tagId);
+  }
 }

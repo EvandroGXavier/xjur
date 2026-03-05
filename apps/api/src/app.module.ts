@@ -24,6 +24,7 @@ import { StockModule } from './stock/stock.module';
 import { ProposalsModule } from './proposals/proposals.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { PaymentConditionsModule } from './payment-conditions/payment-conditions.module';
+import { SecurityModule } from './security/security.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { PaymentConditionsModule } from './payment-conditions/payment-conditions
     ConnectionsModule, // Gestão de Conexões (WhatsApp, Instagram, Email)
     TagsModule,      // Etiquetas Transversais
     EvolutionModule, FiscalModule, StockModule, ProposalsModule, PurchasesModule, PaymentConditionsModule, // Integração Evolution API
+    SecurityModule,
   ],
   controllers: [AppController],
   providers: [

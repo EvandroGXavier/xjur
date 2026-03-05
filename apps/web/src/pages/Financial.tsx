@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import {
   DollarSign,
   Plus,
@@ -34,6 +34,10 @@ import { toast } from 'sonner';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpFinancial } from '../data/helpManuals';
 import { ContactPickerGlobal } from '../components/contacts/ContactPickerGlobal';
+import { PaymentConditions } from './PaymentConditions';
+import { InlineTags } from '../components/ui/InlineTags';
+import { AdvancedTagFilter } from '../components/ui/AdvancedTagFilter';
+import { BankAccountDetails } from '../components/financial/BankAccountDetails';
 
 interface FinancialRecord {
   id: string;
@@ -79,6 +83,7 @@ interface FinancialRecord {
     contact?: Contact;
   }[];
   splits?: TransactionSplit[];
+  tags?: { tag: any }[];
 }
 
 interface TransactionSplit {
@@ -148,12 +153,13 @@ export function Financial() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dashboard' | 'records' | 'accounts'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'records' | 'accounts' | 'conditions'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
   const [showInstallmentModal, setShowInstallmentModal] = useState(false);
   const [showSettleModal, setShowSettleModal] = useState(false);
+  const [selectedBankAccount, setSelectedBankAccount] = useState<BankAccount | null>(null);
   const [settlingRecord, setSettlingRecord] = useState<FinancialRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<FinancialRecord | null>(null);
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
@@ -168,6 +174,8 @@ export function Financial() {
     status: '',
     category: '',
   });
+
+  const [tagFilters, setTagFilters] = useState<{ included: string[], excluded: string[] }>({ included: [], excluded: [] });
 
   const [formData, setFormData] = useState({
     description: '',
@@ -992,9 +1000,30 @@ export function Financial() {
     );
   };
 
-  const filteredRecords = records.filter((record) =>
-    record.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRecords = records.filter((record) => {
+    let matches = record.description.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (filters.type && record.type !== filters.type) matches = false;
+    if (filters.status && record.status !== filters.status) matches = false;
+    if (filters.category) {
+      const catId = record.financialCategory?.id || record.categoryId;
+      if (catId !== filters.category) matches = false;
+    }
+
+    if (matches && tagFilters.included.length > 0) {
+      const recordTagIds = record.tags?.map(t => t.tag.id) || [];
+      const hasAllIncluded = tagFilters.included.every(id => recordTagIds.includes(id));
+      if (!hasAllIncluded) matches = false;
+    }
+
+    if (matches && tagFilters.excluded.length > 0) {
+      const recordTagIds = record.tags?.map(t => t.tag.id) || [];
+      const hasAnyExcluded = tagFilters.excluded.some(id => recordTagIds.includes(id));
+      if (hasAnyExcluded) matches = false;
+    }
+
+    return matches;
+  });
 
   if (loading) {
     return (
@@ -1079,6 +1108,16 @@ export function Financial() {
           }`}
         >
           Contas Bancárias
+        </button>
+        <button
+          onClick={() => setView('conditions')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            view === 'conditions'
+              ? 'text-indigo-400 border-b-2 border-indigo-400'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          Cond. Pagamento
         </button>
       </div>
 
@@ -1193,6 +1232,11 @@ export function Financial() {
               <option value="OVERDUE">Vencido</option>
             </select>
           </div>
+          
+          <AdvancedTagFilter 
+            scope="FINANCE"
+            onFilterChange={(inc, exc) => setTagFilters({ included: inc, excluded: exc })} 
+          />
 
           {/* Records Table */}
           <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
@@ -1212,6 +1256,9 @@ export function Financial() {
                     Vencimento
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                    Tags
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
@@ -1224,8 +1271,8 @@ export function Financial() {
               </thead>
               <tbody className="divide-y divide-slate-700">
                 {filteredRecords.map((record) => (
-                  <>
-                    <tr key={record.id} className="hover:bg-slate-700/30 transition-colors">
+                  <Fragment key={record.id}>
+                    <tr className="hover:bg-slate-700/30 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {record.children && record.children.length > 0 && (
@@ -1259,6 +1306,14 @@ export function Financial() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
                       {formatDate(record.dueDate)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-300">
+                      <InlineTags
+                        tags={record.tags || []}
+                        entityId={record.id}
+                        entityType="financial"
+                        onRefresh={fetchData}
+                      />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(record.status)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -1308,6 +1363,14 @@ export function Financial() {
                       <td className="px-6 py-2 whitespace-nowrap"></td>
                       <td className="px-6 py-2 whitespace-nowrap"></td>
                       <td className="px-6 py-2 whitespace-nowrap text-xs text-slate-400">{formatDate(child.dueDate)}</td>
+                      <td className="px-6 py-2">
+                        <InlineTags
+                          tags={child.tags || []}
+                          entityId={child.id}
+                          entityType="financial"
+                          onRefresh={fetchData}
+                        />
+                      </td>
                       <td className="px-6 py-2 whitespace-nowrap">{getStatusBadge(child.status)}</td>
                       <td className="px-6 py-2 whitespace-nowrap">
                         <span className="text-xs font-bold text-slate-300">{formatCurrency(Number(child.amount))}</span>
@@ -1321,7 +1384,7 @@ export function Financial() {
                       </td>
                     </tr>
                   ))}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -1330,13 +1393,17 @@ export function Financial() {
       )}
 
       {/* Bank Accounts View */}
-      {view === 'accounts' && (
+      {view === 'accounts' && !selectedBankAccount && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {bankAccounts.map((account) => (
-            <div key={account.id} className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+            <div 
+              key={account.id} 
+              onClick={() => setSelectedBankAccount(account)}
+              className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:border-indigo-500/50 transition-all cursor-pointer group"
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="p-3 bg-indigo-500/10 rounded-lg">
+                  <div className="p-3 bg-indigo-500/10 rounded-lg group-hover:bg-indigo-500/20 transition-colors">
                     <Building2 className="text-indigo-400" size={24} />
                   </div>
                   <div className="flex-1">
@@ -1361,7 +1428,7 @@ export function Financial() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => handleOpenBankModal(account)}
                     className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded transition-colors"
@@ -1403,6 +1470,21 @@ export function Financial() {
             </div>
           ))}
         </div>
+      )}
+
+      {view === 'accounts' && selectedBankAccount && (
+        <BankAccountDetails 
+          account={selectedBankAccount} 
+          onBack={() => {
+            setSelectedBankAccount(null);
+            fetchData();
+          }} 
+        />
+      )}
+
+      {/* Conditions View */}
+      {view === 'conditions' && (
+        <PaymentConditions />
       )}
 
       {/* Modal de Transação */}
