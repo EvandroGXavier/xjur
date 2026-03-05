@@ -62,6 +62,7 @@ export class ProposalsService {
         items: { include: { product: true } },
         contact: true,
         invoice: true,
+        financialRecords: true,
       },
     });
   }
@@ -119,11 +120,56 @@ export class ProposalsService {
   }
 
   async remove(tenantId: string, id: string) {
-    const existing = await this.prisma.proposal.findFirst({
-      where: { id, tenantId },
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.proposal.findFirst({
+        where: { id, tenantId },
+        include: { items: true },
+      });
+      if (!existing) throw new BadRequestException("Orçamento não encontrado");
+
+      // Reverter estoque caso já tivesse sido faturado (aprovado)
+      if (existing.status === "APPROVED") {
+        for (const item of existing.items) {
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+          });
+          if (product && product.type === "PRODUCT") {
+            // Estorno: Devolver ao estoque
+            await tx.product.update({
+              where: { id: product.id },
+              data: { currentStock: product.currentStock + item.quantity },
+            });
+
+            // Registro de estorno
+            await tx.inventoryMovement.create({
+              data: {
+                tenantId,
+                productId: product.id,
+                type: "IN",
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalPrice: item.total,
+                reason: `Estorno - Orçamento Cancelado #${existing.code}`,
+              },
+            });
+          }
+        }
+      }
+
+      // Remover Invoice (NF) atrelada
+      await tx.invoice.deleteMany({
+        where: { proposalId: id },
+      });
+
+      // Remover Títulos a Receber (Financeiro) atrelados
+      await tx.financialRecord.deleteMany({
+        where: { proposalId: id },
+      });
+
+      // Finalmente, deletar os itens e a proposta
+      await tx.proposalItem.deleteMany({ where: { proposalId: id } });
+      return tx.proposal.delete({ where: { id } });
     });
-    if (!existing) throw new BadRequestException("Orçamento não encontrado");
-    return this.prisma.proposal.delete({ where: { id } });
   }
 
   async updateStatus(tenantId: string, id: string, status: string) {
@@ -178,6 +224,7 @@ export class ProposalsService {
                 installmentNumber: inst.installment || i + 1,
                 totalInstallments: customInstallments.length,
                 paymentConditionId: proposal.paymentConditionId || null,
+                proposalId: proposal.id,
               },
             });
             if (i === 0) mainFinancialId = fin.id;
@@ -193,6 +240,7 @@ export class ProposalsService {
               status: "PENDING",
               type: "INCOME",
               category: "VENDAS",
+              proposalId: proposal.id,
             },
           });
           mainFinancialId = financialRecord.id;

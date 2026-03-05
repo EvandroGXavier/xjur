@@ -22,6 +22,12 @@ export class FiscalService {
       const infNFe = nfe.infNFe;
       const numNFE = infNFe.ide.nNF;
 
+      // Pegar configuração de estoque
+      let invConfig = await this.prisma.inventoryConfig.findUnique({
+        where: { tenantId }
+      });
+      const profitMargin = invConfig ? Number(invConfig.profitMargin) : 30; // 30% default
+
       // 1. Process Supplier
       const emit = infNFe.emit;
       const cnpj = emit.CNPJ;
@@ -104,6 +110,7 @@ export class FiscalService {
               isActive: true,
               supplierId: supplier.id,
               costPrice: parseFloat(prod.vUnCom || 0),
+              sellPrice: parseFloat(prod.vUnCom || 0) * (1 + profitMargin / 100),
               unit: prod.uCom ? prod.uCom.substring(0, 2) : 'UN',
               minStock: 0,
             }
@@ -114,6 +121,7 @@ export class FiscalService {
             data: {
               currentStock: product.currentStock + quantity,
               costPrice: parseFloat(prod.vUnCom || 0),
+              sellPrice: parseFloat(prod.vUnCom || 0) * (1 + profitMargin / 100),
             }
           });
         }

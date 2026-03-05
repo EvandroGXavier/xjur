@@ -19,6 +19,14 @@ interface Product {
   costPrice?: number;
   sellPrice?: number;
   supplierId?: string;
+  images?: string[];
+  weight?: number;
+  width?: number;
+  height?: number;
+  length?: number;
+  category?: string;
+  brand?: string;
+  isEcommerce?: boolean;
 }
 
 interface Supplier {
@@ -47,7 +55,15 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
     currentStock: 0,
     costPrice: 0,
     sellPrice: 0,
-    supplierId: ''
+    supplierId: '',
+    images: [],
+    weight: 0,
+    width: 0,
+    height: 0,
+    length: 0,
+    category: '',
+    brand: '',
+    isEcommerce: false
   });
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -59,6 +75,14 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
         ...product,
         costPrice: product.costPrice ? Number(product.costPrice) : 0,
         sellPrice: product.sellPrice ? Number(product.sellPrice) : 0,
+        weight: product.weight ? Number(product.weight) : 0,
+        width: product.width ? Number(product.width) : 0,
+        height: product.height ? Number(product.height) : 0,
+        length: product.length ? Number(product.length) : 0,
+        images: product.images || [],
+        category: product.category || '',
+        brand: product.brand || '',
+        isEcommerce: !!product.isEcommerce,
       });
     } else {
       setFormData({
@@ -74,7 +98,15 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
         currentStock: 0,
         costPrice: 0,
         sellPrice: 0,
-        supplierId: ''
+        supplierId: '',
+        images: [],
+        weight: 0,
+        width: 0,
+        height: 0,
+        length: 0,
+        category: '',
+        brand: '',
+        isEcommerce: false
       });
     }
     
@@ -314,6 +346,100 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
                </div>
             </div>
           </div>
+
+           {/* Ecommerce / Marketplace */}
+           <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 space-y-4">
+             <div className="flex items-center gap-2 text-slate-200 font-medium text-sm border-b border-slate-700/50 pb-2">
+               <Package size={16} className="text-purple-400" />
+               Logística e E-commerce
+             </div>
+
+             <div className="flex items-center gap-2 mt-2">
+               <input 
+                 type="checkbox"
+                 id="isEcommerce"
+                 checked={formData.isEcommerce}
+                 onChange={e => setFormData({ ...formData, isEcommerce: e.target.checked })}
+                 className="w-4 h-4 bg-slate-950 border-slate-700 rounded text-indigo-500 focus:ring-indigo-500"
+               />
+               <label htmlFor="isEcommerce" className="text-sm font-medium text-slate-300">
+                 Produto disponível para E-commerce / Catálogo Online
+               </label>
+             </div>
+
+             {formData.isEcommerce && (
+               <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                   <div className="space-y-2">
+                     <label className="text-xs font-medium text-slate-500 uppercase">Peso (Kg)</label>
+                     <input type="number" step="0.001" value={formData.weight} onChange={e => setFormData({ ...formData, weight: Number(e.target.value) })} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-indigo-500" />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-medium text-slate-500 uppercase">Compr. (cm)</label>
+                     <input type="number" step="0.01" value={formData.length} onChange={e => setFormData({ ...formData, length: Number(e.target.value) })} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-indigo-500" />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-medium text-slate-500 uppercase">Altura (cm)</label>
+                     <input type="number" step="0.01" value={formData.height} onChange={e => setFormData({ ...formData, height: Number(e.target.value) })} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-indigo-500" />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-medium text-slate-500 uppercase">Largura (cm)</label>
+                     <input type="number" step="0.01" value={formData.width} onChange={e => setFormData({ ...formData, width: Number(e.target.value) })} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-indigo-500" />
+                   </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="space-y-2">
+                     <label className="text-xs font-medium text-slate-500 uppercase">Categoria</label>
+                     <input type="text" placeholder="Ex: Informática, Papelaria..." value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-indigo-500" />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-xs font-medium text-slate-500 uppercase">Marca</label>
+                     <input type="text" placeholder="Ex: Samsung, BIC..." value={formData.brand} onChange={e => setFormData({ ...formData, brand: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-indigo-500" />
+                   </div>
+                 </div>
+
+                 <div className="space-y-2 pt-2">
+                   <label className="text-xs font-medium text-slate-500 uppercase flex items-center justify-between">
+                     Imagens (URLs)
+                     <button type="button" onClick={() => setFormData(f => ({ ...f, images: [...(f.images || []), ''] }))} className="text-indigo-400 hover:text-indigo-300 font-semibold px-2">
+                        + Adicionar Imagem
+                     </button>
+                   </label>
+                   {formData.images?.map((img, idx) => (
+                     <div key={idx} className="flex gap-2 mb-2 items-center">
+                       <input 
+                         type="url" 
+                         value={img} 
+                         placeholder="https://..."
+                         onChange={e => {
+                           const newImgs = [...(formData.images || [])];
+                           newImgs[idx] = e.target.value;
+                           setFormData({ ...formData, images: newImgs });
+                         }} 
+                         className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-indigo-500" 
+                       />
+                       {img && (
+                         <img src={img} alt="Preview" className="w-10 h-10 object-cover rounded border border-slate-700 bg-slate-900" 
+                           onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOTQ5Njc1MSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIxIDYgMjEgMTggMyAxOCAzIDYgMjEgNiIvPjxwb2x5bGluZSBwb2ludHM9IjIxIDYgMTIgMTIgMyA2Ii8+PC9zdmc+'; }} 
+                         />
+                       )}
+                       <button type="button" onClick={() => {
+                          const newImgs = [...(formData.images || [])];
+                          newImgs.splice(idx, 1);
+                          setFormData({ ...formData, images: newImgs });
+                       }} className="p-1.5 text-red-400 hover:bg-red-400/10 rounded">
+                         <X size={16} />
+                       </button>
+                     </div>
+                   ))}
+                   {(!formData.images || formData.images.length === 0) && (
+                     <p className="text-xs text-slate-500">Nenhuma imagem cadastrada.</p>
+                   )}
+                 </div>
+               </div>
+             )}
+           </div>
 
           {/* Fornecedor */}
           <div className="space-y-2">

@@ -51,4 +51,35 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   supplierId?: string;
+
+  // E-commerce fields
+  @IsOptional()
+  images?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  weight?: number;
+
+  @IsOptional()
+  @IsNumber()
+  width?: number;
+
+  @IsOptional()
+  @IsNumber()
+  height?: number;
+
+  @IsOptional()
+  @IsNumber()
+  length?: number;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  brand?: string;
+
+  @IsOptional()
+  isEcommerce?: boolean;
 }

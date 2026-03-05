@@ -36,7 +36,7 @@ export const SYSTEM_MODULES = [
     to: '/inventory',
     subItems: [
       { id: 'inventory-dashboard', label: 'Dashboard', to: '/inventory/dashboard' },
-      { id: 'inventory-catalog', label: 'Catálogo', to: '/inventory/catalog' },
+      { id: 'inventory-products', label: 'Produtos', to: '/inventory/products' },
       { id: 'inventory-proposals', label: 'Orçamentos', to: '/inventory/proposals' },
       { id: 'inventory-purchases', label: 'Compras', to: '/inventory/purchases' },
       { id: 'inventory-fiscal', label: 'Fiscal', to: '/inventory/fiscal' },

@@ -25,6 +25,7 @@ export function PurchasesPage() {
     items: [],
     financialInstallments: [],
     xmlData: null,
+    buyerId: "",
     supplierName: "",
   });
 
@@ -33,6 +34,162 @@ export function PurchasesPage() {
     loadDependencies();
     fetchConditions();
   }, []);
+
+  const handleNovoPedido = () => {
+    setSelectedPurchase(null);
+    setFormData({
+      contactId: "",
+      expectedDate: "",
+      deliveryDate: "",
+      paymentCondition: "",
+      notes: "",
+      items: [],
+      financialInstallments: [],
+      xmlData: null,
+      supplierName: "",
+    });
+    setIsEditing(true);
+  };
+
+  const printPurchaseOrder = (purchase: any) => {
+    if (!purchase) {
+      toast.warning("Selecione um pedido para imprimir.");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=800,height=800');
+    if (!printWindow) return;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Imprimir Pedido de Compra</title>
+        <style>
+          body { font-family: Arial, sans-serif; font-size: 12px; margin: 0; padding: 20px; }
+          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+          .info-box { border: 1px solid #000; padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+          .info-box h3 { margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 5px; font-size: 14px;}
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #000; padding: 6px; text-align: left; }
+          th { background-color: #f0f0f0; }
+          .text-right { text-align: right; }
+          .total { font-weight: bold; font-size: 14px; text-align: right; }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h2>PEDIDO DE COMPRA Nº ${String(purchase.code).padStart(6, '0')}</h2>
+          <p>DATA: ${new Date(purchase.createdAt).toLocaleDateString()}</p>
+        </div>
+
+        <div class="info-box">
+          <h3>DADOS DO FORNECEDOR / EMITENTE</h3>
+          <p><strong>Nome/Razão Social:</strong> ${purchase.contact?.name || ''}</p>
+          <p><strong>CNPJ/CPF:</strong> ${purchase.contact?.document || ''}</p>
+        </div>
+
+        <div class="info-box">
+          <h3>INFORMAÇÕES DA COMPRA</h3>
+          <p><strong>Previsão de Entrega:</strong> ${purchase.deliveryDate ? new Date(purchase.deliveryDate).toLocaleDateString() : 'N/A'}</p>
+          <p><strong>Status do Pedido:</strong> ${purchase.status}</p>
+          <p><strong>Comprador Responsável:</strong> ${purchase.buyer?.name || 'Não Informado'}</p>
+        </div>
+
+        <h3>ITENS DO PEDIDO</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>CÓDIGO</th>
+              <th>DESCRIÇÃO</th>
+              <th class="text-right">QTD</th>
+              <th class="text-right">CUSTO UN ($)</th>
+              <th class="text-right">TOTAL ($)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${purchase.items?.map((i: any) => `
+              <tr>
+                <td>${i.product?.sku || i.productId.substring(0,6)}</td>
+                <td>${i.product?.name || ''}</td>
+                <td class="text-right">${i.quantity}</td>
+                <td class="text-right">${Number(i.unitCost).toFixed(2)}</td>
+                <td class="text-right">${Number(i.total).toFixed(2)}</td>
+              </tr>
+            `).join('') || '<tr><td colspan="5" style="text-align: center;">Nenhum item adicionado</td></tr>'}
+          </tbody>
+        </table>
+
+        ${purchase.financialRecords && purchase.financialRecords.length > 0 ? `
+           <h3>PARCELAMENTO / FINANCEIRO</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>PARCELA</th>
+                <th>VENCIMENTO</th>
+                <th class="text-right">VALOR ($)</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${purchase.financialRecords.map((fin: any) => `
+                <tr>
+                  <td>${fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Única'}</td>
+                  <td>${new Date(fin.dueDate).toLocaleDateString()}</td>
+                  <td class="text-right">${Number(fin.amount).toFixed(2)}</td>
+                  <td>${fin.status}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : ''}
+
+        <div class="total">
+          TOTAL DO PEDIDO: R$ ${Number(purchase.totalAmount).toFixed(2)}
+        </div>
+
+        ${purchase.notes ? `
+          <div class="info-box" style="margin-top: 20px;">
+            <h3>OBSERVAÇÕES</h3>
+            <p>${purchase.notes}</p>
+          </div>
+        ` : ''}
+        
+        <script>
+          window.onload = function() { window.print(); window.setTimeout(function(){window.close();}, 500); }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") {
+          return;
+      }
+      if (e.key === "F2") {
+        e.preventDefault();
+        handleNovoPedido();
+      }
+      if (e.key === "F4") {
+        e.preventDefault();
+        if (selectedPurchase) {
+          printPurchaseOrder(selectedPurchase);
+        } else {
+          toast.warning("Selecione um pedido para imprimir.");
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPurchase]);
 
   const loadPurchases = async () => {
     try {
@@ -57,7 +214,8 @@ export function PurchasesPage() {
       const res = await api.get(`/purchases/${id}`);
       setSelectedPurchase(res.data);
       setFormData({
-        contactId: res.data.contactId,
+        contactId: res.data.contactId || "",
+        buyerId: res.data.buyerId || "",
         expectedDate: res.data.expectedDate
           ? new Date(res.data.expectedDate).toISOString().split("T")[0]
           : "",
@@ -112,6 +270,17 @@ export function PurchasesPage() {
         (acc: number, item: any) => acc + Number(item.total),
         0,
       );
+
+      if (formData.financialInstallments && formData.financialInstallments.length > 0) {
+        const totalInstallments = formData.financialInstallments.reduce(
+          (acc: number, inst: any) => acc + Number(inst.amount),
+          0,
+        );
+        if (Math.abs(totalAmount - totalInstallments) > 0.05) {
+          toast.warning(`A soma das parcelas (R$ ${totalInstallments.toFixed(2)}) não pode ser diferente do total do pedido (R$ ${totalAmount.toFixed(2)}).`);
+          return;
+        }
+      }
 
       const payload = {
         ...formData,
@@ -355,6 +524,34 @@ export function PurchasesPage() {
                             document: "",
                           }
                         : null
+                  }
+                  className="!p-0 !bg-transparent !border-none !shadow-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="font-semibold text-slate-400 w-24 shrink-0">
+                Comprador:
+              </label>
+              <div className="flex-1 w-full relative z-30 bg-slate-950 rounded border border-slate-700 pointer-events-auto shadow-sm">
+                <ContactPickerGlobal
+                  onAdd={async () => {}}
+                  hideRole={true}
+                  hideQualification={true}
+                  showAction={false}
+                  hideContactLabel={true}
+                  onSelectContact={(id) =>
+                    setFormData({ ...formData, buyerId: id })
+                  }
+                  defaultContact={
+                    selectedPurchase?.buyer
+                      ? {
+                          id: selectedPurchase.buyer.id,
+                          name: selectedPurchase.buyer.name,
+                          document: selectedPurchase.buyer.document,
+                        }
+                      : null
                   }
                   className="!p-0 !bg-transparent !border-none !shadow-none"
                 />
@@ -646,21 +843,7 @@ export function PurchasesPage() {
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold text-teal-400">Compras / Entradas</h1>
           <button
-            onClick={() => {
-              setSelectedPurchase(null);
-              setFormData({
-                contactId: "",
-                expectedDate: "",
-                deliveryDate: "",
-                paymentCondition: "",
-                notes: "",
-                items: [],
-                financialInstallments: [],
-                xmlData: null,
-                supplierName: "",
-              });
-              setIsEditing(true);
-            }}
+            onClick={handleNovoPedido}
             className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 text-sm rounded flex items-center gap-2"
           >
             <Plus size={16} /> Nova Compra / Importar XML
@@ -803,9 +986,20 @@ export function PurchasesPage() {
                   >
                     Excluir Pedido
                   </button>
-                  <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors">
+                  <button 
+                    onClick={() => printPurchaseOrder(selectedPurchase)}
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
+                  >
                     Imprimir Ordem
                   </button>
+                  {selectedPurchase.financialRecords && selectedPurchase.financialRecords.length > 0 && (
+                     <button
+                       className="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/50 text-indigo-400 hover:text-indigo-300 shadow-sm py-2 text-sm font-semibold rounded transition-colors shadow-indigo-500/10"
+                       onClick={() => window.location.href = "/financial"}
+                     >
+                       Acessar Financeiro
+                     </button>
+                  )}
                 </div>
               </div>
 
@@ -818,7 +1012,7 @@ export function PurchasesPage() {
                   <table className="w-full text-left text-sm border-collapse">
                     <thead className="bg-[#0078D7] text-white">
                       <tr>
-                        <th className="px-3 py-2 border-b border-blue-800">
+                        <th className="px-3 py-2 border-b border-blue-800 w-24">
                           Código
                         </th>
                         <th className="px-3 py-2 border-b border-blue-800">
@@ -875,6 +1069,61 @@ export function PurchasesPage() {
                   </table>
                 </div>
               </div>
+
+              {/* Grids Bottom - Financeiro (Contas a Pagar geradas) */}
+              <div className="flex-[0.8] bg-slate-800/50 border border-slate-800 shadow-sm rounded-lg flex flex-col overflow-hidden">
+                <h3 className="text-slate-400 font-semibold px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wider bg-slate-900/50 text-left">
+                  Títulos a Pagar (Financeiro)
+                </h3>
+                <div className="p-0 overflow-auto flex-1">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead className="bg-[#0078D7] text-white">
+                      <tr>
+                        <th className="px-3 py-2 border-b border-blue-800">Parcela</th>
+                        <th className="px-3 py-2 border-b border-blue-800">Vencimento</th>
+                        <th className="px-3 py-2 border-b border-blue-800 text-right">Valor</th>
+                        <th className="px-3 py-2 border-b border-blue-800 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-300">
+                      {selectedPurchase.financialRecords && selectedPurchase.financialRecords.map((fin: any) => (
+                          <tr
+                            key={fin.id}
+                            className="border-b border-slate-800 hover:bg-slate-800 transition-colors"
+                          >
+                            <td className="px-3 py-2 font-mono">
+                              {fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Única'}
+                            </td>
+                            <td className="px-3 py-2">
+                              {new Date(fin.dueDate).toLocaleDateString()}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-white">
+                              R$ {Number(fin.amount).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {fin.status === 'PENDING' ? (
+                                <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded text-xs px-2">A Pagar</span>
+                              ) : fin.status === 'PAID' ? (
+                                <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 px-2 py-0.5 rounded text-xs px-2">Liquidado</span>
+                              ) : (
+                                <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded text-xs px-2">{fin.status}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      {(!selectedPurchase.financialRecords || selectedPurchase.financialRecords.length === 0) && (
+                        <tr>
+                          <td colSpan={4} className="text-center p-8 text-slate-500">
+                            {selectedPurchase.status === 'RECEIVED' 
+                                ? 'Nenhum lançamento financeiro encontrado.'
+                                : 'Contas a Pagar serão geradas ao Dar Entrada neste pedido.'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-slate-500">
@@ -902,28 +1151,22 @@ export function PurchasesPage() {
         </div>
         <button
           className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
-          onClick={() => {
-            setSelectedPurchase(null);
-            setFormData({
-              contactId: "",
-              expectedDate: "",
-              deliveryDate: "",
-              paymentCondition: "",
-              notes: "",
-              items: [],
-            });
-            setIsEditing(true);
-          }}
+          onClick={handleNovoPedido}
         >
           <span>Incluir (F2)</span>
         </button>
-        <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors">
+        <button 
+          onClick={() => printPurchaseOrder(selectedPurchase)}
+          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
+        >
           <span>Imprimir (F4)</span>
         </button>
 
         <div className="flex-1"></div>
 
-        <button className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 text-slate-300 hover:text-red-400 px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors">
+        <button 
+          onClick={() => window.history.back()}
+          className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 text-slate-300 hover:text-red-400 px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors">
           <span>Sair</span>
         </button>
       </div>

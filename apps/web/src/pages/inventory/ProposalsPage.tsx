@@ -34,7 +34,173 @@ export function ProposalsPage() {
     loadProposals();
     loadDependencies();
     fetchConditions();
-  }, []);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        e.preventDefault();
+        handleNovaProposta();
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        if (selectedProposal && !isEditing) {
+          printProposal(selectedProposal);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedProposal, isEditing]);
+
+  const handleNovaProposta = () => {
+    setSelectedProposal(null);
+    setFormData({
+      contactId: "",
+      salesperson: "",
+      validUntil: "",
+      deliveryDate: "",
+      special: false,
+      paymentConditionId: "",
+      paymentCondition: "",
+      notes: "",
+      items: [],
+      financialInstallments: [],
+    });
+    setIsEditing(true);
+  };
+
+  const printProposal = (proposal: any) => {
+    if (!proposal) return;
+
+    const printContents = `
+      <html>
+        <head>
+          <title>Orçamento #${String(proposal.code).padStart(6, "0")}</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; margin: 0; color: #111; text-transform: uppercase; }
+            .subtitle { color: #666; font-size: 14px; margin-top: 5px; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+            .info-box { border: 1px solid #ddd; padding: 15px; border-radius: 4px; background: #fafafa; }
+            .info-box strong { display: block; margin-bottom: 5px; color: #222; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+            .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            th { text-align: left; padding: 10px; border-bottom: 2px solid #ddd; background: #f5f5f5; font-size: 12px; text-transform: uppercase; color: #555; }
+            td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+            .text-right { text-align: right; }
+            .totals { width: 300px; float: right; margin-bottom: 30px; }
+            .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+            .total-row.grand-total { border-top: 2px solid #333; font-weight: bold; font-size: 18px; margin-top: 10px; padding-top: 10px; }
+            .clear { clear: both; }
+            .notes { border-top: 1px solid #ddd; padding-top: 20px; font-size: 13px; color: #666; }
+            .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; border: 1px solid #333; }
+            .financial-table th, .financial-table td { font-size: 12px; padding: 6px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Orçamento / Proposta</h1>
+              <div class="subtitle">Nº ${String(proposal.code).padStart(6, "0")}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="subtitle">Data: ${new Date(proposal.createdAt).toLocaleDateString()}</div>
+              <div class="status-badge">${proposal.status === "APPROVED" ? "APROVADO" : proposal.status}</div>
+            </div>
+          </div>
+          
+          <div class="info-grid">
+            <div class="info-box">
+              <strong>Dados do Cliente</strong>
+              <div class="info-row"><span>Nome:</span> <span>${proposal.contact?.name || "-"}</span></div>
+              <div class="info-row"><span>Doc:</span> <span>${proposal.contact?.document || "-"}</span></div>
+            </div>
+            <div class="info-box">
+              <strong>Informações Comerciais</strong>
+              <div class="info-row"><span>Vendedor:</span> <span>${proposal.salesperson || "-"}</span></div>
+              <div class="info-row"><span>Validade:</span> <span>${proposal.validUntil ? new Date(proposal.validUntil).toLocaleDateString() : "-"}</span></div>
+              <div class="info-row"><span>Entrega:</span> <span>${proposal.deliveryDate ? new Date(proposal.deliveryDate).toLocaleDateString() : "-"}</span></div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Descrição</th>
+                <th class="text-right">Qtd</th>
+                <th class="text-right">V. Unit</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${proposal.items?.map((item: any) => `
+                <tr>
+                  <td>${item.product?.sku || item.productId.substring(0, 6)}</td>
+                  <td>${item.product?.name || "-"}</td>
+                  <td class="text-right">${item.quantity}</td>
+                  <td class="text-right">R$ ${Number(item.unitPrice).toFixed(2)}</td>
+                  <td class="text-right">R$ ${Number(item.total).toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div class="total-row grand-total">
+              <span>Total do Orçamento:</span>
+              <span>R$ ${Number(proposal.totalAmount).toFixed(2)}</span>
+            </div>
+          </div>
+          <div class="clear"></div>
+
+          ${proposal.financialRecords && proposal.financialRecords.length > 0 ? `
+            <h4 style="margin-bottom: 10px; color: #333;">Previsão Financeira</h4>
+            <table class="financial-table" style="width: 50%;">
+              <thead>
+                <tr>
+                  <th>Parcela</th>
+                  <th>Vencimento</th>
+                  <th class="text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${proposal.financialRecords.map((fr: any, index: number) => `
+                  <tr>
+                    <td>${index + 1}</td>
+                    <td>${new Date(fr.dueDate).toLocaleDateString()}</td>
+                    <td class="text-right">R$ ${Number(fr.amount).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          ` : ''}
+
+          ${proposal.notes ? `
+            <div class="notes">
+              <strong>Observações:</strong><br/>
+              ${proposal.notes.replace(/\n/g, '<br/>')}
+            </div>
+          ` : ''}
+          
+          <div style="margin-top: 50px; text-align: center; border-top: 1px dashed #ccc; padding-top: 20px;">
+            ___________________________________________________<br/>
+            Assinatura do Cliente
+          </div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(printContents);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    }
+  };
 
   const loadProposals = async () => {
     try {
@@ -106,11 +272,21 @@ export function ProposalsPage() {
 
   const handleSave = async () => {
     try {
-      // Calcular total baseando-se nos itens
       const totalAmount = formData.items.reduce(
         (acc: number, item: any) => acc + Number(item.total),
         0,
       );
+
+      if (formData.financialInstallments && formData.financialInstallments.length > 0) {
+        const totalInstallments = formData.financialInstallments.reduce(
+          (acc: number, inst: any) => acc + Number(inst.amount),
+          0,
+        );
+        if (Math.abs(totalAmount - totalInstallments) > 0.05) {
+          toast.warning(`A soma das parcelas (R$ ${totalInstallments.toFixed(2)}) não pode ser diferente do total do pedido (R$ ${totalAmount.toFixed(2)}).`);
+          return;
+        }
+      }
 
       const payload = {
         ...formData,
@@ -500,7 +676,7 @@ export function ProposalsPage() {
               {/* Totais */}
               <div className="bg-teal-900/20 border border-teal-800/50 p-4 rounded shadow-sm flex flex-col gap-2">
                 <div className="flex justify-between font-semibold text-slate-300">
-                  <span>Total Produtos:</span>
+                  <span>Soma dos Produtos:</span>
                   <span>R$ {totalItemsAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-lg text-teal-400 border-t border-teal-800/50 pt-2 mt-2">
@@ -736,9 +912,20 @@ export function ProposalsPage() {
                   >
                     Excluir Orçamento
                   </button>
-                  <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors">
-                    Imprimir
+                  <button 
+                    onClick={() => printProposal(selectedProposal)}
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
+                  >
+                    Imprimir Orçamento
                   </button>
+                  {selectedProposal.financialRecords && selectedProposal.financialRecords.length > 0 && (
+                     <button
+                       className="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/50 text-indigo-400 hover:text-indigo-300 shadow-sm py-2 text-sm font-semibold rounded transition-colors shadow-indigo-500/10"
+                       onClick={() => window.location.href = "/financial"}
+                     >
+                       Acessar Financeiro
+                     </button>
+                  )}
                 </div>
               </div>
 
@@ -808,6 +995,61 @@ export function ProposalsPage() {
                   </table>
                 </div>
               </div>
+
+              {/* Grids Bottom - Financeiro (Contas a Receber geradas) */}
+              <div className="flex-[0.8] bg-slate-800/50 border border-slate-800 shadow-sm rounded-lg flex flex-col overflow-hidden">
+                <h3 className="text-slate-400 font-semibold px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wider bg-slate-900/50 text-left">
+                  Títulos a Receber (Financeiro)
+                </h3>
+                <div className="p-0 overflow-auto flex-1">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead className="bg-[#0078D7] text-white">
+                      <tr>
+                        <th className="px-3 py-2 border-b border-blue-800">Parcela</th>
+                        <th className="px-3 py-2 border-b border-blue-800">Vencimento</th>
+                        <th className="px-3 py-2 border-b border-blue-800 text-right">Valor</th>
+                        <th className="px-3 py-2 border-b border-blue-800 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-300">
+                      {selectedProposal.financialRecords && selectedProposal.financialRecords.map((fin: any) => (
+                          <tr
+                            key={fin.id}
+                            className="border-b border-slate-800 hover:bg-slate-800 transition-colors"
+                          >
+                            <td className="px-3 py-2 font-mono">
+                              {fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Única'}
+                            </td>
+                            <td className="px-3 py-2">
+                              {new Date(fin.dueDate).toLocaleDateString()}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-white">
+                              R$ {Number(fin.amount).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {fin.status === 'PENDING' ? (
+                                <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded text-xs px-2">A Receber</span>
+                              ) : fin.status === 'PAID' ? (
+                                <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 px-2 py-0.5 rounded text-xs px-2">Liquidado</span>
+                              ) : (
+                                <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded text-xs px-2">{fin.status}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      {(!selectedProposal.financialRecords || selectedProposal.financialRecords.length === 0) && (
+                        <tr>
+                          <td colSpan={4} className="text-center p-8 text-slate-500">
+                            {selectedProposal.status === 'APPROVED' 
+                                ? 'Nenhum lançamento financeiro encontrado.'
+                                : 'Contas a Receber serão geradas ao Aprovar este orçamento.'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-slate-500">
@@ -835,32 +1077,23 @@ export function ProposalsPage() {
         </div>
         <button
           className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
-          onClick={() => {
-            setSelectedProposal(null);
-            setFormData({
-              contactId: "",
-              salesperson: "",
-              validUntil: "",
-              deliveryDate: "",
-              special: false,
-              paymentConditionId: "",
-              paymentCondition: "",
-              notes: "",
-              items: [],
-              financialInstallments: [],
-            });
-            setIsEditing(true);
-          }}
+          onClick={handleNovaProposta}
         >
           <span>Incluir (F2)</span>
         </button>
-        <button className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors">
+        <button 
+          onClick={() => printProposal(selectedProposal)}
+          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
+        >
           <span>Imprimir (F4)</span>
         </button>
 
         <div className="flex-1"></div>
 
-        <button className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 text-slate-300 hover:text-red-400 px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors">
+        <button 
+          onClick={() => window.history.back()}
+          className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 text-slate-300 hover:text-red-400 px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
+        >
           <span>Sair</span>
         </button>
       </div>

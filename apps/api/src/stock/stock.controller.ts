@@ -26,4 +26,14 @@ export class StockController {
   ) {
     return this.stockService.adjustStock(user.tenantId, productId, body);
   }
+
+  @Get('config')
+  getConfig(@CurrentUser() user: CurrentUserData) {
+    return this.stockService.getConfig(user.tenantId);
+  }
+
+  @Post('config')
+  updateConfig(@Body() body: { profitMargin: number }, @CurrentUser() user: CurrentUserData) {
+    return this.stockService.updateConfig(user.tenantId, body);
+  }
 }

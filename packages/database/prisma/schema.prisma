@@ -60,6 +60,7 @@ model Tenant {
   tickets             Ticket[]
   waInstances         WaInstance[]
   connections         Connection[]
+  inventoryConfig     InventoryConfig?
   partyRoles          PartyRole[]
   partyQualifications PartyQualification[]
   processParties      ProcessParty[]
@@ -144,7 +145,8 @@ model Contact {
   processParties            ProcessParty[]
   financialParties          FinancialParty[]
   products                  Product[]
-  purchaseOrders            PurchaseOrder[]
+  purchaseOrders            PurchaseOrder[] // Como fornecedor
+  purchasesAsBuyer          PurchaseOrder[] @relation("PurchaseOrderBuyer") // Como comprador
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -460,6 +462,8 @@ model FinancialRecord {
   id            String    @id @default(uuid())
   tenantId      String
   processId     String?
+  purchaseOrderId String?
+  proposalId    String?
   bankAccountId String?
   categoryId    String? // FK para FinancialCategory
   description   String
@@ -496,6 +500,8 @@ model FinancialRecord {
   // Relações
   invoice           Invoice?
   process           Process?           @relation(fields: [processId], references: [id])
+  purchaseOrder     PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id])
+  proposal          Proposal?          @relation(fields: [proposalId], references: [id])
   bankAccount       BankAccount?       @relation(fields: [bankAccountId], references: [id])
   tenant            Tenant             @relation(fields: [tenantId], references: [id])
   financialCategory FinancialCategory? @relation(fields: [categoryId], references: [id])
@@ -794,6 +800,16 @@ model Product {
   sellPrice    Decimal? @db.Decimal(10, 2)
   isActive     Boolean  @default(true)
 
+  // E-commerce & Logistics
+  images       String[] // URLs das imagens do produto
+  weight       Decimal? @db.Decimal(10, 3) // Peso em Kg
+  width        Decimal? @db.Decimal(10, 2) // Largura em cm
+  height       Decimal? @db.Decimal(10, 2) // Altura em cm
+  length       Decimal? @db.Decimal(10, 2) // Comprimento em cm
+  category     String?  // Categoria para e-commerce/marketplace
+  brand        String?  // Marca do produto
+  isEcommerce  Boolean  @default(false) // Se o produto está visível no ecommerce
+
   supplierId String?
   supplier   Contact? @relation(fields: [supplierId], references: [id])
 
@@ -947,6 +963,7 @@ model Proposal {
 
   items            ProposalItem[]
   invoice          Invoice?
+  financialRecords FinancialRecord[]
   contact          Contact        @relation(fields: [contactId], references: [id])
   tenant           Tenant         @relation(fields: [tenantId], references: [id])
   createdAt        DateTime       @default(now())
@@ -1006,6 +1023,7 @@ model PurchaseOrder {
   id               String              @id @default(uuid())
   tenantId         String
   contactId        String // Fornecedor
+  buyerId          String? // Comprador
   code             Int                 @default(autoincrement())
   status           String // DRAFT, QUOTATION, APPROVED, RECEIVED, CANCELLED
   totalAmount      Decimal             @db.Decimal(15, 2)
@@ -1020,8 +1038,10 @@ model PurchaseOrder {
 
   items            PurchaseOrderItem[]
   invoice          Invoice?
+  financialRecords FinancialRecord[]
   
   contact          Contact             @relation(fields: [contactId], references: [id])
+  buyer            Contact?            @relation("PurchaseOrderBuyer", fields: [buyerId], references: [id])
   tenant           Tenant              @relation(fields: [tenantId], references: [id])
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
@@ -1077,4 +1097,16 @@ model PaymentConditionInstallment {
   paymentCondition   PaymentCondition @relation(fields: [paymentConditionId], references: [id], onDelete: Cascade)
 
   @@map("payment_condition_installments")
+}
+
+model InventoryConfig {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  profitMargin    Decimal  @default(30) @db.Decimal(5, 2)
+  
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("inventory_configs")
 }

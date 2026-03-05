@@ -122,6 +122,7 @@ export class PurchasesService {
   async create(tenantId: string, data: any) {
     const {
       contactId,
+      buyerId,
       totalAmount,
       notes,
       expectedDate,
@@ -138,6 +139,7 @@ export class PurchasesService {
         data: {
           tenantId,
           contactId,
+          buyerId: buyerId || null,
           status: xmlData ? "RECEIVED" : "QUOTATION",
           totalAmount,
           notes,
@@ -230,6 +232,7 @@ export class PurchasesService {
                 installmentNumber: inst.installment || i + 1,
                 totalInstallments: customInstallments.length,
                 paymentConditionId: paymentConditionId || null,
+                purchaseOrderId: purchaseOrder.id,
                 invoice: i === 0 ? { connect: { id: invoice.id } } : undefined,
                 parties: {
                   create: [
@@ -238,6 +241,7 @@ export class PurchasesService {
                       contactId: purchaseOrder.contactId,
                       role: "CREDITOR",
                     },
+                    ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
                   ],
                 },
               },
@@ -256,6 +260,7 @@ export class PurchasesService {
                 type: "EXPENSE",
                 category: "FORNECEDORES / COMPRAS",
                 notes: `Ref. NFe: ${xmlData.accessKey}`,
+                purchaseOrderId: purchaseOrder.id,
                 invoice: i === 0 ? { connect: { id: invoice.id } } : undefined,
                 parties: {
                   create: [
@@ -264,6 +269,7 @@ export class PurchasesService {
                       contactId: purchaseOrder.contactId,
                       role: "CREDITOR",
                     },
+                    ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
                   ],
                 },
               },
@@ -280,6 +286,7 @@ export class PurchasesService {
               type: "EXPENSE",
               category: "FORNECEDORES / COMPRAS",
               notes: `Ref. NFe: ${xmlData.accessKey}`,
+              purchaseOrderId: purchaseOrder.id,
               invoice: { connect: { id: invoice.id } },
               parties: {
                 create: [
@@ -288,6 +295,7 @@ export class PurchasesService {
                     contactId: purchaseOrder.contactId,
                     role: "CREDITOR",
                   },
+                  ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
                 ],
               },
             },
@@ -302,7 +310,7 @@ export class PurchasesService {
   async findAll(tenantId: string) {
     return this.prisma.purchaseOrder.findMany({
       where: { tenantId },
-      include: { contact: true },
+      include: { contact: true, buyer: true },
       orderBy: { createdAt: "desc" },
     });
   }
@@ -313,7 +321,11 @@ export class PurchasesService {
       include: {
         items: { include: { product: true } },
         contact: true,
+        buyer: true,
         invoice: true,
+        financialRecords: {
+           orderBy: { dueDate: 'asc' }
+        }
       },
     });
   }
@@ -321,6 +333,7 @@ export class PurchasesService {
   async update(tenantId: string, id: string, data: any) {
     const {
       contactId,
+      buyerId,
       totalAmount,
       notes,
       expectedDate,
@@ -345,6 +358,7 @@ export class PurchasesService {
         where: { id },
         data: {
           contactId,
+          buyerId: buyerId || null,
           totalAmount,
           notes,
           expectedDate: expectedDate ? new Date(expectedDate) : null,
@@ -368,12 +382,46 @@ export class PurchasesService {
   }
 
   async remove(tenantId: string, id: string) {
-    const existing = await this.prisma.purchaseOrder.findFirst({
-      where: { id, tenantId },
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.purchaseOrder.findFirst({
+        where: { id, tenantId },
+        include: { items: true, invoice: true }
+      });
+      if (!existing)
+        throw new BadRequestException("Pedido de Compra não encontrado");
+
+      // Reverter estoque se RECEBIDO
+      if (existing.status === "RECEIVED") {
+        for (const item of existing.items) {
+          const product = await tx.product.findUnique({ where: { id: item.productId }});
+          if (product && product.type === "PRODUCT") {
+            await tx.product.update({
+              where: { id: product.id },
+              data: { currentStock: product.currentStock - item.quantity }
+            });
+            await tx.inventoryMovement.deleteMany({
+              where: {
+                tenantId,
+                productId: product.id,
+                reason: { contains: existing.code.toString() }
+              }
+            });
+          }
+        }
+      }
+
+      // Limpar XML
+      if (existing.invoice) {
+        await tx.invoice.delete({ where: { id: existing.invoice.id } });
+      }
+
+      // Limpar Financeiro
+      await tx.financialRecord.deleteMany({
+        where: { tenantId, purchaseOrderId: id }
+      });
+
+      return tx.purchaseOrder.delete({ where: { id } });
     });
-    if (!existing)
-      throw new BadRequestException("Pedido de Compra não encontrado");
-    return this.prisma.purchaseOrder.delete({ where: { id } });
   }
 
   async updateStatus(tenantId: string, id: string, status: string) {
@@ -430,6 +478,13 @@ export class PurchasesService {
                 installmentNumber: inst.installment || i + 1,
                 totalInstallments: customInstallments.length,
                 paymentConditionId: purchaseOrder.paymentConditionId || null,
+                purchaseOrderId: purchaseOrder.id,
+                parties: {
+                  create: [
+                    { tenantId, contactId: purchaseOrder.contactId, role: "CREDITOR" },
+                    ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
+                  ]
+                }
               },
             });
             if (i === 0) mainFinancialId = fin.id;
@@ -445,6 +500,13 @@ export class PurchasesService {
               status: "PENDING",
               type: "EXPENSE",
               category: "FORNECEDORES / COMPRAS",
+              purchaseOrderId: purchaseOrder.id,
+              parties: {
+                create: [
+                  { tenantId, contactId: purchaseOrder.contactId, role: "CREDITOR" },
+                  ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
+                ]
+              }
             },
           });
           mainFinancialId = financialRecord.id;

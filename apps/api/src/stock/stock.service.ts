@@ -70,4 +70,24 @@ export class StockService {
         });
     });
   }
+
+  async getConfig(tenantId: string) {
+    let config = await this.prisma.inventoryConfig.findUnique({
+      where: { tenantId }
+    });
+    if (!config) {
+      config = await this.prisma.inventoryConfig.create({
+        data: { tenantId, profitMargin: 30 }
+      });
+    }
+    return config;
+  }
+
+  async updateConfig(tenantId: string, data: { profitMargin: number }) {
+    return this.prisma.inventoryConfig.upsert({
+      where: { tenantId },
+      update: { profitMargin: data.profitMargin },
+      create: { tenantId, profitMargin: data.profitMargin }
+    });
+  }
 }
