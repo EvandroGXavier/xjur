@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { User, Building2, Clock, LogOut, Menu } from 'lucide-react';
+import { InventoryHelpModal } from './inventory/InventoryHelpModal';
 
 const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const navigate = useNavigate();
@@ -103,6 +104,9 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+      
+      {/* Global Watchers / Modals */}
+      <InventoryHelpModal />
     </div>
   );
 }
