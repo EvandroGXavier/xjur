@@ -28,6 +28,9 @@ import {
   XCircle,
   Paperclip,
   Image,
+  ArrowUp,
+  ArrowDown,
+  Target,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -175,7 +178,10 @@ export function Financial() {
     category: '',
   });
 
+  const [activeCardFilter, setActiveCardFilter] = useState<'ALL' | 'INCOME_ALL' | 'INCOME_PENDING' | 'INCOME_OVERDUE' | 'EXPENSE_ALL' | 'EXPENSE_PENDING' | 'EXPENSE_OVERDUE'>('ALL');
+
   const [tagFilters, setTagFilters] = useState<{ included: string[], excluded: string[] }>({ included: [], excluded: [] });
+  const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
 
   const [formData, setFormData] = useState({
     description: '',
@@ -1003,6 +1009,23 @@ export function Financial() {
   const filteredRecords = records.filter((record) => {
     let matches = record.description.toLowerCase().includes(searchTerm.toLowerCase());
     
+    // Filtro via cards
+    if (activeCardFilter === 'INCOME_ALL') {
+      if (record.type !== 'INCOME') matches = false;
+    } else if (activeCardFilter === 'INCOME_PENDING') {
+      if (record.type !== 'INCOME' || record.status !== 'PENDING') matches = false;
+    } else if (activeCardFilter === 'INCOME_OVERDUE') {
+      if (record.type !== 'INCOME' || record.status !== 'OVERDUE') matches = false;
+    } else if (activeCardFilter === 'EXPENSE_ALL') {
+      if (record.type !== 'EXPENSE') matches = false;
+    } else if (activeCardFilter === 'EXPENSE_PENDING') {
+      if (record.type !== 'EXPENSE' || record.status !== 'PENDING') matches = false;
+    } else if (activeCardFilter === 'EXPENSE_OVERDUE') {
+       if (record.type !== 'EXPENSE' || record.status !== 'OVERDUE') matches = false;
+    }
+
+    // Filtros manuais (selects) - se o usuário mudar o select, ele sobrescreve o card? 
+    // Vamos fazer os selects serem filtros adicionais.
     if (filters.type && record.type !== filters.type) matches = false;
     if (filters.status && record.status !== filters.status) matches = false;
     if (filters.category) {
@@ -1024,6 +1047,35 @@ export function Financial() {
 
     return matches;
   });
+
+  const sortedRecords = useMemo(() => {
+    let sortableItems = [...filteredRecords];
+    if (sortConfig.key && sortConfig.direction) {
+      sortableItems.sort((a, b) => {
+        const key = sortConfig.key as keyof FinancialRecord;
+        let aValue: any = a[key] ?? '';
+        let bValue: any = b[key] ?? '';
+        
+        if (key === 'amount' || key === 'amountFinal') {
+          aValue = Number(aValue);
+          bValue = Number(bValue);
+        }
+        
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredRecords, sortConfig]);
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   if (loading) {
     return (
@@ -1232,6 +1284,136 @@ export function Financial() {
               <option value="OVERDUE">Vencido</option>
             </select>
           </div>
+
+          {/* New Card Filters */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <button
+              onClick={() => {
+                setActiveCardFilter('INCOME_ALL');
+                setFilters({ ...filters, type: 'INCOME', status: '' });
+              }}
+              className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                activeCardFilter === 'INCOME_ALL' ? 'bg-green-500/10 border-green-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-2 rounded-lg bg-green-500/20 text-green-400">
+                  <TrendingUp size={20} />
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {dashboard?.summary.totalIncome ? formatCurrency(dashboard.summary.totalIncome) : 'R$ 0,00'}
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Receitas (Tudo)</span>
+              {activeCardFilter === 'INCOME_ALL' && <div className="absolute bottom-0 left-0 h-1 bg-green-500 w-full" />}
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveCardFilter('INCOME_PENDING');
+                setFilters({ ...filters, type: 'INCOME', status: 'PENDING' });
+              }}
+              className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                activeCardFilter === 'INCOME_PENDING' ? 'bg-blue-500/10 border-blue-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
+                  <Clock size={20} />
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {dashboard?.summary.pendingIncome ? formatCurrency(dashboard.summary.pendingIncome) : 'R$ 0,00'}
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Receitas Abertas</span>
+              {activeCardFilter === 'INCOME_PENDING' && <div className="absolute bottom-0 left-0 h-1 bg-blue-500 w-full" />}
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveCardFilter('INCOME_OVERDUE');
+                setFilters({ ...filters, type: 'INCOME', status: 'OVERDUE' });
+              }}
+              className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                activeCardFilter === 'INCOME_OVERDUE' ? 'bg-orange-500/10 border-orange-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-2 rounded-lg bg-orange-500/20 text-orange-400">
+                  <AlertTriangle size={20} />
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {/* Simplificação: dashboard.summary não separa atraso por tipo, mas vamos estimar ou usar o count */}
+                  {dashboard?.summary.overdueCount || 0} items
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Receitas em Atraso</span>
+              {activeCardFilter === 'INCOME_OVERDUE' && <div className="absolute bottom-0 left-0 h-1 bg-orange-500 w-full" />}
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveCardFilter('EXPENSE_ALL');
+                setFilters({ ...filters, type: 'EXPENSE', status: '' });
+              }}
+              className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                activeCardFilter === 'EXPENSE_ALL' ? 'bg-red-500/10 border-red-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-2 rounded-lg bg-red-500/20 text-red-400">
+                  <TrendingDown size={20} />
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {dashboard?.summary.totalExpense ? formatCurrency(dashboard.summary.totalExpense) : 'R$ 0,00'}
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Despesas (Tudo)</span>
+              {activeCardFilter === 'EXPENSE_ALL' && <div className="absolute bottom-0 left-0 h-1 bg-red-500 w-full" />}
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveCardFilter('EXPENSE_PENDING');
+                setFilters({ ...filters, type: 'EXPENSE', status: 'PENDING' });
+              }}
+              className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                activeCardFilter === 'EXPENSE_PENDING' ? 'bg-purple-500/10 border-purple-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
+                  <Clock size={20} />
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {dashboard?.summary.pendingExpense ? formatCurrency(dashboard.summary.pendingExpense) : 'R$ 0,00'}
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Despesas Abertas</span>
+              {activeCardFilter === 'EXPENSE_PENDING' && <div className="absolute bottom-0 left-0 h-1 bg-purple-500 w-full" />}
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveCardFilter('ALL');
+                setFilters({ type: '', status: '', category: '' });
+              }}
+              className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                activeCardFilter === 'ALL' ? 'bg-indigo-500/10 border-indigo-500/50 shadow-lg' : 'bg-slate-900 border-slate-800 hover:bg-slate-800'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
+                  <DollarSign size={20} />
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {records.length}
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Todas Transações</span>
+              {activeCardFilter === 'ALL' && <div className="absolute bottom-0 left-0 h-1 bg-indigo-500 w-full" />}
+            </button>
+          </div>
           
           <AdvancedTagFilter 
             scope="FINANCE"
@@ -1244,70 +1426,86 @@ export function Financial() {
               <thead className="bg-slate-700/50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Descrição
+                    Contatos
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Tipo
+                    Etiquetas
+                  </th>
+                  <th 
+                    onClick={() => handleSort('description')}
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white"
+                  >
+                    <div className="flex items-center gap-1">
+                      Descrição
+                      {sortConfig.key === 'description' && (sortConfig.direction === 'asc' ? <ArrowUp size={12}/> : <ArrowDown size={12}/>)}
+                    </div>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Categoria
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Vencimento
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Tags
+                    Datas
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Valor
+                  <th 
+                    onClick={() => handleSort('amount')}
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white"
+                  >
+                    <div className="flex items-center gap-1">
+                      Valor
+                      {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ArrowUp size={12}/> : <ArrowDown size={12}/>)}
+                    </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider text-right">
                     Ações
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {filteredRecords.map((record) => (
+                {sortedRecords.map((record) => (
                   <Fragment key={record.id}>
-                    <tr className="hover:bg-slate-700/30 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {record.children && record.children.length > 0 && (
-                          <button onClick={() => toggleRowExpand(record.id)} className="text-slate-400 hover:text-white">
-                            {expandedRows.has(record.id) ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
-                          </button>
-                        )}
-                        <div>
-                          <p className="text-sm font-medium text-white">{record.description}</p>
-                          <div className="flex gap-1 items-center">
-                            {record.bankAccount && (
-                              <span className="text-xs text-slate-400">{record.bankAccount.bankName}</span>
-                            )}
-                            {record.totalInstallments && record.totalInstallments > 1 && (
-                              <span className="text-xs px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded border border-purple-500/20">
-                                {record.totalInstallments}x
-                              </span>
-                            )}
-                            {record.isResidual && (
-                              <span className="text-xs px-1.5 py-0.5 bg-orange-500/10 text-orange-400 rounded border border-orange-500/20">
-                                Residual
-                              </span>
-                            )}
-                          </div>
+                    <tr 
+                      className="hover:bg-slate-700/30 transition-colors cursor-default"
+                      onClick={() => handleOpenModal(record)}
+                    >
+                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0">CREDOR:</span>
+                          <span 
+                            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer font-medium"
+                            onClick={() => {
+                              const creditor = record.parties?.find(p => p.role === 'CREDITOR')?.contact;
+                              if (creditor) navigate(`/contacts/${creditor.id}`);
+                            }}
+                          >
+                            {record.type === 'INCOME' ? 'Minha Empresa' : (record.parties?.find(p => p.role === 'CREDITOR')?.contact?.name || '-')}
+                          </span>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0">DEVEDOR:</span>
+                          <span 
+                            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer font-medium"
+                            onClick={() => {
+                              const debtor = record.parties?.find(p => p.role === 'DEBTOR')?.contact;
+                              if (debtor) navigate(`/contacts/${debtor.id}`);
+                            }}
+                          >
+                            {record.type === 'EXPENSE' ? 'Minha Empresa' : (record.parties?.find(p => p.role === 'DEBTOR')?.contact?.name || '-')}
+                          </span>
+                        </div>
+                        {(record.status === 'PAID' || record.bankAccount) && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0">PAGADOR:</span>
+                            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                              <Building2 size={12} />
+                              {record.bankAccount?.bankName || record.paymentMethod || '-'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{getTypeBadge(record.type)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                      {record.financialCategory?.name || record.category || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
-                      {formatDate(record.dueDate)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-300">
+
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <InlineTags
                         tags={record.tags || []}
                         entityId={record.id}
@@ -1315,19 +1513,78 @@ export function Financial() {
                         onRefresh={fetchData}
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(record.status)}</td>
+
+                    <td className="px-6 py-4 min-w-[200px]">
+                      <div className="flex items-center gap-2">
+                        {record.children && record.children.length > 0 && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); toggleRowExpand(record.id); }} 
+                            className="text-slate-400 hover:text-white shrink-0"
+                          >
+                            {expandedRows.has(record.id) ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+                          </button>
+                        )}
+                        <div className="flex flex-col">
+                          <p className="text-sm font-medium text-white line-clamp-3 leading-tight mb-1">
+                            {record.description}
+                          </p>
+                          <div className="flex gap-1 items-center">
+                            {record.financialCategory && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 bg-slate-800 text-slate-400">
+                                {record.financialCategory.name}
+                              </span>
+                            )}
+                            {record.totalInstallments && record.totalInstallments > 1 && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded border border-purple-500/20">
+                                {record.totalInstallments}x
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0 uppercase">Lanç:</span>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {record.createdAt ? formatDate(record.createdAt) : '-'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0 uppercase">Venc:</span>
+                          <span className="text-[11px] text-orange-400 font-bold">
+                            {formatDate(record.dueDate)}
+                          </span>
+                        </div>
+                        {record.paymentDate && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0 uppercase">Pagto:</span>
+                            <span className="text-[11px] text-green-400 font-bold">
+                              {formatDate(record.paymentDate)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(record.status)}
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-right">
                         <span className={`text-sm font-bold ${record.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
                           {record.type === 'INCOME' ? '+' : '-'}{formatCurrency(record.amountFinal ? Number(record.amountFinal) : record.amount)}
                         </span>
                         {record.amountFinal && Number(record.amountFinal) !== record.amount && (
-                          <p className="text-xs text-slate-500 line-through">{formatCurrency(record.amount)}</p>
+                          <p className="text-[10px] text-slate-500 line-through">{formatCurrency(record.amount)}</p>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex gap-1">
+                    <td className="px-6 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-1 justify-end">
                         {(record.status === 'PENDING' || record.status === 'OVERDUE') && (
                           <button
                             onClick={() => handleOpenSettleModal(record)}
@@ -1356,14 +1613,15 @@ export function Financial() {
                   </tr>
                   {/* Parcelas expandidas */}
                   {expandedRows.has(record.id) && record.children?.map((child) => (
-                    <tr key={child.id} className="bg-slate-700/20 border-l-2 border-purple-500/40">
-                      <td className="px-6 py-2 pl-14 whitespace-nowrap">
-                        <p className="text-xs text-slate-300">{child.description}</p>
+                    <tr 
+                      key={child.id} 
+                      className="bg-slate-700/20 border-l-2 border-purple-500/40 hover:bg-slate-700/40 transition-colors"
+                      onClick={() => handleOpenModal(child as FinancialRecord)}
+                    >
+                      <td className="px-6 py-2 pl-14 whitespace-nowrap text-[10px] text-slate-500 italic">
+                        Parcela {child.installmentNumber}/{record.totalInstallments}
                       </td>
-                      <td className="px-6 py-2 whitespace-nowrap"></td>
-                      <td className="px-6 py-2 whitespace-nowrap"></td>
-                      <td className="px-6 py-2 whitespace-nowrap text-xs text-slate-400">{formatDate(child.dueDate)}</td>
-                      <td className="px-6 py-2">
+                      <td className="px-6 py-2" onClick={(e) => e.stopPropagation()}>
                         <InlineTags
                           tags={child.tags || []}
                           entityId={child.id}
@@ -1371,16 +1629,30 @@ export function Financial() {
                           onRefresh={fetchData}
                         />
                       </td>
-                      <td className="px-6 py-2 whitespace-nowrap">{getStatusBadge(child.status)}</td>
-                      <td className="px-6 py-2 whitespace-nowrap">
-                        <span className="text-xs font-bold text-slate-300">{formatCurrency(Number(child.amount))}</span>
+                      <td className="px-6 py-2">
+                        <p className="text-xs text-slate-300 truncate max-w-[200px]">{child.description}</p>
                       </td>
                       <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="flex flex-col">
+                           <span className="text-[10px] text-orange-400 font-bold">V: {formatDate(child.dueDate)}</span>
+                           {child.paymentDate && <span className="text-[10px] text-green-400 font-bold">P: {formatDate(child.paymentDate)}</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap text-xs">
+                        {getStatusBadge(child.status)}
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap text-right">
+                        <span className="text-xs font-bold text-slate-300">{formatCurrency(Number(child.amount))}</span>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
                         {(child.status === 'PENDING' || child.status === 'OVERDUE') && (
-                          <button onClick={() => handleOpenSettleModal(child as FinancialRecord)} className="p-1 text-green-400 hover:bg-green-500/10 rounded" title="Liquidar parcela">
+                          <button onClick={() => handleOpenSettleModal(child as FinancialRecord)} className="p-1.5 text-green-400 hover:bg-green-500/10 rounded transition-colors" title="Liquidar parcela">
                             <Calculator size={14} />
                           </button>
                         )}
+                        <button onClick={() => handleDelete(child.id)} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded transition-colors ml-1" title="Excluir parcela">
+                          <Trash2 size={14} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1388,6 +1660,42 @@ export function Financial() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* AI & Open Finance Preview */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+            <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/30 rounded-xl p-6 relative overflow-hidden group shadow-lg shadow-indigo-500/5 transition-all hover:border-indigo-500/50">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Target size={80} className="text-indigo-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2">
+                <Target className="text-indigo-400" size={20} />
+                IA Financial Insights (Em Breve)
+              </h3>
+              <p className="text-sm text-slate-400 mb-4">
+                O Dr.X está analisando seu fluxo de caixa. Em breve você terá previsões de inadimplência e sugestões de redução de custos automáticas.
+              </p>
+              <div className="flex gap-2">
+                <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded border border-indigo-500/20 uppercase">Projeção 2026</span>
+                <span className="px-2 py-1 bg-purple-500/10 text-purple-400 text-[10px] font-bold rounded border border-purple-500/20 uppercase">Risk Analysis</span>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-900/20 to-teal-900/20 border border-emerald-500/30 rounded-xl p-6 relative overflow-hidden group shadow-lg shadow-emerald-500/5 transition-all hover:border-emerald-500/50">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Building2 size={80} className="text-emerald-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2">
+                <Building2 className="text-emerald-400" size={20} />
+                Open Finance Hub
+              </h3>
+              <p className="text-sm text-slate-400 mb-4">
+                Conecte suas contas bancárias reais para conciliação automática via Open Finance. Sincronização em tempo real com os principais bancos.
+              </p>
+              <button className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
+                <Plus size={14} /> Conectar Banco
+              </button>
+            </div>
           </div>
         </div>
       )}
