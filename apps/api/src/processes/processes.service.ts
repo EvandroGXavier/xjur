@@ -385,6 +385,11 @@ export class ProcessesService {
                             select: { id: true, name: true }
                         }
                     }
+                },
+                timeline: {
+                    orderBy: { date: 'desc' },
+                    take: 1,
+                    select: { date: true, title: true, description: true }
                 }
             },
             orderBy: { createdAt: 'desc' }

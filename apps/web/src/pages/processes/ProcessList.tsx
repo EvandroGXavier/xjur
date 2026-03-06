@@ -34,11 +34,20 @@ interface Process {
     client?: string;
     court?: string;
     courtSystem?: string;
+    vars?: string;
+    district?: string;
+    judge?: string;
+    area?: string;
+    subject?: string;
     status: string;
     category?: 'JUDICIAL' | 'EXTRAJUDICIAL';
     value?: number;
+    distributionDate?: string;
+    folder?: string;
+    responsibleLawyer?: string;
     createdAt: string;
     updatedAt: string;
+    timeline?: { date: string; title?: string; description?: string }[];
     processParties?: {
         isClient: boolean;
         isOpposing: boolean;
@@ -77,7 +86,12 @@ export function ProcessList() {
     useEffect(() => {
         const controller = new AbortController();
         fetchProcesses(controller.signal);
-        return () => controller.abort();
+        const handleFocus = () => fetchProcesses();
+        window.addEventListener('focus', handleFocus);
+        return () => {
+            controller.abort();
+            window.removeEventListener('focus', handleFocus);
+        };
     }, [includedTags, excludedTags, statusFilter]);
 
     const fetchProcesses = async (signal?: AbortSignal) => {
@@ -131,6 +145,24 @@ export function ProcessList() {
         } catch (e) {
             return date;
         }
+    };
+
+    const getTimeElapsed = (date?: string) => {
+        if (!date) return null;
+        const now = new Date();
+        const past = new Date(date);
+        const diffInMs = now.getTime() - past.getTime();
+        const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+        
+        if (diffInDays === 0) return 'Hoje';
+        if (diffInDays === 1) return 'Há 1 dia';
+        if (diffInDays < 30) return `Há ${diffInDays} dias`;
+        const diffInMonths = Math.floor(diffInDays / 30);
+        if (diffInMonths === 1) return 'Há 1 mês';
+        if (diffInMonths < 12) return `Há ${diffInMonths} meses`;
+        const diffInYears = Math.floor(diffInDays / 365);
+        if (diffInYears === 1) return 'Há 1 ano';
+        return `Há ${diffInYears} anos`;
     };
 
     return (
@@ -213,17 +245,17 @@ export function ProcessList() {
                         columns={[
                             {
                                 key: 'title',
-                                label: 'Processo / Informações',
+                                label: 'Processo / Partes',
                                 sortable: true,
                                 render: (process) => {
                                     const clients = process.processParties?.filter(p => p.isClient).map(p => p.contact.name).join(', ') || '-';
                                     const opposing = process.processParties?.filter(p => p.isOpposing).map(p => p.contact.name).join(', ') || '-';
                                     
                                     return (
-                                        <div className="flex flex-col gap-0.5 min-w-[200px]">
+                                        <div className="flex flex-col gap-1 min-w-[280px] py-1">
                                             <div className="flex items-center gap-2">
-                                                <span className="font-bold text-white hover:text-indigo-400 transition-colors cursor-pointer" onClick={() => navigate(`/processes/${process.id}`)}>
-                                                    {process.title}
+                                                <span className="font-bold text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer text-sm" onClick={() => navigate(`/processes/${process.id}`)}>
+                                                    {process.cnj || 'S/ NÚMERO'}
                                                 </span>
                                                 {process.category && (
                                                     <span className={clsx("px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-transparent", process.category === 'JUDICIAL' ? 'text-indigo-400 bg-indigo-500/10' : 'text-amber-400 bg-amber-500/10')}>
@@ -231,20 +263,40 @@ export function ProcessList() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
-                                                <span className="text-emerald-500 font-semibold text-[9px] uppercase">Cliente:</span>
-                                                <span className="truncate max-w-[150px]">{clients}</span>
+                                            <div className="space-y-0.5">
+                                                <div className="flex items-start gap-1.5 text-slate-300 text-[11px]">
+                                                    <span className="text-slate-500 font-bold uppercase w-14 shrink-0">Título:</span>
+                                                    <span className="font-medium text-white">{process.title}</span>
+                                                </div>
+                                                <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
+                                                    <span className="text-emerald-500 font-bold uppercase w-14 shrink-0">Cliente:</span>
+                                                    <span className="truncate max-w-[200px]">{clients}</span>
+                                                </div>
+                                                <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
+                                                    <span className="text-red-500 font-bold uppercase w-14 shrink-0">Adverso:</span>
+                                                    <span className="truncate max-w-[200px]">{opposing}</span>
+                                                </div>
+                                                <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
+                                                    <span className="text-indigo-500/80 font-bold uppercase w-14 shrink-0">Resp.:</span>
+                                                    <span className="text-slate-200">{process.responsibleLawyer || '-'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 mt-2 text-slate-500 text-[9px] font-mono group/cnj">
+                                                    <span className="truncate max-w-[180px]">{process.cnj || 'ID: ' + process.id.substring(0,8)}</span>
+                                                    {process.cnj && (
+                                                        <button 
+                                                            onClick={(e) => { 
+                                                                e.stopPropagation(); 
+                                                                navigator.clipboard.writeText(process.cnj!); 
+                                                                toast.success('CNJ copiado!'); 
+                                                            }} 
+                                                            className="opacity-0 group-hover/cnj:opacity-100 hover:text-indigo-400 transition-all p-1 -m-1" 
+                                                            title="Copiar CNJ"
+                                                        >
+                                                            <FileText size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
-                                                <span className="text-red-500 font-semibold text-[9px] uppercase">Contrário:</span>
-                                                <span className="truncate max-w-[150px]">{opposing}</span>
-                                            </div>
-                                            <span className="text-slate-500 text-[9px] mt-1 font-mono flex items-center gap-1 group/cnj">
-                                                {process.cnj || 'ID: ' + process.id.substring(0,8)}
-                                                {process.cnj && (
-                                                    <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(process.cnj!); toast.success('CNJ copiado!'); }} className="opacity-0 group-hover/cnj:opacity-100 hover:text-white transition-opacity" title="Copiar CNJ"><FileText size={10} /></button>
-                                                )}
-                                            </span>
                                         </div>
                                     );
                                 }
@@ -262,31 +314,59 @@ export function ProcessList() {
                                 )
                             },
                             {
-                                key: 'court',
-                                label: 'Foro',
-                                sortable: true,
+                                key: 'info' as any,
+                                label: 'Informações',
                                 render: (process) => (
-                                    <div className="flex flex-col">
-                                        <span className="text-slate-300 text-sm">{process.court || '-'}</span>
-                                        {process.courtSystem && <span className="text-[10px] text-slate-500 font-mono">{process.courtSystem}</span>}
+                                    <div className="flex flex-col gap-1 min-w-[200px] py-1">
+                                        <div className="flex items-center gap-1.5 text-[11px]">
+                                            <span className="text-slate-500 font-bold uppercase w-12 shrink-0">Pasta:</span>
+                                            <span className="text-indigo-400 font-mono font-bold bg-indigo-500/5 px-1 rounded">{process.folder || '-'}</span>
+                                        </div>
+                                        <div className="flex items-start gap-1.5 text-[10px]">
+                                            <span className="text-slate-500 font-bold uppercase w-12 shrink-0">Vara/Juiz:</span>
+                                            <span className="text-slate-300 italic">{process.vars || '-'} {process.judge ? `(${process.judge})` : ''}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px]">
+                                            <span className="text-slate-500 font-bold uppercase w-12 shrink-0">Área:</span>
+                                            <span className="text-slate-400">{process.area || '-'} / {process.subject || '-'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] mt-1">
+                                            <span className="text-emerald-400/80 font-bold uppercase w-12 shrink-0">Valor:</span>
+                                            <span className="text-emerald-400 font-mono font-bold">{formatCurrency(Number(process.value))}</span>
+                                        </div>
                                     </div>
                                 )
                             },
-
-                            { key: 'client', label: 'Cliente', sortable: true, render: (process) => <span className="text-slate-300 hover:text-white cursor-pointer transition-colors">{process.client || '-'}</span> },
-                            {
-                                key: 'status',
-                                label: 'Status',
-                                sortable: true,
+                            { 
+                                key: 'createdAt', 
+                                label: 'Histórico & Datas', 
+                                sortable: true, 
                                 render: (process) => {
-                                    const variantMap: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
-                                        'ATIVO': 'success', 'EM_ANDAMENTO': 'info', 'SUSPENSO': 'warning', 'ARQUIVADO': 'default', 'ENCERRADO': 'default'
-                                    };
-                                    return <Badge variant={variantMap[process.status] || 'default'}>{process.status?.replace('_', ' ') || 'RASCUNHO'}</Badge>;
+                                    const lastMov = process.timeline?.[0];
+                                    const elapsed = getTimeElapsed(lastMov?.date);
+                                    
+                                    return (
+                                        <div className="flex flex-col gap-2 min-w-[250px] py-1">
+                                            <div className="flex gap-3 font-mono text-[10px] border-b border-slate-800 pb-1">
+                                                <div className="flex items-center gap-1 text-slate-400"><span className="text-emerald-500 font-bold">C:</span>{formatDate(process.createdAt)}</div>
+                                                <div className="flex items-center gap-1 text-slate-400"><span className="text-blue-500 font-bold">D:</span>{formatDate(process.distributionDate)}</div>
+                                                <div className="flex items-center gap-1 text-slate-400"><span className="text-amber-500 font-bold">A:</span>{formatDate(lastMov?.date)}</div>
+                                            </div>
+                                            {lastMov && (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-800 px-1 rounded">Último Andamento:</span>
+                                                        <span className="text-[9px] text-amber-400 font-bold">{elapsed}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-300 line-clamp-2 leading-tight" title={lastMov.description}>
+                                                        {lastMov.title || lastMov.description || 'Sem descrição'}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
                                 }
                             },
-                            { key: 'value', label: 'Valor', sortable: true, render: (process) => <span className="font-mono text-xs text-slate-300">{formatCurrency(process.value)}</span> },
-                            { key: 'createdAt', label: 'Data', sortable: true, render: (process) => <span className="text-slate-400 text-xs">{formatDate(process.createdAt)}</span> },
                             {
                                 key: 'actions' as keyof Process,
                                 label: 'Ações',
