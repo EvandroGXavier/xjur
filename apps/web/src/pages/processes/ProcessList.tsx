@@ -5,7 +5,7 @@ import {
     List, 
     Search, 
     Filter, 
-    Kanban, 
+    Kanban,
     FileText,
     Gavel,
     Trash2,
@@ -13,7 +13,10 @@ import {
     Pencil,
     Trash,
     ExternalLink,
-    Settings
+    Settings,
+    MessageCircle,
+    Phone as PhoneIcon,
+    Mail
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -21,7 +24,6 @@ import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { MagicProcessModal } from './MagicProcessModal';
 import { DataGrid } from '../../components/ui/DataGrid';
-import { Badge } from '../../components/ui/Badge';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
@@ -54,7 +56,12 @@ interface Process {
         contact: {
             id: string;
             name: string;
+            email?: string;
+            phone?: string;
+            whatsapp?: string;
         }
+        role?: { name: string; category?: string };
+        qualification?: { name: string };
     }[];
 }
 
@@ -152,17 +159,32 @@ export function ProcessList() {
         const now = new Date();
         const past = new Date(date);
         const diffInMs = now.getTime() - past.getTime();
-        const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
         
-        if (diffInDays === 0) return 'Hoje';
-        if (diffInDays === 1) return 'Há 1 dia';
-        if (diffInDays < 30) return `Há ${diffInDays} dias`;
-        const diffInMonths = Math.floor(diffInDays / 30);
-        if (diffInMonths === 1) return 'Há 1 mês';
-        if (diffInMonths < 12) return `Há ${diffInMonths} meses`;
-        const diffInYears = Math.floor(diffInDays / 365);
-        if (diffInYears === 1) return 'Há 1 ano';
-        return `Há ${diffInYears} anos`;
+        const seconds = Math.floor(diffInMs / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        const months = Math.floor(days / 30);
+        const years = Math.floor(days / 365);
+
+        if (years > 0) {
+            const remMonths = months % 12;
+            return `Há ${years} ${years === 1 ? 'ano' : 'anos'}${remMonths > 0 ? ` e ${remMonths} meses` : ''}`;
+        }
+        if (months > 0) {
+            const remDays = days % 30;
+            return `Há ${months} ${months === 1 ? 'mês' : 'meses'}${remDays > 0 ? ` e ${remDays} dias` : ''}`;
+        }
+        if (days > 0) {
+            const remHours = hours % 24;
+            return `Há ${days} ${days === 1 ? 'dia' : 'dias'}${remHours > 0 ? ` e ${remHours}h` : ''}`;
+        }
+        if (hours > 0) {
+            const remMins = minutes % 60;
+            return `Há ${hours} ${hours === 1 ? 'hora' : 'horas'}${remMins > 0 ? ` e ${remMins}min` : ''}`;
+        }
+        if (minutes > 0) return `Há ${minutes} min`;
+        return 'Agora mesmo';
     };
 
     return (
@@ -248,13 +270,90 @@ export function ProcessList() {
                                 label: 'Processo / Partes',
                                 sortable: true,
                                 render: (process) => {
-                                    const clients = process.processParties?.filter(p => p.isClient).map(p => p.contact.name).join(', ') || '-';
-                                    const opposing = process.processParties?.filter(p => p.isOpposing).map(p => p.contact.name).join(', ') || '-';
+                                    const partiesSlice = process.processParties || [];
+                                    
+                                    const filterAndRender = (label: string, labelColor: string, typeFilter: (p: any) => boolean) => {
+                                        const filtered = partiesSlice.filter(typeFilter);
+                                        if (filtered.length === 0) return null;
+                                        return (
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className={clsx("text-[8px] font-bold uppercase shrink-0", labelColor)}>{label}:</span>
+                                                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                                    {filtered.map(p => (
+                                                        <div key={p.contact.id} className="flex flex-col">
+                                                            <span 
+                                                                className="text-white hover:text-indigo-400 cursor-pointer transition-colors font-medium truncate max-w-[180px]"
+                                                                onClick={(e) => { e.stopPropagation(); navigate(`/contacts/${p.contact.id}`); }}
+                                                            >
+                                                                {p.contact.name}
+                                                            </span>
+                                                            <div className="flex items-center gap-2 mt-0.5 ml-0.5">
+                                                                {p.contact.whatsapp && (
+                                                                    <a 
+                                                                        href={`https://wa.me/55${p.contact.whatsapp.replace(/\D/g, '')}`} 
+                                                                        target="_blank" 
+                                                                        rel="noreferrer"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="text-emerald-500 hover:text-emerald-400 transition-colors"
+                                                                        title="WhatsApp"
+                                                                    >
+                                                                        <MessageCircle size={10} />
+                                                                    </a>
+                                                                )}
+                                                                {p.contact.phone && (
+                                                                    <a 
+                                                                        href={`tel:${p.contact.phone.replace(/\D/g, '')}`}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="text-blue-500 hover:text-blue-400 transition-colors"
+                                                                        title="Telefone"
+                                                                    >
+                                                                        <PhoneIcon size={10} />
+                                                                    </a>
+                                                                )}
+                                                                {p.contact.email && (
+                                                                    <a 
+                                                                        href={`mailto:${p.contact.email}`}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="text-amber-500 hover:text-amber-400 transition-colors"
+                                                                        title="E-mail"
+                                                                    >
+                                                                        <Mail size={10} />
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    };
+
+                                    const isClient = (p: any) => {
+                                        const qName = p.qualification?.name?.toUpperCase();
+                                        const rCat = p.role?.category?.toUpperCase();
+                                        const rName = p.role?.name?.toUpperCase();
+                                        return p.isClient || qName === 'CLIENTE' || rCat === 'POLO_ATIVO' || (['AUTOR', 'RECLAMANTE', 'REQUERENTE'].some(n => rName?.includes(n)));
+                                    };
+
+                                    const isOpposing = (p: any) => {
+                                        const qName = p.qualification?.name?.toUpperCase();
+                                        const rCat = p.role?.category?.toUpperCase();
+                                        const rName = p.role?.name?.toUpperCase();
+                                        return p.isOpposing || qName === 'CONTRÁRIO' || rCat === 'POLO_PASSIVO' || (['RÉU', 'RECLAMADO', 'REQUERIDO'].some(n => rName?.includes(n)));
+                                    };
+
+                                    const respParty = partiesSlice.find(p => {
+                                        const qName = p.qualification?.name?.toUpperCase();
+                                        const rName = p.role?.name?.toUpperCase();
+                                        return qName === 'RESPONSAVEL' || rName?.includes('RESPONSAVEL');
+                                    })?.contact.name;
+                                    
+                                    const responsible = process.responsibleLawyer || respParty || '-';
                                     
                                     return (
-                                        <div className="flex flex-col gap-1 min-w-[280px] py-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-bold text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer text-sm" onClick={() => navigate(`/processes/${process.id}`)}>
+                                        <div className="flex flex-col gap-2 min-w-[280px] py-1">
+                                            <div className="flex items-center gap-2 cursor-pointer group/title" onClick={() => navigate(`/processes/${process.id}`)}>
+                                                <span className="font-bold text-indigo-400 group-hover/title:text-indigo-300 transition-colors text-sm">
                                                     {process.cnj || 'S/ NÚMERO'}
                                                 </span>
                                                 {process.category && (
@@ -263,23 +362,23 @@ export function ProcessList() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="space-y-0.5">
-                                                <div className="flex items-start gap-1.5 text-slate-300 text-[11px]">
+                                            <div className="space-y-1.5">
+                                                <div 
+                                                    className="flex items-start gap-1.5 text-slate-300 text-[11px] cursor-pointer hover:bg-slate-800/50 p-0.5 -m-0.5 rounded transition"
+                                                    onClick={() => navigate(`/processes/${process.id}`)}
+                                                >
                                                     <span className="text-slate-500 font-bold uppercase w-14 shrink-0">Título:</span>
                                                     <span className="font-medium text-white">{process.title}</span>
                                                 </div>
-                                                <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
-                                                    <span className="text-emerald-500 font-bold uppercase w-14 shrink-0">Cliente:</span>
-                                                    <span className="truncate max-w-[200px]">{clients}</span>
-                                                </div>
-                                                <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
-                                                    <span className="text-red-500 font-bold uppercase w-14 shrink-0">Adverso:</span>
-                                                    <span className="truncate max-w-[200px]">{opposing}</span>
-                                                </div>
+                                                
+                                                {filterAndRender('Cliente', 'text-emerald-500', isClient)}
+                                                {filterAndRender('Adverso', 'text-red-500', isOpposing)}
+
                                                 <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
                                                     <span className="text-indigo-500/80 font-bold uppercase w-14 shrink-0">Resp.:</span>
-                                                    <span className="text-slate-200">{process.responsibleLawyer || '-'}</span>
+                                                    <span className="text-slate-200">{responsible}</span>
                                                 </div>
+
                                                 <div className="flex items-center gap-1.5 mt-2 text-slate-500 text-[9px] font-mono group/cnj">
                                                     <span className="truncate max-w-[180px]">{process.cnj || 'ID: ' + process.id.substring(0,8)}</span>
                                                     {process.cnj && (
@@ -368,7 +467,7 @@ export function ProcessList() {
                                 }
                             },
                             {
-                                key: 'actions' as keyof Process,
+                                key: 'actions' as any,
                                 label: 'Ações',
                                 sortable: false,
                                 render: (process) => (

@@ -3,7 +3,7 @@ import { HelpSection } from '../components/HelpModal';
 export const helpContacts: HelpSection[] = [
   {
     title: 'Visão Geral (Contatos)',
-    content: 'O módulo de <b>Contatos</b> permite que você gerencie seus clientes, partes contrárias, advogados e outros envolvidos nos processos.',
+    content: 'O módulo de <b>Contatos</b> permite que você gerencie seus clientes, partes contrárias, advogados e outros envolvidos nos processos.<br/><br/><b>💡 Dica de Cadastro:</b> Se você não tiver os dados obrigatórios no momento, pode usar os padrões <b>99 99999999</b> para telefones e <b>nt@nt.com.br</b> para e-mail. Estes valores permitem duplicidade na base de dados para não travar o cadastro, e indicam que as informações reais ainda não foram obtidas.',
   },
   {
     title: 'Como Cadastrar um Novo Contato',

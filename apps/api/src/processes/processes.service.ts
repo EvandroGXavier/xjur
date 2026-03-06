@@ -382,8 +382,10 @@ export class ProcessesService {
                 processParties: {
                     include: {
                         contact: {
-                            select: { id: true, name: true }
-                        }
+                            select: { id: true, name: true, email: true, phone: true, whatsapp: true }
+                        },
+                        role: { select: { name: true, category: true } },
+                        qualification: { select: { name: true } }
                     }
                 },
                 timeline: {

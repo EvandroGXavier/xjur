@@ -331,12 +331,15 @@ export class ContactsService {
     const phone = clean(data.phone).replace(/\D/g, '');
     const email = clean(data.email).toLowerCase();
 
+    const isPlaceholderPhone = (val: string) => val.replace(/\D/g, '') === '9999999999';
+    const isPlaceholderEmail = (val: string) => val.toLowerCase().trim() === 'nt@nt.com.br';
+
     // Monta as condições OR baseadas nos valores preenchidos
     const conditions: any[] = [];
     if (name) conditions.push({ name: { equals: name, mode: 'insensitive' } });
-    if (whatsapp) conditions.push({ whatsapp: { endsWith: whatsapp.slice(-8) } }); // Simplificação para celular 
-    if (phone) conditions.push({ phone: { endsWith: phone.slice(-8) } });
-    if (email) conditions.push({ email: { equals: email, mode: 'insensitive' } });
+    if (whatsapp && !isPlaceholderPhone(whatsapp)) conditions.push({ whatsapp: { endsWith: whatsapp.slice(-8) } }); // Simplificação para celular 
+    if (phone && !isPlaceholderPhone(phone)) conditions.push({ phone: { endsWith: phone.slice(-8) } });
+    if (email && !isPlaceholderEmail(email)) conditions.push({ email: { equals: email, mode: 'insensitive' } });
     
     // Base documents
     if (document) conditions.push({ document: { endsWith: document } });
@@ -375,8 +378,8 @@ export class ContactsService {
     if (name && hit.name?.toLowerCase() === name) matchedField = 'nome';
     if (email && hit.email?.toLowerCase() === email) matchedField = 'e-mail';
     // Removemos non-digits também nos do banco para comparar perfeitamente
-    if (whatsapp && clean(hit.whatsapp).replace(/\D/g, '').endsWith(whatsapp.slice(-8))) matchedField = 'celular/whatsapp';
-    if (phone && clean(hit.phone).replace(/\D/g, '').endsWith(phone.slice(-8))) matchedField = 'telefone';
+    if (whatsapp && !isPlaceholderPhone(whatsapp) && clean(hit.whatsapp).replace(/\D/g, '').endsWith(whatsapp.slice(-8))) matchedField = 'celular/whatsapp';
+    if (phone && !isPlaceholderPhone(phone) && clean(hit.phone).replace(/\D/g, '').endsWith(phone.slice(-8))) matchedField = 'telefone';
     if (document && clean(hit.document).replace(/\D/g, '').endsWith(document)) matchedField = 'documento';
     if (cpf && hit.pfDetails?.cpf && clean(hit.pfDetails.cpf).replace(/\D/g, '').endsWith(cpf)) matchedField = 'cpf';
     if (cnpj && hit.pjDetails?.cnpj && clean(hit.pjDetails.cnpj).replace(/\D/g, '').endsWith(cnpj)) matchedField = 'cnpj';
@@ -636,13 +639,15 @@ export class ContactsService {
         const emailKey = contact.email?.toLowerCase().trim();
 
         let isDuplicate = false;
+        const isPlaceholderPhone = (val: string) => val.replace(/\D/g, '') === '9999999999';
+        const isPlaceholderEmail = (val: string) => val.toLowerCase().trim() === 'nt@nt.com.br';
 
         // Trata como duplicado se o mesmo nome já ocorreu
         if (nameKey && seenNames.has(nameKey)) isDuplicate = true;
-        // Ou se o mesmo celular (últimos 8 dígitos) ocorrer
-        if (phoneKey && seenPhones.has(phoneKey)) isDuplicate = true;
-        // Ou se o mesmo email ocorrer
-        if (emailKey && seenEmails.has(emailKey)) isDuplicate = true;
+        // Ou se o mesmo celular (últimos 8 dígitos) ocorrer (e não for placeholder)
+        if (phoneKey && !isPlaceholderPhone(phoneKey) && seenPhones.has(phoneKey)) isDuplicate = true;
+        // Ou se o mesmo email ocorrer (e não for placeholder)
+        if (emailKey && !isPlaceholderEmail(emailKey) && seenEmails.has(emailKey)) isDuplicate = true;
 
         if (isDuplicate) {
           isIrregular = true;

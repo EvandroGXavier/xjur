@@ -686,6 +686,14 @@ export function ContactForm() {
       // Somente valida se preencheu algo, e ignoramos se já estiver salvo e o valor encontrado for de outro? 
       // Se encontrarmos, redirecionamos.
       if (!value || !value.trim()) return;
+
+      // Ignorar placeholders
+      const isPlaceholderPhone = (val: string) => val.replace(/\D/g, '') === '9999999999';
+      const isPlaceholderEmail = (val: string) => val.toLowerCase().trim() === 'nt@nt.com.br';
+      
+      if ((field === 'whatsapp' || field === 'phone') && isPlaceholderPhone(value)) return;
+      if (field === 'email' && isPlaceholderEmail(value)) return;
+
       if (id !== 'new') return; // Se já estamos editando um contato existente, evitar redirecionamentos surpresa (ou podemos redirecionar se for diferente do id atual). A regra faz mais sentido na criação.
       
       try {
