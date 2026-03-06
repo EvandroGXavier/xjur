@@ -207,7 +207,14 @@ export function ContactList() {
           <p className="text-slate-400 mt-1">Gerencie e analise sua base de clientes, leads e parceiros.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+            <button 
+                onClick={() => setIsHelpOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition border border-slate-700"
+                title="Ajuda (CTRL + F1)"
+            >
+                <HelpCircle size={20} /> Ajuda
+            </button>
             <button 
                 onClick={() => navigate('/contacts/new')} 
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap"

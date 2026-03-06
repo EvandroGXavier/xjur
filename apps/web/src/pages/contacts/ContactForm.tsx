@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search } from 'lucide-react';
+import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search, HelpCircle } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
 import { masks } from '../../utils/masks';
+import { HelpModal, useHelpModal } from '../../components/HelpModal';
+import { helpContacts } from '../../data/helpManuals';
 
 import { PJTab } from './PJTab';
 
@@ -197,6 +199,7 @@ export function ContactForm() {
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [requireOneInfo, setRequireOneInfo] = useState(true);
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   
   // Address form states
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -908,6 +911,13 @@ export function ContactForm() {
             </button>
              <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700">
                 <Calendar size={14} /> Agenda
+            </button>
+            <button 
+                onClick={() => setIsHelpOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition border border-slate-700 text-sm"
+                title="Ajuda (CTRL + F1)"
+            >
+                <HelpCircle size={14} /> Ajuda
             </button>
         </div>
       </div>
@@ -2180,6 +2190,7 @@ export function ContactForm() {
           <span>Voltar para o Local Anterior</span>
         </button>
       )}
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Contatos" sections={helpContacts} />
     </div>
   );
 }
