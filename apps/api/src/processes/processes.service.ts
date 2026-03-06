@@ -318,33 +318,78 @@ export class ProcessesService {
         }
     }
     
-    async findAll(params: { tenantId: string, search?: string }) {
+    async findAll(params: { 
+        tenantId: string, 
+        search?: string, 
+        includedTags?: string, 
+        excludedTags?: string,
+        status?: string 
+    }) {
         if (!params.tenantId) {
-             throw new BadRequestException('Tenant ID is required');
+            throw new BadRequestException('Tenant ID is required');
         }
-        const { tenantId } = params;
+        const { tenantId, search, includedTags, excludedTags, status } = params;
 
-         const where: any = { tenantId };
-         
-         if (params.search) {
-             where.OR = [
-                 { cnj: { contains: params.search } },
-                 { title: { contains: params.search, mode: 'insensitive' } },
-             ];
-         }
+        const where: any = { tenantId };
 
-         const results = await this.prisma.process.findMany({
-             where,
-             include: {
-                 tags: {
-                     include: {
-                         tag: true
-                     }
-                 }
-             },
-             orderBy: { createdAt: 'desc' }
-         });
-         return results;
+        // Search Logic
+        if (search) {
+            where.OR = [
+                { cnj: { contains: search, mode: 'insensitive' } },
+                { title: { contains: search, mode: 'insensitive' } },
+                { code: { contains: search, mode: 'insensitive' } },
+                { court: { contains: search, mode: 'insensitive' } },
+                { district: { contains: search, mode: 'insensitive' } },
+            ];
+        }
+
+        // Status Logic
+        if (status && status !== 'ALL') {
+             where.status = status;
+        }
+
+        // Tag Filtering
+        if (includedTags || excludedTags) {
+            if (!where.AND) where.AND = [];
+            
+            if (includedTags) {
+                const incArray = includedTags.split(',');
+                where.AND.push({
+                    tags: {
+                        some: { tagId: { in: incArray } }
+                    }
+                });
+            }
+
+            if (excludedTags) {
+                const excArray = excludedTags.split(',');
+                where.AND.push({
+                    tags: {
+                        none: { tagId: { in: excArray } }
+                    }
+                });
+            }
+        }
+
+        const results = await this.prisma.process.findMany({
+            where,
+            include: {
+                tags: {
+                    include: {
+                        tag: true
+                    }
+                },
+                processParties: {
+                    include: {
+                        contact: {
+                            select: { id: true, name: true }
+                        }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        return results;
     }
 
     async findOne(id: string, tenantId: string) {

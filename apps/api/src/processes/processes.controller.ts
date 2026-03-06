@@ -74,8 +74,20 @@ export class ProcessesController {
     }
 
     @Get()
-    async findAll(@CurrentUser() user: CurrentUserData, @Query('search') search: string) {
-        return this.processesService.findAll({ tenantId: user.tenantId, search });
+    async findAll(
+        @CurrentUser() user: CurrentUserData, 
+        @Query('search') search?: string,
+        @Query('includedTags') includedTags?: string,
+        @Query('excludedTags') excludedTags?: string,
+        @Query('status') status?: string,
+    ) {
+        return this.processesService.findAll({ 
+            tenantId: user.tenantId, 
+            search, 
+            includedTags, 
+            excludedTags, 
+            status 
+        });
     }
 
     @Get(':id')

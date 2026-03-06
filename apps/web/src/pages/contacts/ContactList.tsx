@@ -1,14 +1,30 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Users, Mail, Phone, FileText, Search, Filter, MessageSquare, Settings, Target, Building2, User, Clock, ChevronRight } from 'lucide-react';
+import { 
+    Search, Plus, Filter, Users, UserPlus, 
+    Building2, Clock, MoreHorizontal, Pencil, 
+    Trash2, HelpCircle, LayoutGrid, List,
+    FileText,
+    Settings,
+    Target,
+    Mail,
+    Phone,
+    MessageSquare,
+    ChevronRight,
+    User
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
+import { Badge } from '../../components/ui/Badge';
 import { DataGrid } from '../../components/ui/DataGrid';
-import { InlineTags } from '../../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
+import { InlineTags } from '../../components/ui/InlineTags';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpContacts } from '../../data/helpManuals';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { clsx } from 'clsx';
 
 interface Contact {
   id: string;
@@ -30,29 +46,31 @@ type CardFilter = 'ALL' | 'LEADS' | 'PJ' | 'PF' | 'RECENT';
 export function ContactList() {
   const navigate = useNavigate();
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'true' | 'false'>('ALL');
+  const [includedTags, setIncludedTags] = useState<string[]>([]);
+  const [excludedTags, setExcludedTags] = useState<string[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCardFilter, setActiveCardFilter] = useState<CardFilter>('ALL');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Contact | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   
-  const [includedTags, setIncludedTags] = useState<string[]>([]);
-  const [excludedTags, setExcludedTags] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('LIST'); // New state for view mode
   
   useEffect(() => {
-    const controller = new AbortController();
-    fetchContacts(controller.signal);
-    return () => controller.abort();
-  }, [includedTags, excludedTags]);
+     fetchContacts();
+  }, [includedTags, excludedTags, statusFilter, searchTerm]); // Added searchTerm to dependencies
 
-  const fetchContacts = async (signal?: AbortSignal) => {
+  const fetchContacts = async () => {
     try {
         setLoading(true);
-        const params: any = {};
+        const params: any = { search: searchTerm };
         if (includedTags.length > 0) params.includedTags = includedTags.join(',');
         if (excludedTags.length > 0) params.excludedTags = excludedTags.join(',');
+        if (statusFilter !== 'ALL') params.active = statusFilter;
 
-        const response = await api.get('/contacts', { signal, params });
+        const response = await api.get('/contacts', { params });
         console.log('Contatos carregados:', response.data);
         setContacts(Array.isArray(response.data) ? response.data : []);
     } catch (err: any) {
@@ -67,6 +85,17 @@ export function ContactList() {
   const getCleanDoc = (c: Contact) => {
       const doc = c.document || c.cpf || c.cnpj;
       return doc ? doc.replace(/\D/g, '') : '';
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      return format(date, 'dd/MM/yyyy HH:mm', { locale: ptBR });
+    } catch (error) {
+      console.error("Error formatting date:", dateString, error);
+      return dateString;
+    }
   };
 
   const stats = useMemo(() => {
@@ -115,17 +144,17 @@ export function ContactList() {
           sortableItems = sortableItems.filter(c => c.createdAt && new Date(c.createdAt) >= sevenDaysAgo);
       }
 
-      // Aplica o termo de busca via texto
-      if (searchTerm) {
-          const lowerTerm = searchTerm.toLowerCase();
-          sortableItems = sortableItems.filter(c => 
-              (c.name && c.name.toLowerCase().includes(lowerTerm)) ||
-              (c.email && c.email.toLowerCase().includes(lowerTerm)) ||
-              (c.document && c.document.toLowerCase().includes(lowerTerm)) ||
-              (c.phone && c.phone.toLowerCase().includes(lowerTerm)) ||
-              (c.whatsapp && c.whatsapp.toLowerCase().includes(lowerTerm))
-          );
-      }
+      // Aplica o termo de busca via texto (já feito na API, mas mantido para consistência se a API não for usada)
+      // if (searchTerm) {
+      //     const lowerTerm = searchTerm.toLowerCase();
+      //     sortableItems = sortableItems.filter(c => 
+      //         (c.name && c.name.toLowerCase().includes(lowerTerm)) ||
+      //         (c.email && c.email.toLowerCase().includes(lowerTerm)) ||
+      //         (c.document && c.document.toLowerCase().includes(lowerTerm)) ||
+      //         (c.phone && c.phone.toLowerCase().includes(lowerTerm)) ||
+      //         (c.whatsapp && c.whatsapp.toLowerCase().includes(lowerTerm))
+      //     );
+      // }
 
       // Aplica a ordenação
       if (sortConfig.key && sortConfig.direction) {
@@ -219,51 +248,56 @@ export function ContactList() {
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full md:max-w-xl">
-                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input 
-                    type="text" 
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    placeholder="Buscar contatos no filtro atual..." 
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500 placeholder-slate-500 transition-all font-medium" 
+            <div className="flex flex-col md:flex-row gap-4 items-center">
+                <div className="relative flex-1 w-full md:max-w-xl">
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input 
+                        type="text" 
+                        value={searchTerm} 
+                        onChange={e => setSearchTerm(e.target.value)} 
+                        placeholder="Buscar por nome, documento, email ou telefone..." 
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-500 transition-all font-medium" 
+                    />
+                </div>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <select 
+                        value={statusFilter} 
+                        onChange={(e) => setStatusFilter(e.target.value as any)}
+                        className="bg-slate-800 border border-slate-700 rounded-lg text-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition font-medium"
+                    >
+                        <option value="ALL">Todos os Contatos</option>
+                        <option value="true">Somente Ativos</option>
+                        <option value="false">Somente Inativos</option>
+                    </select>
+                    
+                    <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-bold shadow-lg"><Filter size={16} /> Filtros</button>
+                    
+                    <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
+                        <button 
+                            onClick={() => setViewMode('CARD')} 
+                            className={clsx("p-1.5 rounded-md transition", viewMode === 'CARD' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
+                        >
+                            <LayoutGrid size={18} />
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('LIST')} 
+                            className={clsx("p-1.5 rounded-md transition", viewMode === 'LIST' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800/50">
+                <AdvancedTagFilter 
+                    onFilterChange={(inc, exc) => { 
+                        setIncludedTags(inc); 
+                        setExcludedTags(exc); 
+                    }} 
                 />
             </div>
-            <div className="flex items-center gap-3 w-full md:w-auto">
-                <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-medium whitespace-nowrap">
-                    <Filter size={16} /> Filtros Adicionais
-                </button>
-                <button 
-                  onClick={() => navigate('/contacts/config', { 
-                    state: { 
-                      filters: { 
-                        search: searchTerm, 
-                        includedTags: includedTags.join(','), 
-                        excludedTags: excludedTags.join(','),
-                        activeFilter: activeCardFilter 
-                      } 
-                    } 
-                  })} 
-                  className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition" 
-                  title="Configurações de Contatos"
-                >
-                    <Settings size={20} />
-                </button>
-            </div>
         </div>
-        
-        <div className="pt-2 border-t border-slate-800/50">
-            {/* Tag Filter Component */}
-            <AdvancedTagFilter 
-               onFilterChange={(inc, exc) => { 
-                   setIncludedTags(inc); 
-                   setExcludedTags(exc); 
-               }} 
-            />
-        </div>
-      </div>
-
       <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm min-h-[400px]">
           <DataGrid<Contact>
             data={sortedContacts}
@@ -271,38 +305,21 @@ export function ContactList() {
             totalItems={sortedContacts.length}
             isLoading={loading}
             columns={[
-                {
-                    key: 'name',
-                    label: 'Nome / Razão Social',
-                    sortable: true,
-                    render: (c) => (
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/contacts/${c.id}`)}>
-                            {c.profilePicUrl ? (
-                                <img src={c.profilePicUrl} alt={c.name} className="w-10 h-10 rounded-full object-cover border border-slate-700" />
-                            ) : (
-                                <div className="w-10 h-10 rounded-full bg-slate-800 flex flex-col items-center justify-center border border-slate-700 font-bold text-slate-400">
-                                    {c.name.charAt(0).toUpperCase()}
-                                </div>
-                            )}
-                            <div className="flex flex-col">
-                                <span className="font-medium text-white hover:text-indigo-400 transition-colors">{c.name}</span>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    {(c.type === 'PJ' || getCleanDoc(c).length > 11) ? (
-                                        <span className={`text-[10px] font-bold px-1 rounded bg-blue-500/20 text-blue-400`}>PJ</span>
-                                    ) : (c.type === 'PF' || getCleanDoc(c).length > 0) ? (
-                                        <span className={`text-[10px] font-bold px-1 rounded bg-amber-500/20 text-amber-400`}>PF</span>
-                                    ) : (
-                                        <span className={`text-[10px] font-bold px-1 rounded bg-emerald-500/20 text-emerald-400`}>LEAD</span>
-                                    )}
-                                    <span className="text-slate-500 text-xs flex items-center gap-1">
-                                        <FileText size={10} />
-                                        {formatDocument(c.document || c.cpf || c.cnpj)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    )
-                },
+                { key: 'name', label: 'Nome / Razão Social', sortable: true, render: (c) => (
+                          <div className="flex flex-col gap-0.5">
+                              <span className="font-bold text-white hover:text-indigo-400 transition-colors cursor-pointer" onClick={() => navigate(`/contacts/${c.id}`)}>{c.name}</span>
+                              <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-500 uppercase font-mono">{formatDocument(c.document)}</span>
+                                  {!c.active && <span className="bg-red-500/10 text-red-400 text-[8px] px-1 rounded border border-red-500/20 font-bold">INATIVO</span>}
+                              </div>
+                          </div>
+                      ) },
+                      { key: 'createdAt', label: 'Cadastro / Atividade', sortable: true, render: (c) => (
+                          <div className="flex flex-col">
+                              <span className="text-slate-300 text-sm">{formatDate(c.createdAt)}</span>
+                              <span className="text-[10px] text-slate-500 italic">ID: {c.id.substring(0,8)}</span>
+                          </div>
+                      ) },
                 {
                     key: 'tags' as any,
                     label: 'Etiquetas',

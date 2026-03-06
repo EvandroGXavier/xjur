@@ -449,6 +449,8 @@ model ProcessTimeline {
   priority         String? @default("MEDIA") // BAIXA, MEDIA, ALTA, URGENTE
   requesterName    String? // Quem solicitou o andamento
   responsibleName  String? // Quem deve tratar a ação
+  completedAt      DateTime? // Data de conclusão
+  responsibleHistory Json?    // Histórico de responsáveis [{name, date}]
   templateCode     String? // Identificador do Template que gerou este andamento
   parentTimelineId String? // FK para o andamento "Pai"
 

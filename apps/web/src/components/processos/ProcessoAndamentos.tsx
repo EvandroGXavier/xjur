@@ -37,9 +37,12 @@ interface TimelineItem {
     parentTimelineId?: string;
     requesterName?: string;
     responsibleName?: string;
+    completedAt?: string;
+    responsibleHistory?: { name: string; date: string }[];
     // Legacy fields
     title: string;
     type: string;
+    createdAt: string;
 }
 
 interface ProcessoAndamentosProps {
@@ -78,7 +81,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         category: 'REGISTRO',
         status: 'PENDENTE',
         priority: 'MEDIA',
-        templateCode: ''
+        templateCode: '',
+        responsibleName: ''
     });
 
     const resetForm = () => {
@@ -92,7 +96,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             category: 'REGISTRO',
             status: 'PENDENTE',
             priority: 'MEDIA',
-            templateCode: ''
+            templateCode: '',
+            responsibleName: ''
         });
         setEditingItem(null);
         setSelectedFiles(null);
@@ -245,7 +250,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             category: item.category || 'REGISTRO',
             status: item.status || 'PENDENTE',
             priority: item.priority || 'MEDIA',
-            templateCode: item.templateCode || ''
+            templateCode: item.templateCode || '',
+            responsibleName: item.responsibleName || ''
         });
         setIsFormOpen(true);
     };
@@ -518,10 +524,10 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                         <thead className="bg-[#f0f0f0] text-slate-700 font-bold border-b-2 border-slate-300">
                             <tr>
                                 <th className="px-2 py-1 w-12 text-center border-r border-slate-200">#</th>
-                                <th className="px-2 py-1 w-32 border-r border-slate-200">Data/Hora</th>
-                                <th className="px-2 py-1 w-1/4 border-r border-slate-200">Evento</th>
+                                <th className="px-2 py-1 w-40 border-r border-slate-200">Data/Hora (REIFC)</th>
+                                <th className="px-2 py-1 w-1/4 border-r border-slate-200">Evento / Responsável</th>
                                 <th className="px-2 py-1 border-r border-slate-200">Descrição</th>
-                                <th className="px-2 py-1 w-24 border-r border-slate-200">Usuário</th>
+                                <th className="px-2 py-1 w-32 border-r border-slate-200">Rastreabilidade (CR)</th>
                                 <th className="px-2 py-1 w-24 text-center">Docs</th>
                             </tr>
                         </thead>
@@ -551,30 +557,54 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         <td className="px-2 py-1.5 text-center font-mono text-slate-600 border-r border-slate-200 text-[11px] align-top">
                                             {item.internalSequence || timelines.length - idx}
                                         </td>
-                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-700 font-medium whitespace-nowrap align-top">
-                                            {formatDateDisplay(item.date)}
+                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-700 font-medium align-top">
+                                            <div className="flex flex-col gap-0.5 text-[10px]">
+                                                <div className="flex items-center gap-1 group/r" title="REGISTRO">
+                                                    <span className="font-bold text-slate-400 w-3">R:</span>
+                                                    <span>{formatDateDisplay(item.createdAt)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 group/e" title="EVENTO">
+                                                    <span className="font-bold text-blue-500 w-3">E:</span>
+                                                    <span>{formatDateDisplay(item.date)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 group/i" title="INTERNA">
+                                                    <span className="font-bold text-amber-500 w-3">I:</span>
+                                                    <span>{item.internalDate ? formatDateDisplay(item.internalDate) : '-'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 group/f" title="FATAL">
+                                                    <span className="font-bold text-red-500 w-3">F:</span>
+                                                    <span>{item.fatalDate ? formatDateDisplay(item.fatalDate) : '-'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 group/c" title="CONCLUSÃO">
+                                                    <span className="font-bold text-emerald-500 w-3">C:</span>
+                                                    <span>{item.completedAt ? formatDateDisplay(item.completedAt) : '-'}</span>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td className="px-2 py-1.5 border-r border-slate-200 align-top">
                                             <div className="flex flex-col">
-                                                <span className="font-bold text-[#0056b3] text-sm hover:underline cursor-pointer">
+                                                <span className="font-bold text-[#0056b3] text-sm hover:underline cursor-pointer" onClick={() => openEdit(item)}>
                                                     {item.title}
                                                 </span>
+                                                <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 italic">
+                                                    <span className="font-bold">Resp:</span>
+                                                    <span className="text-slate-800 font-medium truncate max-w-[150px]">{item.responsibleName || 'Não definido'}</span>
+                                                </div>
                                                 {/* Eproc style origin/type */}
-                                                <div className="flex gap-1 mt-0.5 items-center flex-wrap">
+                                                <div className="flex gap-1 mt-1 items-center flex-wrap">
                                                     {getOriginBadge(item.origin)}
                                                     {item.type && <span className="text-[10px] bg-slate-100 px-1 rounded border border-slate-200">{item.type}</span>}
                                                     {item.status === 'CONCLUIDO' && (
                                                         <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1 rounded border border-emerald-200 font-bold">CONCLUÍDO</span>
                                                     )}
-                                                    {item.templateCode && (
-                                                        <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1 rounded border border-indigo-200 font-medium break-all">Workflow</span>
-                                                    )}
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-800 align-top">
+                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-800 align-top max-w-[400px]">
                                             <div className="flex flex-col gap-1">
-                                                <div dangerouslySetInnerHTML={{ __html: item.description || '' }} className="prose prose-sm max-w-none text-xs text-slate-800" />
+                                                <div className="text-[11px] text-slate-800 whitespace-pre-wrap leading-relaxed">
+                                                    {item.description}
+                                                </div>
                                                 
                                                 {/* Meta infos like Prazos */}
                                                 {(item.internalDate || item.fatalDate) && (
@@ -629,8 +659,30 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-600 text-xs align-top">
-                                            {item.metadata?.user || 'sistema'}
+                                        <td className="px-2 py-1.5 border-r border-slate-200 text-slate-600 text-[10px] align-top">
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-1 group" title={`Criado em: ${formatDateDisplay(item.createdAt)}`}>
+                                                    <span className="font-bold text-slate-400 w-3">C:</span>
+                                                    <span className="truncate">{item.requesterName || 'sistema'}</span>
+                                                </div>
+                                                {item.responsibleHistory && item.responsibleHistory.length > 0 && (
+                                                    <div className="flex flex-col gap-0.5 mt-1 border-t border-slate-100 pt-1">
+                                                        <div className="flex items-center gap-1" title="RESPONSÁVEIS ANTERIORES">
+                                                            <span className="font-bold text-slate-400 w-3">R:</span>
+                                                            <span className="text-[9px] text-slate-400">({item.responsibleHistory.length - 1} trocas)</span>
+                                                        </div>
+                                                        <div className="max-h-[60px] overflow-y-auto space-y-0.5 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+                                                            {item.responsibleHistory.map((h, i) => (
+                                                                <div key={i} className="flex flex-col border-b border-slate-50 last:border-0 pb-0.5" title={`Em: ${formatDateDisplay(h.date)}`}>
+                                                                    <span className={clsx("truncate", i === item.responsibleHistory!.length - 1 ? 'font-bold text-blue-600' : 'text-slate-500')}>
+                                                                        {i + 1}. {h.name}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-2 py-1.5 text-left align-top min-w-[120px]">
                                             <div className="flex flex-col gap-1 items-start">
@@ -846,13 +898,25 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                 </div>
                             </div>
                             
-                            <div>
-                                <label className="block text-sm font-medium text-slate-400 mb-1">Descrição Detalhada</label>
-                                <textarea 
-                                    value={formData.description}
-                                    onChange={e => setFormData({...formData, description: e.target.value})}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:border-indigo-500 outline-none h-24 resize-none"
-                                />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Descrição Detalhada</label>
+                                    <textarea 
+                                        value={formData.description}
+                                        onChange={e => setFormData({...formData, description: e.target.value})}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:border-indigo-500 outline-none h-24 resize-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Responsável Atual</label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.responsibleName}
+                                        onChange={e => setFormData({...formData, responsibleName: e.target.value})}
+                                        placeholder="Nome do responsável..."
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:border-indigo-500 outline-none h-24"
+                                    />
+                                </div>
                             </div>
 
                             <div className="border border-slate-800 rounded p-3 bg-slate-950/50">

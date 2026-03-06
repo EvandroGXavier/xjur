@@ -55,12 +55,13 @@ export class ContactsController {
       @Query('search') search?: string,
       @Query('includedTags') includedTags?: string,
       @Query('excludedTags') excludedTags?: string,
+      @Query('active') active?: string,
   ) {
     if (!user || !user.tenantId) {
       console.error('User or tenantId missing in GET /contacts');
       throw new Error('User context invalid');
     }
-    return this.contactsService.findAll(user.tenantId, search, includedTags, excludedTags);
+    return this.contactsService.findAll(user.tenantId, search, includedTags, excludedTags, active);
   }
 
   @Get('lookup/exact')

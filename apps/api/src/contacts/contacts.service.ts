@@ -101,13 +101,21 @@ export class ContactsService {
     }
   }
 
-  async findAll(tenantId: string, search?: string, includedTags?: string, excludedTags?: string) {
-    const whereClause: any = {
-      tenantId,
-    };
+  async findAll(
+    tenantId: string, 
+    search?: string, 
+    includedTags?: string, 
+    excludedTags?: string,
+    active?: string
+  ) {
+    const where: any = { tenantId };
+
+    // Active/Inactive filter
+    if (active === 'true') where.active = true;
+    else if (active === 'false') where.active = false;
 
     if (search) {
-      whereClause.OR = [
+      where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { document: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
@@ -119,12 +127,12 @@ export class ContactsService {
     }
 
     if (includedTags || excludedTags) {
-       if (!whereClause.AND) whereClause.AND = [];
+       if (!where.AND) where.AND = [];
        
        if (includedTags) {
           const incArray = includedTags.split(',');
           // Must have AT LEAST ONE of the included tags (OR logic for inclusion)
-          whereClause.AND.push({
+          where.AND.push({
              tags: {
                 some: { tagId: { in: incArray } }
              }
@@ -134,7 +142,7 @@ export class ContactsService {
        if (excludedTags) {
           const excArray = excludedTags.split(',');
           // Must NOT have ANY of the excluded tags
-          whereClause.AND.push({
+          where.AND.push({
              tags: {
                 none: { tagId: { in: excArray } }
              }
@@ -143,7 +151,7 @@ export class ContactsService {
     }
 
     const contacts = await this.prisma.contact.findMany({
-      where: whereClause,
+      where,
       include: {
         pfDetails: true,
         pjDetails: true,

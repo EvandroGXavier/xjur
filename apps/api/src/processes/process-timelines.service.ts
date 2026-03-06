@@ -80,6 +80,8 @@ export class ProcessTimelinesService {
                 parentTimelineId,
                 requesterName: user,
                 responsibleName: data.responsibleName || null,
+                completedAt: status === 'CONCLUIDO' ? new Date() : null,
+                responsibleHistory: data.responsibleName ? [{ name: data.responsibleName, date: new Date() }] : [],
             },
         });
 
@@ -245,6 +247,11 @@ export class ProcessTimelinesService {
                 category: data.category,
                 status: data.status,
                 priority: data.priority,
+                responsibleName: data.responsibleName,
+                completedAt: (data.status === 'CONCLUIDO' && existing.status !== 'CONCLUIDO') ? new Date() : (data.status !== 'CONCLUIDO' ? null : existing.completedAt),
+                responsibleHistory: (data.responsibleName && data.responsibleName !== existing.responsibleName) 
+                    ? [...(Array.isArray(existing.responsibleHistory) ? existing.responsibleHistory : []), { name: data.responsibleName, date: new Date() }]
+                    : existing.responsibleHistory
             },
         });
 
