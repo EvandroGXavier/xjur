@@ -14,8 +14,8 @@ import {
     Trash2,
     Edit3
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
+import { AttachmentPreview } from '../ui/AttachmentPreview';
 
 interface TimelineItem {
     id: string;
@@ -356,122 +356,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     };
 
-    const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string; x: number; y: number } | null>(null);
-    const [closeTimeout, setCloseTimeout] = useState<NodeJS.Timeout | null>(null);
+      const filteredTimelines = timelines.filter(t => (t.category || 'REGISTRO') === activeTab);
 
-    const handleMouseEnterDoc = (e: React.MouseEvent, url: string, title: string) => {
-        if (closeTimeout) {
-            clearTimeout(closeTimeout);
-            setCloseTimeout(null);
-        }
-        
-        const rect = (e.target as HTMLElement).closest('a')?.getBoundingClientRect();
-        if (rect) {
-            // Calculate best position
-            const spaceRight = window.innerWidth - rect.right;
-            const spaceBottom = window.innerHeight - rect.bottom;
-            
-            let x = rect.right + 10;
-            let y = rect.top - 20;
-
-            // If not enough space on right, show on left
-            if (spaceRight < 620) {
-                x = rect.left - 610;
-            }
-            
-            // If not enough space on bottom, show slightly up
-            if (spaceBottom < 720) {
-                y = Math.max(10, window.innerHeight - 720);
-            }
-
-            setPreviewDoc({
-                url,
-                title,
-                x,
-                y
-            });
-        }
-    };
-
-    const handleMouseLeaveDoc = () => {
-        const timeout = setTimeout(() => {
-            setPreviewDoc(null);
-        }, 300); // 300ms delay to allow moving to the popup
-        setCloseTimeout(timeout);
-    };
-
-    const handleMouseEnterPreview = () => {
-        if (closeTimeout) {
-            clearTimeout(closeTimeout);
-            setCloseTimeout(null);
-        }
-    };
-
-    const handleMouseLeavePreview = () => {
-        const timeout = setTimeout(() => {
-             setPreviewDoc(null);
-        }, 300);
-        setCloseTimeout(timeout);
-    };
-
-    const formatDateDisplay = (dateStr?: string) => {
-        if (!dateStr) return '-';
-        try {
-            return format(new Date(dateStr), "dd/MM/yyyy HH:mm", { locale: ptBR });
-        } catch {
-            return dateStr;
-        }
-    };
-
-    const filteredTimelines = timelines.filter(t => (t.category || 'REGISTRO') === activeTab);
-
-    return (
-        <div className="space-y-4 animate-in fade-in relative">
-            {/* Document Preview Modal (Mini Browser) */}
-            {previewDoc && (
-                <div 
-                    className="fixed z-[9999] bg-slate-800 border border-slate-600 rounded-lg shadow-2xl flex flex-col overflow-hidden w-[600px] h-[700px] animate-in fade-in zoom-in-95 duration-200"
-                    style={{ top: previewDoc.y, left: previewDoc.x }}
-                    onMouseEnter={handleMouseEnterPreview}
-                    onMouseLeave={handleMouseLeavePreview}
-                >
-                    {/* Header */}
-                    <div className="bg-slate-900 px-3 py-2 border-b border-slate-700 flex items-center justify-between handle cursor-move select-none">
-                        <div className="flex items-center gap-2 text-slate-300">
-                             <FileText size={14} className="text-indigo-400" />
-                             <span className="text-xs font-medium truncate max-w-[350px]">{previewDoc.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                             <a 
-                                href={previewDoc.url} 
-                                target="_blank"
-                                rel="noopener noreferrer" 
-                                className="text-slate-400 hover:text-white"
-                                title="Abrir em Nova Aba"
-                            >
-                                <span className="text-[10px] font-bold border border-slate-600 px-1 rounded hover:bg-slate-700">EXT</span>
-                            </a>
-                            <button 
-                                onClick={() => setPreviewDoc(null)}
-                                className="text-slate-400 hover:text-red-400 p-0.5 rounded hover:bg-slate-800 transition"
-                            >
-                                <span className="font-bold text-xs">✕</span>
-                            </button>
-                        </div>
-                    </div>
-                    {/* Content */}
-                    <div className="flex-1 bg-white relative">
-                        {/* We use an iframe to display PDF/images served by the backend */}
-                         <iframe 
-                            src={previewDoc.url} 
-                            className="w-full h-full border-0 bg-slate-100"
-                            title="Document Preview"
-                        />
-                    </div>
-                </div>
-            )}
-
-            {/* Header Actions */}
+      return (
+          <div className="space-y-4 animate-in fade-in relative">
+              {/* Header Actions */}
             <div className="flex flex-col gap-4 bg-slate-900/50 p-4 rounded-lg border border-slate-800">
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
@@ -689,19 +578,19 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                 {item.metadata?.attachments?.map((att: any, attIdx: number) => {
                                                     const docUrl = `${getApiUrl()}/processes/timelines/attachments/${encodeURIComponent(att.fileName)}`;
                                                     return (
-                                                        <div key={attIdx} className="relative group/doc">
-                                                            <a 
-                                                                href={docUrl} 
-                                                                target="_blank" 
-                                                                rel="noopener noreferrer"
-                                                                className="flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-800 hover:underline group/link py-0.5"
-                                                                title={att.originalName}
-                                                                    onMouseEnter={(e) => handleMouseEnterDoc(e, docUrl, att.originalName)}
-                                                                onMouseLeave={handleMouseLeaveDoc}
-                                                            >
-                                                                <FileText size={14} className="text-blue-500 group-hover/link:text-blue-700" />
-                                                                <span className="truncate max-w-[140px]">{att.originalName}</span>
-                                                            </a>
+                                                        <div key={attIdx} className="relative group/doc flex">
+                                                            <AttachmentPreview url={docUrl} title={att.originalName}>
+                                                                <a 
+                                                                    href={docUrl} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer"
+                                                                    className="flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-800 hover:underline group/link py-0.5"
+                                                                    title={att.originalName}
+                                                                >
+                                                                    <FileText size={14} className="text-blue-500 group-hover/link:text-blue-700" />
+                                                                    <span className="truncate max-w-[140px]">{att.originalName}</span>
+                                                                </a>
+                                                            </AttachmentPreview>
                                                         </div>
                                                     );
                                                 })}

@@ -43,6 +43,18 @@ export class CreateTransactionSplitDto {
   notes?: string;
 }
 
+export class CreateInstallmentItemDto {
+  @IsDateString()
+  dueDate: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  amount: number;
+
+  @IsInt()
+  installmentNumber: number;
+}
+
 export class CreateFinancialRecordDto {
   @IsString()
   @IsNotEmpty({ message: 'TenantId é obrigatório' })
@@ -59,6 +71,10 @@ export class CreateFinancialRecordDto {
   @IsOptional()
   @IsString()
   categoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  paymentConditionId?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'Descrição é obrigatória' })
@@ -146,6 +162,17 @@ export class CreateFinancialRecordDto {
   @IsOptional()
   @IsBoolean()
   isResidual?: boolean;
+
+  // === ORIGEM ===
+  @IsOptional()
+  @IsString()
+  origin?: string; // MANUAL, NF, COMPRA, PROPOSTA, JUDICIAL
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateInstallmentItemDto)
+  installments?: CreateInstallmentItemDto[];
 
   // === RELAÇÕES ===
   @IsOptional()

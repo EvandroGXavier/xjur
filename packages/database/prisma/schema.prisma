@@ -498,6 +498,11 @@ model FinancialRecord {
 
   paymentConditionId String? // Vínculo com a Condição de Pagamento (se gerado via regra)
 
+  // === ORIGEM ===
+  origin String? @default("MANUAL") // MANUAL, NF, COMPRA, PROPOSTA, JUDICIAL
+
+  metadata Json? // Meta informações como anexo, etc.
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

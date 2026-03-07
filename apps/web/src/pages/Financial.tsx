@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import {
   DollarSign,
   Plus,
@@ -31,6 +31,9 @@ import {
   ArrowUp,
   ArrowDown,
   Target,
+  FileText,
+  Upload,
+  Globe,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -41,6 +44,9 @@ import { PaymentConditions } from './PaymentConditions';
 import { InlineTags } from '../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../components/ui/AdvancedTagFilter';
 import { BankAccountDetails } from '../components/financial/BankAccountDetails';
+import { FinancialParties } from '../components/financial/FinancialParties';
+import { AttachmentPreview } from '../components/ui/AttachmentPreview';
+import { useNavigate } from 'react-router-dom';
 
 interface FinancialRecord {
   id: string;
@@ -63,6 +69,8 @@ interface FinancialRecord {
   discountType?: string;
   amountFinal?: number;
   amountPaid?: number;
+  origin?: 'MANUAL' | 'NF' | 'COMPRA' | 'PROPOSTA' | 'JUDICIAL';
+  metadata?: any;
   // Parcelamento
   parentId?: string;
   installmentNumber?: number;
@@ -150,7 +158,15 @@ interface Dashboard {
   overdueRecords: FinancialRecord[];
 }
 
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
+};
+
 export function Financial() {
+  const navigate = useNavigate();
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -171,6 +187,15 @@ export function Financial() {
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [categories, setCategories] = useState<FinancialCategory[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [modalTab, setModalTab] = useState<'dados' | 'partes'>('dados');
+  const [paymentConditions, setPaymentConditions] = useState<any[]>([]);
+  const [installments, setInstallments] = useState<{ dueDate: string; amount: number; installmentNumber: number }[]>([]);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const [nxInput, setNxInput] = useState('');
+  const [showConditionSubModal, setShowConditionSubModal] = useState(false);
+  const [pastedImages, setPastedImages] = useState<{ url: string; file: File }[]>([]);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const [filters, setFilters] = useState({
     type: '',
@@ -204,6 +229,8 @@ export function Financial() {
     // Parcelamento
     totalInstallments: '1',
     periodicity: 'Mensal',
+    paymentConditionId: '',
+    origin: 'MANUAL',
     // Seções colapsáveis
     showCharges: false,
     parties: [] as { contactId: string; role: 'CREDITOR' | 'DEBTOR'; amount?: number }[],
@@ -258,12 +285,6 @@ export function Financial() {
     notes: '',
   });
 
-  const [newParty, setNewParty] = useState({
-    contactId: '',
-    role: 'CREDITOR' as 'CREDITOR' | 'DEBTOR',
-    amount: '',
-  });
-
   const [newSplit, setNewSplit] = useState({
     contactId: '',
     role: 'CREDITOR' as 'CREDITOR' | 'DEBTOR',
@@ -271,43 +292,6 @@ export function Financial() {
     percentage: '',
     description: '',
   });
-
-  const handleAddParty = () => {
-    if (!newParty.contactId) {
-      toast.error('Selecione um contato');
-      return;
-    }
-    
-    // Check if contact already added with same role
-    const exists = formData.parties.some(
-      p => p.contactId === newParty.contactId && p.role === newParty.role
-    );
-    
-    if (exists) {
-      toast.error('Este contato já foi adicionado com este papel');
-      return;
-    }
-
-    setFormData({
-      ...formData,
-      parties: [
-        ...formData.parties,
-        {
-          contactId: newParty.contactId,
-          role: newParty.role,
-          amount: newParty.amount ? parseFloat(newParty.amount) : undefined,
-        },
-      ],
-    });
-    
-    setNewParty({ ...newParty, contactId: '', amount: '' });
-  };
-
-  const handleRemoveParty = (index: number) => {
-    const newParties = [...formData.parties];
-    newParties.splice(index, 1);
-    setFormData({ ...formData, parties: newParties });
-  };
 
   const handleAddSplit = () => {
     if (!newSplit.contactId) { toast.error('Selecione um contato'); return; }
@@ -363,6 +347,94 @@ export function Financial() {
       const res = await api.get('/financial/categories');
       setCategories(res.data);
     } catch (e) { console.error('Erro ao carregar categorias:', e); }
+  };
+
+  const fetchPaymentConditions = async () => {
+    try {
+      const res = await api.get('/payment-conditions');
+      setPaymentConditions(res.data);
+    } catch (e) { console.error('Erro ao carregar condições de pagamento:', e); }
+  };
+
+  const generateInstallments = (conditionId: string, totalAmount: number, firstDueDate: string) => {
+    const condition = paymentConditions.find(c => c.id === conditionId);
+    if (!condition || !totalAmount || !firstDueDate) {
+      setInstallments([]);
+      return;
+    }
+
+    const insts: { dueDate: string; amount: number; installmentNumber: number }[] = [];
+    const baseDate = new Date(firstDueDate);
+    
+    condition.installments.forEach((inst: any, idx: number) => {
+      const dueDate = new Date(baseDate);
+      dueDate.setDate(dueDate.getDate() + (inst.days || 0));
+      
+      insts.push({
+        dueDate: dueDate.toISOString().split('T')[0],
+        amount: Math.round((totalAmount * (inst.percentage / 100)) * 100) / 100,
+        installmentNumber: inst.installmentNumber || (idx + 1),
+      });
+    });
+
+    setInstallments(insts);
+  };
+
+  useEffect(() => {
+    if (formData.paymentConditionId && formData.amount && formData.dueDate) {
+      generateInstallments(formData.paymentConditionId, parseFloat(formData.amount), formData.dueDate);
+    } else {
+      setInstallments([]);
+    }
+  }, [formData.paymentConditionId, formData.amount, formData.dueDate, paymentConditions]);
+
+  // === Nx Shortcut: digitar "3x" gera 3 parcelas iguais mensais ===
+  const handleNxInput = (value: string) => {
+    setNxInput(value);
+    const match = value.match(/^(\d+)\s*[xX]$/);
+    if (match && formData.amount && formData.dueDate) {
+      const n = parseInt(match[1]);
+      if (n >= 2 && n <= 120) {
+        const totalAmount = parseFloat(formData.amount);
+        const instAmount = Math.floor((totalAmount / n) * 100) / 100;
+        const remainder = Math.round((totalAmount - instAmount * n) * 100) / 100;
+        const baseDate = new Date(formData.dueDate);
+        const insts: { dueDate: string; amount: number; installmentNumber: number }[] = [];
+        for (let i = 0; i < n; i++) {
+          const d = new Date(baseDate);
+          d.setMonth(d.getMonth() + i);
+          insts.push({
+            dueDate: d.toISOString().split('T')[0],
+            amount: i === n - 1 ? instAmount + remainder : instAmount,
+            installmentNumber: i + 1,
+          });
+        }
+        setInstallments(insts);
+        setFormData(prev => ({ ...prev, paymentConditionId: '', totalInstallments: n.toString() }));
+      }
+    } else if (!value) {
+      if (!formData.paymentConditionId) {
+        setInstallments([]);
+      }
+    }
+  };
+
+  // === Paste de imagens no campo de observações ===
+  const handleNotesPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) {
+          const url = URL.createObjectURL(file);
+          setPastedImages(prev => [...prev, { url, file }]);
+          toast.success('Imagem colada com sucesso!');
+        }
+        break;
+      }
+    }
   };
 
   const toggleRowExpand = (id: string) => {
@@ -676,6 +748,7 @@ export function Financial() {
   };
 
   const handleOpenModal = async (record?: FinancialRecord) => {
+    setModalTab('dados');
     await fetchContacts();
     await fetchCategories();
 
@@ -700,6 +773,8 @@ export function Financial() {
         discountType: (record.discountType as 'VALUE' | 'PERCENTAGE') || 'VALUE',
         totalInstallments: record.totalInstallments ? record.totalInstallments.toString() : '1',
         periodicity: record.periodicity || 'Mensal',
+        paymentConditionId: '',
+        origin: (record as any).origin || 'MANUAL',
         showCharges: !!(record.fine || record.interest || record.monetaryCorrection || record.discount),
         parties: record.parties?.map(p => ({
           contactId: p.contactId,
@@ -714,6 +789,8 @@ export function Financial() {
           description: s.description,
         })) || [],
       });
+      setInstallments([]);
+      setNxInput('');
     } else {
       setEditingRecord(null);
       setFormData({
@@ -735,12 +812,22 @@ export function Financial() {
         discountType: 'VALUE',
         totalInstallments: '1',
         periodicity: 'Mensal',
+        paymentConditionId: '',
+        origin: 'MANUAL',
         showCharges: false,
         parties: [],
         splits: [],
       });
+      setInstallments([]);
+      setNxInput('');
     }
+    setPastedImages([]);
+    setAttachments([]);
     setShowModal(true);
+    fetchPaymentConditions();
+    setTimeout(() => {
+      amountInputRef.current?.focus();
+    }, 100);
   };
 
   const handleOpenBankModal = async (account?: BankAccount) => {
@@ -801,6 +888,22 @@ export function Financial() {
       return;
     }
 
+    if (installments.length > 0) {
+      const sum = Math.round(installments.reduce((acc, inst) => acc + inst.amount, 0) * 100) / 100;
+      const totalAmount = Math.round(amount * 100) / 100;
+      if (Math.abs(sum - totalAmount) > 0.01) {
+        toast.error(`A soma das parcelas (${formatCurrency(sum)}) deve ser igual ao valor total (${formatCurrency(amount)})`);
+        return;
+      }
+    }
+
+    /* Removido obrigatoriedade conforme pedido do usuário
+    if (!formData.bankAccountId) {
+      toast.error('Selecione uma conta bancária');
+      return;
+    }
+    */
+
     setSubmitting(true);
 
     try {
@@ -819,10 +922,13 @@ export function Financial() {
         paymentMethod: formData.paymentMethod || undefined,
         bankAccountId: formData.bankAccountId || undefined,
         notes: formData.notes.trim() || undefined,
-        parties: formData.parties.length > 0 ? formData.parties : undefined,
+        parties: !editingRecord && formData.parties.length > 0 ? formData.parties : undefined,
         splits: formData.splits.length > 0 ? formData.splits : undefined,
-        totalInstallments: parseInt(formData.totalInstallments) || 1,
+        totalInstallments: installments.length > 0 ? installments.length : (parseInt(formData.totalInstallments) || 1),
+        installments: installments.length > 0 ? installments : undefined,
+        paymentConditionId: formData.paymentConditionId || undefined,
         periodicity: formData.periodicity,
+        origin: formData.origin || 'MANUAL',
         tenantId,
       };
 
@@ -835,23 +941,41 @@ export function Financial() {
         payload.discountType = formData.discountType;
       }
 
+      let createdOrUpdatedRecordId = editingRecord?.id;
+
       if (editingRecord) {
         await api.put(`/financial/records/${editingRecord.id}?tenantId=${tenantId}`, payload);
         toast.success('Registro atualizado com sucesso');
       } else {
-        await api.post('/financial/records', payload);
+        const response = await api.post('/financial/records', payload);
+        createdOrUpdatedRecordId = response.data.id;
         toast.success('Registro criado com sucesso');
       }
+
+      // Se houver anexos novos listados no frontend ('attachments' state array)
+      if (attachments.length > 0 && createdOrUpdatedRecordId) {
+        const attachFormData = new FormData();
+        attachments.forEach(file => attachFormData.append('attachments', file));
+        await api.post(`/financial/records/${createdOrUpdatedRecordId}/attachments`, attachFormData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+
+      // limpar state de anexos novos
+      setAttachments([]);
 
       setShowModal(false);
       await fetchData();
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message ||
-                          (Array.isArray(error.response?.data?.message)
-                            ? error.response.data.message.join(', ')
-                            : 'Erro ao salvar registro');
-      toast.error(errorMessage);
       console.error('Erro completo:', error);
+      const backendMessage = error.response?.data?.message;
+      const errorMessage = Array.isArray(backendMessage)
+                            ? backendMessage.join(', ')
+                            : (typeof backendMessage === 'string' ? backendMessage : 'Erro ao salvar registro');
+      
+      toast.error(errorMessage, {
+        description: error.response?.data?.error || 'Verifique os dados informados'
+      });
     } finally {
       setSubmitting(false);
     }
@@ -1467,40 +1591,53 @@ export function Financial() {
                       className="hover:bg-slate-700/30 transition-colors cursor-default"
                       onClick={() => handleOpenModal(record)}
                     >
-                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0">CREDOR:</span>
-                          <span 
-                            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer font-medium"
-                            onClick={() => {
-                              const creditor = record.parties?.find(p => p.role === 'CREDITOR')?.contact;
-                              if (creditor) navigate(`/contacts/${creditor.id}`);
-                            }}
-                          >
-                            {record.type === 'INCOME' ? 'Minha Empresa' : (record.parties?.find(p => p.role === 'CREDITOR')?.contact?.name || '-')}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0">DEVEDOR:</span>
-                          <span 
-                            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer font-medium"
-                            onClick={() => {
-                              const debtor = record.parties?.find(p => p.role === 'DEBTOR')?.contact;
-                              if (debtor) navigate(`/contacts/${debtor.id}`);
-                            }}
-                          >
-                            {record.type === 'EXPENSE' ? 'Minha Empresa' : (record.parties?.find(p => p.role === 'DEBTOR')?.contact?.name || '-')}
-                          </span>
-                        </div>
-                        {(record.status === 'PAID' || record.bankAccount) && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0">PAGADOR:</span>
-                            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                              <Building2 size={12} />
-                              {record.bankAccount?.bankName || record.paymentMethod || '-'}
+                    <td className="px-5 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-col gap-1">
+                        {/* Credor */}
+                        {(() => {
+                          const creditor = record.parties?.find(p => p.role === 'CREDITOR');
+                          return creditor?.contact ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 shrink-0">C</span>
+                              <span 
+                                className="text-xs text-slate-200 hover:text-indigo-400 cursor-pointer transition-colors truncate max-w-[140px]"
+                                onClick={() => navigate(`/contacts/${creditor.contact!.id}`)}
+                                title={creditor.contact.name}
+                              >
+                                {creditor.contact.name}
+                              </span>
+                            </div>
+                          ) : null;
+                        })()}
+                        {/* Devedor */}
+                        {(() => {
+                          const debtor = record.parties?.find(p => p.role === 'DEBTOR');
+                          return debtor?.contact ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-500/15 text-red-400 shrink-0">D</span>
+                              <span 
+                                className="text-xs text-slate-200 hover:text-indigo-400 cursor-pointer transition-colors truncate max-w-[140px]"
+                                onClick={() => navigate(`/contacts/${debtor.contact!.id}`)}
+                                title={debtor.contact.name}
+                              >
+                                {debtor.contact.name}
+                              </span>
+                            </div>
+                          ) : null;
+                        })()}
+                        {/* Conta/Pagador */}
+                        {record.bankAccount && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 shrink-0">P</span>
+                            <span className="text-[10px] text-slate-400 truncate max-w-[140px] flex items-center gap-1">
+                              <Building2 size={10} />
+                              {record.bankAccount.bankName}
                             </span>
                           </div>
+                        )}
+                        {/* Se não tem nenhuma parte */}
+                        {(!record.parties || record.parties.length === 0) && !record.bankAccount && (
+                          <span className="text-[10px] text-slate-600 italic">Sem partes</span>
                         )}
                       </div>
                     </td>
@@ -1799,39 +1936,134 @@ export function Financial() {
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800">
-              <h2 className="text-xl font-bold text-white">
-                {editingRecord ? 'Editar Transação' : 'Nova Transação'}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
+            <div className="p-6 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-white">
+                  {editingRecord ? 'Editar Transação' : 'Nova Transação'}
+                </h2>
+                <button
+                  onClick={() => { setShowModal(false); setModalTab('dados'); }}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              {/* Tabs */}
+              <div className="flex gap-1 bg-slate-900 rounded-lg p-1">
+                <button
+                  type="button"
+                  onClick={() => setModalTab('dados')}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    modalTab === 'dados' 
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <DollarSign size={14} className="inline mr-1.5" />
+                  Dados Gerais
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab('partes')}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    modalTab === 'partes' 
+                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <User size={14} className="inline mr-1.5" />
+                  Partes da Transação
+                  {editingRecord?.parties && editingRecord.parties.length > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-500/30 rounded text-[10px] font-bold">
+                      {editingRecord.parties.length}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
+            {/* Tab: Partes da Transação */}
+            {modalTab === 'partes' && (
+              <div className="p-6">
+                {editingRecord ? (
+                  <FinancialParties 
+                    recordId={editingRecord.id}
+                    recordType={editingRecord.type as 'INCOME' | 'EXPENSE'}
+                    bankAccounts={bankAccounts}
+                    currentBankAccountId={editingRecord.bankAccount?.id}
+                    onBankAccountChange={(id) => {
+                      setFormData(prev => ({ ...prev, bankAccountId: id }));
+                    }}
+                    onUpdate={fetchData}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 px-6 text-center space-y-4 bg-slate-900/30 rounded-xl border border-slate-700/50">
+                    <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 flex-none">
+                      <User size={32} />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold text-white">Gerenciamento de Partes</h3>
+                      <p className="text-sm text-slate-400 max-w-sm">
+                        Para gerenciar detalhadamente os credores, devedores e pagadores desta transação, primeiro você precisa **salvar** os dados básicos.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModalTab('dados')}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Voltar para Dados Gerais e Salvar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+             {/* Tab: Dados Gerais (formulário refatorado) */}
+            {modalTab === 'dados' && (
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* LINHA 1: Tipo | Categoria | Status */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Tipo *</label>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Tipo *</label>
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     required
                   >
-                    <option value="INCOME">Receita (Contas a Receber)</option>
-                    <option value="EXPENSE">Despesa (Contas a Pagar)</option>
+                    <option value="INCOME">Receita</option>
+                    <option value="EXPENSE">Despesa</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Status *</label>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Categoria</label>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      list="category-list-modal"
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Honorários..."
+                    />
+                    <datalist id="category-list-modal">
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.name} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Status *</label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     required
                   >
                     <option value="PENDING">Pendente</option>
@@ -1842,139 +2074,166 @@ export function Financial() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* LINHA 2: Valor | Parcelas (Select + Nx) | Vencimento */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Nº Parcelas</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={formData.totalInstallments}
-                    onChange={(e) => setFormData({ ...formData, totalInstallments: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="1"
-                  />
-                  {!editingRecord && parseInt(formData.totalInstallments) > 1 && (
-                    <p className="text-[10px] text-indigo-400 mt-1">
-                      Serão criadas {formData.totalInstallments} parcelas de R$ {(parseFloat(formData.amount) / parseInt(formData.totalInstallments) || 0).toFixed(2)}
-                    </p>
-                  )}
-                  {editingRecord && (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Alterar aqui apenas atualiza este registro.
-                    </p>
-                  )}
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Valor *</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-slate-500 text-sm">R$</span>
+                    <input
+                      ref={amountInputRef}
+                      type="number"
+                      step="0.01"
+                      value={formData.amount}
+                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-lg"
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Periodicidade</label>
+                  <label className="block text-[10px] font-bold text-indigo-400 mb-1 uppercase tracking-wider">Parcelas</label>
+                  <div className="flex gap-1">
+                    <select
+                      value={formData.paymentConditionId}
+                      onChange={(e) => {
+                        setFormData({ ...formData, paymentConditionId: e.target.value });
+                        if (e.target.value) setNxInput('');
+                      }}
+                      className="flex-1 px-2 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-0"
+                    >
+                      <option value="">À Vista</option>
+                      {paymentConditions.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={nxInput}
+                      onChange={(e) => handleNxInput(e.target.value)}
+                      className="w-14 px-2 py-2 bg-slate-700 border border-indigo-500/30 rounded-lg text-indigo-300 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-slate-500"
+                      placeholder="Nx"
+                      title="Digite ex: 3x para dividir em 3 parcelas"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowConditionSubModal(true)}
+                      className="p-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 transition-colors shrink-0"
+                      title="Criar nova Condição de Pagamento"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Vencimento *</label>
                   <input
-                    type="text"
-                    list="periodicity-list"
-                    value={formData.periodicity}
-                    onChange={(e) => setFormData({ ...formData, periodicity: e.target.value as any })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Ex: Mensal, Anual"
+                    type="date"
+                    value={formData.dueDate}
+                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    required
                   />
-                  <datalist id="periodicity-list">
-                    <option value="Mensal" />
-                    <option value="Quinzenal" />
-                    <option value="Semanal" />
-                    <option value="Anual" />
-                  </datalist>
                 </div>
               </div>
 
+              {/* Grid de Parcelas Geradas */}
+              {installments.length > 0 && (
+                <div className="bg-slate-900/50 rounded-xl border border-indigo-500/20 p-4 space-y-3">
+                  <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                    <Calendar size={14} />
+                    Parcelas Geradas (Confira e Ajuste se necessário)
+                  </h3>
+                  <div className="max-h-[200px] overflow-y-auto rounded-lg border border-slate-700">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-800 text-[10px] text-slate-400 font-bold uppercase">
+                          <th className="px-3 py-2 border-b border-slate-700">Parcela</th>
+                          <th className="px-3 py-2 border-b border-slate-700">Vencimento</th>
+                          <th className="px-3 py-2 border-b border-slate-700 text-right">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-xs">
+                        {installments.map((inst, idx) => (
+                          <tr key={idx} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                            <td className="px-3 py-2 text-slate-300 font-medium">{inst.installmentNumber}ª</td>
+                            <td className="px-3 py-2">
+                              <input 
+                                type="date" 
+                                value={inst.dueDate}
+                                onChange={(e) => {
+                                  const newInsts = [...installments];
+                                  newInsts[idx].dueDate = e.target.value;
+                                  setInstallments(newInsts);
+                                }}
+                                className="bg-transparent border-none p-0 text-white focus:ring-0 w-full"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-slate-500 text-[10px]">R$</span>
+                                <input 
+                                  type="number" 
+                                  step="0.01"
+                                  value={inst.amount}
+                                  onChange={(e) => {
+                                    const newInsts = [...installments];
+                                    newInsts[idx].amount = parseFloat(e.target.value) || 0;
+                                    setInstallments(newInsts);
+                                  }}
+                                  className="bg-transparent border-none p-0 text-white text-right focus:ring-0 w-20 font-bold"
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-800/50">
+                        <tr>
+                          <td colSpan={2} className="px-3 py-2 text-[11px] font-bold text-slate-400">TOTAL CONFERIDO:</td>
+                          <td className="px-3 py-2 text-right text-white font-bold">
+                            {formatCurrency(installments.reduce((sum, i) => sum + i.amount, 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* LINHA 3: Descrição */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Descrição *</label>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Descrição *</label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Ex: Honorários processo X"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* LINHA 4: Data Pagamento | Forma Pagamento | Conta Bancária */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Valor *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Categoria</label>
-                  <input
-                    type="text"
-                    list="category-list"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Ex: Honorários"
-                  />
-                  <datalist id="category-list">
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.name} />
-                    ))}
-                  </datalist>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Vencimento *</label>
-                  <input
-                    type="date"
-                    value={formData.dueDate}
-                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Data de Pagamento</label>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Data Pagamento</label>
                   <input
                     type="date"
                     value={formData.paymentDate}
                     onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Conta Bancária</label>
-                  <select
-                    value={formData.bankAccountId}
-                    onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Selecione...</option>
-                    {bankAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.bankName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Forma de Pagamento</label>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Forma Pagamento</label>
                   <select
                     value={formData.paymentMethod}
                     onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">Selecione...</option>
                     <option value="PIX">PIX</option>
@@ -1984,97 +2243,183 @@ export function Financial() {
                     <option value="CARTAO">Cartão</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Conta Bancária</label>
+                  <select
+                    value={formData.bankAccountId}
+                    onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Selecione...</option>
+                    {bankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.bankName || account.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Partes Envolvidas */}
-              <div className="bg-slate-700/30 p-4 rounded-lg border border-slate-700 space-y-4">
-                <h3 className="text-sm font-medium text-slate-300">Partes Envolvidas (Credores/Devedores)</h3>
-                
-                <div className="flex flex-col gap-4">
-                   <ContactPickerGlobal 
-                    onAdd={async (data) => {
-                      if (!data.contactId && !data.isQuickAdd) return;
-                      
-                      setFormData(prev => ({
-                        ...prev,
-                        parties: [
-                          ...prev.parties,
-                          {
-                            contactId: data.contactId,
-                            role: data.roleId as 'CREDITOR' | 'DEBTOR',
-                            amount: data.amount ? parseFloat(data.amount) : undefined,
-                            isQuickAdd: data.isQuickAdd,
-                            quickContact: data.quickContact
-                          }
-                        ]
-                      }));
-                      setNewParty({ ...newParty, contactId: '', amount: '' });
-                    }}
-                     roleLabel="Papel"
-                     customRoles={[
-                       { label: 'Credor', value: 'CREDITOR' },
-                       { label: 'Devedor', value: 'DEBTOR' }
-                     ]}
-                     hideQualification={true}
-                     context="financial"
-                     showAmount={true}
-                     amount={newParty.amount}
-                     onAmountChange={(val) => setNewParty({...newParty, amount: val})}
-                     contactLabel="Partes"
-                     hideQuickAdd={true}
-                     className="!bg-transparent !p-0 !border-0 !shadow-none"
-                   />
+              {/* LINHA 5: Origem | Tags */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                    <Globe size={10} className="inline mr-1" />
+                    Origem
+                  </label>
+                  <select
+                    value={formData.origin}
+                    onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="MANUAL">✏️ Manual</option>
+                    <option value="NF">📄 Nota Fiscal</option>
+                    <option value="COMPRA">🛒 Compra</option>
+                    <option value="PROPOSTA">📋 Proposta</option>
+                    <option value="JUDICIAL">⚖️ Judicial</option>
+                  </select>
                 </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                    <Tag size={10} className="inline mr-1" />
+                    Tags
+                  </label>
+                  {editingRecord ? (
+                    <InlineTags
+                      tags={editingRecord.tags || []}
+                      entityId={editingRecord.id}
+                      entityType="financial"
+                      onRefresh={fetchData}
+                    />
+                  ) : (
+                    <p className="text-[10px] text-slate-500 italic py-2">
+                      Tags disponíveis após salvar
+                    </p>
+                  )}
+                </div>
+              </div>
 
-                {/* Lista de Partes */}
-                {formData.parties.length > 0 && (
-                  <div className="space-y-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
-                    {formData.parties.map((party, index) => {
-                      const contact = contacts.find(c => c.id === party.contactId);
-                      return (
-                        <div key={index} className="flex items-center justify-between p-2 bg-slate-800 rounded border border-slate-700">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
-                              party.role === 'CREDITOR' 
-                                ? 'bg-green-500/10 text-green-400 border-green-500/20' 
-                                : 'bg-red-500/10 text-red-400 border-red-500/20'
-                            }`}>
-                              {party.role === 'CREDITOR' ? 'Credor' : 'Devedor'}
-                            </span>
-                            <span className="text-xs text-slate-200 font-medium">
-                              {contact?.name || 'Carregando...'}
-                            </span>
-                            {party.amount && (
-                              <span className="text-xs text-slate-400 ml-1">
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(party.amount))}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveParty(index)}
-                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      );
-                    })}
+              {/* LINHA 6: Observações (com paste de imagens) */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                  Observações
+                  <span className="text-slate-600 font-normal ml-2">(Cole imagens com Ctrl+V)</span>
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  onPaste={handleNotesPaste}
+                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[80px] text-sm"
+                  placeholder="Observações adicionais..."
+                />
+                {/* Preview de imagens coladas */}
+                {pastedImages.length > 0 && (
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {pastedImages.map((img, idx) => (
+                      <div key={idx} className="relative group">
+                        <img src={img.url} alt={`Colada ${idx + 1}`} className="w-20 h-20 object-cover rounded-lg border border-slate-600" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            URL.revokeObjectURL(img.url);
+                            setPastedImages(prev => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X size={10} className="text-white" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
 
+              {/* Anexos */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Observações</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[100px]"
-                  placeholder="Observações adicionais..."
-                />
+                <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                  <Paperclip size={10} className="inline mr-1" />
+                  Anexos
+                </label>
+                 <div className="flex items-center gap-2">
+                  <input 
+                    ref={attachmentInputRef}
+                    type="file" 
+                    multiple 
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        setAttachments(prev => [...prev, ...Array.from(e.target.files!)]);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => attachmentInputRef.current?.click()}
+                    className="px-3 py-1.5 bg-slate-700 border border-dashed border-slate-500 rounded-lg text-xs text-slate-400 hover:text-white hover:border-indigo-500 transition-colors flex items-center gap-1.5"
+                  >
+                    <Upload size={12} />
+                    Adicionar Arquivo
+                  </button>
+                  {attachments.length > 0 && (
+                    <span className="text-[10px] text-indigo-400 font-bold">{attachments.length} novo(s) arquivo(s) para salvar</span>
+                  )}
+                </div>
+
+                {/* Anexos já salvos */}
+                {editingRecord?.metadata?.attachments?.length > 0 && (
+                  <div className="mt-4 border-t border-slate-800 pt-3">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Anexos Salvos</h4>
+                    <div className="flex flex-col gap-1.5">
+                      {editingRecord!.metadata.attachments.map((att: any, attIdx: number) => {
+                        const docUrl = `${api.defaults.baseURL || 'http://localhost:3000/api'}/financial/records/attachments/${encodeURIComponent(att.fileName)}`;
+                        return (
+                          <div key={`saved-${attIdx}`} className="relative group/doc flex bg-slate-800/50 hover:bg-slate-800 rounded p-1.5 transition-colors">
+                            <AttachmentPreview url={docUrl} title={att.originalName}>
+                              <a 
+                                href={docUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 hover:underline group/link py-0.5"
+                                title={att.originalName}
+                              >
+                                <FileText size={14} className="text-blue-500 group-hover/link:text-blue-400" />
+                                <span className="truncate max-w-[300px]">{att.originalName}</span>
+                              </a>
+                            </AttachmentPreview>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Novos Anexos */}
+                {attachments.length > 0 && (
+                  <div className="mt-4 border-t border-slate-800 pt-3">
+                    <h4 className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-2">Novos Anexos</h4>
+                    <div className="space-y-1">
+                      {attachments.map((file, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs text-slate-300 bg-slate-900/30 px-2 py-1 rounded">
+                          <FileText size={12} className="text-slate-500" />
+                          <span className="flex-1 truncate">{file.name}</span>
+                          <span className="text-slate-600">{(file.size / 1024).toFixed(0)} KB</span>
+                          <button
+                            type="button"
+                            onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="flex gap-3 pt-4">
+              {/* Botões */}
+              <div className="flex gap-3 pt-4 border-t border-slate-700">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
@@ -2093,6 +2438,31 @@ export function Financial() {
                 </button>
               </div>
             </form>
+            )}
+
+            {/* Sub-Modal: Criar Condição de Pagamento */}
+            {showConditionSubModal && (
+              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+                <div className="bg-slate-800 rounded-lg w-full max-w-3xl max-h-[85vh] overflow-y-auto border border-slate-700 shadow-2xl">
+                  <div className="p-4 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800 z-10">
+                    <h3 className="text-lg font-bold text-white">Condições de Pagamento</h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowConditionSubModal(false);
+                        fetchPaymentConditions();
+                      }}
+                      className="text-slate-400 hover:text-white transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <div className="p-2">
+                    <PaymentConditions />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2584,12 +2954,12 @@ export function Financial() {
                     )}
                   </div>
                   <div className="shrink-0">
-                    {calcSettleFinalAmount > settlingRecord.amount && (
+                    {settlingRecord && calcSettleFinalAmount > settlingRecord.amount && (
                       <span className="text-xs px-2 py-1 bg-red-500/10 text-red-400 rounded-full border border-red-500/20">
                         +{formatCurrency(calcSettleFinalAmount - settlingRecord.amount)}
                       </span>
                     )}
-                    {calcSettleFinalAmount < settlingRecord.amount && (
+                    {settlingRecord && calcSettleFinalAmount < settlingRecord.amount && (
                       <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20">
                         -{formatCurrency(settlingRecord.amount - calcSettleFinalAmount)}
                       </span>

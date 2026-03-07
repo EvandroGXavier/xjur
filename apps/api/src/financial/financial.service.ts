@@ -30,7 +30,7 @@ export class FinancialService {
       select: {
         id: true, description: true, amount: true,
         installmentNumber: true, status: true, dueDate: true,
-        isResidual: true, amountPaid: true,
+        isResidual: true, amountPaid: true, paymentDate: true,
       },
       orderBy: { installmentNumber: 'asc' as const },
     },
@@ -69,9 +69,48 @@ export class FinancialService {
     return Math.max(0, Math.round(total * 100) / 100); // Nunca negativo, 2 casas decimais
   }
 
+  getAttachmentPath(fileName: string) {
+    const path = require('path');
+    return path.join(process.cwd(), 'uploads', 'financial', fileName);
+  }
+
+  private async processAttachments(files?: any[], existingMetadata?: any): Promise<any> {
+    let metadata = existingMetadata ? { ...(typeof existingMetadata === 'object' ? existingMetadata : {}) } : {};
+    const newAttachments = [];
+
+    if (files && files.length > 0) {
+      const fs = require('fs');
+      const path = require('path');
+      const uploadDir = path.join(process.cwd(), 'uploads', 'financial');
+      
+      if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      for (const file of files) {
+          const fileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${file.originalname}`;
+          const filePath = path.join(uploadDir, fileName);
+          fs.writeFileSync(filePath, file.buffer);
+
+          newAttachments.push({
+              originalName: file.originalname,
+              fileName: fileName,
+              path: `/uploads/financial/${fileName}`,
+              mimeType: file.mimetype,
+              size: file.size
+          });
+      }
+
+      const existingAttachments = Array.isArray(metadata.attachments) ? metadata.attachments : [];
+      metadata.attachments = [...existingAttachments, ...newAttachments];
+    }
+    
+    return Object.keys(metadata).length > 0 ? metadata : undefined;
+  }
+
   // ==================== FINANCIAL RECORDS ====================
 
-  async createFinancialRecord(dto: CreateFinancialRecordDto) {
+  async createFinancialRecord(dto: CreateFinancialRecordDto, files?: any[]) {
     // Calcular valor final se houver encargos/descontos
     const amountFinal = this.calculateFinalAmount(
       dto.amount,
@@ -82,6 +121,101 @@ export class FinancialService {
       dto.discountType,
     );
 
+    // Se houver parcelas pré-calculadas enviadas pelo frontend
+    if (!dto.parentId && dto.installments && dto.installments.length > 0) {
+      // Validar a soma das parcelas
+      const installmentsSum = dto.installments.reduce((acc, inst) => acc + (Number(inst.amount) || 0), 0);
+      const roundedSum = Math.round(installmentsSum * 100) / 100;
+      const roundedAmount = Math.round(dto.amount * 100) / 100;
+
+      if (Math.abs(roundedSum - roundedAmount) > 0.01) {
+        throw new BadRequestException(
+          `A soma das parcelas (${roundedSum}) não confere com o valor total (${roundedAmount}). Diferença: ${Math.round((roundedAmount - roundedSum) * 100) / 100}`,
+        );
+      }
+
+      const totalInst = dto.installments.length;
+      
+      // Criar registro mãe (geralmente a primeira parcela ou um resumo)
+      const parent = await this.prisma.financialRecord.create({
+        data: {
+          tenantId: dto.tenantId,
+          processId: dto.processId,
+          bankAccountId: dto.bankAccountId,
+          categoryId: dto.categoryId,
+          paymentConditionId: dto.paymentConditionId,
+          description: dto.description,
+          amount: 0, // O valor total é distribuído nas parcelas filhas
+          amountFinal: 0,
+          dueDate: new Date(dto.installments[0].dueDate),
+          paymentDate: dto.paymentDate ? new Date(dto.paymentDate) : null,
+          status: dto.status || 'PENDING',
+          type: dto.type,
+          category: dto.category,
+          paymentMethod: dto.paymentMethod,
+          notes: dto.notes ? `${dto.notes} | Parcelado em ${totalInst}x` : `Parcelado em ${totalInst}x`,
+          fine: dto.fine,
+          interest: dto.interest,
+          monetaryCorrection: dto.monetaryCorrection,
+          discount: dto.discount,
+          discountType: dto.discountType,
+          totalInstallments: totalInst,
+          periodicity: dto.periodicity,
+          origin: dto.origin || 'MANUAL',
+          parties: dto.parties ? {
+            create: dto.parties.map(p => ({
+              tenantId: dto.tenantId,
+              contactId: p.contactId,
+              role: p.role,
+              amount: p.amount,
+            }))
+          } : undefined,
+          splits: dto.splits ? {
+            create: dto.splits.map(s => ({
+              tenantId: dto.tenantId,
+              contactId: s.contactId,
+              role: s.role,
+              amount: s.amount,
+              percentage: s.percentage,
+              description: s.description,
+              notes: s.notes,
+            }))
+          } : undefined,
+          metadata: await this.processAttachments(files),
+        },
+      });
+
+      const installments = dto.installments.map((inst, i) => ({
+        tenantId: dto.tenantId,
+        processId: dto.processId,
+        bankAccountId: dto.bankAccountId,
+        categoryId: dto.categoryId,
+        description: `${dto.description} - Parcela ${inst.installmentNumber}/${totalInst}`,
+        amount: inst.amount,
+        amountFinal: inst.amount,
+        dueDate: new Date(inst.dueDate),
+        status: i === 0 && dto.status === 'PAID' ? 'PAID' : 'PENDING',
+        paymentDate: i === 0 && dto.status === 'PAID' ? parent.paymentDate : null,
+        type: dto.type,
+        category: dto.category,
+        paymentMethod: dto.paymentMethod,
+        parentId: parent.id,
+        installmentNumber: inst.installmentNumber,
+        totalInstallments: totalInst,
+        periodicity: dto.periodicity,
+        paymentConditionId: dto.paymentConditionId,
+        isResidual: dto.isResidual,
+        origin: dto.origin || 'MANUAL',
+      }));
+
+      await this.prisma.financialRecord.createMany({
+        data: installments,
+      });
+
+      return this.findOneFinancialRecord(parent.id, dto.tenantId);
+    }
+
+    // Lógica legada de parcelamento simples (se totalInstallments > 1 mas sem installments array)
     if (!dto.parentId && dto.totalInstallments && dto.totalInstallments > 1) {
       const parent = await this.prisma.financialRecord.create({
         data: {
@@ -89,6 +223,7 @@ export class FinancialService {
           processId: dto.processId,
           bankAccountId: dto.bankAccountId,
           categoryId: dto.categoryId,
+          paymentConditionId: dto.paymentConditionId,
           description: dto.description,
           amount: dto.amount,
           amountFinal: amountFinal,
@@ -125,6 +260,7 @@ export class FinancialService {
               notes: s.notes,
             }))
           } : undefined,
+          metadata: await this.processAttachments(files),
         },
       });
 
@@ -134,29 +270,7 @@ export class FinancialService {
       const remainder = Math.round((parentAmountFinal - (installmentAmount * dto.totalInstallments)) * 100) / 100;
 
       for (let i = 0; i < dto.totalInstallments; i++) {
-        const d = new Date(dto.dueDate);
-        const periodicity = (dto.periodicity || 'Mensal').toUpperCase();
-        
-        switch (periodicity) {
-          case 'WEEKLY':
-          case 'SEMANAL':
-            d.setDate(d.getDate() + (7 * i));
-            break;
-          case 'BIWEEKLY':
-          case 'QUINZENAL':
-            d.setDate(d.getDate() + (14 * i));
-            break;
-          case 'YEARLY':
-          case 'ANUAL':
-            d.setFullYear(d.getFullYear() + i);
-            break;
-          case 'CUSTOM':
-          case 'MONTHLY':
-          case 'MENSAL':
-          default:
-            d.setMonth(d.getMonth() + i);
-            break;
-        }
+        const d = this.calculateNextDueDate(dto.dueDate, dto.periodicity, i);
 
         const amount = i === dto.totalInstallments - 1
           ? installmentAmount + remainder
@@ -169,7 +283,7 @@ export class FinancialService {
           categoryId: dto.categoryId,
           description: `${dto.description} - Parcela ${i + 1}/${dto.totalInstallments}`,
           amount: amount,
-          amountFinal: amount, // A parcela não embute os encargos adicionais do pai a menos que liquidados separadamente depois
+          amountFinal: amount, 
           dueDate: d,
           status: i === 0 && dto.status === 'PAID' ? 'PAID' : 'PENDING',
           paymentDate: i === 0 && dto.status === 'PAID' ? parent.paymentDate : null,
@@ -180,6 +294,7 @@ export class FinancialService {
           installmentNumber: i + 1,
           totalInstallments: dto.totalInstallments,
           periodicity: dto.periodicity,
+          paymentConditionId: dto.paymentConditionId,
         });
       }
 
@@ -196,6 +311,7 @@ export class FinancialService {
         processId: dto.processId,
         bankAccountId: dto.bankAccountId,
         categoryId: dto.categoryId,
+        paymentConditionId: dto.paymentConditionId,
         description: dto.description,
         amount: dto.amount,
         dueDate: new Date(dto.dueDate),
@@ -205,21 +321,18 @@ export class FinancialService {
         category: dto.category,
         paymentMethod: dto.paymentMethod,
         notes: dto.notes,
-
-        // Encargos & Descontos
         fine: dto.fine,
         interest: dto.interest,
         monetaryCorrection: dto.monetaryCorrection,
         discount: dto.discount,
         discountType: dto.discountType,
         amountFinal,
-
-        // Parcelamento
         parentId: dto.parentId,
         installmentNumber: dto.installmentNumber,
         totalInstallments: dto.totalInstallments,
         periodicity: dto.periodicity,
         isResidual: dto.isResidual || false,
+        origin: dto.origin || 'MANUAL',
 
         parties: dto.parties ? {
           create: dto.parties.map(p => ({
@@ -241,6 +354,7 @@ export class FinancialService {
             notes: s.notes,
           }))
         } : undefined,
+        metadata: await this.processAttachments(files),
       },
       include: this.defaultRecordInclude,
     });
@@ -262,9 +376,9 @@ export class FinancialService {
     if (filters?.category) where.category = filters.category;
     if (filters?.parentId) where.parentId = filters.parentId;
 
-    // Por padrão, mostrar apenas registros raiz (não parcelas filhas) a menos que solicitado
+    // Por padrão, mostrar apenas registros que não são "containers" (quem tem filhos é agrupador)
     if (!filters?.showInstallments && !filters?.parentId) {
-      where.parentId = null;
+      where.children = { none: {} };
     }
     
     if (filters?.startDate || filters?.endDate) {
@@ -293,8 +407,15 @@ export class FinancialService {
     return record;
   }
 
-  async updateFinancialRecord(id: string, tenantId: string, dto: UpdateFinancialRecordDto) {
-    const existing = await this.findOneFinancialRecord(id, tenantId);
+  async updateFinancialRecord(id: string, tenantId: string, dto: UpdateFinancialRecordDto, files?: any[]) {
+    const existing = await this.prisma.financialRecord.findUnique({
+      where: { id, tenantId },
+      include: { parties: true, splits: true }
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Registro financeiro não encontrado');
+    }
 
     const data: any = {};
     if (dto.processId !== undefined) data.processId = dto.processId;
@@ -333,6 +454,7 @@ export class FinancialService {
     if (dto.totalInstallments !== undefined) data.totalInstallments = dto.totalInstallments;
     if (dto.periodicity !== undefined) data.periodicity = dto.periodicity;
     if (dto.isResidual !== undefined) data.isResidual = dto.isResidual;
+    if (dto.origin !== undefined) data.origin = dto.origin;
 
     // Atualizar partes (parties)
     if (dto.parties) {
@@ -375,10 +497,78 @@ export class FinancialService {
       }
     }
 
+    // Atualizar parcelas (installments) se fornecidas
+    if (dto.installments && dto.installments.length > 0) {
+      // Validar soma
+      const installmentsSum = dto.installments.reduce((acc, inst) => acc + (Number(inst.amount) || 0), 0);
+      const roundedSum = Math.round(installmentsSum * 100) / 100;
+      const roundedAmount = Math.round(amount * 100) / 100;
+
+      if (Math.abs(roundedSum - roundedAmount) > 0.01) {
+        throw new BadRequestException(
+          `A soma das parcelas (${roundedSum}) não confere com o valor total (${roundedAmount}).`,
+        );
+      }
+
+      // Remover parcelas antigas
+      await this.prisma.financialRecord.deleteMany({
+        where: { parentId: id },
+      });
+
+      // Criar novas parcelas
+      const totalInst = dto.installments.length;
+      await this.prisma.financialRecord.createMany({
+        data: dto.installments.map((inst, i) => ({
+          tenantId,
+          processId: data.processId || existing.processId,
+          bankAccountId: data.bankAccountId || existing.bankAccountId,
+          categoryId: data.categoryId || existing.categoryId,
+          description: `${data.description || existing.description} - Parcela ${inst.installmentNumber}/${totalInst}`,
+          amount: inst.amount,
+          amountFinal: inst.amount,
+          dueDate: new Date(inst.dueDate),
+          status: i === 0 && (data.status || existing.status) === 'PAID' ? 'PAID' : 'PENDING',
+          paymentDate: i === 0 && (data.status || existing.status) === 'PAID' ? (data.paymentDate || existing.paymentDate) : null,
+          type: data.type || existing.type,
+          category: data.category !== undefined ? data.category : existing.category,
+          paymentMethod: data.paymentMethod !== undefined ? data.paymentMethod : existing.paymentMethod,
+          parentId: id,
+          installmentNumber: inst.installmentNumber,
+          totalInstallments: totalInst,
+          periodicity: data.periodicity || existing.periodicity,
+          paymentConditionId: dto.paymentConditionId,
+        })),
+      });
+
+      // O registro mãe fica com valor 0 para não duplicar no total
+      data.amount = 0;
+      data.amountFinal = 0;
+      data.totalInstallments = totalInst;
+    }
+
     return this.prisma.financialRecord.update({
       where: { id },
       data,
       include: this.defaultRecordInclude,
+    });
+  }
+
+  async uploadAttachments(id: string, tenantId: string, files: Array<any>) {
+    const existing = await this.prisma.financialRecord.findUnique({
+      where: { id, tenantId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Registro financeiro não encontrado');
+    }
+
+    const newMetadata = await this.processAttachments(files, existing.metadata);
+
+    return this.prisma.financialRecord.update({
+      where: { id },
+      data: {
+        metadata: newMetadata,
+      },
     });
   }
 
@@ -670,6 +860,138 @@ export class FinancialService {
   async getSplits(recordId: string, tenantId: string) {
     return this.prisma.transactionSplit.findMany({
       where: { financialRecordId: recordId, tenantId },
+    });
+  }
+
+  // ==================== PARTES DA TRANSAÇÃO (FINANCIAL PARTIES) ====================
+
+  async findPartiesByRecord(recordId: string, tenantId: string) {
+    return this.prisma.financialParty.findMany({
+      where: { financialRecordId: recordId, tenantId },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            document: true,
+            personType: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async addPartyToRecord(
+    recordId: string,
+    tenantId: string,
+    data: { contactId: string; role: string; amount?: number; notes?: string },
+  ) {
+    // Verificar se o registro existe
+    const record = await this.prisma.financialRecord.findFirst({
+      where: { id: recordId, tenantId },
+    });
+    if (!record) throw new NotFoundException('Registro financeiro não encontrado');
+
+    // Verificar duplicidade (mesma pessoa com mesmo role)
+    const existing = await this.prisma.financialParty.findFirst({
+      where: {
+        financialRecordId: recordId,
+        contactId: data.contactId,
+        role: data.role,
+      },
+    });
+    if (existing) throw new BadRequestException('Este contato já está vinculado com este papel nesta transação');
+
+    return this.prisma.financialParty.create({
+      data: {
+        tenantId,
+        financialRecordId: recordId,
+        contactId: data.contactId,
+        role: data.role,
+        amount: data.amount,
+        notes: data.notes,
+      },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            document: true,
+            personType: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async addPartyWithQuickContact(
+    recordId: string,
+    tenantId: string,
+    data: {
+      name: string;
+      document?: string;
+      phone?: string;
+      email?: string;
+      personType?: string;
+      role: string;
+      amount?: number;
+    },
+  ) {
+    // Verificar se o registro existe
+    const record = await this.prisma.financialRecord.findFirst({
+      where: { id: recordId, tenantId },
+    });
+    if (!record) throw new NotFoundException('Registro financeiro não encontrado');
+
+    // Criar contato rápido
+    const contact = await this.prisma.contact.create({
+      data: {
+        tenantId,
+        name: data.name,
+        document: data.document,
+        phone: data.phone,
+        email: data.email,
+        personType: data.personType || 'PF',
+      },
+    });
+
+    // Vincular como parte
+    return this.prisma.financialParty.create({
+      data: {
+        tenantId,
+        financialRecordId: recordId,
+        contactId: contact.id,
+        role: data.role,
+        amount: data.amount,
+      },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            document: true,
+            personType: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async removePartyFromRecord(partyId: string, tenantId: string) {
+    const party = await this.prisma.financialParty.findFirst({
+      where: { id: partyId, tenantId },
+    });
+    if (!party) throw new NotFoundException('Parte não encontrada');
+
+    return this.prisma.financialParty.delete({
+      where: { id: partyId },
     });
   }
 

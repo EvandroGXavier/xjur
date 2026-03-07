@@ -1,4 +1,7 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UsePipes, ValidationPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UsePipes, ValidationPipe, UseGuards, UseInterceptors, UploadedFiles, Res } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
+import { Public } from '../auth/public.decorator';
 import { FinancialService } from './financial.service';
 import { CreateFinancialRecordDto, CreateInstallmentsDto, PartialPaymentDto, SettleRecordDto, CreateTransactionSplitDto } from './dto/create-financial-record.dto';
 import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
@@ -16,7 +19,10 @@ export class FinancialController {
 
   @Post('records')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  createFinancialRecord(@Body() dto: CreateFinancialRecordDto, @CurrentUser() user: CurrentUserData) {
+  createFinancialRecord(
+    @Body() dto: CreateFinancialRecordDto, 
+    @CurrentUser() user: CurrentUserData
+  ) {
     return this.financialService.createFinancialRecord({ ...dto, tenantId: user.tenantId });
   }
 
@@ -42,6 +48,34 @@ export class FinancialController {
     });
   }
 
+  @Public()
+  @Get('records/attachments/:filename')
+  async downloadAttachment(@Param('filename') filename: string, @Res() res: Response) {
+      const filePath = this.financialService.getAttachmentPath(filename);
+      const fs = require('fs');
+      if (!fs.existsSync(filePath)) {
+          console.error(`File request failed. Path not found: ${filePath}`);
+          return res.status(404).json({ message: 'Arquivo não encontrado' });
+      }
+      
+      // Allow iframe
+      res.setHeader('X-Frame-Options', 'ALLOWALL'); 
+      res.setHeader('Content-Disposition', 'inline');
+      // CSP to allow embedding
+      res.setHeader('Content-Security-Policy', "frame-ancestors 'self' http://localhost:* https://localhost:* *");
+
+      // Basic mime type detection
+      const ext = filename.split('.').pop().toLowerCase();
+      let mimeType = 'application/octet-stream';
+      if (ext === 'pdf') mimeType = 'application/pdf';
+      if (['jpg', 'jpeg'].includes(ext)) mimeType = 'image/jpeg';
+      if (['png'].includes(ext)) mimeType = 'image/png';
+      
+      res.setHeader('Content-Type', mimeType);
+
+      return res.sendFile(filePath);
+  }
+
   @Get('records/:id')
   findOneFinancialRecord(
     @Param('id') id: string,
@@ -55,9 +89,19 @@ export class FinancialController {
   updateFinancialRecord(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserData,
-    @Body() dto: UpdateFinancialRecordDto,
+    @Body() dto: UpdateFinancialRecordDto
   ) {
     return this.financialService.updateFinancialRecord(id, user.tenantId, dto);
+  }
+
+  @Post('records/:id/attachments')
+  @UseInterceptors(FilesInterceptor('attachments'))
+  async uploadAttachments(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+    @UploadedFiles() files: Array<any>
+  ) {
+    return this.financialService.uploadAttachments(id, user.tenantId, files);
   }
 
   @Delete('records/:id')
@@ -118,6 +162,43 @@ export class FinancialController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.financialService.getSplits(id, user.tenantId);
+  }
+
+  // ==================== PARTES DA TRANSAÇÃO (FINANCIAL PARTIES) ====================
+
+  @Get('records/:id/parties')
+  findParties(
+    @Param('id') recordId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.financialService.findPartiesByRecord(recordId, user.tenantId);
+  }
+
+  @Post('records/:id/parties')
+  addParty(
+    @Param('id') recordId: string,
+    @CurrentUser() user: CurrentUserData,
+    @Body() body: { contactId: string; role: string; amount?: number; notes?: string },
+  ) {
+    return this.financialService.addPartyToRecord(recordId, user.tenantId, body);
+  }
+
+  @Post('records/:id/parties/quick-contact')
+  addPartyWithQuickContact(
+    @Param('id') recordId: string,
+    @CurrentUser() user: CurrentUserData,
+    @Body() body: { name: string; document?: string; phone?: string; email?: string; personType?: string; role: string; amount?: number },
+  ) {
+    return this.financialService.addPartyWithQuickContact(recordId, user.tenantId, body);
+  }
+
+  @Delete('records/:id/parties/:partyId')
+  removeParty(
+    @Param('id') recordId: string,
+    @Param('partyId') partyId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.financialService.removePartyFromRecord(partyId, user.tenantId);
   }
 
   // ==================== CATEGORIAS FINANCEIRAS ====================
