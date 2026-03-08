@@ -4,6 +4,7 @@ import { Plus, Search, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ContactPickerGlobal } from "../../components/contacts/ContactPickerGlobal";
 import { usePaymentConditions } from "../../hooks/usePaymentConditions";
+import { useHotkeys } from "../../hooks/useHotkeys";
 
 export function PurchasesPage() {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -169,27 +170,19 @@ export function PurchasesPage() {
     printWindow.document.close();
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") {
-          return;
+  useHotkeys({
+    onNew: handleNovoPedido,
+    onCancel: () => {
+      if (isEditing) setIsEditing(false);
+    },
+    onPrint: () => {
+      if (selectedPurchase && !isEditing) {
+        printPurchaseOrder(selectedPurchase);
+      } else if (!isEditing) {
+        toast.warning("Selecione um pedido para imprimir.");
       }
-      if (e.key === "F2") {
-        e.preventDefault();
-        handleNovoPedido();
-      }
-      if (e.key === "F4") {
-        e.preventDefault();
-        if (selectedPurchase) {
-          printPurchaseOrder(selectedPurchase);
-        } else {
-          toast.warning("Selecione um pedido para imprimir.");
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedPurchase]);
+    }
+  });
 
   const loadPurchases = async () => {
     try {
@@ -264,7 +257,7 @@ export function PurchasesPage() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (shouldClose = true) => {
     try {
       const totalAmount = formData.items.reduce(
         (acc: number, item: any) => acc + Number(item.total),
@@ -301,8 +294,10 @@ export function PurchasesPage() {
           toast.success("Pedido de compra registrado com sucesso");
         }
       }
-      setIsEditing(false);
-      setSelectedPurchase(null);
+      if (shouldClose) {
+        setIsEditing(false);
+        setSelectedPurchase(null);
+      }
       loadPurchases();
       loadDependencies(); // Reload products in case XML created new ones
     } catch (error: any) {
@@ -563,6 +558,7 @@ export function PurchasesPage() {
                 Previsão:
               </label>
               <input
+                autoFocus
                 type="date"
                 className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none"
                 value={formData.expectedDate}
@@ -820,16 +816,22 @@ export function PurchasesPage() {
             className="bg-slate-800 border border-slate-700 text-slate-300 px-4 py-2 font-medium flex items-center gap-2 rounded shadow-sm hover:bg-slate-700"
             onClick={() => setIsEditing(false)}
           >
-            <X size={18} className="text-red-400" /> Cancelar
+            <X size={18} className="text-red-400" /> Cancelar (ESC)
+          </button>
+          <button
+            className={`bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 px-6 py-2 font-medium flex items-center gap-2 rounded shadow-sm`}
+            onClick={() => handleSave(false)}
+          >
+            Salvar
           </button>
           <button
             className={`${formData.xmlData ? "bg-purple-600 border-purple-700 hover:bg-purple-700" : "bg-teal-600 border-teal-700 hover:bg-teal-700"} text-white px-6 py-2 font-medium flex items-center gap-2 rounded shadow-sm`}
-            onClick={handleSave}
+            onClick={() => handleSave(true)}
           >
             <Check size={18} />{" "}
             {formData.xmlData
-              ? "Salvar Entrada (Mover Estoque)"
-              : "Salvar Pedido"}
+              ? "Salvar Entrada e Sair"
+              : "Salvar e Sair"}
           </button>
         </div>
       </div>
@@ -896,6 +898,7 @@ export function PurchasesPage() {
                     key={p.id}
                     className={`cursor-pointer transition-colors ${selectedPurchase?.id === p.id ? "bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500" : "text-slate-300 hover:bg-slate-800/50 border-b border-slate-800"}`}
                     onClick={() => loadPurchaseDetails(p.id)}
+                    onDoubleClick={() => setIsEditing(true)}
                   >
                     <td className="px-3 py-2 w-24 border-r border-slate-800 font-mono">
                       {String(p.code).padStart(6, "0")}

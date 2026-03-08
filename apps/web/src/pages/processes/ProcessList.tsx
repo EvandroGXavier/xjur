@@ -29,6 +29,7 @@ import { InlineTags } from '../../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpProcesses } from '../../data/helpManuals';
+import { useHotkeys } from '../../hooks/useHotkeys';
 import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -123,6 +124,11 @@ export function ProcessList() {
             setLoading(false);
         }
     };
+
+    useHotkeys({
+        onNew: () => setIsMagicModalOpen(true),
+        onPrint: () => window.print()
+    });
 
     const sortedProcesses = useMemo(() => {
         let sortableItems = [...processes];
@@ -253,6 +259,7 @@ export function ProcessList() {
                         isLoading={loading}
                         onSort={(key, direction) => setSortConfig({ key: key as keyof Process, direction })}
                         onSelect={setSelectedIds}
+                        onRowClick={(process) => navigate(`/processes/${process.id}`)}
                         columns={[
                             {
                                 key: 'title',

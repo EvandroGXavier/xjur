@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { SYSTEM_MODULES } from '../config/modules';
+import { useHotkeys } from '../hooks/useHotkeys';
 
 const Modal = ({ isOpen, onClose, title, children }: any) => {
     if (!isOpen) return null;
@@ -42,6 +43,13 @@ export function UsersPage() {
 
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  useHotkeys({
+    onNew: () => handleOpenModal(),
+    onCancel: () => {
+        if (modalOpen) setModalOpen(false);
+    }
+  });
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -97,7 +105,7 @@ export function UsersPage() {
     });
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent, shouldClose: boolean = true) => {
       e.preventDefault();
       try {
           setLoading(true);
@@ -118,10 +126,12 @@ export function UsersPage() {
             alert('Usuário criado com sucesso!');
           }
           
-          setModalOpen(false);
-          setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
-          setEditingId(null);
           fetchUsers();
+          if (shouldClose) {
+              setModalOpen(false);
+              setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
+              setEditingId(null);
+          }
       } catch (error: any) {
           alert('Erro ao salvar usuário: ' + (error.response?.data?.message || error.message));
       } finally {
@@ -182,7 +192,7 @@ export function UsersPage() {
             </thead>
             <tbody className="divide-y divide-slate-800 text-slate-300">
                 {users.map(user => (
-                    <tr key={user.id} className="hover:bg-slate-800/50 transition-colors">
+                    <tr key={user.id} className="hover:bg-slate-800/50 transition-colors cursor-pointer" onDoubleClick={() => handleOpenModal(user)}>
                         <td className="px-6 py-4 font-medium text-white flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-indigo-400">
                                 <User size={16} />
@@ -240,6 +250,7 @@ export function UsersPage() {
               <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Nome Completo</label>
                   <input
+                    autoFocus
                     required
                     type="text"
                     value={formData.name}
@@ -352,16 +363,25 @@ export function UsersPage() {
                   <button
                     type="button"
                     onClick={() => setModalOpen(false)}
-                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors flex items-center gap-2"
                   >
-                      Cancelar
+                        <X size={18} />
+                      Cancelar (ESC)
                   </button>
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={(e) => handleSave(e, false)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                  >
+                      Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleSave(e, true)}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
                   >
                       <Save size={18} />
-                      Salvar
+                      Salvar e Sair
                   </button>
               </div>
           </form>

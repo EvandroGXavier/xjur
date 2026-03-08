@@ -22,6 +22,11 @@ export class UsersController {
     return this.usersService.update(id, updateDto, req.user.tenantId);
   }
 
+  @Patch('me/preferences')
+  updatePreferences(@Body() updateDto: { theme?: string; soundEnabled?: boolean }, @Request() req) {
+      return this.usersService.updatePreferences(req.user.id, updateDto);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req) {
     return this.usersService.remove(id, req.user.tenantId);

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { Badge } from '../../components/ui/Badge';
 import { ProductModal } from './ProductModal';
+import { useHotkeys } from '../../hooks/useHotkeys';
 
 interface Product {
   id: string;
@@ -34,6 +35,16 @@ export function ProductsList() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  useHotkeys({
+    onNew: () => {
+      setSelectedProduct(null);
+      setIsModalOpen(true);
+    },
+    onCancel: () => {
+      if (isModalOpen) setIsModalOpen(false);
+    }
+  });
 
   useEffect(() => {
     fetchProducts();
@@ -143,6 +154,7 @@ export function ProductsList() {
       <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm min-h-[400px]">
           <DataGrid<Product>
             data={sortedProducts}
+            onRowDoubleClick={handleEdit}
             onSort={(key, direction) => setSortConfig({ key: key as keyof Product, direction })}
             totalItems={sortedProducts.length}
             isLoading={loading}

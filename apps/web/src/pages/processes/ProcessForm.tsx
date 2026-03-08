@@ -9,6 +9,7 @@ import { ProcessParties } from './ProcessParties';
 import { ProcessoAndamentos } from '../../components/processos/ProcessoAndamentos';
 import { ProcessAgenda } from '../../components/processos/ProcessAgenda';
 import { CreatableSelect } from '../../components/ui/CreatableSelect';
+import { useHotkeys } from '../../hooks/useHotkeys';
 
 const DEFAULT_AREAS = [
     { label: 'Cível', value: 'Cível' },
@@ -82,9 +83,19 @@ export function ProcessForm() {
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
+    useHotkeys({
+        onNew: () => {
+            if (!isEditing) {
+                // Foco manual no título se não for edição
+                document.getElementById('focus-title')?.focus();
+            } else {
+                navigate('/processes/new');
+            }
+        },
+        onCancel: () => navigate('/processes')
+    });
+
+    const handleSubmit = async (shouldClose: boolean) => {
         if (!form.title) {
             toast.warning('Título é obrigatório');
             return;
@@ -95,11 +106,16 @@ export function ProcessForm() {
             if (isEditing) {
                 await api.patch(`/processes/${id}`, form);
                 toast.success('Processo atualizado!');
+                if (shouldClose) navigate('/processes');
             } else {
                 const res = await api.post('/processes', form);
                 toast.success('Processo criado!');
-                // Redireciona para edição para liberar as abas
-                navigate(`/processes/${res.data.id}`);
+                if (shouldClose) {
+                    navigate('/processes');
+                } else {
+                    // Redireciona para edição para liberar as abas e continuar editando
+                    navigate(`/processes/${res.data.id}`);
+                }
             }
         } catch (err: any) {
             console.error(err);
@@ -178,7 +194,7 @@ export function ProcessForm() {
                 
                 {/* ─── TAB: PRINCIPAL ─── */}
                 <div className={activeTab === 'MAIN' ? 'block' : 'hidden'}>
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={(e) => { e.preventDefault(); handleSubmit(true); }} className="space-y-6">
                         {/* Identificação */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
                             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Identificação</h3>
@@ -186,6 +202,8 @@ export function ProcessForm() {
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Título / Nome do Caso *</label>
                                     <input 
+                                        id="focus-title"
+                                        autoFocus
                                         value={form.title}
                                         onChange={e => setForm({...form, title: e.target.value})}
                                         className={inputClass}
@@ -351,13 +369,27 @@ export function ProcessForm() {
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-3 pb-6">
+                        <div className="flex justify-end gap-3 pb-6 border-t border-slate-800 pt-6">
                             <button type="button" onClick={() => navigate('/processes')} className="px-6 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition">
-                                Cancelar
+                                Cancelar (ESC)
                             </button>
-                            <button type="submit" disabled={loading} className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium flex items-center gap-2 transition disabled:opacity-50 shadow-lg shadow-indigo-500/20">
+                            <button 
+                                type="button" 
+                                onClick={() => handleSubmit(false)} 
+                                disabled={loading} 
+                                className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-2 transition disabled:opacity-50 shadow-lg shadow-blue-500/20"
+                            >
                                 {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                                {isEditing ? 'Salvar Alterações' : 'Criar Processo'}
+                                Salvar
+                            </button>
+                            <button 
+                                type="button" 
+                                onClick={() => handleSubmit(true)} 
+                                disabled={loading} 
+                                className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium flex items-center gap-2 transition disabled:opacity-50 shadow-lg shadow-indigo-500/20"
+                            >
+                                {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                                Salvar e Sair
                             </button>
                         </div>
                     </form>

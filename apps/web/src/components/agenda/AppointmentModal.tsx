@@ -140,7 +140,7 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
         setParticipants(newParts);
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent, shouldClose: boolean = true) => {
         e.preventDefault();
         setLoading(true);
 
@@ -166,7 +166,11 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
                 toast.success('Compromisso criado!');
             }
             onSave();
-            onClose();
+            if (shouldClose) {
+                onClose();
+            } else {
+                toast.info("Modo edição ativado.");
+            }
         } catch (error) {
             console.error(error);
             toast.error('Erro ao salvar compromisso.');
@@ -215,6 +219,7 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
                             <div>
                                 <label className="block text-sm font-medium text-slate-400 mb-1">Título</label>
                                 <input 
+                                    autoFocus
                                     type="text" 
                                     required
                                     value={formData.title} 
@@ -367,12 +372,14 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
                 <div className="p-4 border-t border-slate-800 flex justify-end gap-3 bg-slate-900/50 rounded-b-xl">
                     <button 
                         onClick={onClose}
+                        type="button"
                         className="px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
                     >
-                        Cancelar
+                        Cancelar (ESC)
                     </button>
                     {tab === 'PARTICIPANTS' && (
                         <button 
+                            type="button"
                             onClick={() => setTab('DETAILS')}
                             className="px-4 py-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition"
                         >
@@ -380,12 +387,22 @@ export function AppointmentModal({ isOpen, onClose, onSave, appointment, process
                         </button>
                     )}
                     <button 
-                        onClick={handleSubmit}
+                        type="button"
+                        onClick={(e) => handleSubmit(e, false)}
+                        disabled={loading}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
+                    >
+                        {loading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                        Salvar
+                    </button>
+                    <button 
+                        type="button"
+                        onClick={(e) => handleSubmit(e, true)}
                         disabled={loading}
                         className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg shadow-lg shadow-indigo-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
                     >
                         {loading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                        Salvar Compromisso
+                        Salvar e Sair
                     </button>
                 </div>
             </div>

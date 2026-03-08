@@ -4,6 +4,7 @@ import { Plus, Search, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ContactPickerGlobal } from "../../components/contacts/ContactPickerGlobal";
 import { usePaymentConditions } from "../../hooks/usePaymentConditions";
+import { useHotkeys } from "../../hooks/useHotkeys";
 
 export function ProposalsPage() {
   const [proposals, setProposals] = useState<any[]>([]);
@@ -34,21 +35,19 @@ export function ProposalsPage() {
     loadProposals();
     loadDependencies();
     fetchConditions();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "F2") {
-        e.preventDefault();
-        handleNovaProposta();
-      } else if (e.key === "F4") {
-        e.preventDefault();
-        if (selectedProposal && !isEditing) {
-          printProposal(selectedProposal);
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedProposal, isEditing]);
+
+  useHotkeys({
+    onNew: handleNovaProposta,
+    onCancel: () => {
+      if (isEditing) setIsEditing(false);
+    },
+    onPrint: () => {
+      if (selectedProposal && !isEditing) {
+        printProposal(selectedProposal);
+      }
+    }
+  });
 
   const handleNovaProposta = () => {
     setSelectedProposal(null);
@@ -270,7 +269,7 @@ export function ProposalsPage() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (shouldClose = true) => {
     try {
       const totalAmount = formData.items.reduce(
         (acc: number, item: any) => acc + Number(item.total),
@@ -301,8 +300,10 @@ export function ProposalsPage() {
         await api.post("/proposals", payload);
         toast.success("Orçamento criado com sucesso");
       }
-      setIsEditing(false);
-      setSelectedProposal(null);
+      if (shouldClose) {
+        setIsEditing(false);
+        setSelectedProposal(null);
+      }
       loadProposals();
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Erro ao salvar");
@@ -467,6 +468,7 @@ export function ProposalsPage() {
                 Vendedor:
               </label>
               <input
+                autoFocus
                 className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none"
                 value={formData.salesperson}
                 onChange={(e) =>
@@ -747,13 +749,19 @@ export function ProposalsPage() {
             className="bg-slate-800 border border-slate-700 text-slate-300 px-4 py-2 font-medium flex items-center gap-2 rounded shadow-sm hover:bg-slate-700 transition-colors"
             onClick={() => setIsEditing(false)}
           >
-            <X size={18} className="text-red-400" /> Cancelar
+            <X size={18} className="text-red-400" /> Cancelar (ESC)
+          </button>
+          <button
+            className="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 px-6 py-2 font-medium flex items-center gap-2 rounded shadow-sm transition-colors"
+            onClick={() => handleSave(false)}
+          >
+            Salvar
           </button>
           <button
             className="bg-teal-600 border border-teal-700 text-white px-6 py-2 font-medium flex items-center gap-2 rounded shadow-sm hover:bg-teal-700 transition-colors"
-            onClick={handleSave}
+            onClick={() => handleSave(true)}
           >
-            <Check size={18} /> Finalizar
+            <Check size={18} /> Salvar e Sair
           </button>
         </div>
       </div>
@@ -816,6 +824,7 @@ export function ProposalsPage() {
                     key={p.id}
                     className={`cursor-pointer transition-colors ${selectedProposal?.id === p.id ? "bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500" : "text-slate-300 hover:bg-slate-800/50 border-b border-slate-800"}`}
                     onClick={() => loadProposalDetails(p.id)}
+                    onDoubleClick={() => setIsEditing(true)}
                   >
                     <td className="px-3 py-2 w-24 border-r border-slate-800 font-mono">
                       {String(p.code).padStart(6, "0")}

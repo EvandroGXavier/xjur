@@ -19,6 +19,7 @@ export const SYSTEM_MODULES = [
   { id: 'chat', label: 'Atendimento', icon: MessageSquare, to: '/chat' },
   { id: 'kanban', label: 'Kanban', icon: Columns, to: '/kanban' },
   { id: 'processes', label: 'Processos', icon: Scale, to: '/processes' },
+  { id: 'contacts', label: 'Contatos', icon: Users, to: '/contacts' },
   { id: 'agenda', label: 'Agenda', icon: Calendar, to: '/agenda' },
   { 
     id: 'financial', 
@@ -39,10 +40,8 @@ export const SYSTEM_MODULES = [
       { id: 'inventory-fiscal', label: 'Fiscal', to: '/inventory/fiscal' },
     ]
   },
-  { id: 'contacts', label: 'Contatos', icon: Users, to: '/contacts' },
   { id: 'documents', label: 'Biblioteca', icon: FileText, to: '/documents' },
   { id: 'users', label: 'Equipe', icon: ShieldCheck, to: '/users' },
   { id: 'ai', label: 'Inteligência Artificial', icon: Bot, to: '/ai' },
-  { id: 'settings', label: 'Configuração', icon: Settings, to: '/settings' },
-  { id: 'security_financial', label: 'Segurança_Contas Bancarias', icon: Lock, to: '#' },
+  { id: 'settings', label: 'Configuração', icon: Settings, to: '/settings' }
 ];

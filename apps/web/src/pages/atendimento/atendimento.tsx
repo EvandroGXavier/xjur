@@ -30,6 +30,7 @@ import {
   Calendar,
   Layout
 } from 'lucide-react';
+import { useHotkeys } from '../../hooks/useHotkeys';
 import { clsx } from 'clsx';
 import { Badge } from '../../components/ui/Badge';
 import { QuickReplies } from './components/QuickReplies';
@@ -141,6 +142,13 @@ export function AtendimentoPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<'aberto' | 'atendendo' | 'agenda' | 'fechado' | 'todos'>('aberto');
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+
+  useHotkeys({
+    onNew: () => setShowNewTicketModal(true),
+    onCancel: () => {
+        if (showNewTicketModal) setShowNewTicketModal(false);
+    }
+  });
 
   // Data States
   const [tickets, setTickets] = useState<Ticket[]>([]);

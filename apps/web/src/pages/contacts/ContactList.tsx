@@ -1,11 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
-    Search, Plus, Filter, Users, UserPlus, 
-    Building2, Clock, MoreHorizontal, Pencil, 
-    Trash2, HelpCircle, LayoutGrid, List,
-    FileText,
-    Settings,
+    Search, Plus, Filter, Users,
+    Building2, Clock, HelpCircle, LayoutGrid, List,
     Target,
     Mail,
     Phone,
@@ -16,7 +13,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
-import { Badge } from '../../components/ui/Badge';
+
 import { DataGrid } from '../../components/ui/DataGrid';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
 import { InlineTags } from '../../components/ui/InlineTags';
@@ -25,6 +22,7 @@ import { helpContacts } from '../../data/helpManuals';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
+import { useHotkeys } from '../../hooks/useHotkeys';
 
 interface Contact {
   id: string;
@@ -58,6 +56,11 @@ export function ContactList() {
   
   const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('LIST'); // New state for view mode
   
+  useHotkeys({
+      onNew: () => navigate('/contacts/new'),
+      onPrint: () => window.print()
+  });
+
   useEffect(() => {
      fetchContacts();
   }, [includedTags, excludedTags, statusFilter, searchTerm]); // Added searchTerm to dependencies
@@ -311,6 +314,7 @@ export function ContactList() {
             onSort={(key, direction) => setSortConfig({ key: key as keyof Contact, direction })}
             totalItems={sortedContacts.length}
             isLoading={loading}
+            onRowClick={(c) => navigate(`/contacts/${c.id}`)}
             columns={[
                 { key: 'name', label: 'Nome / Razão Social', sortable: true, render: (c) => (
                           <div className="flex flex-col gap-0.5">

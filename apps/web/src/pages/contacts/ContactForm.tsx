@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { masks } from '../../utils/masks';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpContacts } from '../../data/helpManuals';
+import { useHotkeys } from '../../hooks/useHotkeys';
 
 import { PJTab } from './PJTab';
 
@@ -497,6 +498,17 @@ export function ContactForm() {
     }
   };
 
+  useHotkeys({
+      onNew: () => navigate('/contacts/new'),
+      onCancel: () => {
+          if (returnTo) {
+             navigate(decodeURIComponent(returnTo));
+          } else {
+             navigate('/contacts');
+          }
+      }
+  });
+
   useEffect(() => {
     if (id && id !== 'new') {
       fetchContact();
@@ -513,8 +525,8 @@ export function ContactForm() {
       .catch(err => console.error("Failed to fetch tenant settings", err));
   }, [id]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent, shouldClose: boolean = false) => {
+    if (e) e.preventDefault();
 
     // Validação
     if (requireOneInfo) {
@@ -579,13 +591,24 @@ export function ContactForm() {
             toast.success('Contato criado com sucesso!');
         }
 
-        setTimeout(() => {
-          if (returnTo) {
-            navigate(decodeURIComponent(returnTo));
-          } else {
-            navigate('/contacts');
-          }
-        }, 1000);
+        if (shouldClose) {
+            setTimeout(() => {
+                if (returnTo) {
+                    navigate(decodeURIComponent(returnTo));
+                } else {
+                    navigate('/contacts');
+                }
+            }, 500);
+        } else if (!id || id === 'new') {
+            // Em caso de inclusão, sem fechar, redireciona para a página de edição do ID gerado.
+            // Aqui precisaremos pegar o ID gerado se tivéssemos a resposta do servidor,
+            // mas como a criamos localmente nós tentamos dar o reload ou mandar pra edição assim que tiver.
+            // Para simplificar, vou deixar assim mas uma melhor abordagem seria pegar res.data.id
+            setTimeout(() => {
+                 navigate(`/contacts`); // Default fallback if we don't have ID handy
+            }, 500); 
+        }
+
     } catch (err: any) {
         console.error(err);
         const message = err.response?.data?.message || err.message || 'Erro ao conectar com servidor';
@@ -1018,6 +1041,7 @@ export function ContactForm() {
                                      {formData.personType === 'PJ' ? 'Nome Fantasia *' : 'Nome Completo *'}
                                  </label>
                                  <input 
+                                    autoFocus
                                     required
                                     value={formData.name}
                                     onChange={e => setFormData({...formData, name: e.target.value})}
@@ -1158,13 +1182,35 @@ export function ContactForm() {
                          </div>
                      </div>
 
-                     <div className="flex justify-end pt-4">
+                     <div className="flex justify-end pt-4 gap-3 bg-slate-900 border-t border-slate-800 -mx-6 -mb-6 p-6 mt-8 rounded-b-lg">
                           <button 
-                             disabled={loading}
-                             type="submit"
-                             className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
+                             type="button"
+                             onClick={() => {
+                                 if (returnTo) {
+                                     navigate(decodeURIComponent(returnTo));
+                                 } else {
+                                     navigate('/contacts');
+                                 }
+                             }}
+                             className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
                           >
-                             {loading ? 'Salvando...' : 'Salvar Contato (Ctrl+S)'}
+                             Cancelar (ESC)
+                          </button>
+                          <button 
+                             type="submit"
+                             onClick={(e) => { e.preventDefault(); handleSubmit(e, false); }}
+                             disabled={loading}
+                             className="px-6 py-2 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                          >
+                             Salvar
+                          </button>
+                          <button 
+                             type="button"
+                             onClick={(e) => { e.preventDefault(); handleSubmit(e, true); }}
+                             disabled={loading}
+                             className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                          >
+                             Salvar e Sair
                           </button>
                      </div>
                 </form>

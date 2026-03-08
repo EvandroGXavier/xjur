@@ -9,6 +9,7 @@ import { CalendarMonthView } from '../components/agenda/CalendarMonthView';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpAgenda } from '../data/helpManuals';
+import { useHotkeys } from '../hooks/useHotkeys';
 
 interface Appointment {
   id: string;
@@ -31,6 +32,13 @@ export function Agenda() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Appointment | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+
+  useHotkeys({
+    onNew: () => handleNew(),
+    onCancel: () => {
+        if (isModalOpen) setIsModalOpen(false);
+    }
+  });
 
   useEffect(() => {
     fetchAppointments();

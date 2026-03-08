@@ -47,6 +47,7 @@ import { BankAccountDetails } from '../components/financial/BankAccountDetails';
 import { FinancialParties } from '../components/financial/FinancialParties';
 import { AttachmentPreview } from '../components/ui/AttachmentPreview';
 import { useNavigate } from 'react-router-dom';
+import { useHotkeys } from '../hooks/useHotkeys';
 
 interface FinancialRecord {
   id: string;
@@ -174,6 +175,19 @@ export function Financial() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'dashboard' | 'records' | 'accounts' | 'conditions'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  useHotkeys({
+    onNew: () => handleOpenModal(),
+    onCancel: () => {
+        if (showModal) setShowModal(false);
+        if (showBankModal) setShowBankModal(false);
+        if (showInstallmentModal) setShowInstallmentModal(false);
+        if (showSettleModal) setShowSettleModal(false);
+        if (showConditionSubModal) setShowConditionSubModal(false);
+    },
+    onPrint: () => window.print()
+  });
+
   const [showModal, setShowModal] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
   const [showInstallmentModal, setShowInstallmentModal] = useState(false);
@@ -1588,8 +1602,13 @@ export function Financial() {
                 {sortedRecords.map((record) => (
                   <Fragment key={record.id}>
                     <tr 
-                      className="hover:bg-slate-700/30 transition-colors cursor-default"
-                      onClick={() => handleOpenModal(record)}
+                      className="hover:bg-slate-700/30 transition-colors cursor-pointer"
+                      onClick={(e) => { 
+                         // To avoid issues with click on row vs double click, keeping only double click as standard behavior based on plan.
+                         // But the current interaction uses click to expand if there are children or open modal. Let's make single click select or expand and double click open modal.
+                         // Wait, ProcessList and ContactList used onRowClick which intercepts single clicks. The plan says "Duplo clique na Grid". I will implement onDoubleClick here and keep onClick for expand or selection if needed, but for now just replace onClick with onDoubleClick.
+                      }}
+                      onDoubleClick={() => handleOpenModal(record)}
                     >
                     <td className="px-5 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-col gap-1">
@@ -1752,8 +1771,8 @@ export function Financial() {
                   {expandedRows.has(record.id) && record.children?.map((child) => (
                     <tr 
                       key={child.id} 
-                      className="bg-slate-700/20 border-l-2 border-purple-500/40 hover:bg-slate-700/40 transition-colors"
-                      onClick={() => handleOpenModal(child as FinancialRecord)}
+                      className="bg-slate-700/20 border-l-2 border-purple-500/40 hover:bg-slate-700/40 transition-colors cursor-pointer"
+                      onDoubleClick={() => handleOpenModal(child as FinancialRecord)}
                     >
                       <td className="px-6 py-2 pl-14 whitespace-nowrap text-[10px] text-slate-500 italic">
                         Parcela {child.installmentNumber}/{record.totalInstallments}
@@ -2082,6 +2101,7 @@ export function Financial() {
                     <span className="absolute left-3 top-2 text-slate-500 text-sm">R$</span>
                     <input
                       ref={amountInputRef}
+                      autoFocus
                       type="number"
                       step="0.01"
                       value={formData.amount}
@@ -2419,23 +2439,36 @@ export function Financial() {
               </div>
 
               {/* Botões */}
-              <div className="flex gap-3 pt-4 border-t border-slate-700">
+              <div className="flex gap-3 pt-6 border-t border-slate-700 mt-6 bg-slate-900 -mx-6 -mb-6 p-6 rounded-b-lg">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                  className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition-colors"
                 >
-                  Cancelar
+                  Cancelar (ESC)
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className={`flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors ${
-                    submitting ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {submitting ? 'Salvando...' : (editingRecord ? 'Atualizar' : 'Criar')}
-                </button>
+                <div className="flex-1 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); handleSubmit(e, false); }}
+                      disabled={submitting}
+                      className={`px-6 py-2 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors shadow-lg shadow-indigo-500/20 ${
+                        submitting ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {submitting ? 'Salvando...' : 'Salvar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); handleSubmit(e, true); }}
+                      disabled={submitting}
+                      className={`px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors shadow-lg shadow-emerald-500/20 ${
+                        submitting ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {submitting ? 'Salvando...' : 'Salvar e Sair'}
+                    </button>
+                </div>
               </div>
             </form>
             )}
@@ -2604,7 +2637,7 @@ export function Financial() {
                   onClick={() => setShowBankModal(false)}
                   className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
                 >
-                  Cancelar
+                  Cancelar (ESC)
                 </button>
                 <button
                   type="submit"
@@ -2720,7 +2753,7 @@ export function Financial() {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setShowInstallmentModal(false)} className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors">Cancelar</button>
+                <button type="button" onClick={() => setShowInstallmentModal(false)} className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors">Cancelar (ESC)</button>
                 <button type="submit" disabled={submitting} className={`flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
                   {submitting ? 'Criando...' : 'Criar Parcelamento'}
                 </button>
@@ -3083,10 +3116,9 @@ export function Financial() {
                 )}
               </div>
 
-              {/* Botões */}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowSettleModal(false)} className="flex-1 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors">
-                  Cancelar
+                  Cancelar (ESC)
                 </button>
                 <button
                   type="submit"

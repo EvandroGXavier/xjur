@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { X, Save, Package, Tag, Hash, FileText, Info, Truck } from 'lucide-react';
+import { X, Save, Package, Tag, Hash, Info, Truck } from 'lucide-react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 
@@ -123,7 +123,7 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
       }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, shouldClose: boolean = true) => {
     e.preventDefault();
     if (!formData.name) {
       toast.error('O nome é obrigatório');
@@ -148,7 +148,11 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
         toast.success('Produto cadastrado com sucesso!');
       }
       onSuccess();
-      onClose();
+      if (shouldClose) {
+        onClose();
+      } else {
+        toast.info("Modo de edição ativado.");
+      }
     } catch (error) {
       console.error('Error saving product:', error);
       toast.error('Erro ao salvar produto');
@@ -200,6 +204,7 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
                 Nome do {formData.type === 'PRODUCT' ? 'Produto' : 'Serviço'} <span className="text-red-500">*</span>
               </label>
               <input 
+                autoFocus
                 type="text" 
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -464,17 +469,26 @@ export function ProductModal({ isOpen, onClose, onSuccess, product }: ProductMod
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium transition"
             >
-              Cancelar
+              Cancelar (ESC)
             </button>
             <button
-              type="submit"
+              type="button"
               disabled={loading}
+              onClick={(e) => handleSubmit(e, false)}
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-bold transition shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+            >
+              {loading ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={(e) => handleSubmit(e, true)}
               className="flex-[2] flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold transition shadow-lg shadow-indigo-500/20"
             >
               {loading ? 'Salvando...' : (
                 <>
                   <Save size={20} />
-                  {product ? 'Atualizar Item' : 'Cadastrar Item'}
+                  {product ? 'Atualizar e Sair' : 'Salvar e Sair'}
                 </>
               )}
             </button>

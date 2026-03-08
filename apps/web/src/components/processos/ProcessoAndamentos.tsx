@@ -14,6 +14,7 @@ import {
     Trash2,
     Edit3
 } from 'lucide-react';
+import { useHotkeys } from '../../hooks/useHotkeys';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 import { AttachmentPreview } from '../ui/AttachmentPreview';
 
@@ -86,6 +87,23 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         responsibleName: ''
     });
 
+    useHotkeys({
+        onNew: () => {
+             resetForm();
+             setIsFormOpen(true);
+        },
+        onCancel: () => {
+             if (isFormOpen) setIsFormOpen(false);
+             if (concludeItemId) {
+                 setConcludeItemId(null);
+                 setConcludeFiles(null);
+             }
+             if (selectedMessage) setSelectedMessage(null);
+             if (isDocGenOpen) setIsDocGenOpen(false);
+             if (isDocGenM365Open) setIsDocGenM365Open(false);
+        }
+    });
+
     const formatDateDisplay = (dateStr?: string | null) => {
         if (!dateStr) return '-';
         try {
@@ -149,9 +167,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     }, [processId]);
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
+    const handleSave = async (shouldClose: boolean) => {
         // Basic validation for workflow categories
         if (!formData.title) {
             toast.error('Por favor, informe um título / resumo.');
@@ -187,13 +203,24 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 toast.success('Andamento atualizado!');
+                if (shouldClose) {
+                    resetForm();
+                } else {
+                    setSelectedFiles(null);
+                }
             } else {
-                await api.post(`/processes/${processId}/timelines`, data, {
+                const res = await api.post(`/processes/${processId}/timelines`, data, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 toast.success('Andamento criado!');
+                if (shouldClose) {
+                    resetForm();
+                } else {
+                    // Switch to edit mode so it doesn't duplicate on next save
+                    setEditingItem(res.data);
+                    setSelectedFiles(null);
+                }
             }
-            resetForm();
             fetchTimelines();
         } catch (error) {
             console.error(error);
@@ -688,7 +715,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                 }}
                                 className="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition text-sm"
                             >
-                                Cancelar
+                                Cancelar (ESC)
                             </button>
                             <button 
                                 onClick={handleConcludeAction}
@@ -722,7 +749,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                 onClick={() => setSelectedMessage(null)}
                                 className="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
                             >
-                                Cancelar
+                                Cancelar (ESC)
                             </button>
                             <button 
                                 onClick={confirmSendWhatsapp}
@@ -747,10 +774,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                             </h3>
                         </div>
 
-                        <form onSubmit={handleSave} className="space-y-4">
+                        <form onSubmit={(e) => { e.preventDefault(); handleSave(true); }} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-400 mb-1">Título / Resumo</label>
                                 <input 
+                                    autoFocus
                                     type="text" 
                                     value={formData.title}
                                     onChange={e => setFormData({...formData, title: e.target.value})}
@@ -895,20 +923,29 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-4">
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                                 <button 
                                     type="button"
                                     onClick={resetForm}
                                     className="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
                                 >
-                                    Cancelar
+                                    Cancelar (ESC)
                                 </button>
                                 <button 
-                                    type="submit"
+                                    type="button"
+                                    onClick={() => handleSave(false)}
+                                    disabled={isSaving}
+                                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-lg shadow-blue-900/20 disabled:opacity-50"
+                                >
+                                    {isSaving ? 'Salvando...' : 'Salvar'}
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => handleSave(true)}
                                     disabled={isSaving}
                                     className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-900/20 disabled:opacity-50"
                                 >
-                                    {isSaving ? 'Salvando...' : 'Salvar Andamento'}
+                                    {isSaving ? 'Salvando...' : 'Salvar e Sair'}
                                 </button>
                             </div>
                         </form>

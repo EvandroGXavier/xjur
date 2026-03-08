@@ -22,6 +22,7 @@ import {
 import { clsx } from 'clsx';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpMicrosoft365 } from '../data/helpManuals';
+import { useHotkeys } from '../hooks/useHotkeys';
 
 // --- COMPONENTS ---
 
@@ -378,10 +379,22 @@ export function Settings() {
   const [modalType, setModalType] = useState<'tenant' | 'plan'>('tenant');
   const [editingItem, setEditingItem] = useState<any>(null);
 
-  // FORM STATES
-  const [formData, setFormData] = useState<any>({});
+  // PREFERENCES STATE
+  const [userPrefs, setUserPrefs] = useState<{ theme: string; soundEnabled: boolean }>({ theme: 'DARK', soundEnabled: true });
 
   useEffect(() => {
+    // Carregar preferências iniciais do localStorage (para reflectir UI imediata)
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+        try {
+            const user = JSON.parse(userStr);
+            setUserPrefs({
+                theme: user.theme || 'DARK',
+                soundEnabled: user.soundEnabled !== undefined ? user.soundEnabled : true
+            });
+        } catch(e) {}
+    }
+
     if (activeTab === 'tenants') {
         fetchTenants();
         fetchPlans();
@@ -389,6 +402,16 @@ export function Settings() {
     if (activeTab === 'plans') fetchPlans();
     if (activeTab === 'my-tenant') fetchMyTenant();
   }, [activeTab]);
+
+  useHotkeys({
+      onNew: () => {
+          if (activeTab === 'tenants') handleOpenModal('tenant');
+          if (activeTab === 'plans') handleOpenModal('plan');
+      },
+      onCancel: () => {
+          if (modalOpen) setModalOpen(false);
+      }
+  });
 
   // --- FETCHING ---
 
@@ -500,7 +523,7 @@ export function Settings() {
       setModalOpen(true);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent, closeAfterSave = true) => {
       e.preventDefault();
       try {
           setLoading(true);
@@ -523,11 +546,52 @@ export function Settings() {
               fetchPlans(); // Refresh
           }
           
-          setModalOpen(false);
+          if (closeAfterSave) {
+              setModalOpen(false);
+          } else if (!editingItem) {
+              // If it's a new item and we chose "Salvar" (don't close), ideally we should fetch
+              // the new item and switch to edit mode. For now we will just close or clear form.
+              // We'll close and alert to avoid duplicate creation on next click.
+              alert('Criado com sucesso. Para continuar editando busque o item na lista.');
+              setModalOpen(false);
+          }
       } catch (error: any) {
           alert('Erro ao salvar: ' + (error.response?.data?.message || error.message));
       } finally {
           setLoading(false);
+      }
+  };
+
+  const handleTogglePreference = async (type: 'theme' | 'soundEnabled') => {
+      try {
+          const userStr = localStorage.getItem('user');
+          if (!userStr) return;
+          const user = JSON.parse(userStr);
+          
+          let newPrefs = { ...userPrefs };
+          if (type === 'theme') {
+              newPrefs.theme = userPrefs.theme === 'DARK' ? 'LIGHT' : 'DARK';
+          } else {
+              newPrefs.soundEnabled = !userPrefs.soundEnabled;
+          }
+          
+          // UI Optimistic
+          setUserPrefs(newPrefs);
+          
+          // Atualiza localStorage
+          const updatedUser = { ...user, theme: newPrefs.theme, soundEnabled: newPrefs.soundEnabled };
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          
+          // Aplica tema visual se houver wrapper no main index
+          if (type === 'theme') {
+             if (newPrefs.theme === 'LIGHT') document.documentElement.classList.remove('dark');
+             else document.documentElement.classList.add('dark');
+          }
+          
+          // Persiste na API
+          await api.patch('/users/me/preferences', newPrefs);
+      } catch (error) {
+          console.error("Erro ao salvar preferencia:", error);
       }
   };
 
@@ -589,13 +653,34 @@ export function Settings() {
                     <div className="space-y-4">
                         <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
                             <span className="text-slate-300 text-sm">Notificações Sonoras</span>
-                            <div className="w-10 h-5 bg-indigo-600 rounded-full relative cursor-pointer">
-                                <div className="absolute right-1 top-1 w-3 h-3 bg-white rounded-full"></div>
+                            <div 
+                                onClick={() => handleTogglePreference('soundEnabled')}
+                                className={clsx(
+                                    "w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200",
+                                    userPrefs.soundEnabled ? "bg-indigo-600" : "bg-slate-700"
+                                )}
+                            >
+                                <div className={clsx(
+                                    "absolute top-1 w-3 h-3 bg-white rounded-full transition-transform duration-200",
+                                    userPrefs.soundEnabled ? "translate-x-6" : "translate-x-1"
+                                )}></div>
                             </div>
                         </div>
+                        
                         <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
-                            <span className="text-slate-300 text-sm">Modo Escuro</span>
-                            <span className="text-indigo-400 text-xs font-bold">ATIVO</span>
+                            <span className="text-slate-300 text-sm">Modo Escuro (Dark Mode)</span>
+                            <div 
+                                onClick={() => handleTogglePreference('theme')}
+                                className={clsx(
+                                    "w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200",
+                                    userPrefs.theme === 'DARK' ? "bg-indigo-600" : "bg-slate-700"
+                                )}
+                            >
+                                <div className={clsx(
+                                    "absolute top-1 w-3 h-3 bg-white rounded-full transition-transform duration-200",
+                                    userPrefs.theme === 'DARK' ? "translate-x-6" : "translate-x-1"
+                                )}></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -948,7 +1033,7 @@ export function Settings() {
         onClose={() => setModalOpen(false)}
         title={editingItem ? `Editar ${modalType === 'tenant' ? 'Empresa' : 'Plano'}` : `Nova ${modalType === 'tenant' ? 'Empresa' : 'Plano'}`}
       >
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={(e) => handleSave(e, true)} className="space-y-4">
               
               {/* FORMULARIO DE EMPRESA */}
               {modalType === 'tenant' && (
@@ -956,6 +1041,7 @@ export function Settings() {
                     <div>
                         <label className="block text-sm font-medium text-slate-400 mb-1">Nome da Empresa</label>
                         <input
+                            autoFocus
                             required
                             type="text"
                             value={formData.name || ''}
@@ -1125,6 +1211,7 @@ export function Settings() {
                     <div>
                         <label className="block text-sm font-medium text-slate-400 mb-1">Nome do Plano</label>
                         <input
+                            autoFocus
                             required
                             type="text"
                             value={formData.name || ''}
@@ -1175,14 +1262,22 @@ export function Settings() {
                     onClick={() => setModalOpen(false)}
                     className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
                   >
-                      Cancelar
+                      Cancelar (ESC)
                   </button>
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={(e) => handleSave(e, false)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                  >
+                      Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleSave(e, true)}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
                   >
                       <Save size={18} />
-                      Salvar
+                      Salvar e Sair
                   </button>
               </div>
           </form>

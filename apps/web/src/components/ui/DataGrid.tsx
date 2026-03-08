@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { ArrowUp, ArrowDown, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, MoreHorizontal, Check } from 'lucide-react';
+import { ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Column<T> {
   key: string;
@@ -18,6 +18,8 @@ interface DataGridProps<T> {
   onSort?: (field: string, direction: 'asc' | 'desc') => void;
   onPageChange?: (page: number) => void;
   onSelect?: (selectedIds: string[]) => void;
+  onRowClick?: (item: T) => void;
+  onRowDoubleClick?: (item: T) => void;
 }
 
 export function DataGrid<T extends { id: string }>({ 
@@ -28,7 +30,9 @@ export function DataGrid<T extends { id: string }>({
   isLoading = false,
   onSort,
   onPageChange,
-  onSelect
+  onSelect,
+  onRowClick,
+  onRowDoubleClick
 }: DataGridProps<T>) {
 
   const [sortField, setSortField] = useState<string | null>(null);
@@ -145,7 +149,9 @@ export function DataGrid<T extends { id: string }>({
               displayedData.map((item) => (
                 <tr 
                   key={item.id} 
-                  className={`hover:bg-slate-800/30 transition-colors group ${selectedIds.includes(item.id) ? 'bg-indigo-500/5' : ''}`}
+                  className={`hover:bg-slate-800/30 transition-colors group ${selectedIds.includes(item.id) ? 'bg-indigo-500/5' : ''} ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''}`}
+                  onClick={() => onRowClick && onRowClick(item)}
+                  onDoubleClick={() => onRowDoubleClick && onRowDoubleClick(item)}
                 >
                   <td className="px-6 py-4">
                     <input 

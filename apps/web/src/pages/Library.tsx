@@ -8,6 +8,7 @@ import {
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { RichTextEditor } from '../components/ui/RichTextEditor';
+import { useHotkeys } from '../hooks/useHotkeys';
 import { clsx } from 'clsx';
 
 interface Template {
@@ -37,6 +38,11 @@ export function Library() {
     const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
     const [editorContent, setEditorContent] = useState('');
     const [editorTitle, setEditorTitle] = useState('');
+
+    useHotkeys({
+        onNew: () => handleNewTemplate(),
+        onCancel: () => setIsEditorOpen(false)
+    });
 
     useEffect(() => {
         const controller = new AbortController();

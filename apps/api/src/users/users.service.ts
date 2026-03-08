@@ -113,4 +113,19 @@ export class UsersService {
         }
     });
   }
+
+  async updatePreferences(id: string, data: { theme?: string; soundEnabled?: boolean }) {
+      return this.prisma.user.update({
+          where: { id },
+          data: {
+              ...(data.theme ? { theme: data.theme } : {}),
+              ...(data.soundEnabled !== undefined ? { soundEnabled: data.soundEnabled } : {})
+          },
+          select: {
+              id: true,
+              theme: true,
+              soundEnabled: true
+          }
+      });
+  }
 }

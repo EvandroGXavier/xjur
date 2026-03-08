@@ -5,6 +5,7 @@ import {
 } from "../hooks/usePaymentConditions";
 import { Plus, Edit, Trash2, X, Save, Percent, Calendar } from "lucide-react";
 import { toast } from "sonner";
+import { useHotkeys } from "../hooks/useHotkeys";
 
 export function PaymentConditions() {
   const {
@@ -27,6 +28,13 @@ export function PaymentConditions() {
 
   const [installmentsCount, setInstallmentsCount] = useState<number | "">("");
   const [installments, setInstallments] = useState<any[]>([]);
+
+  useHotkeys({
+    onNew: () => handleOpenModal(),
+    onCancel: () => {
+        if (modalOpen) setModalOpen(false);
+    }
+  });
 
   useEffect(() => {
     fetchConditions();
@@ -122,7 +130,7 @@ export function PaymentConditions() {
     setInstallments(newArr);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent, shouldClose: boolean = true) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
 
@@ -156,7 +164,9 @@ export function PaymentConditions() {
         await createCondition(payload);
         toast.success("Condição criada com sucesso");
       }
-      setModalOpen(false);
+      if (shouldClose) {
+          setModalOpen(false);
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || error.message || "Erro ao salvar condição de pagamento");
       console.error(error);
@@ -300,6 +310,7 @@ export function PaymentConditions() {
                       Nome
                     </label>
                     <input
+                      autoFocus
                       required
                       type="text"
                       value={formData.name}
@@ -476,14 +487,22 @@ export function PaymentConditions() {
                   onClick={() => setModalOpen(false)}
                   className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
                 >
-                  Cancelar
+                  Cancelar (ESC)
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={(e) => handleSave(e, false)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  Salvar
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSave(e, true)}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
                 >
                   <Save size={18} />
-                  Salvar
+                  Salvar e Sair
                 </button>
               </div>
             </form>
