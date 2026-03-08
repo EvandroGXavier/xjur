@@ -15,10 +15,11 @@ interface DocumentGeneratorModalProps {
     processId: string;
     contactId: string; // The main client contact
     onClose: () => void;
-    onSuccess: (file: File) => void;
+    onSuccess: (file?: File) => void;
+    mode?: 'LOCAL' | 'M365';
 }
 
-export function DocumentGeneratorModal({ processId, contactId, onClose, onSuccess }: DocumentGeneratorModalProps) {
+export function DocumentGeneratorModal({ processId, contactId, onClose, onSuccess, mode = 'LOCAL' }: DocumentGeneratorModalProps) {
     const [templates, setTemplates] = useState<Template[]>([]);
     const [loading, setLoading] = useState(true);
     const [rendering, setRendering] = useState(false);
@@ -75,37 +76,62 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
         }
 
         setRendering(true);
-        try {
-            // Create a temporary container for rendering
-            const element = document.createElement('div');
-            element.innerHTML = generatedContent;
-            element.style.padding = '40px';
-            element.style.color = 'black';
-            element.style.backgroundColor = 'white';
-            
-            // PDF Options
-            const opt = {
-                margin: 10,
-                filename: `${docTitle}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, logging: false },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
 
-            // Generate PDF as Blob
-            const worker = html2pdf().from(element).set(opt);
-            const pdfBlob = await worker.output('blob');
-            
-            // Create File from Blob
-            const fileName = `${docTitle.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
-            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-            
-            onSuccess(file);
-        } catch (error) {
-            console.error(error);
-            toast.error('Erro ao gerar arquivo PDF');
-        } finally {
-            setRendering(false);
+        if (mode === 'M365') {
+            try {
+                // Generate and upload directly to OneDrive
+                const res = await api.post(`/documents/templates/${selectedTemplateId}/m365`, {
+                    contactId,
+                    processId
+                });
+
+                if (res.data.success && res.data.msFileUrl) {
+                    toast.success('Documento gerado com sucesso no OneDrive!');
+                    window.open(res.data.msFileUrl, '_blank');
+                    onSuccess();
+                } else {
+                    toast.error(res.data.error || 'Erro ao enviar o documento para o OneDrive');
+                }
+            } catch (error) {
+                console.error('M365 Generation error:', error);
+                toast.error('Ocorreu um erro na integração com o Microsoft 365. Verifique se o Tenant está configurado.');
+            } finally {
+                setRendering(false);
+            }
+        } else {
+            // Local fallback (PDF Generation)
+            try {
+                // Create a temporary container for rendering
+                const element = document.createElement('div');
+                element.innerHTML = generatedContent;
+                element.style.padding = '40px';
+                element.style.color = 'black';
+                element.style.backgroundColor = 'white';
+                
+                // PDF Options
+                const opt = {
+                    margin: 10,
+                    filename: `${docTitle}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+
+                // Generate PDF as Blob
+                const worker = html2pdf().from(element).set(opt);
+                const pdfBlob = await worker.output('blob');
+                
+                // Create File from Blob
+                const fileName = `${docTitle.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+                const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+                
+                onSuccess(file);
+            } catch (error) {
+                console.error(error);
+                toast.error('Erro ao gerar arquivo PDF local');
+            } finally {
+                setRendering(false);
+            }
         }
     };
 
@@ -119,7 +145,9 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                              <FileText size={20} />
                         </div>
                         <div>
-                            <h3 className="text-lg font-bold text-white">Gerar Documento DrX</h3>
+                            <h3 className="text-lg font-bold text-white">
+                                {mode === 'M365' ? 'Gerar via Template M365' : 'Gerar PDF Local'}
+                            </h3>
                             {step === 'EDIT' && (
                                 <input 
                                     type="text"
@@ -213,10 +241,15 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                             <button 
                                 onClick={handleSave}
                                 disabled={rendering}
-                                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-900/20"
+                                className={mode === 'M365' 
+                                    ? "px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-blue-900/20"
+                                    : "px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-900/20"
+                                }
                             >
                                 {rendering ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                                {rendering ? 'Gerando PDF...' : 'Confirmar & Anexar PDF'}
+                                {rendering 
+                                    ? (mode === 'M365' ? 'Gerando M365...' : 'Gerando PDF...') 
+                                    : (mode === 'M365' ? 'Gerar M365 e Abrir Online' : 'Confirmar & Anexar PDF')}
                             </button>
                         </div>
                     </div>

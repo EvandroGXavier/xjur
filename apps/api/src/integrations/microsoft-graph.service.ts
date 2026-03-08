@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import * as htmlToDocx from 'html-to-docx';
 
 @Injectable()
 export class MicrosoftGraphService {
@@ -150,12 +151,13 @@ export class MicrosoftGraphService {
     }
 
     try {
-      // TODO: Implementar conversão real de HTML para DOCX usando pacote 'html-to-docx'
-      // Aqui usamos um envio de texto simulando o binário DOCX para ilustrar a integração Graph API
-      // const fileBuffer = await htmlToDocx(htmlContent); // Exemplo se o pacote importado for usado
-      
-      // Placeholder para o Buffer gerado
-      const fileBuffer = Buffer.from(htmlContent); 
+      // Convert HTML to DOCX Buffer
+      const fileBuffer = await htmlToDocx(htmlContent, null, {
+        table: { row: { cantSplit: true } },
+        footer: true,
+        pageNumber: true,
+      });
+
       const fileName = `Documento_${documentId.substring(0, 8)}.docx`;
 
       // Primeiro, temos que encontrar o ID da subpasta '8.1 - Petições em Elaboração'

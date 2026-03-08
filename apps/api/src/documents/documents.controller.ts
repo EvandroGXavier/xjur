@@ -78,6 +78,16 @@ export class DocumentsController {
     return this.documentsService.renderTemplate(id, user.tenantId, contactId, processId);
   }
 
+  @Post('templates/:id/m365')
+  generateM365Document(
+    @Param('id') id: string, 
+    @CurrentUser() user: CurrentUserData,
+    @Body('contactId') contactId: string,
+    @Body('processId') processId?: string
+  ) {
+    return this.documentsService.generateM365Document(id, user.tenantId, contactId, processId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.documentsService.findOne(id, user.tenantId);

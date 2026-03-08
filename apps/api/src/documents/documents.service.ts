@@ -1,12 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { CreateTemplateDto } from './dto/create-template.dto';
+import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
 
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(DocumentsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly msGraphService: MicrosoftGraphService
+  ) {}
 
   async create(createDocumentDto: CreateDocumentDto, tenantId: string) {
     return this.prisma.documentHistory.create({
@@ -232,6 +238,37 @@ export class DocumentsService {
     }
 
     return { content };
+  }
+
+  async generateM365Document(id: string, tenantId: string, contactId: string, processId?: string) {
+    const { content: htmlContent } = await this.renderTemplate(id, tenantId, contactId, processId);
+    
+    // Create a temporary document history to get a unique document ID
+    const template = await this.findTemplate(id, tenantId);
+    const documentRecord = await this.prisma.documentHistory.create({
+      data: {
+        title: `${template.title} (Word Online)`,
+        content: htmlContent, // Save the generated HTML for record/fallback
+        templateId: id,
+        tenantId,
+        status: 'DRAFT'
+      }
+    });
+
+    if (!processId) {
+       this.logger.warn(`ProcessId não fornecido. Não é possível enviar para a pasta do processo no OneDrive.`);
+       return { success: false, error: 'Process ID is required for OneDrive upload', documentId: documentRecord.id };
+    }
+
+    const success = await this.msGraphService.uploadToOneDrive(tenantId, processId, documentRecord.id, htmlContent);
+
+    if (success) {
+       // Fetch the updated document with msFileUrl
+       const updatedDoc = await this.findOne(documentRecord.id, tenantId);
+       return { success: true, msFileUrl: updatedDoc.msFileUrl, documentId: updatedDoc.id };
+    }
+
+    return { success: false, error: 'Falha ao enviar para o OneDrive', documentId: documentRecord.id };
   }
 
   getVariables() {

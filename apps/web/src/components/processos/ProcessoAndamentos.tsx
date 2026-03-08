@@ -68,6 +68,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
 
     // Document Generation State
     const [isDocGenOpen, setIsDocGenOpen] = useState(false);
+    const [isDocGenM365Open, setIsDocGenM365Open] = useState(false);
     const [targetTimelineId, setTargetTimelineId] = useState<string | null>(null);
     const [processContactId, setProcessContactId] = useState<string | null>(null);
 
@@ -552,9 +553,20 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                             setTargetTimelineId(item.id);
                                                             setIsDocGenOpen(true);
                                                         }}
-                                                        className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded shadow-sm hover:bg-indigo-600 font-bold flex items-center gap-1"
+                                                        className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded shadow-sm hover:bg-indigo-600 font-bold flex items-center gap-1 transition"
+                                                        title="Gerar PDF Local"
                                                     >
-                                                        <FileText size={10} /> Docs
+                                                        <FileText size={10} /> PDF
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setTargetTimelineId(item.id);
+                                                            setIsDocGenM365Open(true);
+                                                        }}
+                                                        className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded shadow-sm hover:bg-blue-500 font-bold flex items-center gap-1 transition"
+                                                        title="Gerar via Template M365 (Word Online)"
+                                                    >
+                                                        <FileText size={10} /> M365 (Word)
                                                     </button>
                                                 </div>
                                             </div>
@@ -908,11 +920,30 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                 <DocumentGeneratorModal 
                     processId={processId}
                     contactId={processContactId}
+                    mode="LOCAL"
                     onClose={() => {
                         setIsDocGenOpen(false);
                         setTargetTimelineId(null);
                     }}
                     onSuccess={handleGenerateDocSuccess}
+                />
+            )}
+
+            {isDocGenM365Open && processContactId && (
+                <DocumentGeneratorModal 
+                    processId={processId}
+                    contactId={processContactId}
+                    mode="M365"
+                    onClose={() => {
+                        setIsDocGenM365Open(false);
+                        setTargetTimelineId(null);
+                    }}
+                    onSuccess={() => {
+                        setIsDocGenM365Open(false);
+                        setTargetTimelineId(null);
+                        // Optional: refresh timelines to see the new document if needed.
+                        fetchTimelines();
+                    }}
                 />
             )}
         </div>
