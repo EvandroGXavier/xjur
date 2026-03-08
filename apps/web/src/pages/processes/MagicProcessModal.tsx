@@ -13,7 +13,7 @@ interface MagicProcessModalProps {
 }
 
 export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessModalProps) {
-    const [mode, setMode] = useState<'JUDICIAL' | 'EXTRAJUDICIAL'>('JUDICIAL');
+    const [mode, setMode] = useState<'JUDICIAL' | 'EXTRAJUDICIAL'>('EXTRAJUDICIAL');
     const [cnj, setCnj] = useState('');
     const [loading, setLoading] = useState(false);
     const [previewData, setPreviewData] = useState<any>(null);
@@ -35,7 +35,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
     useEffect(() => {
         if (isOpen) {
             // Reset ao ABRIR
-            setMode('JUDICIAL');
+            setMode('EXTRAJUDICIAL');
             setCnj('');
             setLoading(false);
             setPreviewData(null);
@@ -237,16 +237,16 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                 {/* Tabs */}
                 <div className="flex border-b border-slate-800">
                     <button 
-                        onClick={() => setMode('JUDICIAL')}
-                        className={clsx("flex-1 py-3 text-sm font-medium transition", mode === 'JUDICIAL' ? "text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5" : "text-slate-400 hover:text-white hover:bg-slate-800")}
-                    >
-                        ⚖️ Processo Judicial
-                    </button>
-                    <button 
                         onClick={() => setMode('EXTRAJUDICIAL')}
                         className={clsx("flex-1 py-3 text-sm font-medium transition", mode === 'EXTRAJUDICIAL' ? "text-amber-400 border-b-2 border-amber-500 bg-amber-500/5" : "text-slate-400 hover:text-white hover:bg-slate-800")}
                     >
-                        📁 Caso / Consultivo
+                        📁 Extrajudicial
+                    </button>
+                    <button 
+                        onClick={() => setMode('JUDICIAL')}
+                        className={clsx("flex-1 py-3 text-sm font-medium transition", mode === 'JUDICIAL' ? "text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5" : "text-slate-400 hover:text-white hover:bg-slate-800")}
+                    >
+                        ⚖️ Judicial / Administrativo
                     </button>
                 </div>
 
@@ -328,7 +328,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                                     )}
 
                                     <div className="grid grid-cols-2 gap-3">
-                                        <InfoItem label="CNJ" value={previewData.cnj} />
+                                        <InfoItem label="CNJ" value={previewData.cnj ? masks.cnj(previewData.cnj) : '-'} />
                                         <InfoItem label="Tribunal" value={previewData.court} />
                                         <InfoItem label="Área" value={previewData.area} />
                                         <InfoItem label="Status" value={previewData.status} />

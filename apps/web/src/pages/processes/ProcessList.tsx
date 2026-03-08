@@ -22,12 +22,15 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
+import { masks } from '../../utils/masks';
 import { MagicProcessModal } from './MagicProcessModal';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpProcesses } from '../../data/helpManuals';
+import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface Process {
     id: string;
@@ -158,31 +161,17 @@ export function ProcessList() {
         if (!date) return null;
         const now = new Date();
         const past = new Date(date);
-        const diffInMs = now.getTime() - past.getTime();
         
-        const seconds = Math.floor(diffInMs / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-        const days = Math.floor(hours / 24);
-        const months = Math.floor(days / 30);
-        const years = Math.floor(days / 365);
+        const years = differenceInYears(now, past);
+        const months = differenceInMonths(now, past) % 12;
+        const days = differenceInDays(now, past) % 30;
+        const hours = differenceInHours(now, past) % 24;
+        const minutes = differenceInMinutes(now, past) % 60;
 
-        if (years > 0) {
-            const remMonths = months % 12;
-            return `Há ${years} ${years === 1 ? 'ano' : 'anos'}${remMonths > 0 ? ` e ${remMonths} meses` : ''}`;
-        }
-        if (months > 0) {
-            const remDays = days % 30;
-            return `Há ${months} ${months === 1 ? 'mês' : 'meses'}${remDays > 0 ? ` e ${remDays} dias` : ''}`;
-        }
-        if (days > 0) {
-            const remHours = hours % 24;
-            return `Há ${days} ${days === 1 ? 'dia' : 'dias'}${remHours > 0 ? ` e ${remHours}h` : ''}`;
-        }
-        if (hours > 0) {
-            const remMins = minutes % 60;
-            return `Há ${hours} ${hours === 1 ? 'hora' : 'horas'}${remMins > 0 ? ` e ${remMins}min` : ''}`;
-        }
+        if (years > 0) return `Há ${years} ${years === 1 ? 'ano' : 'anos'}${months > 0 ? ` e ${months} meses` : ''}`;
+        if (months > 0) return `Há ${months} ${months === 1 ? 'mês' : 'meses'}${days > 0 ? ` e ${days} d` : ''}`;
+        if (days > 0) return `Há ${days} ${days === 1 ? 'dia' : 'dias'}${hours > 0 ? ` e ${hours}h` : ''}`;
+        if (hours > 0) return `Há ${hours} ${hours === 1 ? 'h' : 'hs'}${minutes > 0 ? ` e ${minutes}m` : ''}`;
         if (minutes > 0) return `Há ${minutes} min`;
         return 'Agora mesmo';
     };
@@ -278,46 +267,43 @@ export function ProcessList() {
                                         return (
                                             <div className="flex flex-col gap-0.5">
                                                 <span className={clsx("text-[8px] font-bold uppercase shrink-0", labelColor)}>{label}:</span>
-                                                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                                <div className="flex flex-col gap-1.5 pl-1 mt-1">
                                                     {filtered.map(p => (
-                                                        <div key={p.contact.id} className="flex flex-col">
+                                                        <div key={p.contact.id} className="flex flex-col gap-0.5">
                                                             <span 
-                                                                className="text-white hover:text-indigo-400 cursor-pointer transition-colors font-medium truncate max-w-[180px]"
+                                                                className="text-white hover:text-indigo-400 cursor-pointer transition-colors font-bold text-[10px] truncate max-w-[200px]"
                                                                 onClick={(e) => { e.stopPropagation(); navigate(`/contacts/${p.contact.id}`); }}
                                                             >
                                                                 {p.contact.name}
                                                             </span>
-                                                            <div className="flex items-center gap-2 mt-0.5 ml-0.5">
+                                                            <div className="flex items-center gap-2 text-[9px]">
                                                                 {p.contact.whatsapp && (
                                                                     <a 
                                                                         href={`https://wa.me/55${p.contact.whatsapp.replace(/\D/g, '')}`} 
-                                                                        target="_blank" 
-                                                                        rel="noreferrer"
+                                                                        target="_blank" rel="noreferrer"
                                                                         onClick={(e) => e.stopPropagation()}
-                                                                        className="text-emerald-500 hover:text-emerald-400 transition-colors"
-                                                                        title="WhatsApp"
+                                                                        className="flex items-center gap-0.5 text-emerald-500 hover:text-emerald-400"
                                                                     >
-                                                                        <MessageCircle size={10} />
+                                                                        <MessageCircle size={10} /> <span className="text-[8px] opacity-70">{p.contact.whatsapp}</span>
                                                                     </a>
                                                                 )}
                                                                 {p.contact.phone && (
                                                                     <a 
                                                                         href={`tel:${p.contact.phone.replace(/\D/g, '')}`}
                                                                         onClick={(e) => e.stopPropagation()}
-                                                                        className="text-blue-500 hover:text-blue-400 transition-colors"
-                                                                        title="Telefone"
+                                                                        className="flex items-center gap-0.5 text-blue-500 hover:text-blue-400"
                                                                     >
-                                                                        <PhoneIcon size={10} />
+                                                                        <PhoneIcon size={10} /> <span className="text-[8px] opacity-70">{p.contact.phone}</span>
                                                                     </a>
                                                                 )}
                                                                 {p.contact.email && (
                                                                     <a 
                                                                         href={`mailto:${p.contact.email}`}
                                                                         onClick={(e) => e.stopPropagation()}
-                                                                        className="text-amber-500 hover:text-amber-400 transition-colors"
-                                                                        title="E-mail"
+                                                                        className="flex items-center gap-0.5 text-amber-500 hover:text-amber-400 truncate max-w-[140px]"
+                                                                        title={p.contact.email}
                                                                     >
-                                                                        <Mail size={10} />
+                                                                        <Mail size={10} /> <span className="text-[8px] opacity-70 uppercase tracking-tighter truncate">{p.contact.email}</span>
                                                                     </a>
                                                                 )}
                                                             </div>
@@ -354,7 +340,7 @@ export function ProcessList() {
                                         <div className="flex flex-col gap-2 min-w-[280px] py-1">
                                             <div className="flex items-center gap-2 cursor-pointer group/title" onClick={() => navigate(`/processes/${process.id}`)}>
                                                 <span className="font-bold text-indigo-400 group-hover/title:text-indigo-300 transition-colors text-sm">
-                                                    {process.cnj || 'S/ NÚMERO'}
+                                                    {process.cnj ? masks.cnj(process.cnj) : 'S/ NÚMERO'}
                                                 </span>
                                                 {process.category && (
                                                     <span className={clsx("px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-transparent", process.category === 'JUDICIAL' ? 'text-indigo-400 bg-indigo-500/10' : 'text-amber-400 bg-amber-500/10')}>

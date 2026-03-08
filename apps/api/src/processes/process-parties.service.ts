@@ -158,6 +158,12 @@ export class ProcessPartiesService implements OnModuleInit {
                         phone: true,
                         whatsapp: true,
                         category: true,
+                        additionalContacts: {
+                            select: {
+                                type: true,
+                                value: true
+                            }
+                        }
                     }
                 },
                 role: {

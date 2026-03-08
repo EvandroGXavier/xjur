@@ -8,6 +8,18 @@ import { masks } from '../../utils/masks';
 import { ProcessParties } from './ProcessParties';
 import { ProcessoAndamentos } from '../../components/processos/ProcessoAndamentos';
 import { ProcessAgenda } from '../../components/processos/ProcessAgenda';
+import { CreatableSelect } from '../../components/ui/CreatableSelect';
+
+const DEFAULT_AREAS = [
+    { label: 'Cível', value: 'Cível' },
+    { label: 'Trabalhista', value: 'Trabalhista' },
+    { label: 'Criminal', value: 'Criminal' },
+    { label: 'Família', value: 'Família' },
+    { label: 'Tributário', value: 'Tributário' },
+    { label: 'Consumidor', value: 'Consumidor' },
+    { label: 'Administrativo', value: 'Administrativo' },
+    { label: 'Previdenciário', value: 'Previdenciário' },
+];
 
 export function ProcessForm() {
     const { id } = useParams();
@@ -26,7 +38,7 @@ export function ProcessForm() {
         vars: '',
         district: '',
         status: 'ATIVO',
-        category: 'JUDICIAL',
+        category: 'EXTRAJUDICIAL',
         area: '',
         subject: '',
         judge: '',
@@ -199,8 +211,9 @@ export function ProcessForm() {
                                         onChange={e => setForm({...form, category: e.target.value})}
                                         className={inputClass}
                                     >
+                                        <option value="EXTRAJUDICIAL">Extrajudicial</option>
                                         <option value="JUDICIAL">Judicial</option>
-                                        <option value="EXTRAJUDICIAL">Extrajudicial / Consultivo</option>
+                                        <option value="ADMINISTRATIVO">Administrativo</option>
                                     </select>
                                 </div>
 
@@ -278,12 +291,14 @@ export function ProcessForm() {
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Valor da Causa</label>
                                     <input 
-                                        value={masks.currency(form.value.toString())}
+                                        value={masks.currency(Math.round(form.value * 100).toString())}
                                         onChange={e => {
-                                            const val = parseFloat(e.target.value.replace(/\D/g, '')) / 100;
-                                            setForm({...form, value: val || 0});
+                                            const raw = e.target.value.replace(/\D/g, '');
+                                            const val = raw ? parseFloat(raw) / 100 : 0;
+                                            setForm({...form, value: val});
                                         }}
                                         className={inputClass}
+                                        placeholder="R$ 0,00"
                                     />
                                 </div>
                             </div>
@@ -293,13 +308,14 @@ export function ProcessForm() {
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
                             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Classificação & Notas</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-1.5">
+                                <div className="space-y-1.5 min-w-[200px]">
                                     <label className={labelClass}>Área</label>
-                                    <input 
+                                    <CreatableSelect 
                                         value={form.area}
-                                        onChange={e => setForm({...form, area: e.target.value})}
-                                        className={inputClass}
-                                        placeholder="Cível, Trabalhista, Criminal..."
+                                        onChange={(val) => setForm({...form, area: val})}
+                                        options={DEFAULT_AREAS}
+                                        placeholder="Selecione ou digite a área..."
+                                        className="!bg-slate-950"
                                     />
                                 </div>
 

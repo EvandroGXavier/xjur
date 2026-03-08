@@ -85,6 +85,17 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         responsibleName: ''
     });
 
+    const formatDateDisplay = (dateStr?: string | null) => {
+        if (!dateStr) return '-';
+        try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return '-';
+            return format(d, 'dd/MM/yyyy HH:mm', { locale: ptBR });
+        } catch (e) {
+            return '-';
+        }
+    };
+
     const resetForm = () => {
         setFormData({
             title: '',
@@ -448,24 +459,24 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         </td>
                                         <td className="px-2 py-1.5 border-r border-slate-200 text-slate-700 font-medium align-top">
                                             <div className="flex flex-col gap-0.5 text-[10px]">
-                                                <div className="flex items-center gap-1 group/r" title="REGISTRO">
-                                                    <span className="font-bold text-slate-400 w-3">R:</span>
+                                                <div className="flex items-center gap-1 group/r" title="REGISTRO: Data em que o andamento foi inserido no sistema">
+                                                    <span className="font-bold text-slate-400 w-3 cursor-help">R:</span>
                                                     <span>{formatDateDisplay(item.createdAt)}</span>
                                                 </div>
-                                                <div className="flex items-center gap-1 group/e" title="EVENTO">
-                                                    <span className="font-bold text-blue-500 w-3">E:</span>
+                                                <div className="flex items-center gap-1 group/e" title="EVENTO: Data real do andamento no tribunal/órgão">
+                                                    <span className="font-bold text-blue-500 w-3 cursor-help">E:</span>
                                                     <span>{formatDateDisplay(item.date)}</span>
                                                 </div>
-                                                <div className="flex items-center gap-1 group/i" title="INTERNA">
-                                                    <span className="font-bold text-amber-500 w-3">I:</span>
+                                                <div className="flex items-center gap-1 group/i" title="INTERNA: Prazo interno definido pelo escritório">
+                                                    <span className="font-bold text-amber-500 w-3 cursor-help">I:</span>
                                                     <span>{item.internalDate ? formatDateDisplay(item.internalDate) : '-'}</span>
                                                 </div>
-                                                <div className="flex items-center gap-1 group/f" title="FATAL">
-                                                    <span className="font-bold text-red-500 w-3">F:</span>
+                                                <div className="flex items-center gap-1 group/f" title="FATAL: Prazo fatal (peremptório)">
+                                                    <span className="font-bold text-red-500 w-3 cursor-help">F:</span>
                                                     <span>{item.fatalDate ? formatDateDisplay(item.fatalDate) : '-'}</span>
                                                 </div>
-                                                <div className="flex items-center gap-1 group/c" title="CONCLUSÃO">
-                                                    <span className="font-bold text-emerald-500 w-3">C:</span>
+                                                <div className="flex items-center gap-1 group/c" title="CONCLUSÃO: Data em que a tarefa foi concluída">
+                                                    <span className="font-bold text-emerald-500 w-3 cursor-help">C:</span>
                                                     <span>{item.completedAt ? formatDateDisplay(item.completedAt) : '-'}</span>
                                                 </div>
                                             </div>
@@ -549,23 +560,27 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                             </div>
                                         </td>
                                         <td className="px-2 py-1.5 border-r border-slate-200 text-slate-600 text-[10px] align-top">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-1 group" title={`Criado em: ${formatDateDisplay(item.createdAt)}`}>
-                                                    <span className="font-bold text-slate-400 w-3">C:</span>
-                                                    <span className="truncate">{item.requesterName || 'sistema'}</span>
+                                            <div className="flex flex-col gap-1.5">
+                                                <div className="flex flex-col gap-0.5" title={`Criado em: ${formatDateDisplay(item.createdAt)}`}>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="font-bold text-slate-400 w-3">C:</span>
+                                                        <span className="text-slate-500 font-bold uppercase text-[9px]">Criado por:</span>
+                                                    </div>
+                                                    <span className="pl-4 truncate font-medium text-slate-700">{item.requesterName || 'sistema'}</span>
                                                 </div>
                                                 {item.responsibleHistory && item.responsibleHistory.length > 0 && (
                                                     <div className="flex flex-col gap-0.5 mt-1 border-t border-slate-100 pt-1">
                                                         <div className="flex items-center gap-1" title="RESPONSÁVEIS ANTERIORES">
                                                             <span className="font-bold text-slate-400 w-3">R:</span>
-                                                            <span className="text-[9px] text-slate-400">({item.responsibleHistory.length - 1} trocas)</span>
+                                                            <span className="text-slate-500 font-bold uppercase text-[9px]">Anterior para atual:</span>
                                                         </div>
-                                                        <div className="max-h-[60px] overflow-y-auto space-y-0.5 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+                                                        <div className="max-h-[80px] overflow-y-auto space-y-1 pr-1 pl-4 scrollbar-thin scrollbar-thumb-slate-200">
                                                             {item.responsibleHistory.map((h, i) => (
                                                                 <div key={i} className="flex flex-col border-b border-slate-50 last:border-0 pb-0.5" title={`Em: ${formatDateDisplay(h.date)}`}>
-                                                                    <span className={clsx("truncate", i === item.responsibleHistory!.length - 1 ? 'font-bold text-blue-600' : 'text-slate-500')}>
+                                                                    <span className={clsx("truncate text-[10px]", i === item.responsibleHistory!.length - 1 ? 'font-bold text-blue-600' : 'text-slate-400')}>
                                                                         {i + 1}. {h.name}
                                                                     </span>
+                                                                    <span className="text-[8px] text-slate-400">{formatDateDisplay(h.date).split(' ')[0]}</span>
                                                                 </div>
                                                             ))}
                                                         </div>
