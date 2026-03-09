@@ -495,18 +495,38 @@ export class WhatsappService implements OnModuleInit {
       
       let contact: any = null;
       
-      if (phoneTail) {
-        // Busca inteligente considerando os 8 dígitos finais, tanto em celular quanto telefone
+      if (phoneTail && !isGroup && !fullJid.includes('@lid')) {
+        // Lógica aprimorada para lidar com números formatados no banco
+        // Ex. BD: "(31) 99981-1174" | Incoming: "5531999811174"
+        const phoneTail4 = phoneClean.length >= 4 ? phoneClean.slice(-4) : phoneClean;
+         
+        const candidateContacts = await this.prisma.contact.findMany({
+          where: { 
+            tenantId, 
+            OR: [
+              { whatsapp: { contains: phoneTail4 } },
+              { phone: { contains: phoneTail4 } }
+            ]
+          }
+        });
+
+        // Filtragem em memória comparando apenas os dígitos numéricos
+        contact = candidateContacts.find(c => {
+           const wClean = (c.whatsapp || '').replace(/\D/g, '');
+           const pClean = (c.phone || '').replace(/\D/g, '');
+           return (wClean && wClean.endsWith(phoneTail)) || (pClean && pClean.endsWith(phoneTail));
+        });
+      }
+
+      if (!contact) {
+         // Fallback para grupos, LIDs ou exato
          contact = await this.prisma.contact.findFirst({
-           where: { 
-             tenantId, 
-             OR: [
-               { whatsapp: { endsWith: phoneTail } },
-               { whatsapp: { contains: phoneTail } },
-               { phone: { endsWith: phoneTail } },
-               { whatsapp: { equals: fullJid } },
-               { whatsapp: { equals: phoneRaw } } // Literal fallback
-             ]
+           where: {
+               tenantId,
+               OR: [
+                   { whatsapp: { equals: fullJid } },
+                   { whatsapp: { equals: phoneRaw } }
+               ]
            }
          });
       }
@@ -808,14 +828,32 @@ export class WhatsappService implements OnModuleInit {
           let picUrl = c.profilePictureUrl || c.profilePicUrl || c.imgUrl || null;
 
           let contact: any = null;
-          if (phoneTail) {
+          
+          if (phoneTail && !isGroup && !remoteJid.includes('@lid')) {
+            const phoneTail4 = phoneClean.length >= 4 ? phoneClean.slice(-4) : phoneClean;
+            
+            const candidateContacts = await this.prisma.contact.findMany({
+              where: { 
+                tenantId: connection.tenantId, 
+                OR: [
+                  { whatsapp: { contains: phoneTail4 } },
+                  { phone: { contains: phoneTail4 } }
+                ]
+              }
+            });
+
+            contact = candidateContacts.find(c => {
+               const wClean = (c.whatsapp || '').replace(/\D/g, '');
+               const pClean = (c.phone || '').replace(/\D/g, '');
+               return (wClean && wClean.endsWith(phoneTail)) || (pClean && pClean.endsWith(phoneTail));
+            });
+          }
+
+          if (!contact) {
             contact = await this.prisma.contact.findFirst({
               where: { 
                  tenantId: connection.tenantId, 
                  OR: [
-                   { whatsapp: { endsWith: phoneTail } },
-                   { whatsapp: { contains: phoneTail } },
-                   { phone: { endsWith: phoneTail } },
                    { whatsapp: { equals: remoteJid } },
                    { whatsapp: { equals: phoneRaw } }
                  ]
