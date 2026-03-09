@@ -16,6 +16,10 @@ export const helpContacts: HelpSection[] = [
   {
     title: 'Busca e Filtros',
     content: 'Use a barra de pesquisa na parte superior para encontrar contatos pelo <b>Nome</b>, <b>CPF/CNPJ</b> ou <b>E-mail</b> de forma rápida. A filtragem ocorre enquanto você digita.',
+  },
+  {
+    title: 'Atalhos e Dicas de Uso',
+    content: '<ul><li><b>F2 ou +</b>: Novo Contato.</li><li><b>ESC</b>: Cancelar ou fechar a janela atual.</li><li><b>Duplo Clique</b>: Edita o contato rapidamente se clicado na linha da tabela.</li><li><b>Salvar e Sair</b>: Pressione para salvar o registro e já fechar a tela.</li></ul>',
   }
 ];
 
@@ -35,6 +39,10 @@ export const helpProcesses: HelpSection[] = [
   {
     title: 'Acompanhamento',
     content: 'Sempre que houver movimentações, você pode atualizar a etapa no sistema para <i>Ativo</i>, <i>Arquivado</i>, <i>Suspenso</i>, etc. Na listagem de processos, clique no ícone de lápis para atualizar ou adicionar andamentos.',
+  },
+  {
+    title: 'Atalhos Rápidos',
+    content: '<ul><li><b>F2 ou +</b>: Adicionar Novo Processo / Novo Andamento.</li><li><b>ESC</b>: Fechar/Cancelar a ação atual.</li><li><b>Duplo Clique</b>: Ao aplicar um clique duplo na tabela, o processo se abrirá instantaneamente.</li></ul>',
   }
 ];
 
@@ -50,6 +58,10 @@ export const helpAgenda: HelpSection[] = [
   {
     title: 'Visualizações',
     content: 'No canto superior, você pode alternar a visualização entre <b>Mês, Semana ou Dia</b>, permitindo uma análise mais estreita ou ampla da sua produtividade.',
+  },
+  {
+    title: 'Navegação Ágil',
+    content: '<ul><li><b>F2 ou +</b>: Ativa a janela de Novo Compromisso.</li><li><b>ESC</b>: Fechar janelas ou cancelar edição.</li><li><b>Auto-Foco</b>: Ao tentar incluir qualquer registro o campo Título será selecionado sozinho para digitar rápido.</li></ul>',
   }
 ];
 
@@ -65,6 +77,10 @@ export const helpAtendimento: HelpSection[] = [
   {
     title: 'Funções Avançadas',
     content: '<ul><li><b>Agendamento:</b> Você pode agendar o envio de uma mensagem para uma data e hora futura.</li><li><b>Kanban:</b> Navegue até o módulo Kanban (no menu lateral de ícones) para ver as conversas movendo por funil de vendas/atendimento.</li><li><b>Respostas Rápidas (Raios):</b> Salve textos enormes que você repete muito e ative-os apenas digitando uma barra no chat (ex: <i>/bomdia</i>).</li></ul>',
+  },
+  {
+    title: 'Atalhos Sistêmicos',
+    content: '<ul><li><b>F2 ou +</b>: Cria ou abre a janela para um Novo Atendimento.</li><li><b>ESC</b>: Cancela a operação atual ou fecha o modal em destaque.</li></ul>',
   }
 ];
 
@@ -84,6 +100,10 @@ export const helpFinancial: HelpSection[] = [
   {
     title: 'Contas Bancárias',
     content: 'Acesse a visão "Contas Bancárias" para cadastrar caixas, cofre e contas reais. Ao liquidar uma transação, o valor entra ou sai diretamente do saldo dessa conta.',
+  },
+  {
+    title: 'Agilidade Financeira',
+    content: '<ul><li><b>F2 ou +</b>: Cria rapidamente uma Nova Transação / Contas a Pagar ou Receber.</li><li><b>ESC</b>: Fecha modais e cancela lançamentos.</li><li><b>Duplo Clique</b>: Dois cliques na listagem abre diretamente a janela da transação para edição e foca o Valor.</li><li><b>Salvar vs Salvar e Sair</b>: Você pode apenas "Salvar" para aplicar uma regra e manter a janela aberta lançando subitens.</li></ul>',
   }
 ];
 

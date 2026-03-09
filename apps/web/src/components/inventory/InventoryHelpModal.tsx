@@ -99,12 +99,20 @@ export function InventoryHelpModal() {
             <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-sm">
               <ul className="space-y-3">
                 <li className="flex items-center gap-4">
-                  <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300">F2</kbd>
-                  <span className="text-slate-300">Novo Registro (Limpa formulários, abre Nova Compra ou Novo Orçamento instantaneamente).</span>
+                  <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300">F2 / Numpad +</kbd>
+                  <span className="text-slate-300">Novo Registro (Abre painel de inclusões instantaneamente).</span>
+                </li>
+                <li className="flex items-center gap-4">
+                  <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300">ESC</kbd>
+                  <span className="text-slate-300">Fecha painéis, modais e formulários sem salvar alterações.</span>
+                </li>
+                <li className="flex items-center gap-4">
+                  <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300"><span className="text-xs">Duplo Clique</span></kbd>
+                  <span className="text-slate-300">Edição instantânea no item direto da tabela.</span>
                 </li>
                 <li className="flex items-center gap-4">
                   <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300">F4</kbd>
-                  <span className="text-slate-300">Impressão Rápida (Abre e já seleciona a janela de impressão do Orçamento ou Compra atual).</span>
+                  <span className="text-slate-300">Impressão Rápida (Abre e já seleciona a janela de impressão aplicável).</span>
                 </li>
                 <li className="flex items-center gap-4">
                   <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300">Ctrl + F1</kbd>

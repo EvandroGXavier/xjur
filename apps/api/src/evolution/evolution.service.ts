@@ -254,14 +254,31 @@ export class EvolutionService {
       const client = this.getClient(config);
       const formattedNumber = this.formatNumber(number);
 
-      const response = await client.post(`/message/sendText/${instanceName}`, {
+      // Sanitize payload strictly for Text Protocol
+      const payload: any = {
         number: formattedNumber,
         text: text,
         options: {
           delay: 1000,
           presence: 'composing'
         }
-      });
+      };
+
+      // Support for Quoted Message (Replying to a specific message)
+      if (options?.quoted?.key?.id || options?.quotedId) {
+        payload.options.quoted = {
+          key: {
+            id: options?.quotedId || options?.quoted?.key?.id
+          }
+        };
+      }
+
+      // Ensure no base64 or media garbage leaks into text route
+      if (options?.media || options?.audio) {
+         this.logger.warn(`Media passed to sendText for ${number}. Media ignored to preserve text route integrity.`);
+      }
+
+      const response = await client.post(`/message/sendText/${instanceName}`, payload);
       return response.data;
     } catch (error) {
       this.logger.error(`Error sending text to ${number} via "${instanceName}": ${error.message}`);

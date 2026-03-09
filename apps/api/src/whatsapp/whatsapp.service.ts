@@ -430,22 +430,40 @@ export class WhatsappService implements OnModuleInit {
     const realContent = unwrap(messageContent);
     if (!realContent) return;
 
-    // Extrair texto e tipo
-    let text = realContent.conversation 
-      || realContent.extendedTextMessage?.text 
-      || realContent.imageMessage?.caption 
-      || realContent.videoMessage?.caption 
-      || realContent.documentMessage?.caption 
-      || '';
+    // ==========================================
+    // EXTRAÇÃO DE TIPO E CONTEÚDO BLINDADA
+    // ==========================================
     let type = 'TEXT';
+    let text = '';
     let quotedId = realContent.extendedTextMessage?.contextInfo?.stanzaId || null;
-    
-    if (realContent.imageMessage) type = 'IMAGE';
-    else if (realContent.videoMessage) type = 'VIDEO';
-    else if (realContent.audioMessage) { text = '[Áudio]'; type = 'AUDIO'; }
-    else if (realContent.documentMessage) { text = text || realContent.documentMessage.fileName || '[Documento]'; type = 'DOCUMENT'; }
-    else if (realContent.stickerMessage) { text = '[Figurinha]'; type = 'STICKER'; }
-    else if (realContent.pollCreationMessage) { text = `[Enquete] ${realContent.pollCreationMessage.name}`; }
+
+    // Extração rigorosa baseada no padrão interno da Evolution (Baileys)
+    if (realContent.conversation) {
+        text = realContent.conversation;
+    } else if (realContent.extendedTextMessage) {
+        text = realContent.extendedTextMessage.text || '';
+    } else if (realContent.imageMessage) {
+        type = 'IMAGE';
+        text = realContent.imageMessage.caption || '';
+    } else if (realContent.videoMessage) {
+        type = 'VIDEO';
+        text = realContent.videoMessage.caption || '';
+    } else if (realContent.audioMessage) {
+        type = 'AUDIO';
+        text = '[Áudio]';
+    } else if (realContent.documentMessage) {
+        type = 'DOCUMENT';
+        text = realContent.documentMessage.fileName || '[Documento]';
+    } else if (realContent.stickerMessage) {
+        type = 'STICKER';
+        text = '[Figurinha]';
+    } else if (realContent.pollCreationMessage) {
+        text = `[Enquete] ${realContent.pollCreationMessage.name || ''}`;
+    } else if (realContent.contactMessage) {
+        text = `[Contato] ${realContent.contactMessage.displayName || ''}`;
+    } else if (realContent.locationMessage) {
+        text = '[Localização]';
+    }
 
     const remoteJid = message.key.remoteJid;
     const isGroup = remoteJid.endsWith('@g.us');
@@ -583,7 +601,7 @@ export class WhatsappService implements OnModuleInit {
           contentType: type === 'VIDEO' || type === 'DOCUMENT' ? 'FILE' : type === 'STICKER' ? 'IMAGE' : type,
           mediaUrl: mediaPath,
           externalId: message.key.id,
-          status: 'DELIVERED',
+          status: isFromMe ? 'SENT' : 'DELIVERED', // As opposed to blind 'DELIVERED', we wait for Evolution message.update webhook
           quotedId
         }
       });
