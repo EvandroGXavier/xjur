@@ -127,6 +127,11 @@ export function ProcessList() {
 
     useHotkeys({
         onNew: () => setIsMagicModalOpen(true),
+        onCancel: () => {
+            if (isMagicModalOpen) {
+                setIsMagicModalOpen(false);
+            }
+        },
         onPrint: () => window.print()
     });
 

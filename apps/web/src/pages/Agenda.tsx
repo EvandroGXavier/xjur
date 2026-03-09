@@ -32,14 +32,7 @@ export function Agenda() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Appointment | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
-
-  useHotkeys({
-    onNew: () => handleNew(),
-    onCancel: () => {
-        if (isModalOpen) setIsModalOpen(false);
-    }
-  });
-
+  
   useEffect(() => {
     fetchAppointments();
   }, [currentDate, viewMode]);
@@ -135,6 +128,13 @@ export function Agenda() {
       }
       setIsModalOpen(true);
   };
+
+  useHotkeys({
+    onNew: () => handleNew(),
+    onCancel: () => {
+        if (isModalOpen) setIsModalOpen(false);
+    }
+  });
 
   return (
     <div className="p-6 md:p-8 space-y-6 h-full flex flex-col animate-in fade-in duration-500">

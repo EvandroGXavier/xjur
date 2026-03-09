@@ -44,13 +44,6 @@ export function UsersPage() {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  useHotkeys({
-    onNew: () => handleOpenModal(),
-    onCancel: () => {
-        if (modalOpen) setModalOpen(false);
-    }
-  });
-
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       fetchUsers();
@@ -89,6 +82,13 @@ export function UsersPage() {
     }
     setModalOpen(true);
   };
+
+  useHotkeys({
+    onNew: () => handleOpenModal(),
+    onCancel: () => {
+        if (modalOpen) setModalOpen(false);
+    }
+  });
 
   const handleTogglePermission = (moduleId: string, action: string) => {
     setFormData((prev: any) => {

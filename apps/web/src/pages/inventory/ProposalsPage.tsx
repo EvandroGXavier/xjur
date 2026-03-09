@@ -37,18 +37,6 @@ export function ProposalsPage() {
     fetchConditions();
   }, [selectedProposal, isEditing]);
 
-  useHotkeys({
-    onNew: handleNovaProposta,
-    onCancel: () => {
-      if (isEditing) setIsEditing(false);
-    },
-    onPrint: () => {
-      if (selectedProposal && !isEditing) {
-        printProposal(selectedProposal);
-      }
-    }
-  });
-
   const handleNovaProposta = () => {
     setSelectedProposal(null);
     setFormData({
@@ -200,6 +188,20 @@ export function ProposalsPage() {
       }, 500);
     }
   };
+
+  useHotkeys({
+    onNew: () => handleNovaProposta(),
+    onCancel: () => {
+      if (isEditing) setIsEditing(false);
+    },
+    onPrint: () => {
+      if (selectedProposal && !isEditing) {
+        printProposal(selectedProposal);
+      } else if (!isEditing) {
+        toast.warning("Selecione um orçamento para imprimir.");
+      }
+    }
+  });
 
   const loadProposals = async () => {
     try {

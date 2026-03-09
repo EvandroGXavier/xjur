@@ -29,13 +29,6 @@ export function PaymentConditions() {
   const [installmentsCount, setInstallmentsCount] = useState<number | "">("");
   const [installments, setInstallments] = useState<any[]>([]);
 
-  useHotkeys({
-    onNew: () => handleOpenModal(),
-    onCancel: () => {
-        if (modalOpen) setModalOpen(false);
-    }
-  });
-
   useEffect(() => {
     fetchConditions();
   }, [fetchConditions]);
@@ -59,6 +52,13 @@ export function PaymentConditions() {
     }
     setModalOpen(true);
   };
+
+  useHotkeys({
+    onNew: () => handleOpenModal(),
+    onCancel: () => {
+        if (modalOpen) setModalOpen(false);
+    }
+  });
 
   const handleAddInstallment = () => {
     const nextInstallment = installments.length + 1;
@@ -186,7 +186,7 @@ export function PaymentConditions() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {console.log('Payment Conditions Current State:', { loading, conditionsLength: conditions?.length, conditions })}
+      {/* console.log state removed for TS error */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-white">

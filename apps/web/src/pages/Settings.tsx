@@ -378,6 +378,7 @@ export function Settings() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'tenant' | 'plan'>('tenant');
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [formData, setFormData] = useState<any>({});
 
   // PREFERENCES STATE
   const [userPrefs, setUserPrefs] = useState<{ theme: string; soundEnabled: boolean }>({ theme: 'DARK', soundEnabled: true });
@@ -402,16 +403,6 @@ export function Settings() {
     if (activeTab === 'plans') fetchPlans();
     if (activeTab === 'my-tenant') fetchMyTenant();
   }, [activeTab]);
-
-  useHotkeys({
-      onNew: () => {
-          if (activeTab === 'tenants') handleOpenModal('tenant');
-          if (activeTab === 'plans') handleOpenModal('plan');
-      },
-      onCancel: () => {
-          if (modalOpen) setModalOpen(false);
-      }
-  });
 
   // --- FETCHING ---
 
@@ -522,6 +513,16 @@ export function Settings() {
       
       setModalOpen(true);
   };
+
+  useHotkeys({
+      onNew: () => {
+          if (activeTab === 'tenants') handleOpenModal('tenant');
+          if (activeTab === 'plans') handleOpenModal('plan');
+      },
+      onCancel: () => {
+          if (modalOpen) setModalOpen(false);
+      }
+  });
 
   const handleSave = async (e: React.FormEvent, closeAfterSave = true) => {
       e.preventDefault();

@@ -171,7 +171,7 @@ export function PurchasesPage() {
   };
 
   useHotkeys({
-    onNew: handleNovoPedido,
+    onNew: () => handleNovoPedido(),
     onCancel: () => {
       if (isEditing) setIsEditing(false);
     },
