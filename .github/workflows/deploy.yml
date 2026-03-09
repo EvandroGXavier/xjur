@@ -29,28 +29,31 @@ jobs:
             git fetch --all
             git reset --hard origin/main
 
-            echo "2️⃣ Gerando a Interface Web (Frontend) na VPS..."
-            # Força o build do novo código TypeScript para a pasta /dist
-            # É necessário caso o Nginx ou aaPanel sirvam a pasta localmente em vez do Docker
+            echo "2️⃣ Instalando dependências..."
             npm install
+
+            echo "3️⃣ Garantindo que o Banco de Dados está rodando para o Push..."
+            docker compose -f docker-compose.prod.yml up -d db
+            sleep 5
+
+            echo "4️⃣ Sincronizando Banco de Dados ANTES do Build (Evita erro de coluna faltando)..."
+            export DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public"
+            npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
+
+            echo "5️⃣ Gerando a Interface Web (Frontend) na VPS..."
             npx turbo run build --filter=web
 
-            echo "3️⃣ Limpando PM2..."
+            echo "6️⃣ Limpando PM2..."
             pm2 delete all 2>/dev/null || true
 
-            echo "4️⃣ Configurando Variáveis..."
+            echo "7️⃣ Configurando Variáveis Docker..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=public"
             
-            echo "4️⃣ Reconstruindo Containers..."
+            echo "8️⃣ Reconstruindo Containers..."
             docker compose -f docker-compose.prod.yml build --no-cache api web
             
-            echo "5️⃣ Subindo a Stack..."
+            echo "9️⃣ Subindo a Stack Completa..."
             docker compose -f docker-compose.prod.yml up -d
-            
-            echo "6️⃣ Sincronizando Banco de Dados (Caminho Monorepo)..."
-            sleep 12
-            # Correção aqui: apontando o caminho exato do schema no monorepo
-            docker exec drx_api_prod npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
             
             echo "========================================="
             echo "📊 STATUS FINAL:"
