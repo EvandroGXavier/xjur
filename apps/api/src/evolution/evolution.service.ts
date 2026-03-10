@@ -45,6 +45,9 @@ export class EvolutionService {
   // ==========================================
 
   private formatNumber(number: string): string {
+    if (number.includes('@g.us') || number.includes('@lid') || number.includes('@s.whatsapp.net')) {
+        return number;
+    }
     // Remove non-digit characters
     let cleaned = number.replace(/\D/g, '');
     
@@ -281,6 +284,11 @@ export class EvolutionService {
       const response = await client.post(`/message/sendText/${instanceName}`, payload);
       return response.data;
     } catch (error) {
+      const errResp = error.response?.data?.response?.message;
+      const firstErr = Array.isArray(errResp) ? errResp[0] : errResp;
+      if (firstErr && firstErr.exists === false) {
+        throw new Error(`O número não possui WhatsApp (+${number}).`);
+      }
       this.logger.error(`Error sending text to ${number} via "${instanceName}": ${error.message}`);
       throw error;
     }
@@ -372,6 +380,11 @@ export class EvolutionService {
       const response = await client.post(`/message/${endpoint}/${instanceName}`, payload);
       return response.data;
     } catch (error) {
+      const errResp = error.response?.data?.response?.message;
+      const firstErr = Array.isArray(errResp) ? errResp[0] : errResp;
+      if (firstErr && firstErr.exists === false) {
+        throw new Error(`O número não possui WhatsApp (+${number}).`);
+      }
       this.logger.error(`Error sending ${type} to ${number} via "${instanceName}": ${error.message}`);
       throw error;
     }

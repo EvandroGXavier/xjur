@@ -531,6 +531,15 @@ export class WhatsappService implements OnModuleInit {
          });
       }
 
+      // Auto-fix legacy contacts with missing @lid or @g.us
+      if (contact && fullJid.includes('@lid') && !contact.whatsapp?.includes('@lid')) {
+          this.logger.log(`Fixing legacy LID contact WhatsApp number: ${contact.whatsapp} -> ${fullJid}`);
+          contact = await this.prisma.contact.update({
+              where: { id: contact.id },
+              data: { whatsapp: fullJid }
+          });
+      }
+
       if (!contact) {
         contact = await this.prisma.contact.create({
           data: {

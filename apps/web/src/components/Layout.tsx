@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { User, Building2, Clock, LogOut, Menu } from 'lucide-react';
 import { InventoryHelpModal } from './inventory/InventoryHelpModal';
+declare const __APP_VERSION__: string;
+
 
 const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const navigate = useNavigate();
@@ -10,7 +12,7 @@ const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    // Relógio
+    // RelÃƒÂ³gio
     const timer = setInterval(() => setTime(new Date()), 1000);
     
     // User Info (Carregar apenas uma vez)
@@ -42,6 +44,11 @@ const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
         >
             <Menu size={18} />
         </button>
+
+        <div className="hidden md:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium tracking-wide text-emerald-200">
+            <span className="text-emerald-400/80">Versao</span>
+            <span className="text-white">{__APP_VERSION__}</span>
+        </div>
 
         <div className="flex items-center gap-2 lg:gap-6 ml-auto">
             <div className="hidden sm:flex items-center gap-2">
@@ -110,3 +117,4 @@ export function Layout() {
     </div>
   );
 }
+

@@ -13,8 +13,8 @@ export class TicketsService {
 
   // Helper to format phone numbers for WhatsApp/Evolution
   private formatNumber(number: string): string {
-    // Keep group JIDs intact
-    if (number.includes('@g.us')) return number;
+    // Keep group JIDs and LIDs intact
+    if (number.includes('@g.us') || number.includes('@lid') || number.includes('@s.whatsapp.net')) return number;
     // Strip any suffix after '@' or ':'
     const base = number.split('@')[0].split(':')[0];
     const cleaned = base.replace(/\D/g, '');
@@ -363,10 +363,13 @@ export class TicketsService {
         });
         return;
     }
-    // Strip possible LID or device suffixes (e.g., ":89@lid") and format number
-    const basePhone = rawPhone.split('@')[0].split(':')[0];
-    // Keep group JIDs intact
-    const formattedPhone = rawPhone.includes('@g.us') ? rawPhone : this.formatNumber(basePhone);
+    let formattedPhone = rawPhone;
+    if (rawPhone.includes('@g.us') || rawPhone.includes('@lid')) {
+        formattedPhone = rawPhone;
+    } else {
+        const basePhone = rawPhone.split('@')[0].split(':')[0];
+        formattedPhone = this.formatNumber(basePhone);
+    }
 
 
     try {
