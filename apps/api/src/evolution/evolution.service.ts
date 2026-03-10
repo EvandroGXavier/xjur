@@ -105,7 +105,7 @@ export class EvolutionService {
       const errorData = error.response?.data;
       const errorStr = JSON.stringify(errorData || '').toLowerCase();
 
-      // 403 = "already in use", 409 = "already exists" — ambos significam que a instância já existe
+      // 403 = "already in use", 409 = "already exists" � ambos significam que a instância já existe
       if (status === 403 || status === 409 || status === 400) {
         if (errorStr.includes('already') || errorStr.includes('in use') || errorStr.includes('existe')) {
           this.logger.log(`Instance "${instanceName}" already exists. Continuing...`);
@@ -187,7 +187,7 @@ export class EvolutionService {
    */
   async setWebhook(instanceName: string, webhookUrl: string, config?: EvolutionConfig) {
     try {
-      this.logger.log(`Setting webhook for "${instanceName}" → ${webhookUrl}`);
+      this.logger.log(`Setting webhook for "${instanceName}" �  ${webhookUrl}`);
       const client = this.getClient(config);
 
       // Formato correto para Evolution v2.1.1:
@@ -217,8 +217,7 @@ export class EvolutionService {
       const errorData = error.response?.data;
       this.logger.error(`Error setting webhook for "${instanceName}" [${error.response?.status}]: ${error.message}`);
       this.logger.error(`Webhook error data: ${JSON.stringify(errorData)}`);
-      // Não lançamos o erro — o webhook global pode cobrir isso
-      return { success: false, error: error.message };
+      throw error;
     }
   }
 
@@ -449,3 +448,7 @@ export class EvolutionService {
     }
   }
 }
+
+
+
+

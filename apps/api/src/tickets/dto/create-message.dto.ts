@@ -19,4 +19,8 @@ export class CreateMessageDto {
   @IsOptional()
   @IsString()
   quotedId?: string;
+
+  @IsOptional()
+  @IsString()
+  connectionId?: string;
 }

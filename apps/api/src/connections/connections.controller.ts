@@ -37,10 +37,10 @@ export class ConnectionsController {
   }
 
   @Post(':id/connect')
-  connect(@Param('id') id: string, @Body() config: any, @CurrentUser() user: CurrentUserData) {
+  async connect(@Param('id') id: string, @Body() config: any, @CurrentUser() user: CurrentUserData) {
     // If config supplied, update before connecting
     if (config && Object.keys(config).length > 0) {
-      this.connectionsService.update(id, { config } as any, user.tenantId);
+      await this.connectionsService.update(id, { config } as any, user.tenantId);
     }
     return this.connectionsService.connect(id, user.tenantId);
   }

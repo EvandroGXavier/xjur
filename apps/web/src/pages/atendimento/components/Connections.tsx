@@ -20,6 +20,11 @@ interface Connection {
 
 // Store raw QR strings from websocket (keyed by connectionId)
 const qrRawCache: Record<string, string> = {};
+const defaultWaConfig = {
+    evolutionApiKey: '',
+    evolutionUrl: '',
+    evolutionVersion: '2.3000.x'
+};
 
 export function Connections() {
     const [connections, setConnections] = useState<Connection[]>([]);
@@ -37,12 +42,7 @@ export function Connections() {
     const [formName, setFormName] = useState('');
     const [formType, setFormType] = useState<'WHATSAPP' | 'INSTAGRAM' | 'EMAIL' | 'TELEGRAM'>('WHATSAPP');
     const [emailConfig, setEmailConfig] = useState({ email: '', password: '' });
-    const [waConfig, setWaConfig] = useState({ 
-        evolutionChannel: 'baileys', 
-        evolutionToken: '',
-        evolutionNumber: '',
-        evolutionVersion: '2.3000.x'
-    });
+    const [waConfig, setWaConfig] = useState(defaultWaConfig);
 
     const fetchConnections = useCallback(async () => {
         try {
@@ -61,7 +61,7 @@ export function Connections() {
             ? `http://${window.location.hostname}:3000/whatsapp`
             : '/whatsapp';
 
-        console.log('🔌 Conectando WebSocket WhatsApp:', socketUrl);
+        console.log('�xR Conectando WebSocket WhatsApp:', socketUrl);
 
         const socket = io(socketUrl, {
             transports: ['websocket', 'polling'],
@@ -73,11 +73,11 @@ export function Connections() {
         socketRef.current = socket;
 
         socket.on('connect', () => {
-            console.log('✅ WebSocket WhatsApp conectado');
+            console.log('�S& WebSocket WhatsApp conectado');
         });
 
         socket.on('qr_code', (data: { connectionId: string; qr: string }) => {
-            console.log(`📸 QR Code recebido para ${data.connectionId}`);
+            console.log(`�x� QR Code recebido para ${data.connectionId}`);
             qrRawCache[data.connectionId] = data.qr;
             setQrMap(prev => ({ ...prev, [data.connectionId]: data.qr }));
             
@@ -90,7 +90,7 @@ export function Connections() {
         });
 
         socket.on('connection:status', (data: { connectionId: string; status: string }) => {
-            console.log(`📶 Status: ${data.connectionId} → ${data.status}`);
+            console.log(`�x� Status: ${data.connectionId} �  ${data.status}`);
             
             setConnections(prev => prev.map(c => 
                 c.id === data.connectionId 
@@ -137,7 +137,7 @@ export function Connections() {
         });
 
         socket.on('disconnect', () => {
-            console.log('❌ WebSocket desconectado');
+            console.log('�R WebSocket desconectado');
         });
 
         return () => {
@@ -186,9 +186,12 @@ export function Connections() {
         try {
             const payload: any = { name: formName, type: formType };
             if (formType === 'WHATSAPP') {
+                const { evolutionToken, evolutionNumber, evolutionChannel, ...currentConfig } = editingConnection.config || {};
                 payload.config = {
-                    ...editingConnection.config,
-                    ...waConfig
+                    ...currentConfig,
+                    ...waConfig,
+                    blockGroups: editingConnection.config?.blockGroups ?? true,
+                    groupWhitelist: editingConnection.config?.groupWhitelist ?? []
                 };
             }
             if (formType === 'EMAIL') {
@@ -203,7 +206,6 @@ export function Connections() {
             toast.error('Erro ao atualizar conexão');
         }
     };
-
     // CRUD: Delete
     const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -224,7 +226,7 @@ export function Connections() {
             setConnectingId(connection.id);
             const response = await api.post(`/connections/${connection.id}/connect`);
             toast.info(response.data.message || 'Iniciando conexão...');
-            // Don't clear connectingId here — wait for WebSocket status
+            // Don't clear connectingId here � wait for WebSocket status
             fetchConnections();
         } catch (error) {
             toast.error('Falha ao conectar');
@@ -250,14 +252,17 @@ export function Connections() {
     };
 
     const handleEdit = (conn: Connection) => {
+        const legacyEvolutionUrl = typeof conn.config?.evolutionNumber === 'string' && conn.config.evolutionNumber.startsWith('http')
+            ? conn.config.evolutionNumber
+            : '';
+
         setEditingConnection(conn);
         setFormName(conn.name);
         setFormType(conn.type as any);
         setEmailConfig(conn.config?.email ? { email: conn.config.email, password: '' } : { email: '', password: '' });
         setWaConfig({ 
-            evolutionChannel: conn.config?.evolutionChannel ?? 'baileys',
-            evolutionToken: conn.config?.evolutionToken ?? '',
-            evolutionNumber: conn.config?.evolutionNumber ?? '',
+            evolutionApiKey: conn.config?.evolutionApiKey ?? conn.config?.evolutionToken ?? '',
+            evolutionUrl: conn.config?.evolutionUrl ?? legacyEvolutionUrl,
             evolutionVersion: conn.config?.evolutionVersion ?? '2.3000.x'
         });
         setIsCreating(false);
@@ -269,12 +274,7 @@ export function Connections() {
         setFormName('');
         setFormType('WHATSAPP');
         setEmailConfig({ email: '', password: '' });
-        setWaConfig({ 
-            evolutionChannel: 'baileys',
-            evolutionToken: '',
-            evolutionNumber: '',
-            evolutionVersion: '2.3000.x'
-        });
+        setWaConfig(defaultWaConfig);
     };
 
     const renderQrCode = (qrData: string | undefined | null) => {
@@ -310,11 +310,12 @@ export function Connections() {
                 ...(settingsConnection.config || {}),
                 evolutionVersion: newVersion
             };
-            await api.put(`/connections/${settingsConnection.id}`, { config: updatedConfig });
+            await api.patch(`/connections/${settingsConnection.id}`, { config: updatedConfig });
             
             setConnections(prev => prev.map(c => 
                 c.id === settingsConnection.id ? { ...c, config: updatedConfig } : c
             ));
+            setSettingsConnection(prev => prev ? { ...prev, config: updatedConfig } : prev);
             
             toast.success('Configurações salvas!');
         } catch (error) {
@@ -407,42 +408,42 @@ export function Connections() {
 
                     {formType === 'WHATSAPP' && (
                         <div className="mb-4">
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-400 mb-1">Channel</label>
-                                    <select 
-                                        value={waConfig.evolutionChannel}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionChannel: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
-                                    >
-                                        <option value="baileys">Baileys</option>
-                                        <option value="wo-cloud">API Oficial (Cloud)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-400 mb-1">Token <span className="text-red-500">*</span></label>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">API Key da Evolution</label>
                                     <input 
                                         type="text"
-                                        value={waConfig.evolutionToken}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionToken: e.target.value })}
+                                        value={waConfig.evolutionApiKey}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionApiKey: e.target.value })}
                                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
                                         placeholder="Ex: A1291CA0CCD6..."
                                     />
+                                    <p className="text-[11px] text-slate-500 mt-1">Se ficar em branco, a conexao usa a API key padrao do servidor.</p>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-400 mb-1">Number</label>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">URL da Evolution</label>
                                     <input 
                                         type="text"
-                                        value={waConfig.evolutionNumber}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionNumber: e.target.value })}
+                                        value={waConfig.evolutionUrl}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionUrl: e.target.value })}
                                         className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
-                                        placeholder="Ex: 5511999999999"
+                                        placeholder="Ex: http://localhost:8080"
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1">Opcional. Preencha apenas se esta conexao usar uma Evolution diferente da configurada no backend.</p>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-medium text-slate-400 mb-1">Versao do WhatsApp</label>
+                                    <input 
+                                        type="text"
+                                        value={waConfig.evolutionVersion}
+                                        onChange={e => setWaConfig({ ...waConfig, evolutionVersion: e.target.value })}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
+                                        placeholder="Ex: 2.3000.x"
                                     />
                                 </div>
                             </div>
                         </div>
                     )}
-
                     {formType === 'EMAIL' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-slate-950 rounded-lg border border-slate-800">
                             <div>
@@ -524,7 +525,7 @@ export function Connections() {
                                     </div>
                                 </div>
 
-                                {/* Card Body — QR or Status */}
+                                {/* Card Body � QR or Status */}
                                 <div className={clsx(
                                     "flex-1 flex flex-col items-center justify-center py-3",
                                     isPairing && (rawQr || conn.qrCode) ? "min-h-[340px]" : "min-h-[220px]"
@@ -568,7 +569,7 @@ export function Connections() {
                                                 Escaneie o QR Code
                                             </span>
                                             <span className="text-[11px] text-slate-500 mt-1">
-                                                Abra WhatsApp → Aparelhos Conectados → Conectar
+                                                Abra WhatsApp �  Aparelhos Conectados �  Conectar
                                             </span>
                                         </div>
                                     ) : isPairing && conn.qrCode ? (
@@ -578,7 +579,7 @@ export function Connections() {
                                                 Escaneie o QR Code
                                             </span>
                                             <span className="text-[11px] text-slate-500 mt-1">
-                                                Abra WhatsApp → Aparelhos Conectados → Conectar
+                                                Abra WhatsApp �  Aparelhos Conectados �  Conectar
                                             </span>
                                         </div>
                                     ) : isThisConnecting ? (
@@ -818,7 +819,7 @@ export function Connections() {
                                         <div>
                                             <label className="block text-xs font-bold text-slate-400 mb-2">Webhook URL Global</label>
                                             <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-sm text-slate-300 font-mono">
-                                                {window.location.origin.replace('5173', '3000')}/evolution/webhook
+                                                {window.location.origin.replace('5173', '3000')}/api/evolution/webhook
                                             </div>
                                         </div>
                                         
@@ -852,7 +853,7 @@ export function Connections() {
                                         
                                         {/* Painel de Envio */}
                                         <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 flex flex-col h-full">
-                                            <h3 className="text-sm font-bold text-slate-300 mb-4 uppercase tracking-wider">📤 Enviar Mensagem</h3>
+                                            <h3 className="text-sm font-bold text-slate-300 mb-4 uppercase tracking-wider">�x� Enviar Mensagem</h3>
                                             <div className="space-y-4 flex-1">
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-400 mb-2">Número Alvo</label>
@@ -893,7 +894,7 @@ export function Connections() {
                                         <div className="bg-slate-950 border border-slate-800 rounded-xl p-0 flex flex-col h-full overflow-hidden">
                                             <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex items-center gap-2">
                                                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">📥 Webhoook Listener</h3>
+                                                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">�x� Webhoook Listener</h3>
                                             </div>
                                             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-[#0d1117] font-mono text-[11px] text-emerald-400 leading-relaxed space-y-4">
                                                 {testEvents.length === 0 ? (
@@ -935,3 +936,7 @@ export function Connections() {
         </>
     );
 }
+
+
+
+

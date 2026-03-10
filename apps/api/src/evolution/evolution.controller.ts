@@ -89,12 +89,7 @@ export class EvolutionController {
     const instance = data.instance;
     const message = data.data;
 
-    // We proxy this to the existing WhatsApp service logic for processing
-    // but we need to adapt the data format from Evolution to Baileys if we want to reuse handleIncomingMessage
-    // OR just implement a new handler in WhatsappService that accepts Evolution format.
-    
-    // For now, let's call a new method we'll create in WhatsappService
-    await (this.whatsappService as any).handleEvolutionMessage(instance, message);
+    await (this.whatsappService as any).handleEvolutionMessage(instance, message, data);
   }
 
   private async handleConnectionUpdate(data: any) {

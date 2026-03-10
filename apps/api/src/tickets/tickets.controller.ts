@@ -80,6 +80,12 @@ export class TicketsController {
     return this.ticketsService.markAsRead(id, user.tenantId);
   }
 
+  @Delete('messages/:messageId')
+  async deleteMessage(@Param('messageId') messageId: string, @CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.ticketsService.deleteMessage(messageId, user.tenantId, user.userId);
+  }
+
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     if (!user || !user.tenantId) throw new Error('User context invalid');

@@ -40,7 +40,7 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // ==========================================
-  // CONFIGURAÇÃO DINÂMICA POR CONEXÃO
+  // CONFIGURA�!ÒO DIN�MICA POR CONEXÒO
   // ==========================================
 
   /**
@@ -81,6 +81,124 @@ export class WhatsappService implements OnModuleInit {
     return undefined;
   }
 
+  private unwrapMessageContent(message: any): any {
+    if (!message) return message;
+    if (message.ephemeralMessage) return this.unwrapMessageContent(message.ephemeralMessage.message);
+    if (message.viewOnceMessage) return this.unwrapMessageContent(message.viewOnceMessage.message);
+    if (message.viewOnceMessageV2) return this.unwrapMessageContent(message.viewOnceMessageV2.message);
+    if (message.documentWithCaptionMessage) return this.unwrapMessageContent(message.documentWithCaptionMessage.message);
+    if (message.editMessage) return this.unwrapMessageContent(message.editMessage.message);
+    return message;
+  }
+
+  private getMediaNode(realContent: any): any {
+    return realContent?.imageMessage
+      || realContent?.videoMessage
+      || realContent?.audioMessage
+      || realContent?.documentMessage
+      || realContent?.stickerMessage
+      || null;
+  }
+
+  private extractMediaBase64(message: any, eventPayload?: any, realContent?: any): string | null {
+    const mediaNode = this.getMediaNode(realContent);
+    const candidates = [
+      message?.base64,
+      message?.data?.base64,
+      eventPayload?.data?.base64,
+      eventPayload?.base64,
+      eventPayload?.data?.message?.base64,
+      mediaNode?.base64,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.length > 100) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private extractMediaDetails(type: string, realContent: any) {
+    const mediaNode = this.getMediaNode(realContent);
+    const mimeType = mediaNode?.mimetype || mediaNode?.mimeType || undefined;
+    const fileName = mediaNode?.fileName || mediaNode?.title || undefined;
+
+    return { mimeType, fileName };
+  }
+
+  private resolveMediaExtension(type: string, mimeType?: string, fileName?: string): string {
+    const originalExtension = fileName ? path.extname(fileName).replace('.', '').toLowerCase() : '';
+    if (originalExtension) {
+      return originalExtension;
+    }
+
+    const mimeMap: Record<string, string> = {
+      'audio/mpeg': 'mp3',
+      'audio/mp4': 'm4a',
+      'audio/ogg': 'ogg',
+      'audio/opus': 'ogg',
+      'audio/webm': 'webm',
+      'application/msword': 'doc',
+      'application/pdf': 'pdf',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/zip': 'zip',
+      'image/gif': 'gif',
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'text/plain': 'txt',
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'video/webm': 'webm',
+    };
+
+    if (mimeType && mimeMap[mimeType.toLowerCase()]) {
+      return mimeMap[mimeType.toLowerCase()];
+    }
+
+    switch (type) {
+      case 'AUDIO':
+        return 'ogg';
+      case 'IMAGE':
+        return 'jpg';
+      case 'VIDEO':
+        return 'mp4';
+      case 'STICKER':
+        return 'webp';
+      case 'DOCUMENT':
+        return 'pdf';
+      default:
+        return 'bin';
+    }
+  }
+
+  private saveInboundMedia(type: string, base64Data: string, mimeType?: string, fileName?: string): string | null {
+    try {
+      let normalizedBase64 = base64Data;
+      if (normalizedBase64.includes('base64,')) {
+        normalizedBase64 = normalizedBase64.split('base64,')[1];
+      }
+
+      const buffer = Buffer.from(normalizedBase64, 'base64');
+      const uploadsDir = path.join(process.cwd(), 'storage', 'uploads');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+      const fileId = `${Date.now()}_${Math.round(Math.random() * 1000)}`;
+      const extension = this.resolveMediaExtension(type, mimeType, fileName);
+      const savedFileName = `${fileId}.${extension}`;
+      const filePath = path.join(uploadsDir, savedFileName);
+      fs.writeFileSync(filePath, buffer);
+      return `storage/uploads/${savedFileName}`;
+    } catch (error) {
+      this.logger.error(`Failed to save Evolution media: ${error.message}`);
+      return null;
+    }
+  }
   // ==========================================
   // SESSION MANAGEMENT
   // ==========================================
@@ -108,7 +226,7 @@ export class WhatsappService implements OnModuleInit {
         const state = status.instance?.state;
         
         if (state === 'open') {
-          // Instância conectada — atualizar webhook
+          // Instância conectada � atualizar webhook
           this.logger.log(`Instance ${connection.id} is OPEN. Refreshing webhook...`);
           const apiUrl = process.env.APP_URL || 'http://host.docker.internal:3000';
           const webhookUrl = `${apiUrl}/api/evolution/webhook`;
@@ -146,7 +264,7 @@ export class WhatsappService implements OnModuleInit {
 
   /**
    * Cria uma nova sessão WhatsApp via Evolution API.
-   * Fluxo: Delete antiga (se existir) → Create → Set Webhook → Connect → QR Code
+   * Fluxo: Delete antiga (se existir) �  Create �  Set Webhook �  Connect �  QR Code
    */
   async createSession(connectionId: string): Promise<any> {
     this.logger.log(`Creating Evolution session for ${connectionId}`);
@@ -162,7 +280,7 @@ export class WhatsappService implements OnModuleInit {
         await this.evolutionService.deleteInstance(connectionId, evolutionConfig);
         this.logger.log(`Cleaned up old instance for ${connectionId}`);
       } catch (e) {
-        // Ignorar — pode não existir
+        // Ignorar � pode não existir
       }
 
       // Pequeno delay para a Evolution processar a deleção
@@ -284,30 +402,30 @@ export class WhatsappService implements OnModuleInit {
     const state = data.state;
     const reason = data.statusReason;
 
-    // ── COOLDOWN CHECK ──
+    // ���� COOLDOWN CHECK ����
     // Se esta instância foi "killed" recentemente, ignorar TODOS os webhooks
     const killedAt = this.killedInstances.get(connectionId);
     if (killedAt) {
       if (Date.now() - killedAt < this.KILL_COOLDOWN_MS) {
-        // Ainda no cooldown — ignora silenciosamente
+        // Ainda no cooldown � ignora silenciosamente
         return;
       }
-      // Cooldown expirou — limpar
+      // Cooldown expirou � limpar
       this.killedInstances.delete(connectionId);
     }
     
     this.logger.log(`Connection ${connectionId}: state=${state}, reason=${reason}`);
     
-    // ── 405/401: SESSÃO EXPIROU ──
+    // ���� 405/401: SESSÒO EXPIROU ����
     // Deletar instância na Evolution para PARAR o loop de reconexão
-    // MAS: NÃO deletar se a connection está em PAIRING (criação nova, estado transitório)
+    // MAS: NÒO deletar se a connection está em PAIRING (criação nova, estado transitório)
     if (reason === 405 || reason === 401) {
-      // Verificar se está em fase de criação (PAIRING) — se sim, ignorar o 405/401
+      // Verificar se está em fase de criação (PAIRING) � se sim, ignorar o 405/401
       // pois é um estado transitório normal da Evolution antes do QR code
       try {
         const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
         if (conn?.status === 'PAIRING') {
-          this.logger.warn(`Connection ${connectionId} got ${reason} but is PAIRING — ignoring (transient state)`);
+          this.logger.warn(`Connection ${connectionId} got ${reason} but is PAIRING � ignoring (transient state)`);
           return;
         }
       } catch (e) {
@@ -340,14 +458,14 @@ export class WhatsappService implements OnModuleInit {
       return;
     }
 
-    // ── 408: TIMEOUT ──
+    // ���� 408: TIMEOUT ����
     // Ignorar silenciosamente
     if (reason === 408 && state === 'close') {
-      this.logger.debug(`Connection ${connectionId} timeout — ignoring`);
+      this.logger.debug(`Connection ${connectionId} timeout � ignoring`);
       return;
     }
 
-    // ── MAPEAR ESTADO ──
+    // ���� MAPEAR ESTADO ����
     let status = 'DISCONNECTED';
     if (state === 'open') status = 'CONNECTED';
     else if (state === 'connecting' || state === 'qrCode') status = 'PAIRING';
@@ -384,7 +502,7 @@ export class WhatsappService implements OnModuleInit {
       return;
     }
 
-    this.logger.log(`📸 QR Code received via webhook for ${connectionId}`);
+    this.logger.log(`�x� QR Code received via webhook for ${connectionId}`);
 
     try {
       await this.prisma.connection.update({
@@ -402,12 +520,11 @@ export class WhatsappService implements OnModuleInit {
   /**
    * Processa mensagens recebidas via webhook (messages.upsert).
    */
-  async handleEvolutionMessage(connectionId: string, message: any) {
-    // Permite "fromMe" para carregar as mensagens enviadas do aparelho!
+  async handleEvolutionMessage(connectionId: string, message: any, eventPayload?: any) {
     if (message.key?.remoteJid === 'status@broadcast') return;
 
     this.fileLogger.log(`Processing Evolution message for ${connectionId}. JID: ${message.key?.remoteJid}`);
-    
+
     const connection = await this.prisma.connection.findUnique({
       where: { id: connectionId }
     });
@@ -417,59 +534,44 @@ export class WhatsappService implements OnModuleInit {
     const messageContent = message.message;
     if (!messageContent) return;
 
-    // Desembrulha mensagens especiais (efêmeras, visualização única, etc)
-    const unwrap = (m: any): any => {
-      if (!m) return m;
-      if (m.ephemeralMessage) return unwrap(m.ephemeralMessage.message);
-      if (m.viewOnceMessage) return unwrap(m.viewOnceMessage.message);
-      if (m.viewOnceMessageV2) return unwrap(m.viewOnceMessageV2.message);
-      if (m.documentWithCaptionMessage) return unwrap(m.documentWithCaptionMessage.message);
-      if (m.editMessage) return unwrap(m.editMessage.message);
-      return m;
-    };
-    const realContent = unwrap(messageContent);
+    const realContent = this.unwrapMessageContent(messageContent);
     if (!realContent) return;
 
-    // ==========================================
-    // EXTRAÇÃO DE TIPO E CONTEÚDO BLINDADA
-    // ==========================================
     let type = 'TEXT';
     let text = '';
-    let quotedId = realContent.extendedTextMessage?.contextInfo?.stanzaId || null;
+    const quotedId = realContent.extendedTextMessage?.contextInfo?.stanzaId || null;
 
-    // Extração rigorosa baseada no padrão interno da Evolution (Baileys)
     if (realContent.conversation) {
-        text = realContent.conversation;
+      text = realContent.conversation;
     } else if (realContent.extendedTextMessage) {
-        text = realContent.extendedTextMessage.text || '';
+      text = realContent.extendedTextMessage.text || '';
     } else if (realContent.imageMessage) {
-        type = 'IMAGE';
-        text = realContent.imageMessage.caption || '';
+      type = 'IMAGE';
+      text = realContent.imageMessage.caption || '';
     } else if (realContent.videoMessage) {
-        type = 'VIDEO';
-        text = realContent.videoMessage.caption || '';
+      type = 'VIDEO';
+      text = realContent.videoMessage.caption || '';
     } else if (realContent.audioMessage) {
-        type = 'AUDIO';
-        text = '[Áudio]';
+      type = 'AUDIO';
+      text = '[Audio]';
     } else if (realContent.documentMessage) {
-        type = 'DOCUMENT';
-        text = realContent.documentMessage.fileName || '[Documento]';
+      type = 'DOCUMENT';
+      text = realContent.documentMessage.fileName || '[Documento]';
     } else if (realContent.stickerMessage) {
-        type = 'STICKER';
-        text = '[Figurinha]';
+      type = 'STICKER';
+      text = '[Figurinha]';
     } else if (realContent.pollCreationMessage) {
-        text = `[Enquete] ${realContent.pollCreationMessage.name || ''}`;
+      text = `[Enquete] ${realContent.pollCreationMessage.name || ''}`;
     } else if (realContent.contactMessage) {
-        text = `[Contato] ${realContent.contactMessage.displayName || ''}`;
+      text = `[Contato] ${realContent.contactMessage.displayName || ''}`;
     } else if (realContent.locationMessage) {
-        text = '[Localização]';
+      text = '[Localizacao]';
     }
 
     const remoteJid = message.key.remoteJid;
     const isGroup = remoteJid.endsWith('@g.us');
-    let pushName = message.pushName || 'WhatsApp Contact';
+    const pushName = message.pushName || 'WhatsApp Contact';
 
-    // Filtro de grupos
     if (isGroup) {
       const config = connection.config as any || {};
       if (config.blockGroups && !(config.groupWhitelist || []).includes(remoteJid)) return;
@@ -477,32 +579,29 @@ export class WhatsappService implements OnModuleInit {
 
     try {
       const tenantId = connection.tenantId;
-      let fullJid = remoteJid.replace(/:[0-9]+/, '');
-      let phoneRaw = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
-      
-      // Validação de número - não importar contatos anômalos com letras (evita lixo no banco)
+      const fullJid = remoteJid.replace(/:[0-9]+/, '');
+      const phoneRaw = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
+
       if (/[a-zA-Z]/.test(phoneRaw) && !isGroup) {
-         this.fileLogger.warn(`Skipping message processing for ${phoneRaw}: Invalid WhatsApp ID (contains letters)`);
-         return; // Interrompe para não criar lixo no banco
+        this.fileLogger.warn(`Skipping message processing for ${phoneRaw}: Invalid WhatsApp ID (contains letters)`);
+        return;
       }
-      
+
       let phoneClean = phoneRaw.replace(/\D/g, '');
       const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
-      
+
       if (isGroup || fullJid.includes('@lid')) {
-          phoneClean = fullJid;
+        phoneClean = fullJid;
       }
-      
+
       let contact: any = null;
-      
+
       if (phoneTail && !isGroup && !fullJid.includes('@lid')) {
-        // Lógica aprimorada para lidar com números formatados no banco
-        // Ex. BD: "(31) 99981-1174" | Incoming: "5531999811174"
         const phoneTail4 = phoneClean.length >= 4 ? phoneClean.slice(-4) : phoneClean;
-         
+
         const candidateContacts = await this.prisma.contact.findMany({
-          where: { 
-            tenantId, 
+          where: {
+            tenantId,
             OR: [
               { whatsapp: { contains: phoneTail4 } },
               { phone: { contains: phoneTail4 } }
@@ -510,34 +609,31 @@ export class WhatsappService implements OnModuleInit {
           }
         });
 
-        // Filtragem em memória comparando apenas os dígitos numéricos
         contact = candidateContacts.find(c => {
-           const wClean = (c.whatsapp || '').replace(/\D/g, '');
-           const pClean = (c.phone || '').replace(/\D/g, '');
-           return (wClean && wClean.endsWith(phoneTail)) || (pClean && pClean.endsWith(phoneTail));
+          const wClean = (c.whatsapp || '').replace(/\D/g, '');
+          const pClean = (c.phone || '').replace(/\D/g, '');
+          return (wClean && wClean.endsWith(phoneTail)) || (pClean && pClean.endsWith(phoneTail));
         });
       }
 
       if (!contact) {
-         // Fallback para grupos, LIDs ou exato
-         contact = await this.prisma.contact.findFirst({
-           where: {
-               tenantId,
-               OR: [
-                   { whatsapp: { equals: fullJid } },
-                   { whatsapp: { equals: phoneRaw } }
-               ]
-           }
-         });
+        contact = await this.prisma.contact.findFirst({
+          where: {
+            tenantId,
+            OR: [
+              { whatsapp: { equals: fullJid } },
+              { whatsapp: { equals: phoneRaw } }
+            ]
+          }
+        });
       }
 
-      // Auto-fix legacy contacts with missing @lid or @g.us
       if (contact && fullJid.includes('@lid') && !contact.whatsapp?.includes('@lid')) {
-          this.logger.log(`Fixing legacy LID contact WhatsApp number: ${contact.whatsapp} -> ${fullJid}`);
-          contact = await this.prisma.contact.update({
-              where: { id: contact.id },
-              data: { whatsapp: fullJid }
-          });
+        this.logger.log(`Fixing legacy LID contact WhatsApp number: ${contact.whatsapp} -> ${fullJid}`);
+        contact = await this.prisma.contact.update({
+          where: { id: contact.id },
+          data: { whatsapp: fullJid }
+        });
       }
 
       if (!contact) {
@@ -545,7 +641,6 @@ export class WhatsappService implements OnModuleInit {
           data: {
             tenantId,
             name: pushName || phoneClean || 'Sem Nome',
-            // Salva em whatsapp; phone fica null conforme regra
             whatsapp: phoneClean || '99 99999999',
             category: isGroup ? 'Grupo' : 'Lead',
             email: 'nt@nt.com.br',
@@ -555,7 +650,6 @@ export class WhatsappService implements OnModuleInit {
         });
       }
 
-      // Buscar foto se não existir
       if (!isGroup && !contact.profilePicUrl && !message.key.fromMe) {
         try {
           const evolutionConfig = await this.getEvolutionConfig(connectionId);
@@ -566,40 +660,21 @@ export class WhatsappService implements OnModuleInit {
               data: { profilePicUrl: pic }
             });
           }
-        } catch(e) {}
+        } catch (e) {}
       }
 
-      // Salvar mídia se houver
+      const { mimeType, fileName } = this.extractMediaDetails(type, realContent);
+      const mediaBase64 = type !== 'TEXT' ? this.extractMediaBase64(message, eventPayload, realContent) : null;
       let mediaPath: string | null = null;
-      if (type !== 'TEXT' && message.base64) {
-        try {
-          // Remover prefixo "data:mime/type;base64," se existir
-          let base64Data = message.base64;
-          if (base64Data.includes('base64,')) {
-            base64Data = base64Data.split('base64,')[1];
-          }
 
-          const buffer = Buffer.from(base64Data, 'base64');
-          const uploadsDir = path.join(process.cwd(), 'storage', 'uploads');
-          if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-          const fileId = `${Date.now()}_${Math.round(Math.random() * 1000)}`;
-          let ext = 'bin';
-          if (type === 'AUDIO') ext = 'ogg'; 
-          else if (type === 'IMAGE') ext = 'jpg';
-          else if (type === 'VIDEO') ext = 'mp4';
-          else if (type === 'STICKER') ext = 'webp';
-          
-          const fileName = `${fileId}.${ext}`;
-          const filePath = path.join(uploadsDir, fileName);
-          fs.writeFileSync(filePath, buffer);
-          mediaPath = `storage/uploads/${fileName}`;
-        } catch (e) {
-          this.logger.error(`Failed to save Evolution media: ${e.message}`);
+      if (type !== 'TEXT') {
+        if (mediaBase64) {
+          mediaPath = this.saveInboundMedia(type, mediaBase64, mimeType, fileName);
+        } else {
+          this.logger.warn(`Evolution media message ${message.key?.id} arrived without base64 payload. type=${type} instance=${connectionId}`);
         }
       }
 
-      // Buscar ou criar ticket
       let ticket = await this.prisma.ticket.findFirst({
         where: { tenantId, contactId: contact.id, status: { not: 'CLOSED' } }
       });
@@ -619,8 +694,15 @@ export class WhatsappService implements OnModuleInit {
         isNewTicket = true;
       }
 
-      // Criar mensagem
       const isFromMe = message.key.fromMe;
+      const metadata: Record<string, any> = {
+        connectionId,
+        remoteJid: fullJid,
+        source: 'evolution-webhook'
+      };
+      if (mimeType) metadata.mimeType = mimeType;
+      if (fileName) metadata.fileName = fileName;
+
       const dbMessage = await this.prisma.ticketMessage.create({
         data: {
           ticketId: ticket.id,
@@ -630,22 +712,21 @@ export class WhatsappService implements OnModuleInit {
           contentType: type === 'VIDEO' || type === 'DOCUMENT' ? 'FILE' : type === 'STICKER' ? 'IMAGE' : type,
           mediaUrl: mediaPath,
           externalId: message.key.id,
-          status: isFromMe ? 'SENT' : 'DELIVERED', // As opposed to blind 'DELIVERED', we wait for Evolution message.update webhook
-          quotedId
+          status: isFromMe ? 'SENT' : 'DELIVERED',
+          quotedId,
+          metadata
         }
       });
 
-      // Atualizar timestamp do ticket e status de quem deve responder
       await this.prisma.ticket.update({
         where: { id: ticket.id },
-        data: { 
-          updatedAt: new Date(), 
-          lastMessageAt: new Date(), 
-          waitingReply: !isFromMe 
+        data: {
+          updatedAt: new Date(),
+          lastMessageAt: new Date(),
+          waitingReply: !isFromMe
         }
       });
 
-      // Emitir eventos via WebSocket
       const fullTicket = await this.prisma.ticket.findUnique({
         where: { id: ticket.id },
         include: { contact: true, _count: { select: { messages: true } } }
@@ -654,12 +735,10 @@ export class WhatsappService implements OnModuleInit {
       if (isNewTicket) this.ticketsGateway.emitTicketCreated(tenantId, fullTicket);
       else this.ticketsGateway.emitTicketUpdated(tenantId, fullTicket);
       this.ticketsGateway.emitNewMessage(tenantId, ticket.id, dbMessage);
-
     } catch (error) {
       this.logger.error(`Error processing Evolution message: ${error.message}`);
     }
   }
-
   /**
    * Processa atualizações de status de mensagem (sent, delivered, read).
    */
@@ -698,16 +777,50 @@ export class WhatsappService implements OnModuleInit {
     if (!jid) return;
 
     const phone = jid.split('@')[0].split(':')[0];
+    const phoneDigits = phone.replace(/\D/g, '');
+    const phoneTail = phoneDigits.length >= 8 ? phoneDigits.slice(-8) : phoneDigits;
+    const phoneTail4 = phoneDigits.length >= 4 ? phoneDigits.slice(-4) : phoneDigits;
+
     try {
       const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
       if (conn) {
-        const contact = await this.prisma.contact.findFirst({
-          where: { tenantId: conn.tenantId, phone }
-        });
+        let contact: any = null;
+
+        if (phoneTail4) {
+          const candidateContacts = await this.prisma.contact.findMany({
+            where: {
+              tenantId: conn.tenantId,
+              OR: [
+                { whatsapp: { contains: phoneTail4 } },
+                { phone: { contains: phoneTail4 } }
+              ]
+            }
+          });
+
+          contact = candidateContacts.find((candidate) => {
+            const whatsappDigits = (candidate.whatsapp || '').replace(/\D/g, '');
+            const phoneDigitsCandidate = (candidate.phone || '').replace(/\D/g, '');
+            return (whatsappDigits && whatsappDigits.endsWith(phoneTail)) || (phoneDigitsCandidate && phoneDigitsCandidate.endsWith(phoneTail));
+          });
+        }
+
+        if (!contact) {
+          contact = await this.prisma.contact.findFirst({
+            where: {
+              tenantId: conn.tenantId,
+              OR: [
+                { whatsapp: jid },
+                { whatsapp: phone },
+                { phone }
+              ]
+            }
+          });
+        }
+
         if (contact) {
           this.ticketsGateway.emitPresenceUpdate(
-            conn.tenantId, 
-            contact.id, 
+            conn.tenantId,
+            contact.id,
             data.presences?.[jid]?.lastKnownPresence || 'available'
           );
         }
@@ -716,7 +829,6 @@ export class WhatsappService implements OnModuleInit {
       this.logger.error(`Error processing presence update: ${e.message}`);
     }
   }
-
   // ==========================================
   // OUTGOING METHODS
   // ==========================================

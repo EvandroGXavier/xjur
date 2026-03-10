@@ -1,5 +1,4 @@
-
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
@@ -25,6 +24,94 @@ export class TicketsService {
     return cleaned;
   }
 
+  private asMetadataObject(metadata: any): Record<string, any> {
+    return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {};
+  }
+
+  private buildMessageMetadata(
+    connectionId?: string | null,
+    file?: Express.Multer.File,
+    extras: Record<string, any> = {},
+  ): Record<string, any> | undefined {
+    const metadata: Record<string, any> = { ...extras };
+
+    if (connectionId) {
+      metadata.connectionId = connectionId;
+    }
+
+    if (file) {
+      metadata.fileName = file.originalname;
+      metadata.mimeType = file.mimetype;
+      metadata.fileSize = file.size;
+    }
+
+    return Object.keys(metadata).length > 0 ? metadata : undefined;
+  }
+
+  private async resolveWhatsappConnection(tenantId: string, ticket: { id: string }, preferredConnectionId?: string | null) {
+    const normalizedConnectionId = preferredConnectionId?.trim();
+
+    if (normalizedConnectionId) {
+      const connection = await this.prisma.connection.findFirst({
+        where: {
+          id: normalizedConnectionId,
+          tenantId,
+          type: 'WHATSAPP',
+          status: 'CONNECTED',
+        },
+      });
+
+      if (!connection) {
+        throw new BadRequestException('A conexao WhatsApp selecionada nao esta conectada.');
+      }
+
+      return connection;
+    }
+
+    const recentMessages = await this.prisma.ticketMessage.findMany({
+      where: { ticketId: ticket.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { metadata: true },
+    });
+
+    const storedConnectionId = recentMessages
+      .map((ticketMessage) => this.asMetadataObject(ticketMessage.metadata).connectionId)
+      .find((value) => typeof value === 'string' && value.trim().length > 0);
+
+    if (storedConnectionId) {
+      const connection = await this.prisma.connection.findFirst({
+        where: {
+          id: storedConnectionId,
+          tenantId,
+          type: 'WHATSAPP',
+          status: 'CONNECTED',
+        },
+      });
+
+      if (!connection) {
+        throw new BadRequestException('Este atendimento esta vinculado a uma conexao WhatsApp que nao esta conectada.');
+      }
+
+      return connection;
+    }
+
+    const connectedConnections = await this.prisma.connection.findMany({
+      where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (connectedConnections.length === 0) {
+      return null;
+    }
+
+    if (connectedConnections.length === 1) {
+      return connectedConnections[0];
+    }
+
+    throw new BadRequestException('Ha multiplas conexoes WhatsApp ativas e este atendimento ainda nao esta vinculado a uma instancia.');
+  }
+
   constructor(
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
@@ -32,7 +119,6 @@ export class TicketsService {
   ) {}
 
   async create(createTicketDto: CreateTicketDto, tenantId: string, userId: string) {
-    // If contactPhone was provided and no contactId, find or create contact
     let contactId = createTicketDto.contactId;
 
     if (!contactId && createTicketDto.contactPhone) {
@@ -44,11 +130,10 @@ export class TicketsService {
         contactId = existingContact.id;
       } else {
         const contactData: any = {
-            tenantId,
-            name: createTicketDto.contactName || createTicketDto.contactPhone,
-            phone: createTicketDto.contactPhone,
-            // If channel is WhatsApp, save as whatsapp field too
-            whatsapp: createTicketDto.channel === 'WHATSAPP' ? createTicketDto.contactPhone : undefined,
+          tenantId,
+          name: createTicketDto.contactName || createTicketDto.contactPhone,
+          phone: createTicketDto.contactPhone,
+          whatsapp: createTicketDto.channel === 'WHATSAPP' ? createTicketDto.contactPhone : undefined,
         };
 
         const newContact = await this.prisma.contact.create({
@@ -58,7 +143,6 @@ export class TicketsService {
       }
     }
 
-    // Create Ticket
     const ticket = await this.prisma.ticket.create({
       data: {
         tenantId,
@@ -66,13 +150,12 @@ export class TicketsService {
         status: 'OPEN',
         priority: createTicketDto.priority || 'MEDIUM',
         channel: createTicketDto.channel || 'WHATSAPP',
-        contactId: contactId, // Ensure contactId is valid or handled if null (schema might allow optional)
+        contactId,
         queue: createTicketDto.queue || 'DEFAULT',
         assigneeId: createTicketDto.assigneeId || userId,
       },
     });
 
-    // Add initial message if provided
     if (createTicketDto.description) {
       await this.prisma.ticketMessage.create({
         data: {
@@ -85,7 +168,6 @@ export class TicketsService {
       });
     }
 
-    // 🔌 Emit WebSocket event for new ticket
     const fullTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
@@ -98,9 +180,9 @@ export class TicketsService {
     return ticket;
   }
 
-  async findAll(tenantId: string, filters?: { status?: string, queue?: string, assigneeId?: string }) {
+  async findAll(tenantId: string, filters?: { status?: string; queue?: string; assigneeId?: string }) {
     const where: any = { tenantId };
-    
+
     if (filters?.status) where.status = filters.status;
     if (filters?.queue) where.queue = filters.queue;
     if (filters?.assigneeId) where.assigneeId = filters.assigneeId;
@@ -109,11 +191,11 @@ export class TicketsService {
       where,
       include: {
         contact: {
-            select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true }
+          select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true },
         },
         _count: {
-             select: { messages: true }
-        }
+          select: { messages: true },
+        },
       },
       orderBy: { updatedAt: 'desc' },
     });
@@ -145,11 +227,12 @@ export class TicketsService {
       const isAudio = file.mimetype.startsWith('audio/') || file.mimetype.includes('webm');
       if (file.mimetype.startsWith('image/')) contentType = 'IMAGE';
       else if (isAudio) contentType = 'AUDIO';
-      else contentType = 'FILE'; 
+      else contentType = 'FILE';
     }
 
     const scheduledAt = createMessageDto.scheduledAt ? new Date(createMessageDto.scheduledAt) : null;
     const isScheduled = scheduledAt && scheduledAt > new Date();
+    const metadata = this.buildMessageMetadata(createMessageDto.connectionId, file);
 
     const message = await this.prisma.ticketMessage.create({
       data: {
@@ -158,34 +241,29 @@ export class TicketsService {
         senderId: userId,
         content: createMessageDto.content || '',
         contentType: contentType as any,
-        mediaUrl: mediaUrl,
+        mediaUrl,
         scheduledAt: isScheduled ? scheduledAt : null,
         status: isScheduled ? 'SCHEDULED' : 'SENT',
-        quotedId: createMessageDto.quotedId
+        quotedId: createMessageDto.quotedId,
+        metadata,
       } as any,
     });
 
-    // Update ticket updatedAt and reset waitingReply
     await this.prisma.ticket.update({
-        where: { id: ticket.id },
-        data: { 
-          updatedAt: new Date(),
-          lastMessageAt: new Date(),
-          waitingReply: false
-        } as any
+      where: { id: ticket.id },
+      data: {
+        updatedAt: new Date(),
+        lastMessageAt: new Date(),
+        waitingReply: false,
+      } as any,
     });
 
-    // ==========================================
-    // SEND VIA WHATSAPP (Baileys) if channel is WHATSAPP
-    // ==========================================
     if (ticket.channel === 'WHATSAPP' && !isScheduled) {
-      await this.sendToWhatsApp(tenantId, ticket, message, file);
+      await this.sendToWhatsApp(tenantId, ticket, message, file, createMessageDto.connectionId);
     }
 
-    // 🔌 Emit WebSocket event for new message
     this.ticketsGateway.emitNewMessage(tenantId, ticket.id, message);
 
-    // Also emit ticket:updated so the ticket list refreshes
     const updatedTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
@@ -199,274 +277,262 @@ export class TicketsService {
   }
 
   async updateTicket(id: string, updateData: any, tenantId: string) {
-      // Validate ticket
-      await this.findOne(id, tenantId);
+    await this.findOne(id, tenantId);
 
-      const updated = await this.prisma.ticket.update({
-          where: { id },
-          data: updateData,
-          include: {
-            contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
-            _count: { select: { messages: true } },
-          },
-      });
+    const updated = await this.prisma.ticket.update({
+      where: { id },
+      data: updateData,
+      include: {
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        _count: { select: { messages: true } },
+      },
+    });
 
-      // 🔌 Emit WebSocket event for status change
-      this.ticketsGateway.emitTicketUpdated(tenantId, updated);
+    this.ticketsGateway.emitTicketUpdated(tenantId, updated);
 
-      return updated;
+    return updated;
   }
 
   async remove(id: string, tenantId: string) {
-      await this.findOne(id, tenantId); // validate existence
-      
-      // Delete will cascade to messages automatically thanks to Prisma `onDelete: Cascade`
-      await this.prisma.ticket.delete({
-          where: { id }
-      });
+    await this.findOne(id, tenantId);
 
-      // Emita um evento para avisar ao front-end que este ticket foi apagado,
-      // Se necessário, você pode usar um evento similar a `ticketUpdated` mas dizendo q foi deletado,
-      // ou apenas omitir que o front-end via Socket poderá não achar. 
-      // Por enquanto, faremos um fallback com status error ou evento custom.
-      // this.ticketsGateway.emitTicketDeleted(tenantId, id); // opcional se houver
+    await this.prisma.ticket.delete({
+      where: { id },
+    });
 
-      return { success: true };
+    return { success: true };
   }
 
-  // Helper for simulation: Create a fake incoming message from customer
   async simulateIncomingMessage(id: string, content: string, tenantId: string) {
-      const ticket = await this.findOne(id, tenantId);
-      
-      const message = await this.prisma.ticketMessage.create({
-          data: {
-              ticketId: ticket.id,
-              senderType: 'CONTACT',
-              senderId: ticket.contactId,
-              content,
-              contentType: 'TEXT'
-          }
-      });
+    const ticket = await this.findOne(id, tenantId);
 
-      // Update ticket updatedAt and set waitingReply to true
-      await this.prisma.ticket.update({
-          where: { id: ticket.id },
-          data: { 
-              updatedAt: new Date(),
-              lastMessageAt: new Date(),
-              waitingReply: true
-          } as any
-      });
+    const message = await this.prisma.ticketMessage.create({
+      data: {
+        ticketId: ticket.id,
+        senderType: 'CONTACT',
+        senderId: ticket.contactId,
+        content,
+        contentType: 'TEXT',
+      },
+    });
 
-      // 🔌 Emit WebSocket event for simulated incoming message
-      this.ticketsGateway.emitNewMessage(tenantId, ticket.id, message);
+    await this.prisma.ticket.update({
+      where: { id: ticket.id },
+      data: {
+        updatedAt: new Date(),
+        lastMessageAt: new Date(),
+        waitingReply: true,
+      } as any,
+    });
 
-      const updatedTicket = await this.prisma.ticket.findFirst({
-        where: { id: ticket.id },
-        include: {
-          contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
-          _count: { select: { messages: true } },
-        },
-      });
-      this.ticketsGateway.emitTicketUpdated(tenantId, updatedTicket);
-      
-      return message;
+    this.ticketsGateway.emitNewMessage(tenantId, ticket.id, message);
+
+    const updatedTicket = await this.prisma.ticket.findFirst({
+      where: { id: ticket.id },
+      include: {
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        _count: { select: { messages: true } },
+      },
+    });
+    this.ticketsGateway.emitTicketUpdated(tenantId, updatedTicket);
+
+    return message;
   }
 
   async deleteMessage(messageId: string, tenantId: string, userId: string) {
     const message = await this.prisma.ticketMessage.findFirst({
-        where: { id: messageId, ticket: { tenantId } },
-        include: { ticket: { include: { contact: true } } }
+      where: { id: messageId, ticket: { tenantId } },
+      include: { ticket: { include: { contact: true } } },
     });
-    
-    if (!message) throw new NotFoundException('Mensagem não encontrada');
 
-    // Attempt to delete from WhatsApp (Best Effort)
+    if (!message) throw new NotFoundException('Mensagem nao encontrada');
+
     if (message.ticket.channel === 'WHATSAPP') {
-        try {
-            const connection = await this.prisma.connection.findFirst({
-                where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' }
-            });
-            if (connection) {
-                if (message.externalId) {
-                    const phone = message.ticket.contact?.whatsapp || message.ticket.contact?.phone;
-                    await this.whatsappService.deleteMessage(connection.id, phone, message.externalId, true);
-                    this.logger.log(`✅ Remote delete executed for message ${messageId}`);
-                } else {
-                    this.logger.warn(`Skipping remote delete for message ${messageId} as externalId is missing.`);
-                }
-            }
-        } catch (e) {
-            this.logger.error(`Failed to delete WhatsApp message: ${e.message}`);
+      try {
+        const messageMetadata = this.asMetadataObject(message.metadata);
+        const connection = await this.resolveWhatsappConnection(tenantId, message.ticket, messageMetadata.connectionId);
+
+        if (connection && message.externalId) {
+          const phone = message.ticket.contact?.whatsapp || message.ticket.contact?.phone;
+          await this.whatsappService.deleteMessage(connection.id, phone, message.externalId, true);
+          this.logger.log(`Remote delete executed for message ${messageId}`);
+        } else if (!message.externalId) {
+          this.logger.warn(`Skipping remote delete for message ${messageId} as externalId is missing.`);
         }
+      } catch (error) {
+        this.logger.error(`Failed to delete WhatsApp message: ${error.message}`);
+      }
     }
 
-
-    // Delete from DB
     await this.prisma.ticketMessage.delete({
-        where: { id: messageId }
+      where: { id: messageId },
     });
 
-    // Notify Frontend
     this.ticketsGateway.emitMessageDeleted(tenantId, message.ticketId, messageId);
 
     return { success: true };
   }
 
-
   async markAsRead(ticketId: string, tenantId: string) {
-      const ticket = await this.findOne(ticketId, tenantId);
-      
-      const unreadMessages = await this.prisma.ticketMessage.findMany({
-          where: { ticketId, status: { not: 'READ' }, senderType: 'CONTACT', externalId: { not: null } }
-      });
-      
-      if (unreadMessages.length === 0) return;
-      
-      // Update local first
-      await this.prisma.ticketMessage.updateMany({
-          where: { id: { in: unreadMessages.map(m => m.id) } },
-          data: { status: 'READ', readAt: new Date() }
-      });
-      
-      // Send to WhatsApp
-      try {
-          const connection = await this.prisma.connection.findFirst({
-              where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' }
-          });
-          
-          if (connection && ticket.contact?.whatsapp) {
-              const fullJid = ticket.contact.whatsapp;
-              // Only call if method exists (in case it wasn't added yet properly)
-              if (this.whatsappService.markRead) {
-                  await this.whatsappService.markRead(connection.id, fullJid, unreadMessages.map(m => m.externalId));
-              }
-          }
-      } catch (e) {
-          this.logger.warn(`Failed to sync read status with WhatsApp: ${e.message}`);
-      }
-      
-      // Emit update
-      this.ticketsGateway.emitTicketUpdated(tenantId, { ...ticket, _count: { messages: 0 } }); 
-  }
+    const ticket = await this.findOne(ticketId, tenantId);
 
-  // ==========================================
-  // SHARED SENDING LOGIC (For immediate and scheduled)
-  // ==========================================
-  private async sendToWhatsApp(tenantId: string, ticket: any, message: any, file?: any) {
-    const rawPhone = ticket.contact?.whatsapp || ticket.contact?.phone;
-    if (!rawPhone) {
-        this.ticketsGateway.emitTicketError(tenantId, {
-            ticketId: ticket.id,
-            message: 'Contato sem telefone/WhatsApp cadastrado.',
-            code: 'NO_PHONE'
-        });
-        return;
-    }
-    let formattedPhone = rawPhone;
-    if (rawPhone.includes('@g.us') || rawPhone.includes('@lid')) {
-        formattedPhone = rawPhone;
-    } else {
-        const basePhone = rawPhone.split('@')[0].split(':')[0];
-        formattedPhone = this.formatNumber(basePhone);
-    }
+    const unreadMessages = await this.prisma.ticketMessage.findMany({
+      where: { ticketId, status: { not: 'READ' }, senderType: 'CONTACT', externalId: { not: null } },
+    });
 
+    if (unreadMessages.length === 0) return;
+
+    await this.prisma.ticketMessage.updateMany({
+      where: { id: { in: unreadMessages.map((message) => message.id) } },
+      data: { status: 'READ', readAt: new Date() },
+    });
 
     try {
-        const connection = await this.prisma.connection.findFirst({
-            where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' },
-        });
+      const preferredConnectionId = unreadMessages
+        .map((message) => this.asMetadataObject(message.metadata).connectionId)
+        .find((value) => typeof value === 'string' && value.trim().length > 0);
+      const connection = await this.resolveWhatsappConnection(tenantId, ticket, preferredConnectionId);
 
-        if (!connection) {
-            this.logger.warn(`No active connection for tenant ${tenantId}`);
-            this.ticketsGateway.emitTicketError(tenantId, {
-                ticketId: ticket.id,
-                message: 'Nenhuma conexão WhatsApp ativa no momento.',
-                code: 'NO_CONNECTION'
-            });
-            return;
+      if (connection) {
+        const rawJid = ticket.contact?.whatsapp || ticket.contact?.phone;
+        if (rawJid && this.whatsappService.markRead) {
+          await this.whatsappService.markRead(connection.id, rawJid, unreadMessages.map((message) => message.externalId!));
         }
-
-        let externalId: string | undefined;
-
-        this.logger.log(`Attempting to send to WhatsApp via connection ${connection.id} to phone ${formattedPhone}`);
-
-        if (message.contentType === 'TEXT') {
-            externalId = await this.whatsappService.sendText(connection.id, formattedPhone, message.content);
-        } else {
-            let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document';
-            if (message.contentType === 'IMAGE') mediaType = 'image';
-            else if (message.contentType === 'AUDIO') mediaType = 'audio';
-            // Simple mapping for existing paths
-            externalId = await this.whatsappService.sendMedia(
-                connection.id, 
-                formattedPhone, 
-                mediaType, 
-                message.mediaUrl, 
-                message.content || '',
-                file?.mimetype,
-                file?.originalname
-            );
-        }
-
-        this.logger.log(`WhatsApp API responded with externalId: ${typeof externalId} - ${externalId}`);
-
-        if (externalId && typeof externalId === 'string') {
-            await this.prisma.ticketMessage.update({
-                where: { id: message.id },
-                data: { externalId, status: 'SENT' }
-            });
-            this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
-        } else {
-            this.logger.warn(`Message sent but no valid externalId returned. Setting status to SENT anyway.`);
-            await this.prisma.ticketMessage.update({
-                where: { id: message.id },
-                data: { status: 'SENT' }
-            });
-            this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
-        }
-        this.logger.log(`✅ WhatsApp message sent to ${formattedPhone}`);
+      }
     } catch (error) {
-        this.logger.error(`❌ WhatsApp Send Error: ${error.message}`);
-        this.logger.error(`❌ Full error details: ${JSON.stringify(error?.response?.data || error)}`);
-        
-        await this.prisma.ticketMessage.update({
-             where: { id: message.id },
-             data: { status: 'FAILED' }
-        }).catch(e => this.logger.error(`Failed to mark message as FAILED: ${e.message}`));
-        
+      this.logger.warn(`Failed to sync read status with WhatsApp: ${error.message}`);
+    }
+
+    this.ticketsGateway.emitTicketUpdated(tenantId, { ...ticket, _count: { messages: 0 } });
+  }
+
+  private async sendToWhatsApp(
+    tenantId: string,
+    ticket: any,
+    message: any,
+    file?: Express.Multer.File,
+    preferredConnectionId?: string | null,
+  ) {
+    const rawPhone = ticket.contact?.whatsapp || ticket.contact?.phone;
+    if (!rawPhone) {
+      this.ticketsGateway.emitTicketError(tenantId, {
+        ticketId: ticket.id,
+        message: 'Contato sem telefone/WhatsApp cadastrado.',
+        code: 'NO_PHONE',
+      });
+      return;
+    }
+
+    let formattedPhone = rawPhone;
+    if (!rawPhone.includes('@g.us') && !rawPhone.includes('@lid')) {
+      const basePhone = rawPhone.split('@')[0].split(':')[0];
+      formattedPhone = this.formatNumber(basePhone);
+    }
+
+    try {
+      const connection = await this.resolveWhatsappConnection(tenantId, ticket, preferredConnectionId);
+
+      if (!connection) {
+        this.logger.warn(`No active connection for tenant ${tenantId}`);
         this.ticketsGateway.emitTicketError(tenantId, {
-            ticketId: ticket.id,
-            message: `Falha no envio: ${error.message}`,
-            code: 'SEND_ERROR'
+          ticketId: ticket.id,
+          message: 'Nenhuma conexao WhatsApp ativa no momento.',
+          code: 'NO_CONNECTION',
         });
+        return;
+      }
+
+      let externalId: string | undefined;
+      const currentMetadata = this.asMetadataObject(message.metadata);
+      const nextMetadata = this.buildMessageMetadata(connection.id, file, currentMetadata);
+      const mimeType = file?.mimetype || currentMetadata.mimeType;
+      const fileName = file?.originalname || currentMetadata.fileName;
+
+      this.logger.log(`Attempting to send to WhatsApp via connection ${connection.id} to phone ${formattedPhone}`);
+
+      if (message.contentType === 'TEXT') {
+        externalId = await this.whatsappService.sendText(connection.id, formattedPhone, message.content);
+      } else {
+        let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document';
+        if (message.contentType === 'IMAGE') mediaType = 'image';
+        else if (message.contentType === 'AUDIO') mediaType = 'audio';
+
+        externalId = await this.whatsappService.sendMedia(
+          connection.id,
+          formattedPhone,
+          mediaType,
+          message.mediaUrl,
+          message.content || '',
+          mimeType,
+          fileName,
+        );
+      }
+
+      this.logger.log(`WhatsApp API responded with externalId: ${typeof externalId} - ${externalId}`);
+
+      if (externalId && typeof externalId === 'string') {
+        await this.prisma.ticketMessage.update({
+          where: { id: message.id },
+          data: { externalId, status: 'SENT', metadata: nextMetadata },
+        });
+        this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
+      } else {
+        this.logger.warn('Message sent but no valid externalId returned. Setting status to SENT anyway.');
+        await this.prisma.ticketMessage.update({
+          where: { id: message.id },
+          data: { status: 'SENT', metadata: nextMetadata },
+        });
+        this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
+      }
+
+      this.logger.log(`WhatsApp message sent to ${formattedPhone}`);
+    } catch (error) {
+      this.logger.error(`WhatsApp Send Error: ${error.message}`);
+      this.logger.error(`Full error details: ${JSON.stringify(error?.response?.data || error)}`);
+
+      await this.prisma.ticketMessage
+        .update({
+          where: { id: message.id },
+          data: { status: 'FAILED' },
+        })
+        .catch((updateError) => this.logger.error(`Failed to mark message as FAILED: ${updateError.message}`));
+
+      this.ticketsGateway.emitTicketError(tenantId, {
+        ticketId: ticket.id,
+        message: `Falha no envio: ${error.message}`,
+        code: 'SEND_ERROR',
+      });
     }
   }
 
-  // ==========================================
-  // BACKGROUND TASK: Scheduled Messages
-  // ==========================================
   @Cron(CronExpression.EVERY_MINUTE)
   async handleScheduledMessages() {
     const now = new Date();
     const scheduledMessages = await this.prisma.ticketMessage.findMany({
       where: {
         status: 'SCHEDULED',
-        scheduledAt: { lte: now }
+        scheduledAt: { lte: now },
       } as any,
       include: {
         ticket: {
           include: {
-            contact: true
-          }
-        }
-      }
+            contact: true,
+          },
+        },
+      },
     });
 
     if (scheduledMessages.length > 0) {
-      this.logger.log(`⏲️ Processing ${scheduledMessages.length} scheduled messages...`);
-      for (const msg of (scheduledMessages as any[])) {
-        await this.sendToWhatsApp(msg.ticket.tenantId, msg.ticket, msg);
+      this.logger.log(`Processing ${scheduledMessages.length} scheduled messages...`);
+      for (const scheduledMessage of scheduledMessages as any[]) {
+        const preferredConnectionId = this.asMetadataObject(scheduledMessage.metadata).connectionId;
+        await this.sendToWhatsApp(
+          scheduledMessage.ticket.tenantId,
+          scheduledMessage.ticket,
+          scheduledMessage,
+          undefined,
+          preferredConnectionId,
+        );
       }
     }
   }
