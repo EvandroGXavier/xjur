@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
 import { Decimal } from '@prisma/client/runtime/library';
 import { CreateFinancialRecordDto, CreateInstallmentsDto, PartialPaymentDto, SettleRecordDto, CreateTransactionSplitDto } from './dto/create-financial-record.dto';
@@ -871,27 +871,45 @@ export class FinancialService {
     );
     const metadata = await this.processAttachments(files, (record as any).metadata);
 
-    return this.prisma.financialRecord.update({
-      where: { id: recordId },
-      data: {
-        status: 'PAID',
-        paymentDate: new Date(dto.paymentDate),
-        fine: dto.fine,
-        interest: dto.interest,
-        monetaryCorrection: dto.monetaryCorrection,
-        discount: dto.discount,
-        discountType: dto.discountType,
-        amountFinal,
-        amountPaid: amountFinal,
-        paymentMethod: dto.paymentMethod,
-        bankAccountId: dto.bankAccountId,
-        metadata,
-        notes: dto.notes
-          ? `${record.notes || ""} | Liquidado: ${dto.notes}`
-          : `${record.notes || ""} | Liquidado em ${dto.paymentDate}`,
-      },
-      include: this.defaultRecordInclude,
-    });
+    // Utilize Prisma transaction para garantir que ambas operações ocorram
+    const [updatedRecord] = await this.prisma.$transaction([
+      this.prisma.financialRecord.update({
+        where: { id: recordId },
+        data: {
+          status: 'PAID',
+          paymentDate: new Date(dto.paymentDate),
+          fine: dto.fine,
+          interest: dto.interest,
+          monetaryCorrection: dto.monetaryCorrection,
+          discount: dto.discount,
+          discountType: dto.discountType,
+          amountFinal,
+          amountPaid: amountFinal,
+          paymentMethod: dto.paymentMethod,
+          bankAccountId: dto.bankAccountId || record.bankAccountId,
+          metadata,
+          notes: dto.notes
+            ? `${record.notes || ""} | Liquidado: ${dto.notes}`
+            : `${record.notes || ""} | Liquidado em ${dto.paymentDate}`,
+        },
+      }),
+      
+      // Atualizar o saldo da conta associada
+      ...(dto.bankAccountId || record.bankAccountId
+        ? [
+            this.prisma.bankAccount.update({
+              where: { id: dto.bankAccountId || record.bankAccountId! },
+              data: {
+                balance: {
+                  [record.type === 'INCOME' ? 'increment' : 'decrement']: amountFinal,
+                },
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    return this.findOneFinancialRecord(recordId, dto.tenantId);
   }
 
   // ==================== RATEIO (TRANSACTION SPLITS) ====================

@@ -48,7 +48,7 @@ import { AudioRecorder } from './components/AudioRecorder';
 import { MessageBubble } from './components/MessageBubble';
 import { InfoPanel } from './components/InfoPanel';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
-import { helpAtendimento } from '../../data/helpManuals';
+import { helpAtendimento, helpOmnichannelConnections } from '../../data/helpManuals';
 
 // =========================
 // INTERFACES
@@ -176,6 +176,9 @@ export function AtendimentoPage() {
   const { isConnected: socketConnected, on: onSocketEvent } = useTicketSocket();
 
   const selectedTicket = tickets.find(t => t.id === selectedTicketId) || null;
+
+  const currentHelpTitle = activeModule === 'connections' ? 'Conexoes & Agente Omnichannel' : 'Atendimento (Chat CRM)';
+  const currentHelpSections = activeModule === 'connections' ? helpOmnichannelConnections : helpAtendimento;
 
   // =========================
   // LOGIC: Filter
@@ -662,7 +665,7 @@ export function AtendimentoPage() {
         );
       case 'quick_replies': return <QuickReplies />;
       case 'kanban': return <KanbanBoard />;
-      case 'connections': return <Connections />;
+      case 'connections': return <Connections onOpenHelp={() => setIsHelpOpen(true)} />;
       case 'tags': return <TagsManager />;
       case 'settings': return <AtendimentoSettings />;
       case 'security': return <ConfiguracoesWhatsapp />;
@@ -687,7 +690,7 @@ export function AtendimentoPage() {
       </div>
       {renderCurrentModule()}
       <NewTicketModal open={showNewTicketModal} onClose={() => setShowNewTicketModal(false)} onSuccess={(id) => { fetchTickets(); setSelectedTicketId(id); }} />
-      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Atendimento (Chat CRM)" sections={helpAtendimento} />
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title={currentHelpTitle} sections={currentHelpSections} />
     </div>
   );
 }

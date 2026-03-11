@@ -6,6 +6,7 @@ import { TicketsGateway } from '../tickets/tickets.gateway';
 import { WhatsappGateway } from './whatsapp.gateway';
 import { EvolutionService, EvolutionConfig } from '../evolution/evolution.service';
 import { FileLogger } from '../common/file-logger';
+import { AgentService } from '../agent/agent.service';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -27,6 +28,7 @@ export class WhatsappService implements OnModuleInit {
     @Inject(forwardRef(() => TicketsGateway))
     private readonly ticketsGateway: TicketsGateway,
     private readonly whatsappGateway: WhatsappGateway,
+    private readonly agentService: AgentService,
   ) {}
 
   async onModuleInit() {
@@ -716,6 +718,28 @@ export class WhatsappService implements OnModuleInit {
           quotedId,
           metadata
         }
+      });
+
+      await this.agentService.captureMessage({
+        tenantId,
+        channel: 'WHATSAPP',
+        ticketId: ticket.id,
+        ticketMessageId: dbMessage.id,
+        contactId: contact.id,
+        connectionId,
+        externalThreadId: fullJid,
+        externalMessageId: message.key.id,
+        externalParticipantId: phoneClean || fullJid,
+        title: ticket.title,
+        direction: isFromMe ? 'OUTBOUND' : 'INBOUND',
+        role: isFromMe ? 'operator' : 'contact',
+        content: dbMessage.content,
+        contentType: dbMessage.contentType,
+        senderName: !isFromMe ? (message.pushName || contact.name || null) : null,
+        senderAddress: fullJid,
+        mediaUrl: mediaPath,
+        metadata,
+        createdAt: dbMessage.createdAt,
       });
 
       let updateData: any = {

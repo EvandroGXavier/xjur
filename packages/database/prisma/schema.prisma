@@ -68,6 +68,9 @@ model Tenant {
   paymentConditions   PaymentCondition[]
   securitySecrets     SecuritySecret[]
   securitySettings    SecuritySetting[]
+  agentConversations  AgentConversation[]
+  agentMessages       AgentMessage[]
+  agentRuns           AgentRun[]
 
   // Preferences
   contactRequireOneInfo Boolean @default(true) // Se false, celular/telefone/email ficam não-obrigatórios
@@ -151,6 +154,7 @@ model Contact {
   products                  Product[]
   purchaseOrders            PurchaseOrder[] // Como fornecedor
   purchasesAsBuyer          PurchaseOrder[] @relation("PurchaseOrderBuyer") // Como comprador
+  agentConversations        AgentConversation[]
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -903,7 +907,8 @@ model Ticket {
   lastMessageAt DateTime? @default(now())
   scheduledTo   DateTime?
 
-  messages TicketMessage[]
+  messages           TicketMessage[]
+  agentConversations AgentConversation[]
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
@@ -936,6 +941,82 @@ model TicketMessage {
   @@map("ticket_messages")
 }
 
+model AgentConversation {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  ticketId              String?
+  contactId             String?
+  connectionId          String?
+  channel               String
+  status                String    @default("ACTIVE")
+  title                 String?
+  externalThreadId      String?
+  externalParticipantId String?
+  lastMessageAt         DateTime? @default(now())
+  metadata              Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  ticket     Ticket?     @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  contact    Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  messages   AgentMessage[]
+  runs       AgentRun[]
+
+  @@index([tenantId, channel, status])
+  @@index([ticketId])
+  @@index([contactId])
+  @@index([connectionId])
+  @@index([tenantId, externalThreadId])
+  @@map("agent_conversations")
+}
+
+model AgentMessage {
+  id                String   @id @default(uuid())
+  conversationId    String
+  tenantId          String
+  ticketMessageId   String?
+  direction         String
+  role              String
+  content           String   @db.Text
+  contentType       String   @default("TEXT")
+  externalMessageId String?
+  senderName        String?
+  senderAddress     String?
+  mediaUrl          String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([ticketMessageId])
+  @@index([tenantId, externalMessageId])
+  @@map("agent_messages")
+}
+
+model AgentRun {
+  id             String   @id @default(uuid())
+  conversationId String
+  tenantId       String
+  trigger        String
+  channel        String
+  status         String   @default("PENDING")
+  summary        String?
+  metadata       Json?
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+
+  @@index([conversationId, startedAt])
+  @@index([tenantId, channel, status])
+  @@map("agent_runs")
+}
+
 model WaInstance {
   id        String  @id @default(uuid())
   tenantId  String
@@ -961,9 +1042,10 @@ model Connection {
   config Json? // Credentials, tokens, settings
   qrCode String? @db.Text
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  agentConversations AgentConversation[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@map("connections")
 }

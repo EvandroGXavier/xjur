@@ -66,7 +66,19 @@ export class CommunicationsService {
 
     if (ticket) {
       console.log(`[Communications] Linking to existing Ticket #${ticket.code}`);
-      const msg = await this.ticketsService.simulateIncomingMessage(ticket.id, dto.content, dto.tenantId);
+      const msg = await this.ticketsService.simulateIncomingMessage(ticket.id, dto.content, dto.tenantId, {
+        contentType: dto.contentType || 'TEXT',
+        mediaUrl: dto.mediaUrl,
+        externalId: dto.externalMessageId,
+        metadata: {
+          ...(dto.metadata || {}),
+          connectionId: dto.connectionId,
+          externalThreadId: dto.externalThreadId || dto.from,
+          senderAddress: dto.from,
+          subject: dto.subject,
+          channel: dto.channel,
+        },
+      });
       return { action: 'MESSAGE_ADDED', ticketId: ticket.id, messageId: msg.id };
     } else {
       console.log(`[Communications] Creating NEW Ticket`);
@@ -76,7 +88,6 @@ export class CommunicationsService {
 
       const createDto: CreateTicketDto = {
         title: `Atendimento ${dto.channel} - ${contact.name}`,
-        description: dto.content,
         priority: 'MEDIUM',
         channel: dto.channel,
         contactId: contact.id,
@@ -85,7 +96,20 @@ export class CommunicationsService {
       } as any; // Cast to avoid strict type issues if DTO differs slightly
 
       const newTicket = await this.ticketsService.create(createDto, dto.tenantId, userId);
-      return { action: 'TICKET_CREATED', ticketId: newTicket.id, code: newTicket.code };
+      const msg = await this.ticketsService.simulateIncomingMessage(newTicket.id, dto.content, dto.tenantId, {
+        contentType: dto.contentType || 'TEXT',
+        mediaUrl: dto.mediaUrl,
+        externalId: dto.externalMessageId,
+        metadata: {
+          ...(dto.metadata || {}),
+          connectionId: dto.connectionId,
+          externalThreadId: dto.externalThreadId || dto.from,
+          senderAddress: dto.from,
+          subject: dto.subject,
+          channel: dto.channel,
+        },
+      });
+      return { action: 'TICKET_CREATED', ticketId: newTicket.id, code: newTicket.code, messageId: msg.id };
     }
   }
 }

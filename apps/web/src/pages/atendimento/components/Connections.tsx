@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap, Settings, Users, Shield, Instagram, Send } from 'lucide-react';
+import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap, Settings, Users, Shield, Instagram, Send, HelpCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
@@ -26,7 +26,11 @@ const defaultWaConfig = {
     evolutionVersion: '2.3000.x'
 };
 
-export function Connections() {
+interface ConnectionsProps {
+    onOpenHelp?: () => void;
+}
+
+export function Connections({ onOpenHelp }: ConnectionsProps) {
     const [connections, setConnections] = useState<Connection[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
@@ -361,12 +365,23 @@ export function Connections() {
                     </h2>
                     <p className="text-slate-400 mt-1">Gerencie seus canais de comunicação (WhatsApp, Email, Instagram).</p>
                 </div>
+                <div className="flex items-center gap-3">
+                    {onOpenHelp && (
+                        <button
+                            onClick={onOpenHelp}
+                            title="Ajuda (CTRL + F1)"
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border border-slate-700"
+                        >
+                            <HelpCircle size={16} /> Ajuda
+                        </button>
+                    )}
                 <button 
                     onClick={() => { resetForm(); setIsCreating(true); }}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition shadow-lg shadow-indigo-500/20"
                 >
                     <Plus size={16} /> Nova Conexão
                 </button>
+                </div>
             </div>
 
             {/* Create/Edit Form */}

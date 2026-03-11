@@ -125,3 +125,70 @@ export const helpMicrosoft365: HelpSection[] = [
     content: '<ul><li><b>Processos:</b> É criada a pasta "Nome do Cliente > Número do Processo". Os documentos adicionados via painel do processo são carregados fisicamente no OneDrive.</li><li>Se você alterar o nome/número do processo na plataforma, o OneDrive será notificado para <b>renomear a pasta</b> correspondente automaticamente.</li></ul>',
   }
 ];
+
+
+export const helpOmnichannelConnections: HelpSection[] = [
+  {
+    title: 'Visao Geral (Conexoes & Agente Omnichannel)',
+    content: 'Este modulo centraliza a operacao dos novos recursos de <b>conexao por canal</b> e da nova <b>camada omnichannel do agente</b>. A partir desta implantacao, toda entrada relevante pode ser normalizada para uma conversa canonica interna, vinculada ao <b>Contato</b>, <b>Ticket</b>, <b>Conexao</b> e canal de origem.<br/><br/><b>Canais previstos:</b> WhatsApp, E-mail, Instagram e Telegram.<br/><b>Camadas implantadas:</b> <i>AgentConversation</i>, <i>AgentMessage</i> e <i>AgentRun</i>.<br/><br/>Na pratica, isso permite que o sistema deixe de tratar cada canal como um fluxo isolado e passe a registrar tudo em um padrao unico, pronto para automacao, IA, roteamento e auditoria.',
+  },
+  {
+    title: 'O que ja esta operacional hoje',
+    content: '<ul><li><b>WhatsApp:</b> conexao real via Evolution + QR Code + tickets + mensagens ja operando na interface.</li><li><b>E-mail e Instagram:</b> a base omnichannel ja esta preparada e o sistema ja aceita entradas pelo webhook generico de comunicacoes.</li><li><b>Ticket novo:</b> a primeira mensagem agora entra corretamente como mensagem do contato, e nao como descricao interna do operador.</li><li><b>Memoria canonica:</b> toda mensagem relevante pode ser espelhada na nova camada do agente para futuras rotinas de IA, automacao e auditoria.</li></ul><br/><b>Importante:</b> para E-mail e Instagram, a conexao visual ja pode ser cadastrada nesta tela, mas o recebimento nativo definitivo dependera do adaptador externo do provedor. Enquanto isso, a operacao pode ser testada de forma real pelo endpoint <code>/api/communications/webhook</code>.',
+  },
+  {
+    title: 'Como operar a tela Conexoes & Canais',
+    content: '1. Clique em <b>Nova Conexao</b>.<br/>2. Escolha o canal: <b>WHATSAPP</b>, <b>EMAIL</b>, <b>INSTAGRAM</b> ou <b>TELEGRAM</b>.<br/>3. Informe um nome operacional claro, como <i>Atendimento Principal</i>, <i>Financeiro Email</i> ou <i>Instagram Comercial</i>.<br/>4. Se o canal for WhatsApp, preencha a URL e a API Key da Evolution quando necessario.<br/>5. Salve a conexao.<br/>6. Use <b>Connect</b> para iniciar a conexao. No WhatsApp, o sistema abrira o processo de pareamento com QR Code. Nos demais canais, a conexao pode ser preparada e usada nos testes de webhook.<br/><br/><b>Dica operacional:</b> use nomes de conexao por finalidade e nao por pessoa. Exemplo: <i>WA Financeiro</i> e melhor que <i>Celular Joao</i>.',
+  },
+  {
+    title: 'Fluxo esperado por canal',
+    content: '<ul><li><b>WhatsApp:</b> a mensagem entra pela Evolution, vira TicketMessage e tambem e registrada na camada omnichannel do agente.</li><li><b>E-mail:</b> o ideal e que cada thread vire um <code>externalThreadId</code> estavel. O remetente vai em <code>from</code> e o assunto em <code>subject</code>.</li><li><b>Instagram:</b> use o identificador do remetente em <code>from</code> e o ID da conversa/DM em <code>externalThreadId</code>.</li><li><b>Telegram:</b> a base ja esta prevista no modelo, mas a interface nativa pode ser adicionada depois sem refazer a memoria.</li></ul><br/>Sempre que possivel, envie tambem: <code>connectionId</code>, <code>externalMessageId</code>, <code>contentType</code> e <code>metadata</code>. Isso melhora rastreabilidade, deduplicacao e auditoria.',
+  },
+  {
+    title: 'Primeiro atendimento: do canal ate a conversa',
+    content: '1. Cadastre a conexao do canal nesta tela.<br/>2. Coloque a conexao em funcionamento usando <b>Connect</b> ou o webhook de teste.<br/>3. Envie uma primeira mensagem real ou simulada para o canal.<br/>4. Acesse o modulo <b>Atendimento</b> e clique em <b>Chats</b> no menu lateral.<br/>5. Procure a nova conversa na lista da esquerda.<br/>6. Clique no atendimento para abrir o historico e os dados do contato.<br/><br/><b>O que deve acontecer:</b><ul><li>o contato deve ser localizado ou criado</li><li>o ticket deve aparecer na fila</li><li>a primeira mensagem deve estar visivel no centro da tela</li><li>o atendimento deve ficar pronto para resposta do operador</li></ul><br/><b>Se nao aparecer:</b> revise <code>tenantId</code>, <code>channel</code>, <code>connectionId</code> e o envio para <code>/api/communications/webhook</code>.',
+  },
+  {
+    title: 'Como responder e enviar mensagens ao cliente',
+    content: 'Depois de abrir o atendimento em <b>Chats</b>, use a area inferior da conversa para responder.<br/><br/>1. Clique no atendimento desejado na coluna da esquerda.<br/>2. Digite a resposta no campo <b>Digite...</b> na parte inferior.<br/>3. Pressione <b>Enter</b> ou clique no botao de envio para responder.<br/>4. Se quiser enviar arquivo, use o icone de <b>clipe</b> antes do envio.<br/>5. Se quiser enviar audio, use o icone de <b>microfone</b> quando o campo estiver vazio.<br/><br/><b>Resultado esperado:</b><ul><li>a sua mensagem aparece no historico da conversa</li><li>o atendimento continua vinculado ao mesmo ticket</li><li>o contato segue no mesmo contexto do canal de origem</li></ul><br/><b>Dica pratica:</b> para validar o primeiro atendimento completo, responda a mensagem inicial e confirme no historico que existe pelo menos uma mensagem recebida do cliente e uma enviada pelo operador.',
+  },
+  {
+    title: 'Exemplo pratico testavel: E-mail',
+    content: `Use o PowerShell abaixo para simular uma entrada de e-mail no sistema:<br/><br/><pre><code>Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/communications/webhook" -ContentType "application/json" -Body (@{
+  tenantId = "SEU_TENANT_ID"
+  channel = "EMAIL"
+  from = "cliente.teste@exemplo.com"
+  name = "Cliente Teste"
+  content = "Preciso de retorno sobre o contrato enviado ontem."
+  connectionId = "ID_DA_CONEXAO_EMAIL"
+  externalThreadId = "email-thread-001"
+  externalMessageId = "email-msg-001"
+  subject = "Retorno de contrato"
+  contentType = "TEXT"
+  metadata = @{ mailbox = "contato@seudominio.com.br"; provider = "manual-test" }
+} | ConvertTo-Json -Depth 6)</code></pre><br/><b>Resultado esperado:</b><ul><li>o sistema localiza ou cria o contato</li><li>cria ou atualiza um ticket</li><li>registra a mensagem recebida</li><li>espelha a entrada na memoria omnichannel do agente</li></ul>`,
+  },
+  {
+    title: 'Exemplo pratico testavel: Instagram',
+    content: `Use o PowerShell abaixo para simular uma DM do Instagram:<br/><br/><pre><code>Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/communications/webhook" -ContentType "application/json" -Body (@{
+  tenantId = "SEU_TENANT_ID"
+  channel = "INSTAGRAM"
+  from = "@cliente_ig_teste"
+  name = "Cliente Instagram"
+  content = "Ola, vim pelo Instagram e quero saber sobre honorarios."
+  connectionId = "ID_DA_CONEXAO_INSTAGRAM"
+  externalThreadId = "ig-thread-001"
+  externalMessageId = "ig-msg-001"
+  contentType = "TEXT"
+  metadata = @{ profile = "cliente_ig_teste"; provider = "manual-test" }
+} | ConvertTo-Json -Depth 6)</code></pre><br/><b>Resultado esperado:</b><ul><li>se o contato ainda nao existir, ele sera criado como lead</li><li>o ticket sera aberto ou reaproveitado</li><li>a mensagem sera vinculada ao canal Instagram</li><li>a conversa canonica do agente sera alimentada com o mesmo thread externo</li></ul>`,
+  },
+  {
+    title: 'Exemplo pratico testavel: WhatsApp real',
+    content: '1. Cadastre ou edite uma conexao do tipo <b>WHATSAPP</b> nesta tela.<br/>2. Clique em <b>Connect</b>.<br/>3. Leia o QR Code com o telefone correspondente.<br/>4. Envie uma mensagem real do celular para essa instancia.<br/>5. Abra o modulo <b>Atendimento</b> e confirme o ticket/mensagem.<br/><br/><b>Resultado esperado:</b><ul><li>a mensagem aparece no ticket</li><li>o contato e criado ou atualizado</li><li>midias sao armazenadas quando houver payload suportado</li><li>a camada omnichannel recebe o espelho da mensagem com <code>externalThreadId</code> e <code>connectionId</code></li></ul><br/><b>Teste complementar:</b> responda pela tela de Atendimento e confirme que a conversa continua vinculada ao mesmo ticket.',
+  },
+  {
+    title: 'Checklist de validacao e problemas comuns',
+    content: '<ul><li><b>Conexao nao conecta:</b> revise URL/API Key da Evolution, status da conexao e versao configurada.</li><li><b>Ticket nao aparece:</b> confira <code>tenantId</code>, canal, e se o webhook foi enviado para <code>/api/communications/webhook</code>.</li><li><b>Contato duplicado:</b> padronize o valor de <code>from</code> e de <code>externalThreadId</code> nos testes.</li><li><b>E-mail/Instagram sem inbound nativo:</b> use o exemplo de webhook manual ate o adaptador do provedor ser ligado.</li><li><b>Teste repetido criando entradas extras:</b> altere <code>externalMessageId</code> ou mantenha IDs estaveis quando quiser validar deduplicacao por fluxo.</li></ul><br/><b>Dica final:</b> para auditoria operacional, sempre documente nos testes qual conexao foi usada, qual canal foi disparado e qual <code>externalThreadId</code> representava a conversa.',
+  },
+];

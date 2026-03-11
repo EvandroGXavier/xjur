@@ -1,5 +1,5 @@
 
-import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn, IsObject } from 'class-validator';
 
 export class IncomingCommunicationDto {
   @IsString()
@@ -15,10 +15,39 @@ export class IncomingCommunicationDto {
   content: string;
 
   @IsString()
-  @IsIn(['WHATSAPP', 'EMAIL', 'PHONE', 'WEBCHAT'])
+  @IsIn(['WHATSAPP', 'EMAIL', 'PHONE', 'WEBCHAT', 'INSTAGRAM', 'TELEGRAM'])
   channel: string;
 
   @IsString()
   @IsNotEmpty()
   tenantId: string; // In real webhook, this comes from API Key or URL param
+
+
+  @IsString()
+  @IsOptional()
+  connectionId?: string;
+
+  @IsString()
+  @IsOptional()
+  externalThreadId?: string;
+
+  @IsString()
+  @IsOptional()
+  externalMessageId?: string;
+
+  @IsString()
+  @IsOptional()
+  contentType?: string;
+
+  @IsString()
+  @IsOptional()
+  mediaUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  subject?: string;
+
+  @IsObject()
+  @IsOptional()
+  metadata?: Record<string, any>;
 }

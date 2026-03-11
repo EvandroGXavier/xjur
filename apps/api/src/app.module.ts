@@ -25,6 +25,7 @@ import { ProposalsModule } from './proposals/proposals.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { PaymentConditionsModule } from './payment-conditions/payment-conditions.module';
 import { SecurityModule } from './security/security.module';
+import { AgentModule } from './agent/agent.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SecurityModule } from './security/security.module';
     TagsModule,      // Etiquetas Transversais
     EvolutionModule, FiscalModule, StockModule, ProposalsModule, PurchasesModule, PaymentConditionsModule, // Integração Evolution API
     SecurityModule,
+    AgentModule,
   ],
   controllers: [AppController],
   providers: [

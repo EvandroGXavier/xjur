@@ -6,12 +6,14 @@ import { WhatsappGateway } from './whatsapp.gateway';
 import { PrismaService } from '../prisma.service';
 import { TicketsModule } from '../tickets/tickets.module';
 import { EvolutionModule } from '../evolution/evolution.module';
+import { AgentModule } from '../agent/agent.module';
 
 @Module({
   imports: [
     ConfigModule, 
     forwardRef(() => TicketsModule),
     forwardRef(() => EvolutionModule),
+    AgentModule,
   ],
   controllers: [WhatsappController],
   providers: [WhatsappService, WhatsappGateway, PrismaService],

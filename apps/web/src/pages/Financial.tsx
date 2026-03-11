@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import {
   DollarSign,
   Plus,
@@ -700,7 +700,11 @@ export function Financial() {
 
     setSubmitting(true);
     try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const tenantId = user.tenantId || 'default-tenant-id';
+
       const payload: any = {
+        tenantId,
         paymentDate: settleData.paymentDate,
         amountFinal: calcSettleFinalAmount,
       };
@@ -709,6 +713,7 @@ export function Financial() {
       if (settleData.monetaryCorrection) payload.monetaryCorrection = parseFloat(settleData.monetaryCorrection);
       if (settleData.discount) {
         payload.discount = parseFloat(settleData.discount);
+        payload.discountType = settleData.discountType;
       }
       payload.paymentMethod = settleData.paymentMethod;
       payload.bankAccountId = settleData.bankAccountId;
@@ -2521,7 +2526,7 @@ export function Financial() {
                 <div className="flex-1 flex justify-end gap-3">
                     <button
                       type="button"
-                      onClick={(e) => { e.preventDefault(); handleSubmit(e, false); }}
+                      onClick={(e) => { e.preventDefault(); handleSubmit(e); }}
                       disabled={submitting}
                       className={`px-6 py-2 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors shadow-lg shadow-indigo-500/20 ${
                         submitting ? 'opacity-50 cursor-not-allowed' : ''
@@ -2531,7 +2536,7 @@ export function Financial() {
                     </button>
                     <button
                       type="button"
-                      onClick={(e) => { e.preventDefault(); handleSubmit(e, true); }}
+                      onClick={(e) => { e.preventDefault(); handleSubmit(e); }}
                       disabled={submitting}
                       className={`px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors shadow-lg shadow-emerald-500/20 ${
                         submitting ? 'opacity-50 cursor-not-allowed' : ''

@@ -5,6 +5,7 @@ import { CreateMessageDto } from './dto/create-message.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { TicketsGateway } from './tickets.gateway';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { AgentService } from '../agent/agent.service';
 
 @Injectable()
 export class TicketsService {
@@ -46,6 +47,64 @@ export class TicketsService {
     }
 
     return Object.keys(metadata).length > 0 ? metadata : undefined;
+  }
+
+  private resolveAgentThreadId(ticket: any, metadata: Record<string, any>) {
+    if (typeof metadata.remoteJid === 'string' && metadata.remoteJid.trim().length > 0) {
+      return metadata.remoteJid.trim();
+    }
+
+    if (typeof metadata.externalThreadId === 'string' && metadata.externalThreadId.trim().length > 0) {
+      return metadata.externalThreadId.trim();
+    }
+
+    if (ticket.channel === 'WHATSAPP') {
+      return ticket.contact?.whatsapp || ticket.contact?.phone || 'ticket:' + ticket.id;
+    }
+
+    if (ticket.channel === 'EMAIL') {
+      return ticket.contact?.email || 'ticket:' + ticket.id;
+    }
+
+    return 'ticket:' + ticket.id;
+  }
+
+  private async captureTicketMessageForAgent(
+    ticket: any,
+    message: any,
+    direction: 'INBOUND' | 'OUTBOUND',
+    role: string,
+  ) {
+    const metadata = this.asMetadataObject(message.metadata);
+    const senderAddress =
+      metadata.remoteJid
+      || metadata.senderAddress
+      || (ticket.channel === 'EMAIL' ? ticket.contact?.email : null)
+      || ticket.contact?.whatsapp
+      || ticket.contact?.phone
+      || null;
+
+    await this.agentService.captureMessage({
+      tenantId: ticket.tenantId,
+      channel: ticket.channel,
+      ticketId: ticket.id,
+      ticketMessageId: message.id,
+      contactId: ticket.contactId,
+      connectionId: metadata.connectionId || null,
+      externalThreadId: this.resolveAgentThreadId(ticket, metadata),
+      externalMessageId: message.externalId || metadata.externalMessageId || null,
+      externalParticipantId: senderAddress,
+      title: ticket.title,
+      direction,
+      role,
+      content: message.content || '',
+      contentType: message.contentType || 'TEXT',
+      senderName: direction === 'INBOUND' ? ticket.contact?.name || null : null,
+      senderAddress,
+      mediaUrl: message.mediaUrl || null,
+      metadata,
+      createdAt: message.createdAt,
+    });
   }
 
   private async resolveWhatsappConnection(tenantId: string, ticket: { id: string }, preferredConnectionId?: string | null) {
@@ -116,6 +175,7 @@ export class TicketsService {
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
     private ticketsGateway: TicketsGateway,
+    private agentService: AgentService,
   ) {}
 
   async create(createTicketDto: CreateTicketDto, tenantId: string, userId: string) {
@@ -249,6 +309,8 @@ export class TicketsService {
       } as any,
     });
 
+    await this.captureTicketMessageForAgent(ticket, message, 'OUTBOUND', 'operator');
+
     await this.prisma.ticket.update({
       where: { id: ticket.id },
       data: {
@@ -303,7 +365,17 @@ export class TicketsService {
     return { success: true };
   }
 
-  async simulateIncomingMessage(id: string, content: string, tenantId: string) {
+  async simulateIncomingMessage(
+    id: string,
+    content: string,
+    tenantId: string,
+    options?: {
+      contentType?: string;
+      mediaUrl?: string | null;
+      externalId?: string | null;
+      metadata?: Record<string, any>;
+    },
+  ) {
     const ticket = await this.findOne(id, tenantId);
 
     const message = await this.prisma.ticketMessage.create({
@@ -312,7 +384,10 @@ export class TicketsService {
         senderType: 'CONTACT',
         senderId: ticket.contactId,
         content,
-        contentType: 'TEXT',
+        contentType: options?.contentType || 'TEXT',
+        mediaUrl: options?.mediaUrl || null,
+        externalId: options?.externalId || null,
+        metadata: options?.metadata,
       },
     });
 
@@ -324,6 +399,8 @@ export class TicketsService {
         waitingReply: true,
       } as any,
     });
+
+    await this.captureTicketMessageForAgent(ticket, message, 'INBOUND', 'contact');
 
     this.ticketsGateway.emitNewMessage(tenantId, ticket.id, message);
 

@@ -7,9 +7,10 @@ import { TicketsGateway } from './tickets.gateway';
 import { PrismaService } from '../prisma.service';
 import { ContactsModule } from '../contacts/contacts.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { AgentModule } from '../agent/agent.module';
 
 @Module({
-  imports: [ConfigModule, ContactsModule, forwardRef(() => WhatsappModule)],
+  imports: [ConfigModule, ContactsModule, AgentModule, forwardRef(() => WhatsappModule)],
   controllers: [TicketsController],
   providers: [TicketsService, TicketsGateway, PrismaService],
   exports: [TicketsService, TicketsGateway],
