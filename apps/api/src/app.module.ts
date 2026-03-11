@@ -1,41 +1,42 @@
-import { Module, Logger } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
-import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, HttpAdapterHost } from '@nestjs/core';
-import { AppController } from './app.controller';
-import { AuthModule } from './auth/auth.module';
-import { ContactsModule } from './contacts/contacts.module';
-import { WhatsappModule } from './whatsapp/whatsapp.module';
-import { FinancialModule } from './financial/financial.module';
-import { SaasModule } from './saas/saas.module';
-import { DocumentsModule } from './documents/documents.module';
-import { UsersModule } from './users/users.module';
-import { ProcessesModule } from './processes/processes.module';
-import { AppointmentsModule } from './appointments/appointments.module';
-import { TicketsModule } from './tickets/tickets.module';
-import { ProductsModule } from './products/products.module';
-import { CommunicationsModule } from './communications/communications.module';
-import { ConnectionsModule } from './connections/connections.module';
-import { TagsModule } from './tags/tags.module';
-import { EvolutionModule } from './evolution/evolution.module';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { FiscalModule } from './fiscal/fiscal.module';
-import { StockModule } from './stock/stock.module';
-import { ProposalsModule } from './proposals/proposals.module';
-import { PurchasesModule } from './purchases/purchases.module';
-import { PaymentConditionsModule } from './payment-conditions/payment-conditions.module';
-import { SecurityModule } from './security/security.module';
-import { AgentModule } from './agent/agent.module';
+import { Module, Logger } from "@nestjs/common";
+import { ScheduleModule } from "@nestjs/schedule";
+import { ConfigModule } from "@nestjs/config";
+import { APP_FILTER, HttpAdapterHost } from "@nestjs/core";
+import { AppController } from "./app.controller";
+import { AuthModule } from "./auth/auth.module";
+import { ContactsModule } from "./contacts/contacts.module";
+import { WhatsappModule } from "./whatsapp/whatsapp.module";
+import { FinancialModule } from "./financial/financial.module";
+import { SaasModule } from "./saas/saas.module";
+import { DocumentsModule } from "./documents/documents.module";
+import { UsersModule } from "./users/users.module";
+import { ProcessesModule } from "./processes/processes.module";
+import { AppointmentsModule } from "./appointments/appointments.module";
+import { TicketsModule } from "./tickets/tickets.module";
+import { ProductsModule } from "./products/products.module";
+import { CommunicationsModule } from "./communications/communications.module";
+import { ConnectionsModule } from "./connections/connections.module";
+import { TagsModule } from "./tags/tags.module";
+import { EvolutionModule } from "./evolution/evolution.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { FiscalModule } from "./fiscal/fiscal.module";
+import { StockModule } from "./stock/stock.module";
+import { ProposalsModule } from "./proposals/proposals.module";
+import { PurchasesModule } from "./purchases/purchases.module";
+import { PaymentConditionsModule } from "./payment-conditions/payment-conditions.module";
+import { SecurityModule } from "./security/security.module";
+import { AgentModule } from "./agent/agent.module";
+import { DrxClawModule } from "./drx-claw/drx-claw.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }), // Carrega .env globalmente
     ScheduleModule.forRoot(),
-    AuthModule,      // Reativa o sistema de Login
-    ContactsModule,  // Gestão de Clientes
-    WhatsappModule,  // Conexão Baileys
+    AuthModule, // Reativa o sistema de Login
+    ContactsModule, // Gestão de Clientes
+    WhatsappModule, // Conexão Baileys
     FinancialModule, // Módulo Financeiro
-    SaasModule,      // Controle de Assinaturas
+    SaasModule, // Controle de Assinaturas
     DocumentsModule, // Biblioteca de Documentos
     UsersModule,
     ProcessesModule, // Automator de Processos
@@ -44,10 +45,16 @@ import { AgentModule } from './agent/agent.module';
     ProductsModule, // Estoque e Produtos
     CommunicationsModule, // Webhook de entrada
     ConnectionsModule, // Gestão de Conexões (WhatsApp, Instagram, Email)
-    TagsModule,      // Etiquetas Transversais
-    EvolutionModule, FiscalModule, StockModule, ProposalsModule, PurchasesModule, PaymentConditionsModule, // Integração Evolution API
+    TagsModule, // Etiquetas Transversais
+    EvolutionModule,
+    FiscalModule,
+    StockModule,
+    ProposalsModule,
+    PurchasesModule,
+    PaymentConditionsModule, // Integração Evolution API
     SecurityModule,
     AgentModule,
+    DrxClawModule,
   ],
   controllers: [AppController],
   providers: [
