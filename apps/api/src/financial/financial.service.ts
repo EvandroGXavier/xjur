@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
 import { Decimal } from '@prisma/client/runtime/library';
 import { CreateFinancialRecordDto, CreateInstallmentsDto, PartialPaymentDto, SettleRecordDto, CreateTransactionSplitDto } from './dto/create-financial-record.dto';
@@ -30,11 +30,57 @@ export class FinancialService {
       select: {
         id: true, description: true, amount: true,
         installmentNumber: true, status: true, dueDate: true,
-        isResidual: true, amountPaid: true, paymentDate: true,
+        isResidual: true, amountFinal: true, amountPaid: true, paymentDate: true,
       },
       orderBy: { installmentNumber: 'asc' as const },
     },
   };
+
+  private buildRootRecordWhere(tenantId: string) {
+    return {
+      tenantId,
+      parentId: null,
+    };
+  }
+
+  private buildEffectiveRecordWhere(tenantId: string) {
+    return {
+      tenantId,
+      NOT: {
+        children: { some: {} },
+      },
+    };
+  }
+
+  private normalizeRecordTotals<
+    T extends {
+      amount?: any;
+      amountFinal?: any;
+      children?: Array<{ amount?: any; amountFinal?: any }>;
+    },
+  >(record: T): T {
+    if (!Array.isArray(record.children) || record.children.length === 0) {
+      return record;
+    }
+
+    const childrenAmount = Math.round(
+      record.children.reduce((sum, child) => sum + Number(child.amount ?? 0), 0) * 100,
+    ) / 100;
+    const childrenAmountFinal = Math.round(
+      record.children.reduce((sum, child) => sum + Number(child.amountFinal ?? child.amount ?? 0), 0) * 100,
+    ) / 100;
+
+    return {
+      ...record,
+      amount: Number(record.amount ?? 0) > 0 ? record.amount : childrenAmount,
+      amountFinal: Number(record.amountFinal ?? 0) > 0 ? record.amountFinal : childrenAmountFinal,
+    };
+  }
+
+  private sanitizeAttachmentName(fileName: string) {
+    const path = require('path');
+    return path.basename(fileName).replace(/[^\w.\-() ]+/g, '_');
+  }
 
   // ==================== UTILITÁRIOS DE CÁLCULO ====================
 
@@ -71,7 +117,33 @@ export class FinancialService {
 
   getAttachmentPath(fileName: string) {
     const path = require('path');
-    return path.join(process.cwd(), 'uploads', 'financial', fileName);
+    return path.join(process.cwd(), 'uploads', 'financial', this.sanitizeAttachmentName(fileName));
+  }
+
+  async getAttachmentForRecord(recordId: string, tenantId: string, fileName: string) {
+    const safeFileName = this.sanitizeAttachmentName(fileName);
+    const record = await this.prisma.financialRecord.findFirst({
+      where: { id: recordId, tenantId },
+      select: { metadata: true },
+    });
+
+    if (!record) {
+      throw new NotFoundException('Registro financeiro nao encontrado');
+    }
+
+    const metadata = record.metadata as any;
+    const attachments = Array.isArray(metadata?.attachments) ? metadata.attachments : [];
+    const attachment = attachments.find((item: any) => item?.fileName === safeFileName);
+
+    if (!attachment) {
+      throw new NotFoundException('Anexo financeiro nao encontrado');
+    }
+
+    return {
+      ...attachment,
+      fileName: safeFileName,
+      filePath: this.getAttachmentPath(safeFileName),
+    };
   }
 
   private async processAttachments(files?: any[], existingMetadata?: any): Promise<any> {
@@ -88,12 +160,13 @@ export class FinancialService {
       }
 
       for (const file of files) {
-          const fileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${file.originalname}`;
-          const filePath = path.join(uploadDir, fileName);
+        const originalName = this.sanitizeAttachmentName(file.originalname || 'anexo');
+        const fileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${originalName}`;
+        const filePath = path.join(uploadDir, fileName);
           fs.writeFileSync(filePath, file.buffer);
 
           newAttachments.push({
-              originalName: file.originalname,
+              originalName: file.originalname || originalName,
               fileName: fileName,
               path: `/uploads/financial/${fileName}`,
               mimeType: file.mimetype,
@@ -145,8 +218,8 @@ export class FinancialService {
           categoryId: dto.categoryId,
           paymentConditionId: dto.paymentConditionId,
           description: dto.description,
-          amount: 0, // O valor total é distribuído nas parcelas filhas
-          amountFinal: 0,
+          amount: dto.amount,
+          amountFinal,
           dueDate: new Date(dto.installments[0].dueDate),
           paymentDate: dto.paymentDate ? new Date(dto.paymentDate) : null,
           status: dto.status || 'PENDING',
@@ -369,29 +442,28 @@ export class FinancialService {
     parentId?: string;
     showInstallments?: boolean;
   }) {
-    const where: any = { tenantId };
+    const where: any = filters?.showInstallments || filters?.parentId
+      ? { tenantId }
+      : this.buildRootRecordWhere(tenantId);
 
     if (filters?.type) where.type = filters.type;
     if (filters?.status) where.status = filters.status;
     if (filters?.category) where.category = filters.category;
     if (filters?.parentId) where.parentId = filters.parentId;
 
-    // Por padrão, mostrar apenas registros que não são "containers" (quem tem filhos é agrupador)
-    if (!filters?.showInstallments && !filters?.parentId) {
-      where.children = { none: {} };
-    }
-    
     if (filters?.startDate || filters?.endDate) {
       where.dueDate = {};
       if (filters.startDate) where.dueDate.gte = new Date(filters.startDate);
       if (filters.endDate) where.dueDate.lte = new Date(filters.endDate);
     }
 
-    return this.prisma.financialRecord.findMany({
+    const records = await this.prisma.financialRecord.findMany({
       where,
       include: this.defaultRecordInclude,
-      orderBy: { dueDate: 'desc' },
+      orderBy: { dueDate: "desc" },
     });
+
+    return records.map((record) => this.normalizeRecordTotals(record));
   }
 
   async findOneFinancialRecord(id: string, tenantId: string) {
@@ -404,7 +476,7 @@ export class FinancialService {
       throw new NotFoundException('Registro financeiro não encontrado');
     }
 
-    return record;
+    return this.normalizeRecordTotals(record);
   }
 
   async updateFinancialRecord(id: string, tenantId: string, dto: UpdateFinancialRecordDto, files?: any[]) {
@@ -540,9 +612,9 @@ export class FinancialService {
         })),
       });
 
-      // O registro mãe fica com valor 0 para não duplicar no total
-      data.amount = 0;
-      data.amountFinal = 0;
+      // O registro-mãe mantém o valor total; relatórios ignoram containers para não duplicar.
+      data.amount = roundedAmount;
+      data.amountFinal = this.calculateFinalAmount(roundedAmount, fine, interest, monetaryCorrection, discount, discountType);
       data.totalInstallments = totalInst;
     }
 
@@ -778,7 +850,7 @@ export class FinancialService {
    * Liquida um registro financeiro calculando o valor final
    * com multa, juros, correção e descontos.
    */
-  async settleRecord(recordId: string, dto: SettleRecordDto) {
+  async settleRecord(recordId: string, dto: SettleRecordDto, files?: any[]) {
     const record = await this.findOneFinancialRecord(recordId, dto.tenantId);
 
     if (record.status === 'PAID') {
@@ -797,6 +869,7 @@ export class FinancialService {
       dto.discount,
       dto.discountType,
     );
+    const metadata = await this.processAttachments(files, (record as any).metadata);
 
     return this.prisma.financialRecord.update({
       where: { id: recordId },
@@ -812,9 +885,10 @@ export class FinancialService {
         amountPaid: amountFinal,
         paymentMethod: dto.paymentMethod,
         bankAccountId: dto.bankAccountId,
+        metadata,
         notes: dto.notes
-          ? `${record.notes || ''} | Liquidado: ${dto.notes}`
-          : `${record.notes || ''} | Liquidado em ${dto.paymentDate}`,
+          ? `${record.notes || ""} | Liquidado: ${dto.notes}`
+          : `${record.notes || ""} | Liquidado em ${dto.paymentDate}`,
       },
       include: this.defaultRecordInclude,
     });
@@ -1172,7 +1246,7 @@ export class FinancialService {
   // ==================== DASHBOARD & REPORTS ====================
 
   async getDashboard(tenantId: string, startDate?: string, endDate?: string) {
-    const where: any = { tenantId };
+    const where: any = this.buildEffectiveRecordWhere(tenantId);
     
     if (startDate || endDate) {
       where.dueDate = {};
@@ -1182,38 +1256,38 @@ export class FinancialService {
 
     const records = await this.prisma.financialRecord.findMany({
       where,
+      orderBy: { dueDate: "desc" },
     });
 
     const totalIncome = records
-      .filter(r => r.type === 'INCOME' && r.status === 'PAID')
+      .filter(r => r.type === "INCOME" && r.status === "PAID")
       .reduce((sum, r) => sum + Number(r.amountPaid || r.amountFinal || r.amount), 0);
 
     const totalExpense = records
-      .filter(r => r.type === 'EXPENSE' && r.status === 'PAID')
+      .filter(r => r.type === "EXPENSE" && r.status === "PAID")
       .reduce((sum, r) => sum + Number(r.amountPaid || r.amountFinal || r.amount), 0);
 
     const pendingIncome = records
-      .filter(r => r.type === 'INCOME' && (r.status === 'PENDING' || r.status === 'PARTIAL'))
+      .filter(r => r.type === "INCOME" && (r.status === "PENDING" || r.status === "PARTIAL"))
       .reduce((sum, r) => sum + Number(r.amountFinal || r.amount), 0);
 
     const pendingExpense = records
-      .filter(r => r.type === 'EXPENSE' && (r.status === 'PENDING' || r.status === 'PARTIAL'))
+      .filter(r => r.type === "EXPENSE" && (r.status === "PENDING" || r.status === "PARTIAL"))
       .reduce((sum, r) => sum + Number(r.amountFinal || r.amount), 0);
 
     const overdueRecords = records.filter(r => 
-      (r.status === 'PENDING' || r.status === 'PARTIAL') && new Date(r.dueDate) < new Date()
+      (r.status === "PENDING" || r.status === "PARTIAL") && new Date(r.dueDate) < new Date()
     );
 
-    const partialRecords = records.filter(r => r.status === 'PARTIAL');
+    const partialRecords = records.filter(r => r.status === "PARTIAL");
 
-    // Group by category
     const byCategory = records.reduce((acc, record) => {
-      const cat = record.category || 'Sem categoria';
+      const cat = record.category || "Sem categoria";
       if (!acc[cat]) {
         acc[cat] = { income: 0, expense: 0 };
       }
-      if (record.status === 'PAID') {
-        if (record.type === 'INCOME') {
+      if (record.status === "PAID") {
+        if (record.type === "INCOME") {
           acc[cat].income += Number(record.amountPaid || record.amountFinal || record.amount);
         } else {
           acc[cat].expense += Number(record.amountPaid || record.amountFinal || record.amount);
@@ -1222,14 +1296,13 @@ export class FinancialService {
       return acc;
     }, {} as Record<string, { income: number; expense: number }>);
 
-    // Group by month
     const byMonth = records.reduce((acc, record) => {
-      const month = new Date(record.dueDate).toISOString().slice(0, 7); // YYYY-MM
+      const month = new Date(record.dueDate).toISOString().slice(0, 7);
       if (!acc[month]) {
         acc[month] = { income: 0, expense: 0 };
       }
-      if (record.status === 'PAID') {
-        if (record.type === 'INCOME') {
+      if (record.status === "PAID") {
+        if (record.type === "INCOME") {
           acc[month].income += Number(record.amountPaid || record.amountFinal || record.amount);
         } else {
           acc[month].expense += Number(record.amountPaid || record.amountFinal || record.amount);
@@ -1264,23 +1337,27 @@ export class FinancialService {
 
   async getProcessBalance(processId: string, tenantId: string) {
     const records = await this.prisma.financialRecord.findMany({
-      where: { processId, tenantId },
+      where: {
+        ...this.buildEffectiveRecordWhere(tenantId),
+        processId,
+      },
+      orderBy: { dueDate: "desc" },
     });
 
     const totalIncome = records
-      .filter(r => r.type === 'INCOME')
+      .filter(r => r.type === "INCOME")
       .reduce((sum, r) => sum + Number(r.amountFinal || r.amount), 0);
 
     const totalExpense = records
-      .filter(r => r.type === 'EXPENSE')
+      .filter(r => r.type === "EXPENSE")
       .reduce((sum, r) => sum + Number(r.amountFinal || r.amount), 0);
 
     const paid = records
-      .filter(r => r.status === 'PAID')
+      .filter(r => r.status === "PAID")
       .reduce((sum, r) => sum + Number(r.amountPaid || r.amountFinal || r.amount), 0);
 
     const pending = records
-      .filter(r => r.status === 'PENDING' || r.status === 'PARTIAL')
+      .filter(r => r.status === "PENDING" || r.status === "PARTIAL")
       .reduce((sum, r) => sum + Number(r.amountFinal || r.amount), 0);
 
     return {
@@ -1292,4 +1369,5 @@ export class FinancialService {
       records,
     };
   }
+
 }

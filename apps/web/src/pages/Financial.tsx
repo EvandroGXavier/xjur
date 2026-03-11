@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import {
   DollarSign,
   Plus,
@@ -90,7 +90,7 @@ interface FinancialRecord {
   financialCategory?: FinancialCategory;
   parties?: {
     contactId: string;
-    role: 'CREDITOR' | 'DEBTOR';
+    role: string;
     amount?: number;
     contact?: Contact;
   }[];
@@ -101,7 +101,7 @@ interface FinancialRecord {
 interface TransactionSplit {
   id?: string;
   contactId: string;
-  role: 'CREDITOR' | 'DEBTOR';
+  role: string;
   amount: number;
   percentage?: number;
   description?: string;
@@ -166,6 +166,24 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
+const PARTY_ROLE_META: Record<string, { label: string; short: string; className: string; order: number }> = {
+  CREDITOR: { label: 'Credor', short: 'C', className: 'bg-emerald-500/15 text-emerald-400', order: 1 },
+  DEBTOR: { label: 'Devedor', short: 'D', className: 'bg-red-500/15 text-red-400', order: 2 },
+  PAYER: { label: 'Pagador', short: 'P', className: 'bg-blue-500/15 text-blue-400', order: 3 },
+  BENEFICIARY: { label: 'Beneficiario', short: 'B', className: 'bg-violet-500/15 text-violet-400', order: 4 },
+  GUARANTOR: { label: 'Fiador', short: 'F', className: 'bg-amber-500/15 text-amber-400', order: 5 },
+  WITNESS: { label: 'Testemunha', short: 'T', className: 'bg-slate-500/15 text-slate-300', order: 6 },
+};
+
+const getPartyRoleMeta = (role: string) => {
+  return PARTY_ROLE_META[role] || {
+    label: role || 'Parte',
+    short: role?.slice(0, 1)?.toUpperCase() || '?',
+    className: 'bg-slate-500/15 text-slate-300',
+    order: 99,
+  };
+};
+
 export function Financial() {
   const navigate = useNavigate();
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
@@ -209,6 +227,7 @@ export function Financial() {
   const [showConditionSubModal, setShowConditionSubModal] = useState(false);
   const [pastedImages, setPastedImages] = useState<{ url: string; file: File }[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [savedAttachmentUrls, setSavedAttachmentUrls] = useState<Record<string, string>>({});
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const [filters, setFilters] = useState({
@@ -218,6 +237,51 @@ export function Financial() {
   });
 
   const [activeCardFilter, setActiveCardFilter] = useState<'ALL' | 'INCOME_ALL' | 'INCOME_PENDING' | 'INCOME_OVERDUE' | 'EXPENSE_ALL' | 'EXPENSE_PENDING' | 'EXPENSE_OVERDUE'>('ALL');
+
+  const revokeSavedAttachmentUrls = useCallback(() => {
+    setSavedAttachmentUrls((current) => {
+      Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+      return {};
+    });
+  }, []);
+
+  const preloadSavedAttachments = useCallback(async (record: FinancialRecord) => {
+    const savedAttachments = record.metadata?.attachments;
+
+    revokeSavedAttachmentUrls();
+
+    if (!Array.isArray(savedAttachments) || savedAttachments.length === 0) {
+      return;
+    }
+
+    try {
+      const entries = await Promise.all(
+        savedAttachments.map(async (att: any) => {
+          const response = await api.get(
+            '/financial/records/' + record.id + '/attachments/' + encodeURIComponent(att.fileName),
+            { responseType: 'blob' },
+          );
+
+          return [att.fileName, URL.createObjectURL(response.data)] as const;
+        }),
+      );
+
+      setSavedAttachmentUrls(Object.fromEntries(entries));
+    } catch (error) {
+      console.error('Erro ao carregar anexos salvos:', error);
+      toast.error('Erro ao carregar anexos salvos');
+    }
+  }, [revokeSavedAttachmentUrls]);
+
+  useEffect(() => {
+    if (!showModal) {
+      revokeSavedAttachmentUrls();
+    }
+  }, [showModal, revokeSavedAttachmentUrls]);
+
+  useEffect(() => () => {
+    revokeSavedAttachmentUrls();
+  }, [revokeSavedAttachmentUrls]);
 
   const [tagFilters, setTagFilters] = useState<{ included: string[], excluded: string[] }>({ included: [], excluded: [] });
   const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
@@ -247,8 +311,8 @@ export function Financial() {
     origin: 'MANUAL',
     // Seções colapsáveis
     showCharges: false,
-    parties: [] as { contactId: string; role: 'CREDITOR' | 'DEBTOR'; amount?: number }[],
-    splits: [] as { contactId: string; role: 'CREDITOR' | 'DEBTOR'; amount: number; percentage?: number; description?: string }[],
+    parties: [] as { contactId: string; role: string; amount?: number }[],
+    splits: [] as { contactId: string; role: string; amount: number; percentage?: number; description?: string }[],
   });
 
   const [installmentData, setInstallmentData] = useState({
@@ -805,6 +869,7 @@ export function Financial() {
       });
       setInstallments([]);
       setNxInput('');
+      await preloadSavedAttachments(record);
     } else {
       setEditingRecord(null);
       setFormData({
@@ -834,6 +899,7 @@ export function Financial() {
       });
       setInstallments([]);
       setNxInput('');
+      revokeSavedAttachmentUrls();
     }
     setPastedImages([]);
     setAttachments([]);
@@ -1612,49 +1678,46 @@ export function Financial() {
                     >
                     <td className="px-5 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-col gap-1">
-                        {/* Credor */}
-                        {(() => {
-                          const creditor = record.parties?.find(p => p.role === 'CREDITOR');
-                          return creditor?.contact ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 shrink-0">C</span>
-                              <span 
-                                className="text-xs text-slate-200 hover:text-indigo-400 cursor-pointer transition-colors truncate max-w-[140px]"
-                                onClick={() => navigate(`/contacts/${creditor.contact!.id}`)}
-                                title={creditor.contact.name}
-                              >
-                                {creditor.contact.name}
-                              </span>
-                            </div>
-                          ) : null;
-                        })()}
-                        {/* Devedor */}
-                        {(() => {
-                          const debtor = record.parties?.find(p => p.role === 'DEBTOR');
-                          return debtor?.contact ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-500/15 text-red-400 shrink-0">D</span>
-                              <span 
-                                className="text-xs text-slate-200 hover:text-indigo-400 cursor-pointer transition-colors truncate max-w-[140px]"
-                                onClick={() => navigate(`/contacts/${debtor.contact!.id}`)}
-                                title={debtor.contact.name}
-                              >
-                                {debtor.contact.name}
-                              </span>
-                            </div>
-                          ) : null;
-                        })()}
-                        {/* Conta/Pagador */}
+                        {record.parties
+                          ?.filter((party) => party.contact)
+                          .sort((a, b) => getPartyRoleMeta(a.role).order - getPartyRoleMeta(b.role).order)
+                          .map((party) => {
+                            const roleMeta = getPartyRoleMeta(party.role);
+                    
+                            return (
+                              <div key={`${record.id}-${party.contactId}-${party.role}`} className="flex items-center gap-1.5">
+                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${roleMeta.className}`}>
+                                  {roleMeta.short}
+                                </span>
+                                <span
+                                  className="text-xs text-slate-200 hover:text-indigo-400 cursor-pointer transition-colors truncate max-w-[140px]"
+                                  onClick={() => navigate(`/contacts/${party.contact!.id}`)}
+                                  title={`${roleMeta.label}: ${party.contact!.name}`}
+                                >
+                                  {party.contact!.name}
+                                </span>
+                                {party.amount && (
+                                  <span className="text-[10px] text-slate-500 shrink-0">
+                                    {formatCurrency(Number(party.amount))}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                    
                         {record.bankAccount && (
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 shrink-0">P</span>
-                            <span className="text-[10px] text-slate-400 truncate max-w-[140px] flex items-center gap-1">
+                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 shrink-0">BC</span>
+                            <span
+                              className="text-[10px] text-slate-400 truncate max-w-[140px] flex items-center gap-1"
+                              title={record.bankAccount.bankName}
+                            >
                               <Building2 size={10} />
                               {record.bankAccount.bankName}
                             </span>
                           </div>
                         )}
-                        {/* Se não tem nenhuma parte */}
+                    
                         {(!record.parties || record.parties.length === 0) && !record.bankAccount && (
                           <span className="text-[10px] text-slate-600 italic">Sem partes</span>
                         )}
@@ -2392,21 +2455,29 @@ export function Financial() {
                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Anexos Salvos</h4>
                     <div className="flex flex-col gap-1.5">
                       {editingRecord!.metadata.attachments.map((att: any, attIdx: number) => {
-                        const docUrl = `${api.defaults.baseURL || 'http://localhost:3000/api'}/financial/records/attachments/${encodeURIComponent(att.fileName)}`;
+                        const docUrl = savedAttachmentUrls[att.fileName];
+
                         return (
-                          <div key={`saved-${attIdx}`} className="relative group/doc flex bg-slate-800/50 hover:bg-slate-800 rounded p-1.5 transition-colors">
-                            <AttachmentPreview url={docUrl} title={att.originalName}>
-                              <a 
-                                href={docUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 hover:underline group/link py-0.5"
-                                title={att.originalName}
-                              >
-                                <FileText size={14} className="text-blue-500 group-hover/link:text-blue-400" />
-                                <span className="truncate max-w-[300px]">{att.originalName}</span>
-                              </a>
-                            </AttachmentPreview>
+                          <div key={'saved-' + attIdx} className="relative group/doc flex bg-slate-800/50 hover:bg-slate-800 rounded p-1.5 transition-colors">
+                            {docUrl ? (
+                              <AttachmentPreview url={docUrl} title={att.originalName}>
+                                <a
+                                  href={docUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 hover:underline group/link py-0.5"
+                                  title={att.originalName}
+                                >
+                                  <FileText size={14} className="text-blue-500 group-hover/link:text-blue-400" />
+                                  <span className="truncate max-w-[300px]">{att.originalName}</span>
+                                </a>
+                              </AttachmentPreview>
+                            ) : (
+                              <div className="flex items-center gap-1.5 py-0.5 text-xs text-slate-500">
+                                <FileText size={14} className="text-slate-600" />
+                                <span className="truncate max-w-[300px]">Carregando {att.originalName}...</span>
+                              </div>
+                            )}
                           </div>
                         );
                       })}

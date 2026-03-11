@@ -1,14 +1,34 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UsePipes, ValidationPipe, UseGuards, UseInterceptors, UploadedFiles, Res } from '@nestjs/common';
+﻿import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Res,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
-import { Public } from '../auth/public.decorator';
-import { FinancialService } from './financial.service';
-import { CreateFinancialRecordDto, CreateInstallmentsDto, PartialPaymentDto, SettleRecordDto, CreateTransactionSplitDto } from './dto/create-financial-record.dto';
-import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
-import { CreateBankAccountDto } from './dto/create-bank-account.dto';
-import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
+import { CreateBankAccountDto } from './dto/create-bank-account.dto';
+import {
+  CreateFinancialRecordDto,
+  CreateInstallmentsDto,
+  CreateTransactionSplitDto,
+  PartialPaymentDto,
+  SettleRecordDto,
+} from './dto/create-financial-record.dto';
+import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
+import { UpdateFinancialRecordDto } from './dto/update-financial-record.dto';
+import { FinancialService } from './financial.service';
 
 @Controller('financial')
 @UseGuards(JwtAuthGuard)
@@ -20,8 +40,8 @@ export class FinancialController {
   @Post('records')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   createFinancialRecord(
-    @Body() dto: CreateFinancialRecordDto, 
-    @CurrentUser() user: CurrentUserData
+    @Body() dto: CreateFinancialRecordDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.financialService.createFinancialRecord({ ...dto, tenantId: user.tenantId });
   }
@@ -48,32 +68,29 @@ export class FinancialController {
     });
   }
 
-  @Public()
-  @Get('records/attachments/:filename')
-  async downloadAttachment(@Param('filename') filename: string, @Res() res: Response) {
-      const filePath = this.financialService.getAttachmentPath(filename);
-      const fs = require('fs');
-      if (!fs.existsSync(filePath)) {
-          console.error(`File request failed. Path not found: ${filePath}`);
-          return res.status(404).json({ message: 'Arquivo não encontrado' });
-      }
-      
-      // Allow iframe
-      res.setHeader('X-Frame-Options', 'ALLOWALL'); 
-      res.setHeader('Content-Disposition', 'inline');
-      // CSP to allow embedding
-      res.setHeader('Content-Security-Policy', "frame-ancestors 'self' http://localhost:* https://localhost:* *");
+  @Get('records/:id/attachments/:filename')
+  async downloadAttachment(
+    @Param('id') id: string,
+    @Param('filename') filename: string,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+  ) {
+    const attachment = await this.financialService.getAttachmentForRecord(id, user.tenantId, filename);
+    const fs = require('fs');
 
-      // Basic mime type detection
-      const ext = filename.split('.').pop().toLowerCase();
-      let mimeType = 'application/octet-stream';
-      if (ext === 'pdf') mimeType = 'application/pdf';
-      if (['jpg', 'jpeg'].includes(ext)) mimeType = 'image/jpeg';
-      if (['png'].includes(ext)) mimeType = 'image/png';
-      
-      res.setHeader('Content-Type', mimeType);
+    if (!fs.existsSync(attachment.filePath)) {
+      console.error(`File request failed. Path not found: ${attachment.filePath}`);
+      return res.status(404).json({ message: 'Arquivo não encontrado' });
+    }
 
-      return res.sendFile(filePath);
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${attachment.originalName || attachment.fileName}"`,
+    );
+    res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
+
+    return res.sendFile(attachment.filePath);
   }
 
   @Get('records/:id')
@@ -89,7 +106,7 @@ export class FinancialController {
   updateFinancialRecord(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserData,
-    @Body() dto: UpdateFinancialRecordDto
+    @Body() dto: UpdateFinancialRecordDto,
   ) {
     return this.financialService.updateFinancialRecord(id, user.tenantId, dto);
   }
@@ -99,7 +116,7 @@ export class FinancialController {
   async uploadAttachments(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserData,
-    @UploadedFiles() files: Array<any>
+    @UploadedFiles() files: Array<any>,
   ) {
     return this.financialService.uploadAttachments(id, user.tenantId, files);
   }
@@ -135,13 +152,15 @@ export class FinancialController {
   // ==================== LIQUIDAÇÃO COM ENCARGOS ====================
 
   @Post('records/:id/settle')
+  @UseInterceptors(FilesInterceptor('attachments'))
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   settleRecord(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserData,
     @Body() dto: SettleRecordDto,
+    @UploadedFiles() files: Array<any>,
   ) {
-    return this.financialService.settleRecord(id, { ...dto, tenantId: user.tenantId });
+    return this.financialService.settleRecord(id, { ...dto, tenantId: user.tenantId }, files);
   }
 
   // ==================== RATEIO (SPLITS) ====================
@@ -187,7 +206,16 @@ export class FinancialController {
   addPartyWithQuickContact(
     @Param('id') recordId: string,
     @CurrentUser() user: CurrentUserData,
-    @Body() body: { name: string; document?: string; phone?: string; email?: string; personType?: string; role: string; amount?: number },
+    @Body()
+    body: {
+      name: string;
+      document?: string;
+      phone?: string;
+      email?: string;
+      personType?: string;
+      role: string;
+      amount?: number;
+    },
   ) {
     return this.financialService.addPartyWithQuickContact(recordId, user.tenantId, body);
   }
