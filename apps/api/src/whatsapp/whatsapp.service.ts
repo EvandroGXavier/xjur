@@ -718,13 +718,19 @@ export class WhatsappService implements OnModuleInit {
         }
       });
 
+      let updateData: any = {
+        updatedAt: new Date(),
+        lastMessageAt: new Date(),
+        waitingReply: !isFromMe
+      };
+
+      if (!isFromMe && ticket.status === 'RESOLVED') {
+        updateData.status = 'WAITING';
+      }
+
       await this.prisma.ticket.update({
         where: { id: ticket.id },
-        data: {
-          updatedAt: new Date(),
-          lastMessageAt: new Date(),
-          waitingReply: !isFromMe
-        }
+        data: updateData
       });
 
       const fullTicket = await this.prisma.ticket.findUnique({
@@ -748,8 +754,9 @@ export class WhatsappService implements OnModuleInit {
 
     const statusKey = data.status;
     let newStatus = 'SENT';
-    if (statusKey === 3 || statusKey === 4) newStatus = 'READ';
-    else if (statusKey === 2) newStatus = 'DELIVERED';
+    if (statusKey === 4 || statusKey === 5) newStatus = 'READ';
+    else if (statusKey === 3) newStatus = 'DELIVERED';
+    else if (statusKey === 2) newStatus = 'SENT';
     else return;
 
     try {
