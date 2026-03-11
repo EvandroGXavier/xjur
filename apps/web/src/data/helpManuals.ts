@@ -109,23 +109,38 @@ export const helpFinancial: HelpSection[] = [
 
 export const helpMicrosoft365: HelpSection[] = [
   {
-    title: 'Integração OneDrive / SharePoint (Visão Geral)',
-    content: 'A integração com o <b>Microsoft 365</b> permite que os arquivos e documentos (PDFs, petições geradas) de processos e contatos sejam salvos automaticamente na nuvem da Microsoft.',
+    title: 'Visao Geral da Integracao Microsoft 365',
+    content: 'A integracao com o <b>Microsoft 365</b> permite autenticar no Graph, localizar uma <b>biblioteca/pasta raiz</b> do OneDrive ou SharePoint e criar subpastas de processos e documentos automaticamente.<br/><br/><b>Campos principais:</b><ul><li><b>Tenant ID:</b> diretorio Azure/Entra da empresa.</li><li><b>Client ID:</b> identificador da aplicacao registrada no Azure.</li><li><b>Client Secret:</b> segredo ativo da aplicacao.</li><li><b>Drive ID / Biblioteca:</b> identificador da biblioteca onde fica a pasta raiz.</li><li><b>ID da Pasta Raiz:</b> pasta mae onde o sistema criara as subpastas.</li><li><b>Observacoes:</b> instrucoes operacionais, responsaveis, ambiente e cuidados.</li></ul>'
   },
   {
-    title: 'Como Configurar (Azure Portal)',
-    content: '1. Acesse o portal do <b>Microsoft Entra ID (Azure AD)</b>.<br/>2. Vá em `Registros de Aplicativo` e crie um novo.<br/>3. Anote o <b>Client ID</b> e o <b>Tenant ID</b>.<br/>4. Crie um <b>Segredo do Cliente (Client Secret)</b> e copie o <i>Valor</i>.<br/>5. Conceda permissões de API tipo `Application` (Files.ReadWrite.All e Sites.ReadWrite.All) com <b>consentimento do administrador</b>.',
+    title: 'Passo 1: Registrar o App no Azure',
+    content: '1. Acesse o <b>Microsoft Entra ID</b>.<br/>2. Entre em <b>App registrations</b> e clique em <b>New registration</b>.<br/>3. Defina um nome claro, como <i>DRX Office 365 - Empresa X</i>.<br/>4. Copie o <b>Application (client) ID</b> e o <b>Directory (tenant) ID</b>.<br/>5. Em <b>Certificates & secrets</b>, crie um novo segredo e copie o <b>Value</b> imediatamente.'
   },
   {
-    title: 'ID da Pasta Raiz (Folder ID)',
-    content: 'O sistema criará as pastas dos processos dentro de uma pasta base do seu OneDrive. Para pegar o ID dessa pasta:<br/>1. Acesse a pasta raiz pelo navegador.<br/>2. Na URL, procure pela sequência após <code>id=</code> (frequentemente contendo <i>%252</i> que pode precisar ser decodificada, ou apenas copie a partir de algo como b! ou 01...).<br/>3. Cole essa sequência no campo <b>ID da Pasta Raiz no OneDrive</b>.',
+    title: 'Passo 2: Permissoes Necessarias',
+    content: 'Em <b>API permissions</b>, adicione permissoes do tipo <b>Application</b> e conceda <b>Admin consent</b>.<br/><br/><b>Minimo recomendado para este fluxo:</b><ul><li><code>Files.ReadWrite.All</code></li><li><code>Sites.ReadWrite.All</code></li><li><code>User.Read.All</code></li></ul><br/><b>Por que User.Read.All?</b> Ele permite a descoberta automatica do Drive quando voce informar apenas a pasta raiz de um OneDrive corporativo.'
   },
   {
-    title: 'Mecânica das Pastas',
-    content: '<ul><li><b>Processos:</b> É criada a pasta "Nome do Cliente > Número do Processo". Os documentos adicionados via painel do processo são carregados fisicamente no OneDrive.</li><li>Se você alterar o nome/número do processo na plataforma, o OneDrive será notificado para <b>renomear a pasta</b> correspondente automaticamente.</li></ul>',
-  }
+    title: 'Passo 3: Como Obter Drive ID e Pasta Raiz',
+    content: 'O sistema funciona melhor quando voce informa <b>Drive ID</b> e <b>ID da Pasta Raiz</b>.<br/><br/><b>Opcao recomendada:</b> use o Graph Explorer ou uma chamada autenticada para localizar a biblioteca e a pasta.<br/><br/><b>Dica pratica:</b><ul><li>Links iniciados com <code>b!</code> normalmente representam um <b>Drive ID</b>.</li><li>IDs iniciados com algo parecido com <code>01...</code> normalmente representam um <b>item/pasta</b>.</li></ul><br/>Se voce preencher apenas a pasta raiz, o sistema tentara descobrir o Drive automaticamente durante o teste.'
+  },
+  {
+    title: 'Passo 4: Observacoes Operacionais',
+    content: 'Use o campo <b>Observacoes da Integracao</b> para registrar tudo que ajuda o admin a operar sem depender de memoria:<ul><li>qual conta Microsoft foi usada</li><li>se o ambiente e homologacao ou producao</li><li>qual pasta foi aprovada pelo TI</li><li>regras para criacao de pastas</li><li>ultimo teste executado e seu resultado</li></ul><br/>Esse campo tambem e ideal para documentar restricoes, links internos e orientacoes da equipe.'
+  },
+  {
+    title: 'Passo 5: Como Testar na Tela',
+    content: '1. Preencha os campos da integracao.<br/>2. Clique em <b>Testar Integracao</b>.<br/>3. O sistema valida a autenticacao no Azure.<br/>4. Depois tenta localizar a biblioteca/pasta configurada.<br/>5. Por fim cria uma <b>pasta temporaria</b> e remove em seguida.<br/><br/><b>Se o teste passar:</b> a integracao esta pronta para uso basico.<br/><b>Se falhar:</b> o painel mostrara o ponto exato da falha e recomendacoes objetivas.'
+  },
+  {
+    title: 'Comportamento Esperado da Criacao de Pastas',
+    content: 'Quando a integracao estiver valida, os processos podem receber pastas e subpastas dentro da pasta raiz configurada. O teste nao cria lixo permanente: ele cria uma pasta temporaria para prova de escrita e remove em seguida.<br/><br/><b>Importante:</b> se voce alterar a biblioteca ou a pasta raiz, execute o teste novamente antes de liberar o uso para a equipe.'
+  },
+  {
+    title: 'Problemas Comuns e Solucao Rapida',
+    content: '<ul><li><b>Falha ao autenticar:</b> revise Tenant ID, Client ID, Client Secret e validade do segredo.</li><li><b>Pasta nao localizada:</b> preencha tambem o <b>Drive ID</b> da biblioteca.</li><li><b>Sem permissao para criar:</b> confirme <code>Files.ReadWrite.All</code> e <code>Sites.ReadWrite.All</code> com consentimento do admin.</li><li><b>Teste descobre o Drive automaticamente:</b> salve o valor retornado para evitar novas buscas.</li><li><b>Diferenca entre OneDrive e SharePoint:</b> ambos funcionam, desde que a biblioteca e a pasta raiz estejam corretas.</li></ul>'
+  },
 ];
-
 
 export const helpOmnichannelConnections: HelpSection[] = [
   {

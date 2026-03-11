@@ -62,6 +62,110 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
   );
 };
 
+const Microsoft365Diagnostics = ({ result }: any) => {
+  if (!result) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h5 className="text-sm font-semibold text-white">
+            DiagnÃ³stico da IntegraÃ§Ã£o
+          </h5>
+          <p className="text-xs text-slate-400">
+            Resultado do Ãºltimo teste executado com as credenciais atuais.
+          </p>
+        </div>
+        <span
+          className={clsx(
+            "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] w-fit",
+            result.success
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+              : "border-amber-500/30 bg-amber-500/10 text-amber-200",
+          )}
+        >
+          <Check size={14} />
+          {result.success ? "IntegraÃ§Ã£o validada" : "RevisÃ£o necessÃ¡ria"}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        {(result.checks || []).map((check: any) => (
+          <div
+            key={check.key}
+            className="flex items-start justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2"
+          >
+            <div>
+              <p className="text-sm font-medium text-white">{check.label}</p>
+              <p className="text-xs text-slate-400">{check.details}</p>
+            </div>
+            <span
+              className={clsx(
+                "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em]",
+                check.status === "success" &&
+                  "bg-emerald-500/15 text-emerald-300",
+                check.status === "warning" &&
+                  "bg-amber-500/15 text-amber-200",
+                check.status === "error" && "bg-red-500/15 text-red-300",
+              )}
+            >
+              {check.status === "success"
+                ? "OK"
+                : check.status === "warning"
+                  ? "AtenÃ§Ã£o"
+                  : "Erro"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {result.resolved && (
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+              Drive ID
+            </p>
+            <p className="mt-1 break-all text-xs text-slate-200">
+              {result.resolved.driveId || "-"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+              Pasta Validada
+            </p>
+            <p className="mt-1 break-all text-xs text-slate-200">
+              {result.resolved.folderName || result.resolved.folderId || "-"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+              Origem da ResoluÃ§Ã£o
+            </p>
+            <p className="mt-1 text-xs text-slate-200">
+              {result.resolved.ownerLabel || result.resolved.source || "-"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!!result.recommendations?.length && (
+        <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">
+            RecomendaÃ§Ãµes
+          </p>
+          <div className="mt-2 space-y-1">
+            {result.recommendations.map((item: string, index: number) => (
+              <p key={`${item}-${index}`} className="text-xs text-blue-100/90">
+                {item}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // --- BULK ACTIONS TAB ---
 
 const BulkActionsTab = () => {
@@ -431,6 +535,8 @@ const BulkActionsTab = () => {
 export function Settings() {
   const [activeTab, setActiveTab] = useState("options");
   const [loading, setLoading] = useState(false);
+  const [testingMicrosoft365, setTestingMicrosoft365] = useState(false);
+  const [microsoft365TestResult, setMicrosoft365TestResult] = useState<any>(null);
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
   // DATA
@@ -511,9 +617,12 @@ export function Settings() {
         msTenantId: res.data.msTenantId || "",
         msClientId: res.data.msClientId || "",
         msClientSecret: res.data.msClientSecret || "",
+        msDriveId: res.data.msDriveId || "",
         msFolderId: res.data.msFolderId || "",
+        msObservation: res.data.msObservation || "",
         msStorageActive: res.data.msStorageActive || false,
       });
+      setMicrosoft365TestResult(null);
     } catch (error) {
       console.error("Erro ao carregar minha empresa", error);
     } finally {
@@ -538,6 +647,57 @@ export function Settings() {
     }
   };
 
+  const handleTestMicrosoft365 = async (tenantId?: string) => {
+    if (!tenantId) {
+      alert("Salve a empresa primeiro para habilitar o teste da integraÃ§Ã£o.");
+      return;
+    }
+
+    try {
+      setTestingMicrosoft365(true);
+      const res = await api.post(`/saas/tenants/test-microsoft/${tenantId}`, {
+        msStorageActive: formData.msStorageActive,
+        msTenantId: formData.msTenantId,
+        msClientId: formData.msClientId,
+        msClientSecret: formData.msClientSecret,
+        msDriveId: formData.msDriveId,
+        msFolderId: formData.msFolderId,
+      });
+
+      setMicrosoft365TestResult(res.data);
+
+      if (!formData.msDriveId && res.data?.resolved?.driveId) {
+        setFormData((current: any) => ({
+          ...current,
+          msDriveId: res.data.resolved.driveId,
+        }));
+      }
+    } catch (error: any) {
+      const fallback = {
+        success: false,
+        checks: [
+          {
+            key: "request",
+            label: "Teste de integraÃ§Ã£o",
+            status: "error",
+            details:
+              error.response?.data?.message ||
+              error.message ||
+              "Falha ao testar a integraÃ§Ã£o com o Microsoft 365.",
+          },
+        ],
+        recommendations: [],
+      };
+      setMicrosoft365TestResult(fallback);
+      alert(
+        "Erro ao testar integraÃ§Ã£o: " +
+          (error.response?.data?.message || error.message),
+      );
+    } finally {
+      setTestingMicrosoft365(false);
+    }
+  };
+
   const handleOpenModal = (type: "tenant" | "plan", item?: any) => {
     setModalType(type);
     setEditingItem(item || null);
@@ -553,7 +713,9 @@ export function Settings() {
               msTenantId: item.msTenantId || "",
               msClientId: item.msClientId || "",
               msClientSecret: item.msClientSecret || "",
+              msDriveId: item.msDriveId || "",
               msFolderId: item.msFolderId || "",
+              msObservation: item.msObservation || "",
               msStorageActive: item.msStorageActive || false,
               password: "", // Reset password field for security
             }
@@ -565,7 +727,9 @@ export function Settings() {
               msTenantId: "",
               msClientId: "",
               msClientSecret: "",
+              msDriveId: "",
               msFolderId: "",
+              msObservation: "",
               msStorageActive: false,
               email: "", // Only for new
               password: "",
@@ -589,6 +753,7 @@ export function Settings() {
       );
     }
 
+    setMicrosoft365TestResult(null);
     setModalOpen(true);
   };
 
@@ -878,22 +1043,47 @@ export function Settings() {
                   </div>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-slate-800">
-                  <h4 className="text-md font-semibold text-white mb-4 flex items-center gap-2">
-                    <svg
-                      className="w-5 h-5 text-blue-500"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
+                <div className="mt-8 pt-6 border-t border-slate-800 space-y-6">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <h4 className="text-md font-semibold text-white mb-2 flex items-center gap-2">
+                        <svg
+                          className="w-5 h-5 text-blue-500"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
+                        </svg>
+                        Integracao com Microsoft 365
+                      </h4>
+                      <p className="text-sm text-slate-400 max-w-2xl">
+                        Configure a autenticacao no Azure, a biblioteca do OneDrive/SharePoint e registre observacoes operacionais para a equipe saber configurar, usar e testar a integracao.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsHelpOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/20"
                     >
-                      <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
-                    </svg>
-                    Integração com Microsoft 365
-                  </h4>
-                  <p className="text-sm text-slate-400 mb-6">
-                    Configure as credenciais do seu aplicativo no Azure para
-                    ativar o salvamento automático de documentos no seu
-                    OneDrive/SharePoint.
-                  </p>
+                      <HelpCircle size={16} />
+                      Ajuda de Configuracao
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">1. Azure</p>
+                      <p className="mt-2 text-sm text-slate-200">Cadastre Tenant ID, Client ID e Client Secret da aplicacao com permissoes Application.</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">2. Biblioteca</p>
+                      <p className="mt-2 text-sm text-slate-200">Informe o Drive ID e a pasta raiz onde os processos e documentos serao criados.</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">3. Validacao</p>
+                      <p className="mt-2 text-sm text-slate-200">Execute o teste para autenticar, localizar a pasta e criar uma pasta temporaria de prova.</p>
+                    </div>
+                  </div>
 
                   <div className="space-y-4 bg-slate-950 p-5 rounded-lg border border-slate-800">
                     <div className="flex items-center gap-3">
@@ -921,7 +1111,7 @@ export function Settings() {
                       <div className="space-y-4 mt-4 pt-4 border-t border-slate-800/50 animate-in fade-in duration-300">
                         <div>
                           <label className="block text-sm font-medium text-slate-400 mb-1">
-                            Tenant ID (Diretório Azure)
+                            Tenant ID (Diretorio Azure)
                           </label>
                           <input
                             type="text"
@@ -933,10 +1123,10 @@ export function Settings() {
                               })
                             }
                             className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
-                            placeholder="Ex: 8a7b6c5d..."
+                            placeholder="Ex: 83e40612-8967-4775-a1f5-d0946602163f"
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-slate-400 mb-1">
                               Client ID (App)
@@ -970,40 +1160,91 @@ export function Settings() {
                             />
                           </div>
                         </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">
+                              Drive ID / Biblioteca
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.msDriveId || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  msDriveId: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
+                              placeholder="Ex: b!ABCDEF..."
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                              Recomendado. O teste preenche automaticamente quando conseguir descobrir.
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-1">
+                              ID da Pasta Raiz
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.msFolderId || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  msFolderId: e.target.value,
+                                })
+                              }
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
+                              placeholder="Ex: 01XTLPBK3F..."
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                              Pasta mae onde as subpastas dos processos serao geradas.
+                            </p>
+                          </div>
+                        </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-400 mb-1">
-                            ID da Pasta Raiz (Drive ID base)
+                            Observacoes da Integracao
                           </label>
-                          <input
-                            type="text"
-                            value={formData.msFolderId || ""}
+                          <textarea
+                            rows={4}
+                            value={formData.msObservation || ""}
                             onChange={(e) =>
                               setFormData({
                                 ...formData,
-                                msFolderId: e.target.value,
+                                msObservation: e.target.value,
                               })
                             }
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
-                            placeholder="Ex: b!ABCD_XYZ123..."
+                            className="w-full resize-y bg-slate-900 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none"
+                            placeholder="Ex: Biblioteca principal aprovada pelo TI em 11/03/2026, usar homologacao para testes, responsavel pela conta Microsoft: financeiro@empresa.com."
                           />
                           <p className="text-xs text-slate-500 mt-1">
-                            ID da pasta ou drive onde serão salvas as
-                            informações.
+                            Registre contexto, cuidados, links, responsaveis e detalhes relevantes para uso e suporte.
                           </p>
                         </div>
                       </div>
                     )}
                   </div>
+
+                  <Microsoft365Diagnostics result={microsoft365TestResult} />
                 </div>
 
-                <div className="pt-6 border-t border-slate-800 flex justify-end">
+                <div className="pt-6 border-t border-slate-800 flex flex-col gap-3 md:flex-row md:justify-end">
+                  <button
+                    type="button"
+                    disabled={testingMicrosoft365 || !myTenant}
+                    onClick={() => handleTestMicrosoft365(myTenant?.id)}
+                    className="border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-100 px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    {testingMicrosoft365 ? "Testando integracao..." : "Testar Integracao"}
+                  </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Save size={18} />
-                    {loading ? "Salvando..." : "Salvar Configurações"}
+                    {loading ? "Salvando..." : "Salvar Configuracoes"}
                   </button>
                 </div>
               </form>
@@ -1212,16 +1453,18 @@ export function Settings() {
             <h2 className="text-xl font-bold text-white mb-2">
               Central de Ajuda
             </h2>
-            <p className="text-slate-400 max-w-md mx-auto mb-6">
-              Precisa de ajuda? Entre em contato com nosso suporte técnico ou
-              consulte nossa documentação.
+            <p className="text-slate-400 max-w-2xl mx-auto mb-6">
+              Centralize manuais, passos de configuracao e testes guiados. A documentacao da integracao Microsoft 365 agora inclui Azure, Drive ID, pasta raiz, teste de criacao de pasta e checklist de validacao.
             </p>
-            <div className="flex justify-center gap-4">
+            <div className="flex flex-wrap justify-center gap-4">
               <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
                 Abrir Chamado
               </button>
-              <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
-                Ver Documentação
+              <button
+                onClick={() => setIsHelpOpen(true)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Ver Guia do Microsoft 365
               </button>
             </div>
           </div>
@@ -1434,17 +1677,32 @@ export function Settings() {
                 </label>
               </div>
 
-              <div className="mt-6 pt-6 border-t border-slate-800">
-                <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                  <svg
-                    className="w-4 h-4 text-blue-500"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
+              <div className="mt-6 pt-6 border-t border-slate-800 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+                      <svg
+                        className="w-4 h-4 text-blue-500"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
+                      </svg>
+                      Integracao Microsoft 365
+                    </h4>
+                    <p className="text-xs text-slate-400 max-w-md">
+                      Configure a conexao, registre observacoes importantes e valide a criacao de pastas sem sair da empresa.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsHelpOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-200 transition-colors hover:bg-blue-500/20"
                   >
-                    <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
-                  </svg>
-                  Integração Microsoft 365
-                </h4>
+                    <HelpCircle size={14} />
+                    Ajuda
+                  </button>
+                </div>
 
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
@@ -1472,7 +1730,7 @@ export function Settings() {
                     <>
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1">
-                          Tenant ID Diretório (Azure)
+                          Tenant ID Diretorio (Azure)
                         </label>
                         <input
                           type="text"
@@ -1484,10 +1742,10 @@ export function Settings() {
                             })
                           }
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
-                          placeholder="Ex: 8a7b6c5d..."
+                          placeholder="Ex: 83e40612-8967-4775-a1f5-d0946602163f"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
                             Client ID (App)
@@ -1521,27 +1779,79 @@ export function Settings() {
                           />
                         </div>
                       </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Drive ID / Biblioteca
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.msDriveId || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                msDriveId: e.target.value,
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                            placeholder="Ex: b!ABCDEF..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            ID da Pasta Raiz no OneDrive
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.msFolderId || ""}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                msFolderId: e.target.value,
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                            placeholder="Ex: 01XTLPBK3F..."
+                          />
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Os processos serao criados como subpastas dentro desta pasta Microsoft.
+                          </p>
+                        </div>
+                      </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1">
-                          ID da Pasta Raiz no OneDrive
+                          Observacoes da Integracao
                         </label>
-                        <input
-                          type="text"
-                          value={formData.msFolderId || ""}
+                        <textarea
+                          rows={4}
+                          value={formData.msObservation || ""}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              msFolderId: e.target.value,
+                              msObservation: e.target.value,
                             })
                           }
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
-                          placeholder="Ex: 01ABCDEFXYZ..."
+                          className="w-full resize-y bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                          placeholder="Ex: pasta aprovada em 11/03/2026, conta corporativa, usar apenas para documentos oficiais, ambiente de homologacao liberado pelo admin."
                         />
-                        <p className="text-[10px] text-slate-500 mt-1">
-                          Os processos serão criados como subpastas dentro desta
-                          pasta Microsoft.
-                        </p>
                       </div>
+
+                      <Microsoft365Diagnostics result={microsoft365TestResult} />
+
+                      {editingItem ? (
+                        <button
+                          type="button"
+                          disabled={testingMicrosoft365}
+                          onClick={() => handleTestMicrosoft365(editingItem.id)}
+                          className="w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-100 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
+                        >
+                          {testingMicrosoft365 ? "Testando integracao..." : "Testar Integracao Microsoft 365"}
+                        </button>
+                      ) : (
+                        <p className="text-[11px] text-slate-500">
+                          Salve a empresa primeiro para habilitar o teste automatico da integracao.
+                        </p>
+                      )}
                     </>
                   )}
                 </div>

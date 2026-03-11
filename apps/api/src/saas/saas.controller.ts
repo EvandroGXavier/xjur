@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
 import { SaasService } from './saas.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RegisterDto } from '../auth/dto/register.dto';
@@ -37,9 +37,18 @@ export class SaasController {
   @Post('tenants/update/:id') // Safe fallback
   async updateTenantPost(@Request() req: any, @Body() body: any) {
     if (req.user.email !== 'evandro@conectionmg.com.br' && req.user.tenantId !== req.params.id) {
-        throw new Error('Unauthorized');
+        throw new UnauthorizedException('Unauthorized');
     }
     return this.saasService.updateTenant(req.params.id, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('tenants/test-microsoft/:id')
+  async testMicrosoftIntegration(@Request() req: any, @Body() body: any) {
+    if (req.user.email !== 'evandro@conectionmg.com.br' && req.user.tenantId !== req.params.id) {
+        throw new UnauthorizedException('Unauthorized');
+    }
+    return this.saasService.testMicrosoftIntegration(req.params.id, body);
   }
   
   // Standard REST

@@ -45,7 +45,9 @@ model Tenant {
   msClientSecret  String?
   msAccessToken   String? @db.Text
   msRefreshToken  String? @db.Text
+  msDriveId       String? // Drive/Biblioteca onde fica a pasta raiz
   msFolderId      String? // Pasta raiz do escritório no OneDrive
+  msObservation   String? @db.Text
   msStorageActive Boolean @default(false)
 
   // New Modules Relationships

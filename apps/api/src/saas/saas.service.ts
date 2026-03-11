@@ -3,10 +3,14 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
 import * as bcrypt from 'bcryptjs';
 import { RegisterDto } from '../auth/dto/register.dto';
+import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
 
 @Injectable()
 export class SaasService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly microsoftGraphService: MicrosoftGraphService,
+  ) {}
 
   async registerTenant(data: RegisterDto) {
     const { tenantName, email, document, mobile, password, adminName } = data;
@@ -72,7 +76,21 @@ export class SaasService {
   }
 
   async updateTenant(id: string, data: any) {
-    const { name, document, planId, isActive, password, msTenantId, msClientId, msClientSecret, msFolderId, msStorageActive, contactRequireOneInfo } = data;
+    const {
+      name,
+      document,
+      planId,
+      isActive,
+      password,
+      msTenantId,
+      msClientId,
+      msClientSecret,
+      msDriveId,
+      msFolderId,
+      msObservation,
+      msStorageActive,
+      contactRequireOneInfo,
+    } = data;
 
     // Check if document belongs to another tenant
     if (document) {
@@ -93,7 +111,9 @@ export class SaasService {
         msTenantId: msTenantId !== undefined ? msTenantId : undefined,
         msClientId: msClientId !== undefined ? msClientId : undefined,
         msClientSecret: msClientSecret !== undefined ? msClientSecret : undefined,
+        msDriveId: msDriveId !== undefined ? msDriveId : undefined,
         msFolderId: msFolderId !== undefined ? msFolderId : undefined,
+        msObservation: msObservation !== undefined ? msObservation : undefined,
         msStorageActive: msStorageActive !== undefined ? msStorageActive : undefined,
         contactRequireOneInfo: contactRequireOneInfo !== undefined ? contactRequireOneInfo : undefined,
       },
@@ -136,6 +156,10 @@ export class SaasService {
           where: { id },
           include: { plan: true }
       });
+  }
+
+  async testMicrosoftIntegration(id: string, data?: any) {
+      return this.microsoftGraphService.validateIntegration(id, data || {});
   }
 
   // --- PLANS CRUD ---
