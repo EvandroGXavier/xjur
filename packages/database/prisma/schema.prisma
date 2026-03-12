@@ -126,6 +126,7 @@ model Contact {
   category      String? // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
   password      String? // Senha para acesso ao sistema
   profilePicUrl String? // URL da foto de perfil
+  metadata      Json?
   active        Boolean @default(true)
 
   // Detalhes Específicos (1:1)
@@ -311,6 +312,7 @@ model AdditionalContact {
   contactId String
   type      String // EMAIL, PHONE, ETC
   value     String
+  nomeContatoAdicional String?
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@map("additional_contacts")

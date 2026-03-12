@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { api } from "../services/api";
 import {
   Settings as SettingsIcon,
@@ -24,6 +24,7 @@ import { HelpModal, useHelpModal } from "../components/HelpModal";
 import { helpMicrosoft365 } from "../data/helpManuals";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { DrxClawTab } from "../components/settings/DrxClawTab";
+import { BackupTab } from "../components/settings/BackupTab";
 
 // --- COMPONENTS ---
 
@@ -555,6 +556,14 @@ export function Settings() {
     theme: string;
     soundEnabled: boolean;
   }>({ theme: "DARK", soundEnabled: true });
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch (error) {
+      return {};
+    }
+  }, []);
+  const isSuperAdmin = currentUser?.email === "evandro@conectionmg.com.br";
 
   useEffect(() => {
     // Carregar preferências iniciais do localStorage (para reflectir UI imediata)
@@ -908,8 +917,7 @@ export function Settings() {
         />
 
         {/* SAAS TABS - SUPER ADMIN ONLY */}
-        {JSON.parse(localStorage.getItem("user") || "{}")?.email ===
-          "evandro@conectionmg.com.br" && (
+        {isSuperAdmin && (
           <>
             <TabButton
               active={activeTab === "tenants"}
@@ -922,6 +930,12 @@ export function Settings() {
               onClick={() => setActiveTab("plans")}
               icon={CreditCard}
               label="Planos"
+            />
+            <TabButton
+              active={activeTab === "backup"}
+              onClick={() => setActiveTab("backup")}
+              icon={Database}
+              label="Backup"
             />
           </>
         )}
@@ -1253,6 +1267,8 @@ export function Settings() {
         )}
 
         {activeTab === "drx-claw" && <DrxClawTab />}
+
+        {activeTab === "backup" && isSuperAdmin && <BackupTab />}
 
         {/* === TENANTS TAB === */}
         {activeTab === "tenants" && (

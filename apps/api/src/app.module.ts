@@ -27,6 +27,7 @@ import { PaymentConditionsModule } from "./payment-conditions/payment-conditions
 import { SecurityModule } from "./security/security.module";
 import { AgentModule } from "./agent/agent.module";
 import { DrxClawModule } from "./drx-claw/drx-claw.module";
+import { BackupModule } from "./backup/backup.module";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { DrxClawModule } from "./drx-claw/drx-claw.module";
     SecurityModule,
     AgentModule,
     DrxClawModule,
+    BackupModule,
   ],
   controllers: [AppController],
   providers: [

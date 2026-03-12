@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Res } from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ContactsService } from './contacts.service';
 import { EnrichmentService } from './enrichment.service';
 import { ContactsImportService } from './contacts-import.service';
@@ -11,9 +11,11 @@ import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto'
 import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
 import { CreateRelationTypeDto, CreateContactRelationDto } from './dto/relation.dto';
 import { CreateAssetTypeDto, CreateContactAssetDto, UpdateContactAssetDto } from './dto/asset.dto';
+import { CreateContactContractDto, UpdateContactContractDto } from './dto/contract.dto';
 import { ImportContactsDto } from './dto/import-contact.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
+import { Response } from 'express';
 
 @Controller('contacts')
 @UseGuards(JwtAuthGuard)
@@ -131,6 +133,57 @@ export class ContactsController {
     return this.contactsService.removeAdditionalContact(id, contactId);
   }
 
+  @Get(':id/attachments/:filename')
+  async downloadAttachment(
+    @Param('id') id: string,
+    @Param('filename') filename: string,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+  ) {
+    const attachment = await this.contactsService.getAttachmentForContact(
+      id,
+      user.tenantId,
+      filename,
+    );
+    const fs = require('fs');
+
+    if (!fs.existsSync(attachment.filePath)) {
+      return res.status(404).json({ message: 'Arquivo nao encontrado' });
+    }
+
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${attachment.originalName || attachment.fileName}"`,
+    );
+    res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
+    res.setHeader(
+      'Content-Security-Policy',
+      "frame-ancestors 'self' http://localhost:* https://localhost:* *",
+    );
+
+    return res.sendFile(attachment.filePath);
+  }
+
+  @Post(':id/attachments')
+  @UseInterceptors(FilesInterceptor('attachments'))
+  uploadAttachments(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+    @UploadedFiles() files: Array<any>,
+  ) {
+    return this.contactsService.uploadAttachments(id, user.tenantId, files);
+  }
+
+  @Delete(':id/attachments/:filename')
+  deleteAttachment(
+    @Param('id') id: string,
+    @Param('filename') filename: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.deleteAttachment(id, user.tenantId, filename);
+  }
+
   // Relations Endpoints
   @Get('relations/types')
   getRelationTypes(@CurrentUser() user: CurrentUserData) {
@@ -204,6 +257,45 @@ export class ContactsController {
       @CurrentUser() user: CurrentUserData
   ) {
       return this.contactsService.removeContactAsset(user.tenantId, assetId);
+  }
+
+  // Contracts Endpoints
+  @Get(':id/contracts')
+  getContactContracts(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.contactsService.getContactContracts(id, user.tenantId);
+  }
+
+  @Post(':id/contracts')
+  createContactContract(
+    @Param('id') id: string,
+    @Body() dto: CreateContactContractDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.createContactContract(user.tenantId, id, dto);
+  }
+
+  @Patch(':id/contracts/:contractId')
+  updateContactContract(
+    @Param('id') id: string,
+    @Param('contractId') contractId: string,
+    @Body() dto: UpdateContactContractDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.updateContactContract(user.tenantId, id, contractId, dto);
+  }
+
+  @Delete(':id/contracts/:contractId')
+  removeContactContract(
+    @Param('id') id: string,
+    @Param('contractId') contractId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.removeContactContract(user.tenantId, id, contractId);
+  }
+
+  @Get(':id/financial-records')
+  getContactFinancialRecords(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.contactsService.getContactFinancialRecords(id, user.tenantId);
   }
 
   // Enrichment endpoints

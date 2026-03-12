@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search, HelpCircle, Download, Upload, ExternalLink, Printer, CheckCircle2 } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
-import { api } from '../../services/api';
+import { api, getApiUrl } from '../../services/api';
 import { masks } from '../../utils/masks';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpContacts } from '../../data/helpManuals';
 import { useHotkeys } from '../../hooks/useHotkeys';
+import { AttachmentPreview } from '../../components/ui/AttachmentPreview';
 
 import { PJTab } from './PJTab';
 
@@ -70,6 +71,10 @@ interface ContactData {
   category?: string;
   addresses?: Address[];
   additionalContacts?: AdditionalContact[];
+  metadata?: {
+    attachments?: ContactAttachment[];
+    [key: string]: any;
+  };
   active?: boolean;
 }
 
@@ -92,6 +97,16 @@ interface AdditionalContact {
   id?: string;
   type: string;
   value: string;
+  nomeContatoAdicional?: string;
+}
+
+interface ContactAttachment {
+  originalName: string;
+  fileName: string;
+  path?: string;
+  mimeType?: string;
+  size?: number;
+  uploadedAt?: string;
 }
 
 interface RelationType {
@@ -127,6 +142,57 @@ interface ContactAsset {
   notes?: string;
 }
 
+interface ContactContract {
+  id: string;
+  type: string;
+  description: string;
+  dueDay: number;
+  firstDueDate: string;
+  billingFrequency: 'MONTHLY' | 'ANNUAL';
+  transactionKind: 'INCOME' | 'EXPENSE';
+  counterpartyRole: 'CONTRACTOR' | 'CONTRACTED';
+  counterpartyName: string;
+  status: 'ACTIVE' | 'PAUSED' | 'ENDED';
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ContactFinancialRecord {
+  id: string;
+  description: string;
+  amount: number;
+  amountFinal?: number | null;
+  amountPaid?: number | null;
+  dueDate: string;
+  paymentDate?: string | null;
+  status: string;
+  effectiveStatus?: string;
+  type: 'INCOME' | 'EXPENSE';
+  category?: string | null;
+  paymentMethod?: string | null;
+  origin?: string | null;
+  bankAccount?: {
+    id: string;
+    title: string;
+    bankName?: string | null;
+  } | null;
+  financialCategory?: {
+    id: string;
+    name: string;
+  } | null;
+  contactRole?: string;
+  parties?: Array<{
+    id: string;
+    role: string;
+    amount?: number | null;
+    contact: {
+      id: string;
+      name: string;
+    };
+  }>;
+}
+
 const CATEGORIES = [
   'Cliente',
   'Fornecedor',
@@ -139,13 +205,37 @@ const CATEGORIES = [
   'Outro'
 ];
 
+const CONTRACT_BILLING_LABELS = {
+  MONTHLY: 'Mensal',
+  ANNUAL: 'Anual',
+} as const;
+
+const CONTRACT_ROLE_LABELS = {
+  CONTRACTOR: 'Contratante',
+  CONTRACTED: 'Contratado',
+} as const;
+
+const CONTRACT_STATUS_LABELS = {
+  ACTIVE: 'Ativo',
+  PAUSED: 'Pausado',
+  ENDED: 'Encerrado',
+} as const;
+
+const FINANCIAL_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Pendente',
+  PAID: 'Pago',
+  CANCELLED: 'Cancelado',
+  OVERDUE: 'Vencido',
+  PARTIAL: 'Parcial',
+};
+
 export function ContactForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo');
   
-  const [activeTab, setActiveTab] = useState('contact');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'contact');
   const [formData, setFormData] = useState<ContactData>({
     name: '',
     personType: 'LEAD',
@@ -153,6 +243,8 @@ export function ContactForm() {
     whatsapp: '',
     document: '',
     addresses: [],
+    additionalContacts: [],
+    metadata: { attachments: [] },
     sideActivities: [],
     pjQsa: [],
     active: true
@@ -164,11 +256,11 @@ export function ContactForm() {
     ];
 
     if (formData.personType === 'PF') {
-      baseTabs.push({ id: 'pf_details', label: 'Dados PF', icon: Users });
+      baseTabs.push({ id: 'pf_details', label: 'PF', icon: Users });
     }
 
     if (formData.personType === 'PJ') {
-      baseTabs.push({ id: 'pj_details', label: 'Dados PJ', icon: Briefcase });
+      baseTabs.push({ id: 'pj_details', label: 'PJ', icon: Briefcase });
     }
 
     // Abas comuns a todos (exceto Lead que pode ter restrições, mas o user disse "Lead... aba PF e PJ ocultas", implying others are fine or default)
@@ -197,6 +289,13 @@ export function ContactForm() {
 
     return [...baseTabs, ...commonTabs];
   }, [formData.personType]);
+
+  useEffect(() => {
+    if (!TABS.some(tab => tab.id === activeTab)) {
+      setActiveTab('contact');
+    }
+  }, [TABS, activeTab]);
+
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [requireOneInfo, setRequireOneInfo] = useState(true);
@@ -255,6 +354,7 @@ export function ContactForm() {
   const [assetTypes, setAssetTypes] = useState<AssetType[]>([]);
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [editingAsset, setEditingAsset] = useState<ContactAsset | null>(null);
+  const [assetSearch, setAssetSearch] = useState('');
   const [assetForm, setAssetForm] = useState({
       assetTypeId: '',
       newTypeName: '',
@@ -265,6 +365,28 @@ export function ContactForm() {
       notes: ''
   });
   const [creatingAssetType, setCreatingAssetType] = useState(false);
+  const [contracts, setContracts] = useState<ContactContract[]>([]);
+  const [showContractForm, setShowContractForm] = useState(false);
+  const [editingContract, setEditingContract] = useState<ContactContract | null>(null);
+  const [contractSearch, setContractSearch] = useState('');
+  const [creatingContractType, setCreatingContractType] = useState(false);
+  const [contractForm, setContractForm] = useState({
+    type: '',
+    newTypeName: '',
+    description: '',
+    dueDay: '5',
+    firstDueDate: '',
+    billingFrequency: 'MONTHLY' as 'MONTHLY' | 'ANNUAL',
+    transactionKind: 'INCOME' as 'INCOME' | 'EXPENSE',
+    counterpartyRole: 'CONTRACTOR' as 'CONTRACTOR' | 'CONTRACTED',
+    counterpartyName: '',
+    status: 'ACTIVE' as 'ACTIVE' | 'PAUSED' | 'ENDED',
+    notes: '',
+  });
+  const [financialRecords, setFinancialRecords] = useState<ContactFinancialRecord[]>([]);
+  const [financialSearch, setFinancialSearch] = useState('');
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [attachmentUploadProgress, setAttachmentUploadProgress] = useState(0);
 
   const fetchRelations = async () => {
       try {
@@ -281,6 +403,24 @@ export function ContactForm() {
           setAssets(response.data);
       } catch (err) {
           console.error("Failed to fetch assets", err);
+      }
+  };
+
+  const fetchContracts = async () => {
+      try {
+          const response = await api.get(`/contacts/${id}/contracts`);
+          setContracts(response.data);
+      } catch (err) {
+          console.error("Failed to fetch contracts", err);
+      }
+  };
+
+  const fetchFinancialRecords = async () => {
+      try {
+          const response = await api.get(`/contacts/${id}/financial-records`);
+          setFinancialRecords(response.data);
+      } catch (err) {
+          console.error("Failed to fetch financial records", err);
       }
   };
 
@@ -468,6 +608,129 @@ export function ContactForm() {
       setCreatingAssetType(false);
   };
 
+  const resetContractForm = () => {
+      setEditingContract(null);
+      setCreatingContractType(false);
+      setContractForm({
+        type: '',
+        newTypeName: '',
+        description: '',
+        dueDay: '5',
+        firstDueDate: '',
+        billingFrequency: 'MONTHLY',
+        transactionKind: 'INCOME',
+        counterpartyRole: 'CONTRACTOR',
+        counterpartyName: '',
+        status: 'ACTIVE',
+        notes: '',
+      });
+  };
+
+  const handleCreateContract = async () => {
+      if (!id || id === 'new') {
+          toast.warning('Salve o contato antes de adicionar contratos');
+          return;
+      }
+
+      const resolvedType = creatingContractType ? contractForm.newTypeName.trim() : contractForm.type.trim();
+      if (!resolvedType) {
+          toast.warning('Informe o tipo do contrato');
+          return;
+      }
+      if (!contractForm.description.trim()) {
+          toast.warning('Informe a descrição do contrato');
+          return;
+      }
+      if (!contractForm.firstDueDate) {
+          toast.warning('Informe o primeiro vencimento');
+          return;
+      }
+      if (!contractForm.counterpartyName.trim()) {
+          toast.warning('Informe quem é a outra parte do contrato');
+          return;
+      }
+
+      try {
+          setLoading(true);
+          const payload = {
+              type: resolvedType,
+              description: contractForm.description.trim(),
+              dueDay: Number(contractForm.dueDay),
+              firstDueDate: contractForm.firstDueDate,
+              billingFrequency: contractForm.billingFrequency,
+              transactionKind: contractForm.transactionKind,
+              counterpartyRole: contractForm.counterpartyRole,
+              counterpartyName: contractForm.counterpartyName.trim(),
+              status: contractForm.status,
+              notes: contractForm.notes.trim(),
+          };
+
+          const response = editingContract
+            ? await api.patch(`/contacts/${id}/contracts/${editingContract.id}`, payload)
+            : await api.post(`/contacts/${id}/contracts`, payload);
+
+          setContracts(response.data);
+          setFormData(prev => ({
+              ...prev,
+              metadata: {
+                  ...(prev.metadata || {}),
+                  contracts: response.data,
+              },
+          }));
+          toast.success(editingContract ? 'Contrato atualizado!' : 'Contrato adicionado!');
+          setShowContractForm(false);
+          resetContractForm();
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao salvar contrato');
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const startEditContract = (contract: ContactContract) => {
+      setEditingContract(contract);
+      setCreatingContractType(false);
+      setContractForm({
+          type: contract.type,
+          newTypeName: '',
+          description: contract.description,
+          dueDay: String(contract.dueDay || 5),
+          firstDueDate: contract.firstDueDate ? contract.firstDueDate.split('T')[0] : '',
+          billingFrequency: contract.billingFrequency,
+          transactionKind: contract.transactionKind,
+          counterpartyRole: contract.counterpartyRole,
+          counterpartyName: contract.counterpartyName,
+          status: contract.status,
+          notes: contract.notes || '',
+      });
+      setShowContractForm(true);
+  };
+
+  const handleDeleteContract = async (contractId: string) => {
+      if (!id || id === 'new') return;
+      if (!confirm('Deseja remover este contrato?')) return;
+
+      try {
+          setLoading(true);
+          const response = await api.delete(`/contacts/${id}/contracts/${contractId}`);
+          setContracts(response.data);
+          setFormData(prev => ({
+              ...prev,
+              metadata: {
+                  ...(prev.metadata || {}),
+                  contracts: response.data,
+              },
+          }));
+          toast.success('Contrato removido!');
+      } catch (err) {
+          console.error(err);
+          toast.error('Erro ao remover contrato');
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const fetchContact = async () => {
     try {
         setLoading(true);
@@ -490,7 +753,13 @@ export function ContactForm() {
         data.statusDate = toDateInput(data.statusDate);
         data.specialStatusDate = toDateInput(data.specialStatusDate);
 
-        setFormData(data);
+        setFormData({
+          ...data,
+          addresses: data.addresses ?? [],
+          additionalContacts: data.additionalContacts ?? [],
+          metadata: data.metadata ?? { attachments: [] },
+        });
+        setContracts(Array.isArray(data.metadata?.contracts) ? data.metadata.contracts : []);
     } catch(err) {
         console.error("Failed to fetch contact", err);
     } finally {
@@ -514,6 +783,8 @@ export function ContactForm() {
       fetchContact();
       fetchRelations();
       fetchAssets();
+      fetchContracts();
+      fetchFinancialRecords();
     }
     fetchRelationTypes();
     fetchAssetTypes();
@@ -524,6 +795,152 @@ export function ContactForm() {
       .then(res => setRequireOneInfo(res.data.contactRequireOneInfo ?? true))
       .catch(err => console.error("Failed to fetch tenant settings", err));
   }, [id]);
+
+  const hasFilledAddress = (address?: Partial<Address>) => {
+    if (!address) return false;
+    return Boolean(
+      address.street?.trim() ||
+      address.number?.trim() ||
+      address.city?.trim() ||
+      address.state?.trim() ||
+      address.zipCode?.trim(),
+    );
+  };
+
+  const buildDraftAddress = (): Address | null => {
+    if (!hasFilledAddress(addressForm)) return null;
+
+    const draftAddress = {
+      type: addressForm.type?.trim() || 'Principal',
+      street: addressForm.street?.trim() || '',
+      number: addressForm.number?.trim() || 'S/N',
+      complement: addressForm.complement?.trim() || '',
+      district: addressForm.district?.trim() || '',
+      city: addressForm.city?.trim() || '',
+      state: addressForm.state?.trim() || '',
+      zipCode: addressForm.zipCode?.trim() || '',
+    };
+
+    if (!draftAddress.street || !draftAddress.city || !draftAddress.state || !draftAddress.zipCode) {
+      return null;
+    }
+
+    return draftAddress;
+  };
+
+  const collectCreateAddresses = (): Address[] => {
+    const savedAddresses = Array.isArray(formData.addresses) ? [...formData.addresses] : [];
+    const draftAddress = buildDraftAddress();
+    if (!draftAddress) return savedAddresses;
+
+    const alreadyIncluded = savedAddresses.some(address =>
+      (address.zipCode || '') === draftAddress.zipCode &&
+      (address.street || '').trim().toLowerCase() === draftAddress.street.trim().toLowerCase() &&
+      (address.number || '').trim().toLowerCase() === draftAddress.number.trim().toLowerCase(),
+    );
+
+    return alreadyIncluded ? savedAddresses : [...savedAddresses, draftAddress];
+  };
+
+  const getAttachmentUrl = (attachment: ContactAttachment) => {
+    const safeFileName = encodeURIComponent(attachment.fileName);
+    return getApiUrl(`/contacts/${id}/attachments/${safeFileName}`);
+  };
+
+  const formatFileSize = (size?: number) => {
+    if (!size) return 'Arquivo';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatCurrency = (value?: number | null) =>
+    new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(Number(value || 0));
+
+  const getEffectiveFinancialStatus = (record: ContactFinancialRecord) =>
+    record.effectiveStatus || record.status;
+
+  const handleAttachmentSelection = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setPendingAttachments(prev => [...prev, ...Array.from(files)]);
+  };
+
+  const handleRemovePendingAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, currentIndex) => currentIndex !== index));
+  };
+
+  const handlePrintAttachment = (attachment: ContactAttachment) => {
+    const printWindow = window.open(getAttachmentUrl(attachment), '_blank', 'noopener,noreferrer');
+    if (!printWindow) {
+      toast.error('Nao foi possivel abrir o anexo para impressao');
+      return;
+    }
+    setTimeout(() => {
+      try {
+        printWindow.print();
+      } catch (error) {
+        console.error(error);
+      }
+    }, 800);
+  };
+
+  const handleUploadAttachments = async () => {
+    if (!id || id === 'new') {
+      toast.warning('Salve o contato antes de anexar arquivos');
+      return;
+    }
+
+    if (pendingAttachments.length === 0) {
+      toast.warning('Selecione pelo menos um arquivo');
+      return;
+    }
+
+    try {
+      setUploadingAttachments(true);
+      setAttachmentUploadProgress(0);
+      const data = new FormData();
+      pendingAttachments.forEach(file => data.append('attachments', file));
+      const response = await api.post(`/contacts/${id}/attachments`, data, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: progressEvent => {
+          if (!progressEvent.total) return;
+          setAttachmentUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
+        },
+      });
+      setFormData(response.data);
+      setPendingAttachments([]);
+      setAttachmentUploadProgress(100);
+      toast.success('Anexos enviados com sucesso!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao enviar anexos do contato');
+    } finally {
+      setUploadingAttachments(false);
+      setTimeout(() => setAttachmentUploadProgress(0), 1200);
+    }
+  };
+
+  const handleDeleteAttachment = async (fileName: string) => {
+    if (!id || id === 'new') return;
+    if (!window.confirm('Deseja realmente excluir este anexo?')) return;
+
+    try {
+      setLoading(true);
+      const response = await api.delete(`/contacts/${id}/attachments/${encodeURIComponent(fileName)}`);
+      setFormData(response.data);
+      toast.success('Anexo removido com sucesso!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao remover anexo');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e?: React.FormEvent, shouldClose: boolean = false) => {
     if (e) e.preventDefault();
@@ -581,14 +998,37 @@ export function ContactForm() {
             key,
             (typeof value === 'string' && value.trim() === '') ? null : value
           ])
-        );
+        ) as ContactData;
+
+        if (!id || id === 'new') {
+            const addressesToCreate = collectCreateAddresses();
+            if (addressesToCreate.length > 0) {
+                payload.addresses = addressesToCreate;
+            }
+        }
 
         if (id && id !== 'new') {
-            await api.patch(`/contacts/${id}`, payload);
+            const response = await api.patch(`/contacts/${id}`, payload);
+            setFormData(response.data);
             toast.success('Contato atualizado com sucesso!');
         } else {
-            await api.post('/contacts', payload);
+            const response = await api.post('/contacts', payload);
             toast.success('Contato criado com sucesso!');
+
+            if (shouldClose) {
+                setTimeout(() => {
+                    if (returnTo) {
+                        navigate(decodeURIComponent(returnTo));
+                    } else {
+                        navigate('/contacts');
+                    }
+                }, 500);
+            } else if (response.data?.id) {
+                navigate(`/contacts/${response.data.id}?tab=${activeTab}`, { replace: true });
+            } else {
+                navigate('/contacts');
+            }
+            return;
         }
 
         if (shouldClose) {
@@ -599,14 +1039,6 @@ export function ContactForm() {
                     navigate('/contacts');
                 }
             }, 500);
-        } else if (!id || id === 'new') {
-            // Em caso de inclusão, sem fechar, redireciona para a página de edição do ID gerado.
-            // Aqui precisaremos pegar o ID gerado se tivéssemos a resposta do servidor,
-            // mas como a criamos localmente nós tentamos dar o reload ou mandar pra edição assim que tiver.
-            // Para simplificar, vou deixar assim mas uma melhor abordagem seria pegar res.data.id
-            setTimeout(() => {
-                 navigate(`/contacts`); // Default fallback if we don't have ID handy
-            }, 500); 
         }
 
     } catch (err: any) {
@@ -659,43 +1091,54 @@ export function ContactForm() {
              return dateStr; // Assume already correct or ISO
         };
 
-         setFormData({
-           ...formData,
-           companyName: companyName,
-           name: tradeName,
-           email: data.email || formData.email,
-           phone: data.telefone || data.ddd_telefone_1 || formData.phone,
-           
-           // Mapeamento Dados PJ Estendidos (Normalizando datas)
-           openingDate: normalizeDate(data.abertura) ?? undefined,
-           size: data.porte,
-           legalNature: data.natureza_juridica,
-           mainActivity: data.atividade_principal ? data.atividade_principal[0] : null,
-           sideActivities: data.atividades_secundarias || [],
-           shareCapital: data.capital_social,
-           status: data.situacao,
-           statusDate: normalizeDate(data.data_situacao) ?? undefined,
-           statusReason: data.motivo_situacao,
-           specialStatus: data.situacao_especial,
-           specialStatusDate: normalizeDate(data.data_situacao_especial) ?? undefined,
-           pjQsa: data.qsa || []
-         });
+        const enrichedAddress = data.logradouro ? {
+            type: 'Principal',
+            street: data.logradouro,
+            number: data.numero || '',
+            complement: data.complemento || '',
+            district: data.bairro || '',
+            city: data.municipio,
+            state: data.uf,
+            zipCode: data.cep ? data.cep.replace(/\D/g, '') : ''
+        } : null;
+
+        setFormData(prev => {
+          const existingAddresses = Array.isArray(prev.addresses) ? prev.addresses : [];
+          const nextAddresses = enrichedAddress && !existingAddresses.some(address =>
+            (address.zipCode || '') === enrichedAddress.zipCode &&
+            (address.street || '').trim().toLowerCase() === enrichedAddress.street.trim().toLowerCase() &&
+            (address.number || '').trim().toLowerCase() === (enrichedAddress.number || '').trim().toLowerCase()
+          )
+            ? [...existingAddresses, enrichedAddress]
+            : existingAddresses;
+
+          return {
+            ...prev,
+            companyName: companyName,
+            name: tradeName,
+            document: prev.document || prev.cnpj || formData.cnpj || undefined,
+            email: data.email || prev.email,
+            phone: data.telefone || data.ddd_telefone_1 || prev.phone,
+            openingDate: normalizeDate(data.abertura) ?? undefined,
+            size: data.porte,
+            legalNature: data.natureza_juridica,
+            mainActivity: data.atividade_principal ? data.atividade_principal[0] : null,
+            sideActivities: data.atividades_secundarias || [],
+            shareCapital: data.capital_social,
+            status: data.situacao,
+            statusDate: normalizeDate(data.data_situacao) ?? undefined,
+            statusReason: data.motivo_situacao,
+            specialStatus: data.situacao_especial,
+            specialStatusDate: normalizeDate(data.data_situacao_especial) ?? undefined,
+            pjQsa: data.qsa || [],
+            addresses: nextAddresses
+          };
+        });
         
-        // Auto-fill address if available and form is empty or user confirms
-        if (data.logradouro) {
-             setAddressForm({
-                 type: 'Principal',
-                 street: data.logradouro,
-                 number: data.numero || '',
-                 complement: data.complemento || '',
-                 district: data.bairro || '',
-                 city: data.municipio,
-                 state: data.uf,
-                 zipCode: data.cep ? data.cep.replace(/\D/g, '') : ''
-             });
-             // We can suggest the user to add this address
-             toast.success('Dados e Endereço carregados! Clique em "Salvar Endereço" se desejar adicionar.');
-             setShowAddressForm(true); // Open address details
+        if (enrichedAddress) {
+             setAddressForm(enrichedAddress);
+             toast.success('Dados do CNPJ e endereco preparados para salvamento automatico.');
+             setShowAddressForm(true);
         } else {
              toast.success('Dados do CNPJ carregados com sucesso!');
         }
@@ -826,6 +1269,30 @@ export function ContactForm() {
     }
   };
 
+  const handlePrimaryAddressAction = () => {
+    if (!id || id === 'new') {
+      toast.warning('Salve o contato antes de adicionar endereços');
+      return;
+    }
+
+    if (!showAddressForm) {
+      setShowAddressForm(true);
+      return;
+    }
+
+    if (editingAddress) {
+      handleUpdateAddress();
+      return;
+    }
+
+    if (hasFilledAddress(addressForm)) {
+      handleAddAddress();
+      return;
+    }
+
+    zipCodeRef.current?.focus();
+  };
+
   const startEditAddress = (address: Address) => {
     setEditingAddress(address);
     setAddressForm(address);
@@ -843,8 +1310,89 @@ export function ContactForm() {
   const [editingContact, setEditingContact] = useState<AdditionalContact | null>(null);
   const [contactForm, setContactForm] = useState<AdditionalContact>({
     type: 'EMAIL',
-    value: ''
+    value: '',
+    nomeContatoAdicional: '',
   });
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+
+  const contactAttachments = useMemo(
+    () => (Array.isArray(formData.metadata?.attachments) ? (formData.metadata?.attachments as ContactAttachment[]) : []),
+    [formData.metadata],
+  );
+
+  const contractTypeOptions = useMemo(() => {
+    const defaults = [
+      'Honorários',
+      'Prestação de Serviços',
+      'Locação',
+      'Mensalidade',
+      'Manutenção',
+      'Licenciamento',
+      'Assinatura',
+      'Parceria',
+    ];
+    const dynamic = contracts.map(contract => contract.type).filter(Boolean);
+    const currentType = contractForm.type && contractForm.type !== '__new__' ? [contractForm.type] : [];
+    return Array.from(new Set([...defaults, ...dynamic, ...currentType])).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [contracts, contractForm.type]);
+
+  const filteredAssets = useMemo(() => {
+    const term = assetSearch.trim().toLowerCase();
+    if (!term) return assets;
+
+    return assets.filter(asset =>
+      asset.assetType.name.toLowerCase().includes(term) ||
+      asset.description.toLowerCase().includes(term) ||
+      (asset.notes || '').toLowerCase().includes(term) ||
+      String(asset.value || '').includes(term),
+    );
+  }, [assets, assetSearch]);
+
+  const filteredContracts = useMemo(() => {
+    const term = contractSearch.trim().toLowerCase();
+    if (!term) return contracts;
+
+    return contracts.filter(contract =>
+      contract.type.toLowerCase().includes(term) ||
+      contract.description.toLowerCase().includes(term) ||
+      contract.counterpartyName.toLowerCase().includes(term) ||
+      (contract.notes || '').toLowerCase().includes(term),
+    );
+  }, [contracts, contractSearch]);
+
+  const filteredFinancialRecords = useMemo(() => {
+    const term = financialSearch.trim().toLowerCase();
+    if (!term) return financialRecords;
+
+    return financialRecords.filter(record =>
+      record.description.toLowerCase().includes(term) ||
+      (record.category || '').toLowerCase().includes(term) ||
+      (record.financialCategory?.name || '').toLowerCase().includes(term) ||
+      (record.bankAccount?.title || '').toLowerCase().includes(term) ||
+      (record.paymentMethod || '').toLowerCase().includes(term),
+    );
+  }, [financialRecords, financialSearch]);
+
+  const financialSummary = useMemo(() => {
+    return filteredFinancialRecords.reduce(
+      (summary, record) => {
+        const amount = Number(record.amount || 0);
+        if (record.type === 'INCOME') {
+          summary.income += amount;
+        } else {
+          summary.expense += amount;
+        }
+        if ((record.effectiveStatus || record.status) === 'OVERDUE') {
+          summary.overdue += 1;
+        }
+        if ((record.effectiveStatus || record.status) === 'PENDING') {
+          summary.pending += 1;
+        }
+        return summary;
+      },
+      { income: 0, expense: 0, overdue: 0, pending: 0 },
+    );
+  }, [filteredFinancialRecords]);
 
   const handleAddContact = async () => {
     if (!id || id === 'new') {
@@ -855,7 +1403,7 @@ export function ContactForm() {
         setLoading(true);
         await api.post(`/contacts/${id}/additional-contacts`, contactForm);
         await fetchContact();
-        setContactForm({ type: 'EMAIL', value: '' });
+        setContactForm({ type: 'EMAIL', value: '', nomeContatoAdicional: '' });
         setShowContactForm(false);
         toast.success('Contato adicionado!');
     } catch (err: any) {
@@ -875,7 +1423,7 @@ export function ContactForm() {
           setLoading(true);
           await api.patch(`/contacts/${id}/additional-contacts/${editingContact.id}`, contactForm);
           await fetchContact();
-          setContactForm({ type: 'EMAIL', value: '' });
+          setContactForm({ type: 'EMAIL', value: '', nomeContatoAdicional: '' });
           setEditingContact(null);
           setShowContactForm(false);
           toast.success('Contato atualizado!');
@@ -903,14 +1451,19 @@ export function ContactForm() {
 
   const startEditContact = (contact: AdditionalContact) => {
       setEditingContact(contact);
-      setContactForm(contact);
+      setContactForm({
+        type: contact.type,
+        value: contact.value,
+        nomeContatoAdicional: contact.nomeContatoAdicional || '',
+        id: contact.id,
+      });
       setShowContactForm(true);
   };
 
   const cancelContactForm = () => {
       setShowContactForm(false);
       setEditingContact(null);
-      setContactForm({ type: 'EMAIL', value: '' });
+      setContactForm({ type: 'EMAIL', value: '', nomeContatoAdicional: '' });
   };
 
   return (
@@ -1458,11 +2011,18 @@ export function ContactForm() {
                             <MapPin size={20} className="text-indigo-400" /> Endereços Cadastrados
                         </h3>
                         <button
-                            onClick={() => setShowAddressForm(true)}
+                            onClick={handlePrimaryAddressAction}
                             disabled={!id || id === 'new'}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <Plus size={16} /> Adicionar Endereço
+                            <Plus size={16} />
+                            {showAddressForm
+                              ? editingAddress
+                                ? 'Atualizar Endereço'
+                                : hasFilledAddress(addressForm)
+                                  ? 'Salvar Endereço'
+                                  : 'Adicionar Endereço'
+                              : 'Adicionar Endereço'}
                         </button>
                     </div>
 
@@ -1481,7 +2041,18 @@ export function ContactForm() {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {/* Linha 1: CEP, Número, Complemento */}
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-slate-400">CEP</label>
+                                            <label className="text-sm font-medium text-slate-400 flex items-center gap-2">
+                                                <a
+                                                    href="https://buscacepinter.correios.com.br/app/endereco/index.php"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex items-center justify-center text-indigo-400 hover:text-indigo-300 transition"
+                                                    title="Pesquisar CEP nos Correios"
+                                                >
+                                                    <Search size={14} />
+                                                </a>
+                                                <span>CEP</span>
+                                            </label>
                                             <input
                                                 id="addr-zip"
                                                 ref={zipCodeRef}
@@ -1493,6 +2064,7 @@ export function ContactForm() {
                                                 placeholder="00000-000"
                                                 maxLength={9}
                                             />
+                                            <p className="text-[11px] text-slate-500">Nao sabe o CEP? Use a lupa para pesquisar nos Correios.</p>
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">Número</label>
@@ -1889,7 +2461,16 @@ export function ContactForm() {
                                     <h4 className="text-md font-semibold text-white mb-4">
                                         {editingContact ? 'Editar Contato' : 'Novo Contato Extra'}
                                     </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Nome do contato adicional</label>
+                                            <input
+                                                value={contactForm.nomeContatoAdicional || ''}
+                                                onChange={e => setContactForm({...contactForm, nomeContatoAdicional: e.target.value})}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Ex: Maria do Financeiro"
+                                            />
+                                        </div>
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400">Tipo</label>
                                             <select
@@ -1948,6 +2529,9 @@ export function ContactForm() {
                                                         {['INSTAGRAM', 'LINKEDIN', 'WEBSITE', 'OTHER'].includes(contact.type) && <Briefcase size={18} />}
                                                     </div>
                                                     <div>
+                                                        {contact.nomeContatoAdicional && (
+                                                            <p className="text-sm font-semibold text-slate-200">{contact.nomeContatoAdicional}</p>
+                                                        )}
                                                         <p className="font-medium text-white">{contact.value}</p>
                                                         <p className="text-xs text-slate-400 font-mono">{contact.type}</p>
                                                     </div>
@@ -1980,12 +2564,178 @@ export function ContactForm() {
                 </div>
             )}
 
+            {activeTab === 'attachments' && (
+                <div className="space-y-6 max-w-5xl">
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <Paperclip size={20} className="text-indigo-400" /> Anexos do Contato
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">
+                                Centralize contratos, PDFs, imagens, planilhas e outros documentos do contato em um so lugar.
+                            </p>
+                        </div>
+                        <div className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-sm text-slate-300">
+                            {contactAttachments.length} arquivo(s) salvo(s)
+                        </div>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato antes de anexar documentos</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 space-y-4">
+                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                    <div>
+                                        <p className="text-white font-medium">Upload multiplo</p>
+                                        <p className="text-sm text-slate-400">
+                                            Aceita PDF, imagens, Word, Excel e outros arquivos para consulta rapida, download e impressao.
+                                        </p>
+                                    </div>
+                                    <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium cursor-pointer transition">
+                                        <Upload size={16} />
+                                        Selecionar arquivos
+                                        <input
+                                            type="file"
+                                            multiple
+                                            className="hidden"
+                                            onChange={event => {
+                                                handleAttachmentSelection(event.target.files);
+                                                event.currentTarget.value = '';
+                                            }}
+                                        />
+                                    </label>
+                                </div>
+
+                                {pendingAttachments.length > 0 && (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium text-slate-300">Prontos para envio</p>
+                                            <button
+                                                onClick={handleUploadAttachments}
+                                                disabled={uploadingAttachments}
+                                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition disabled:opacity-50"
+                                            >
+                                                {uploadingAttachments ? `Enviando... ${attachmentUploadProgress}%` : `Enviar ${pendingAttachments.length} arquivo(s)`}
+                                            </button>
+                                        </div>
+                                        {uploadingAttachments && (
+                                            <div className="space-y-2">
+                                                <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-emerald-500 transition-all duration-300"
+                                                        style={{ width: `${attachmentUploadProgress}%` }}
+                                                    />
+                                                </div>
+                                                <p className="text-xs text-emerald-300">Upload em andamento. Os arquivos aparecerao abaixo quando o envio terminar.</p>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {pendingAttachments.map((file, index) => (
+                                                <div key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-3">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-medium text-white truncate">{file.name}</p>
+                                                        <p className="text-xs text-slate-400">{formatFileSize(file.size)}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleRemovePendingAttachment(index)}
+                                                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
+                                                        title="Remover da fila"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-3">
+                                {contactAttachments.length > 0 ? (
+                                    contactAttachments.map((attachment) => {
+                                        const attachmentUrl = getAttachmentUrl(attachment);
+                                        return (
+                                            <div key={attachment.fileName} className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                                                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                                                    <div className="min-w-0">
+                                                        <AttachmentPreview url={attachmentUrl} title={attachment.originalName}>
+                                                            <button className="text-left">
+                                                                <p className="font-semibold text-white truncate hover:text-indigo-300 transition">
+                                                                    {attachment.originalName}
+                                                                </p>
+                                                            </button>
+                                                        </AttachmentPreview>
+                                                        <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-400">
+                                                            <span>{formatFileSize(attachment.size)}</span>
+                                                            <span>{attachment.mimeType || 'arquivo'}</span>
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                                                                <CheckCircle2 size={12} />
+                                                                Upload concluido
+                                                            </span>
+                                                            {attachment.uploadedAt && (
+                                                                <span>{new Date(attachment.uploadedAt).toLocaleString('pt-BR')}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <AttachmentPreview url={attachmentUrl} title={attachment.originalName}>
+                                                            <button className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition">
+                                                                <ExternalLink size={14} />
+                                                                Abrir
+                                                            </button>
+                                                        </AttachmentPreview>
+                                                        <a
+                                                            href={attachmentUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            download={attachment.originalName}
+                                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                                                        >
+                                                            <Download size={14} />
+                                                            Baixar
+                                                        </a>
+                                                        <button
+                                                            onClick={() => handlePrintAttachment(attachment)}
+                                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                                                        >
+                                                            <Printer size={14} />
+                                                            Imprimir
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteAttachment(attachment.fileName)}
+                                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 transition"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                            Excluir
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                                        <p className="text-slate-400">Nenhum anexo salvo para este contato</p>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+
             {activeTab === 'assets' && (
                 <div className="space-y-6 max-w-5xl">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                            <Briefcase size={20} className="text-indigo-400" /> Gestão de Patrimônio
-                        </h3>
+                        <div>
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <Briefcase size={20} className="text-indigo-400" /> Gestão de Patrimônio
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">Pesquise e gerencie os bens vinculados a este contato sem sair da aba.</p>
+                        </div>
                         <button
                             onClick={() => setShowAssetForm(true)}
                             disabled={!id || id === 'new'}
@@ -2001,6 +2751,23 @@ export function ContactForm() {
                         </div>
                     ) : (
                         <>
+                             <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3 items-center">
+                                <div className="relative">
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                    <input
+                                        value={assetSearch}
+                                        onChange={e => setAssetSearch(e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="Buscar por tipo, descricao, observacao ou valor"
+                                    />
+                                </div>
+                                <div className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/40 text-sm text-slate-300">
+                                    {filteredAssets.length} item(ns) exibido(s)
+                                </div>
+                                <div className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/40 text-sm text-slate-300">
+                                    Ativos: {assets.filter(asset => !asset.writeOffDate).length}
+                                </div>
+                             </div>
                              {showAssetForm && (
                                 <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800 animate-fadeIn mb-6">
                                     <h4 className="text-md font-semibold text-white mb-4">
@@ -2134,14 +2901,14 @@ export function ContactForm() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800">
-                                        {assets.length === 0 ? (
+                                        {filteredAssets.length === 0 ? (
                                             <tr>
                                                 <td colSpan={6} className="p-8 text-center text-slate-500">
-                                                    Nenhum patrimônio cadastrado.
+                                                    {assetSearch ? 'Nenhum patrimônio encontrado para a busca informada.' : 'Nenhum patrimônio cadastrado.'}
                                                 </td>
                                             </tr>
                                         ) : (
-                                            assets.map(asset => (
+                                            filteredAssets.map(asset => (
                                                 <tr key={asset.id} className="hover:bg-slate-800/50 transition">
                                                     <td className="p-4 text-white font-medium">{asset.assetType.name}</td>
                                                     <td className="p-4 text-slate-300">{asset.description}</td>
@@ -2184,6 +2951,462 @@ export function ContactForm() {
                     )}
 
 
+                </div>
+            )}
+
+            {activeTab === 'contracts' && (
+                <div className="space-y-6 max-w-6xl">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <FileText size={20} className="text-indigo-400" /> Contratos do Contato
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">
+                                Cadastre recorrencias e organize rapidamente quem paga, quem recebe e quando vence.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                if (!showContractForm) resetContractForm();
+                                setShowContractForm(true);
+                            }}
+                            disabled={!id || id === 'new'}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus size={16} />
+                            Novo Contrato
+                        </button>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato antes de cadastrar contratos</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Contratos</p>
+                                    <p className="text-2xl font-semibold text-white mt-2">{filteredContracts.length}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Ativos</p>
+                                    <p className="text-2xl font-semibold text-emerald-300 mt-2">
+                                        {filteredContracts.filter(contract => contract.status === 'ACTIVE').length}
+                                    </p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Receitas</p>
+                                    <p className="text-2xl font-semibold text-cyan-300 mt-2">
+                                        {filteredContracts.filter(contract => contract.transactionKind === 'INCOME').length}
+                                    </p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Despesas</p>
+                                    <p className="text-2xl font-semibold text-rose-300 mt-2">
+                                        {filteredContracts.filter(contract => contract.transactionKind === 'EXPENSE').length}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-center">
+                                <div className="relative">
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                    <input
+                                        value={contractSearch}
+                                        onChange={e => setContractSearch(e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="Buscar por tipo, descricao, outra parte ou observacao"
+                                    />
+                                </div>
+                                <div className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/40 text-sm text-slate-300">
+                                    {filteredContracts.length} contrato(s) exibido(s)
+                                </div>
+                            </div>
+
+                            {showContractForm && (
+                                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 space-y-4">
+                                    <h4 className="text-white font-semibold">
+                                        {editingContract ? 'Editar contrato' : 'Novo contrato'}
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Tipo</label>
+                                            {!creatingContractType ? (
+                                                <select
+                                                    value={contractForm.type}
+                                                    onChange={e => {
+                                                        if (e.target.value === '__new__') {
+                                                            setCreatingContractType(true);
+                                                            setContractForm(prev => ({ ...prev, type: '' }));
+                                                            return;
+                                                        }
+                                                        setContractForm(prev => ({ ...prev, type: e.target.value }));
+                                                    }}
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                >
+                                                    <option value="">Selecione...</option>
+                                                    {contractTypeOptions.map(type => (
+                                                        <option key={type} value={type}>{type}</option>
+                                                    ))}
+                                                    <option value="__new__">+ Novo tipo</option>
+                                                </select>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        autoFocus
+                                                        value={contractForm.newTypeName}
+                                                        onChange={e => setContractForm(prev => ({ ...prev, newTypeName: e.target.value }))}
+                                                        className="flex-1 bg-slate-950 border border-indigo-500 rounded px-3 py-2 text-white focus:outline-none"
+                                                        placeholder="Digite o novo tipo"
+                                                    />
+                                                    <button
+                                                        onClick={() => setCreatingContractType(false)}
+                                                        className="px-3 text-slate-300 hover:text-white"
+                                                        type="button"
+                                                    >
+                                                        X
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2 xl:col-span-3">
+                                            <label className="text-sm font-medium text-slate-400">Descricao</label>
+                                            <input
+                                                value={contractForm.description}
+                                                onChange={e => setContractForm(prev => ({ ...prev, description: e.target.value }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Ex: Honorarios mensais da assessoria juridica"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Vencimento (dia)</label>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={31}
+                                                value={contractForm.dueDay}
+                                                onChange={e => setContractForm(prev => ({ ...prev, dueDay: e.target.value }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Primeiro vencimento</label>
+                                            <input
+                                                type="date"
+                                                value={contractForm.firstDueDate}
+                                                onChange={e => setContractForm(prev => ({ ...prev, firstDueDate: e.target.value }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Cobranca</label>
+                                            <select
+                                                value={contractForm.billingFrequency}
+                                                onChange={e => setContractForm(prev => ({ ...prev, billingFrequency: e.target.value as 'MONTHLY' | 'ANNUAL' }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="MONTHLY">Mensal</option>
+                                                <option value="ANNUAL">Anual</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Receita / Despesa</label>
+                                            <select
+                                                value={contractForm.transactionKind}
+                                                onChange={e => setContractForm(prev => ({ ...prev, transactionKind: e.target.value as 'INCOME' | 'EXPENSE' }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="INCOME">Receita</option>
+                                                <option value="EXPENSE">Despesa</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Outra parte</label>
+                                            <select
+                                                value={contractForm.counterpartyRole}
+                                                onChange={e => setContractForm(prev => ({ ...prev, counterpartyRole: e.target.value as 'CONTRACTOR' | 'CONTRACTED' }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="CONTRACTOR">Contratante</option>
+                                                <option value="CONTRACTED">Contratado</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Nome da outra parte</label>
+                                            <input
+                                                value={contractForm.counterpartyName}
+                                                onChange={e => setContractForm(prev => ({ ...prev, counterpartyName: e.target.value }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Quem esta do outro lado do contrato"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-slate-400">Status</label>
+                                            <select
+                                                value={contractForm.status}
+                                                onChange={e => setContractForm(prev => ({ ...prev, status: e.target.value as 'ACTIVE' | 'PAUSED' | 'ENDED' }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                            >
+                                                <option value="ACTIVE">Ativo</option>
+                                                <option value="PAUSED">Pausado</option>
+                                                <option value="ENDED">Encerrado</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2 xl:col-span-4">
+                                            <label className="text-sm font-medium text-slate-400">Observacoes</label>
+                                            <textarea
+                                                rows={3}
+                                                value={contractForm.notes}
+                                                onChange={e => setContractForm(prev => ({ ...prev, notes: e.target.value }))}
+                                                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                                placeholder="Detalhes internos para uso operacional e de cobranca"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleCreateContract}
+                                            disabled={loading}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition disabled:opacity-50"
+                                        >
+                                            {loading ? 'Salvando...' : editingContract ? 'Atualizar contrato' : 'Salvar contrato'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowContractForm(false);
+                                                resetContractForm();
+                                            }}
+                                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition"
+                                            type="button"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="bg-slate-800/30 border border-slate-700 rounded-lg overflow-hidden">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-800/50 border-b border-slate-700 text-slate-400 text-sm">
+                                            <th className="p-4 font-medium">Tipo</th>
+                                            <th className="p-4 font-medium">Descricao</th>
+                                            <th className="p-4 font-medium">Cobranca</th>
+                                            <th className="p-4 font-medium">Primeiro Venc.</th>
+                                            <th className="p-4 font-medium">Fluxo</th>
+                                            <th className="p-4 font-medium">Outra Parte</th>
+                                            <th className="p-4 font-medium">Status</th>
+                                            <th className="p-4 font-medium text-right">Acoes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800">
+                                        {filteredContracts.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={8} className="p-8 text-center text-slate-500">
+                                                    {contractSearch ? 'Nenhum contrato encontrado com os filtros atuais.' : 'Nenhum contrato cadastrado.'}
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            filteredContracts.map(contract => (
+                                                <tr key={contract.id} className="hover:bg-slate-800/40 transition">
+                                                    <td className="p-4 text-white font-medium">{contract.type}</td>
+                                                    <td className="p-4 text-slate-300">
+                                                        <div>
+                                                            <p>{contract.description}</p>
+                                                            <p className="text-xs text-slate-500 mt-1">Vence todo dia {contract.dueDay}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 text-slate-300">{CONTRACT_BILLING_LABELS[contract.billingFrequency]}</td>
+                                                    <td className="p-4 text-slate-300">
+                                                        {contract.firstDueDate ? new Date(contract.firstDueDate).toLocaleDateString('pt-BR') : '-'}
+                                                    </td>
+                                                    <td className={clsx('p-4 font-medium', contract.transactionKind === 'INCOME' ? 'text-emerald-300' : 'text-rose-300')}>
+                                                        {contract.transactionKind === 'INCOME' ? 'Receita' : 'Despesa'}
+                                                    </td>
+                                                    <td className="p-4 text-slate-300">
+                                                        <div>
+                                                            <p>{contract.counterpartyName}</p>
+                                                            <p className="text-xs text-slate-500">{CONTRACT_ROLE_LABELS[contract.counterpartyRole]}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <span className={clsx(
+                                                            'inline-flex rounded-full border px-2 py-1 text-xs',
+                                                            contract.status === 'ACTIVE' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+                                                            contract.status === 'PAUSED' && 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+                                                            contract.status === 'ENDED' && 'border-slate-600 bg-slate-700/40 text-slate-300',
+                                                        )}>
+                                                            {CONTRACT_STATUS_LABELS[contract.status]}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button
+                                                                onClick={() => startEditContract(contract)}
+                                                                className="p-2 text-slate-400 hover:text-indigo-300 hover:bg-slate-700 rounded-lg transition"
+                                                            >
+                                                                <Edit size={16} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteContract(contract.id)}
+                                                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'financial' && (
+                <div className="space-y-6 max-w-6xl">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <DollarSign size={20} className="text-indigo-400" /> Financeiro do Contato
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">
+                                Veja todas as transacoes ligadas a este contato sem sair do cadastro.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/financial')}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                        >
+                            <ExternalLink size={16} />
+                            Abrir Financeiro
+                        </button>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato para visualizar o financeiro vinculado</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Receitas</p>
+                                    <p className="text-2xl font-semibold text-emerald-300 mt-2">{formatCurrency(financialSummary.income)}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Despesas</p>
+                                    <p className="text-2xl font-semibold text-rose-300 mt-2">{formatCurrency(financialSummary.expense)}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Pendentes</p>
+                                    <p className="text-2xl font-semibold text-amber-300 mt-2">{financialSummary.pending}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Vencidas</p>
+                                    <p className="text-2xl font-semibold text-red-300 mt-2">{financialSummary.overdue}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-center">
+                                <div className="relative">
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                    <input
+                                        value={financialSearch}
+                                        onChange={e => setFinancialSearch(e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                        placeholder="Buscar por descricao, categoria, conta ou forma de pagamento"
+                                    />
+                                </div>
+                                <div className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/40 text-sm text-slate-300">
+                                    {filteredFinancialRecords.length} lancamento(s)
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-800/30 border border-slate-700 rounded-lg overflow-hidden">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-800/50 border-b border-slate-700 text-slate-400 text-sm">
+                                            <th className="p-4 font-medium">Tipo</th>
+                                            <th className="p-4 font-medium">Descricao</th>
+                                            <th className="p-4 font-medium">Vencimento</th>
+                                            <th className="p-4 font-medium">Status</th>
+                                            <th className="p-4 font-medium">Valor</th>
+                                            <th className="p-4 font-medium">Conta</th>
+                                            <th className="p-4 font-medium">Categoria</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800">
+                                        {filteredFinancialRecords.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={7} className="p-8 text-center text-slate-500">
+                                                    {financialSearch ? 'Nenhuma transacao encontrada para a busca informada.' : 'Nenhuma transacao financeira vinculada a este contato.'}
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            filteredFinancialRecords.map(record => {
+                                                const effectiveStatus = getEffectiveFinancialStatus(record);
+                                                return (
+                                                    <tr key={record.id} className="hover:bg-slate-800/40 transition">
+                                                        <td className={clsx('p-4 font-medium', record.type === 'INCOME' ? 'text-emerald-300' : 'text-rose-300')}>
+                                                            {record.type === 'INCOME' ? 'Receita' : 'Despesa'}
+                                                        </td>
+                                                        <td className="p-4 text-slate-300">
+                                                            <div>
+                                                                <p className="text-white">{record.description}</p>
+                                                                <p className="text-xs text-slate-500 mt-1">
+                                                                    {record.paymentMethod || 'Sem forma definida'}
+                                                                    {record.contactRole ? ` • ${record.contactRole}` : ''}
+                                                                </p>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-slate-300">
+                                                            <div>
+                                                                <p>{new Date(record.dueDate).toLocaleDateString('pt-BR')}</p>
+                                                                <p className="text-xs text-slate-500">
+                                                                    {record.paymentDate ? `Pago em ${new Date(record.paymentDate).toLocaleDateString('pt-BR')}` : 'Aguardando pagamento'}
+                                                                </p>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <span className={clsx(
+                                                                'inline-flex rounded-full border px-2 py-1 text-xs',
+                                                                effectiveStatus === 'PAID' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+                                                                effectiveStatus === 'PENDING' && 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+                                                                effectiveStatus === 'OVERDUE' && 'border-red-500/30 bg-red-500/10 text-red-300',
+                                                                effectiveStatus === 'PARTIAL' && 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+                                                                effectiveStatus === 'CANCELLED' && 'border-slate-600 bg-slate-700/40 text-slate-300',
+                                                            )}>
+                                                                {FINANCIAL_STATUS_LABELS[effectiveStatus] || effectiveStatus}
+                                                            </span>
+                                                        </td>
+                                                        <td className={clsx('p-4 font-semibold', record.type === 'INCOME' ? 'text-emerald-300' : 'text-rose-300')}>
+                                                            {formatCurrency(record.amountFinal ?? record.amount)}
+                                                        </td>
+                                                        <td className="p-4 text-slate-300">{record.bankAccount?.title || '-'}</td>
+                                                        <td className="p-4 text-slate-300">{record.financialCategory?.name || record.category || '-'}</td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -2240,3 +3463,4 @@ export function ContactForm() {
     </div>
   );
 }
+

@@ -214,4 +214,11 @@ export class CreateContactDto {
   @IsString()
   @Transform(({ value }) => value === "" ? null : value)
   category?: string; // Cliente, Fornecedor, Parte Contrária, etc.
+  @IsOptional()
+  @IsArray()
+  addresses?: any[];
+
+  @IsOptional()
+  @IsArray()
+  additionalContacts?: any[];
 }
