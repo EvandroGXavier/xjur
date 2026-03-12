@@ -53,6 +53,7 @@ type DrxClawConfig = {
     claude: string;
     groq: string;
   };
+  customModels: Record<string, string[]>;
   playground: {
     temperature: number;
     maxTokens: number;
@@ -71,6 +72,39 @@ type PlaygroundResponse = {
   answer: string;
   error?: string | null;
   systemPrompt: string;
+};
+
+type ProviderModelOption = {
+  id: string;
+  label: string;
+  source: "live" | "fallback" | "custom" | "selected";
+  status: "stable" | "preview" | "alias" | "custom";
+};
+
+type ProviderCatalogEntry = {
+  provider: string;
+  label: string;
+  supported: boolean;
+  ready: boolean;
+  canValidate: boolean;
+  usesFixedBaseUrl: boolean;
+  selectedModel: string;
+  defaultModel: string;
+  baseUrl: string;
+  missing: string[];
+  note: string;
+  models: ProviderModelOption[];
+  fetchedLiveModels: boolean;
+  liveLookupError: string | null;
+};
+
+type ProviderValidation = {
+  ok: boolean;
+  provider: string;
+  label: string;
+  model: string;
+  latencyMs?: number;
+  message: string;
 };
 
 const EMPTY_CONFIG: DrxClawConfig = {
@@ -98,6 +132,15 @@ const EMPTY_CONFIG: DrxClawConfig = {
     deepseek: "",
     claude: "",
     groq: "",
+  },
+  customModels: {
+    OPENAI: [],
+    GEMINI: [],
+    CLAUDE: [],
+    GROQ: [],
+    DEEPSEEK: [],
+    OPENAI_COMPATIBLE: [],
+    LOCAL: [],
   },
   playground: {
     temperature: 0.4,
@@ -164,6 +207,104 @@ const generateSkillId = (name: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
 
+const getProviderModel = (config: DrxClawConfig) => {
+  const provider = String(config.provider || "LOCAL").toUpperCase();
+
+  if (
+    provider === "LOCAL" ||
+    provider === "OLLAMA" ||
+    provider === "LMSTUDIO"
+  ) {
+    return config.local.model;
+  }
+
+  if (provider === "OPENAI") {
+    return config.openaiCompatible.model || "gpt-4o-mini";
+  }
+
+  if (provider === "GROQ") {
+    return config.openaiCompatible.model || "llama-3.3-70b-versatile";
+  }
+
+  if (provider === "DEEPSEEK") {
+    return config.openaiCompatible.model || "deepseek-chat";
+  }
+
+  if (provider === "GEMINI") {
+    return config.openaiCompatible.model || "gemini-2.5-flash";
+  }
+
+  if (provider === "CLAUDE") {
+    return config.openaiCompatible.model || "claude-sonnet-4-20250514";
+  }
+
+  return config.openaiCompatible.model;
+};
+
+const usesFixedRemoteEndpoint = (providerInput: string) =>
+  ["OPENAI", "GROQ", "DEEPSEEK", "GEMINI", "CLAUDE"].includes(
+    String(providerInput || "").toUpperCase(),
+  );
+
+const getProviderLabel = (providerInput: string) => {
+  const provider = String(providerInput || "").toUpperCase();
+
+  if (provider === "OPENAI") return "OpenAI";
+  if (provider === "GEMINI") return "Gemini";
+  if (provider === "CLAUDE") return "Claude";
+  if (provider === "GROQ") return "Groq";
+  if (provider === "DEEPSEEK") return "DeepSeek";
+  if (provider === "OPENAI_COMPATIBLE") return "OpenAI Compatible";
+  if (provider === "LOCAL") return "IA Local";
+  if (provider === "OLLAMA") return "Ollama";
+  if (provider === "LMSTUDIO") return "LM Studio";
+  return provider || "Provider";
+};
+
+const getRemoteModelLabel = (providerInput: string) => {
+  const provider = String(providerInput || "").toUpperCase();
+
+  if (provider === "OPENAI") return "Modelo OpenAI";
+  if (provider === "GEMINI") return "Modelo Gemini";
+  if (provider === "CLAUDE") return "Modelo Claude";
+  if (provider === "GROQ") return "Modelo Groq";
+  if (provider === "DEEPSEEK") return "Modelo DeepSeek";
+  return "Modelo";
+};
+
+const getRemoteModelHint = (providerInput: string) => {
+  const provider = String(providerInput || "").toUpperCase();
+
+  if (provider === "OPENAI") {
+    return "Se deixar vazio, o sistema usa gpt-4o-mini.";
+  }
+
+  if (provider === "GEMINI") {
+    return "Se deixar vazio, o sistema usa gemini-2.5-flash.";
+  }
+
+  if (provider === "CLAUDE") {
+    return "Se deixar vazio, o sistema usa claude-sonnet-4-20250514.";
+  }
+
+  if (provider === "GROQ") {
+    return "Se deixar vazio, o sistema usa llama-3.3-70b-versatile.";
+  }
+
+  if (provider === "DEEPSEEK") {
+    return "Se deixar vazio, o sistema usa deepseek-chat.";
+  }
+
+  return undefined;
+};
+
+const SUB_TABS = [
+  { id: "operacao", label: "Operacao" },
+  { id: "modelos", label: "Modelos" },
+  { id: "skills", label: "Skills" },
+  { id: "playground", label: "Playground" },
+] as const;
+
 const Field = ({
   label,
   children,
@@ -187,10 +328,20 @@ export function DrxClawTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [activeSubTab, setActiveSubTab] =
+    useState<(typeof SUB_TABS)[number]["id"]>("operacao");
   const [playgroundPrompt, setPlaygroundPrompt] = useState("");
   const [playgroundScenario, setPlaygroundScenario] = useState("Livre");
   const [playgroundResponse, setPlaygroundResponse] =
     useState<PlaygroundResponse | null>(null);
+  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalogEntry[]>(
+    [],
+  );
+  const [providerValidation, setProviderValidation] =
+    useState<ProviderValidation | null>(null);
+  const [customModelInput, setCustomModelInput] = useState("");
   const [newSkill, setNewSkill] = useState({
     name: "",
     description: "",
@@ -201,6 +352,15 @@ export function DrxClawTab() {
   const enabledSkills = useMemo(
     () => config.skills.filter((skill) => skill.enabled),
     [config.skills],
+  );
+
+  const selectedCatalog = useMemo(
+    () =>
+      providerCatalog.find(
+        (entry) =>
+          entry.provider === String(config.provider || "").toUpperCase(),
+      ) || null,
+    [config.provider, providerCatalog],
   );
 
   const readiness = useMemo(() => {
@@ -219,6 +379,10 @@ export function DrxClawTab() {
             ? config.apiKeys.groq.trim()
             : config.provider === "DEEPSEEK"
               ? config.apiKeys.deepseek.trim()
+              : config.provider === "GEMINI"
+                ? config.apiKeys.gemini.trim()
+                : config.provider === "CLAUDE"
+                  ? config.apiKeys.claude.trim()
               : config.openaiCompatible.baseUrl.trim() &&
                 config.openaiCompatible.model.trim()
     ) {
@@ -228,6 +392,21 @@ export function DrxClawTab() {
     return Math.min(score, 100);
   }, [config, enabledSkills.length]);
 
+  const loadCatalog = async (draftConfig: DrxClawConfig) => {
+    try {
+      setCatalogLoading(true);
+      const response = await api.post("/drx-claw/catalog", {
+        config: draftConfig,
+      });
+      setProviderCatalog(response.data?.providers || []);
+    } catch (error) {
+      console.error("Erro ao carregar catalogo do DrX-Claw:", error);
+      toast.error("Nao foi possivel carregar o catalogo dos providers");
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
   const loadConfig = async () => {
     try {
       setLoading(true);
@@ -235,6 +414,7 @@ export function DrxClawTab() {
       const loadedConfig = response.data?.config || EMPTY_CONFIG;
 
       setConfig(loadedConfig);
+      setProviderValidation(null);
       setPlaygroundPrompt(
         loadedConfig.playground?.lastPrompt || PLAYGROUND_PRESETS[0].prompt,
       );
@@ -243,18 +423,14 @@ export function DrxClawTab() {
           ? {
               mode: "history",
               provider: loadedConfig.provider,
-              model:
-                loadedConfig.provider === "LOCAL" ||
-                loadedConfig.provider === "OLLAMA" ||
-                loadedConfig.provider === "LMSTUDIO"
-                  ? loadedConfig.local.model
-                  : loadedConfig.openaiCompatible.model,
+              model: getProviderModel(loadedConfig),
               matchedSkills: [],
               answer: loadedConfig.playground.lastResponse,
               systemPrompt: loadedConfig.systemPrompt,
             }
           : null,
       );
+      await loadCatalog(loadedConfig);
     } catch (error) {
       console.error("Erro ao carregar DrX-Claw:", error);
       toast.error("Não foi possível carregar a configuração do DrX-Claw");
@@ -275,6 +451,7 @@ export function DrxClawTab() {
     try {
       setSaving(true);
       await api.post("/drx-claw/config", config);
+      await loadCatalog(config);
       toast.success("DrX-Claw salvo com sucesso");
     } catch (error) {
       console.error("Erro ao salvar DrX-Claw:", error);
@@ -282,6 +459,124 @@ export function DrxClawTab() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const validateCurrentProvider = async () => {
+    try {
+      setValidating(true);
+      const response = await api.post("/drx-claw/validate", {
+        provider: config.provider,
+        config,
+      });
+      setProviderValidation(response.data);
+      if (response.data?.ok) {
+        toast.success("Provider validado com resposta ao vivo");
+      } else {
+        toast.error(response.data?.message || "Falha ao validar provider");
+      }
+    } catch (error) {
+      console.error("Erro ao validar provider:", error);
+      toast.error("Não foi possível validar o provider atual");
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const selectModel = (modelId: string) => {
+    setProviderCatalog((current) =>
+      current.map((entry) =>
+        entry.provider === String(config.provider || "").toUpperCase()
+          ? { ...entry, selectedModel: modelId }
+          : entry,
+      ),
+    );
+
+    if (
+      config.provider === "LOCAL" ||
+      config.provider === "OLLAMA" ||
+      config.provider === "LMSTUDIO"
+    ) {
+      updateConfig({
+        local: { ...config.local, model: modelId },
+      });
+      return;
+    }
+
+    updateConfig({
+      openaiCompatible: {
+        ...config.openaiCompatible,
+        model: modelId,
+      },
+    });
+  };
+
+  const addCustomModel = () => {
+    const model = customModelInput.trim();
+    const providerKey = String(config.provider || "LOCAL").toUpperCase();
+
+    if (!model) {
+      toast.error("Informe o nome do modelo para incluir");
+      return;
+    }
+
+    if ((config.customModels?.[providerKey] || []).includes(model)) {
+      toast.message("Esse modelo já está na lista manual");
+      return;
+    }
+
+    updateConfig({
+      customModels: {
+        ...config.customModels,
+        [providerKey]: [...(config.customModels?.[providerKey] || []), model],
+      },
+    });
+    setProviderCatalog((current) =>
+      current.map((entry) =>
+        entry.provider === providerKey
+          ? {
+              ...entry,
+              models: [
+                ...entry.models,
+                {
+                  id: model,
+                  label: model,
+                  source: "custom",
+                  status: "custom",
+                },
+              ],
+            }
+          : entry,
+      ),
+    );
+    setCustomModelInput("");
+  };
+
+  const removeCustomModel = (modelId: string) => {
+    const providerKey = String(config.provider || "LOCAL").toUpperCase();
+    updateConfig({
+      customModels: {
+        ...config.customModels,
+        [providerKey]: (config.customModels?.[providerKey] || []).filter(
+          (item) => item !== modelId,
+        ),
+      },
+    });
+    setProviderCatalog((current) =>
+      current.map((entry) =>
+        entry.provider === providerKey
+          ? {
+              ...entry,
+              models: entry.models.filter(
+                (item) =>
+                  !(
+                    item.source === "custom" &&
+                    item.id.toLowerCase() === modelId.toLowerCase()
+                  ),
+              ),
+            }
+          : entry,
+      ),
+    );
   };
 
   const addSkill = () => {
@@ -447,11 +742,7 @@ export function DrxClawTab() {
               {config.provider}
             </div>
             <div className="text-sm text-slate-400 mt-1">
-              {config.provider === "LOCAL" ||
-              config.provider === "OLLAMA" ||
-              config.provider === "LMSTUDIO"
-                ? config.local.model || "Defina um modelo"
-                : config.openaiCompatible.model || "Defina um modelo"}
+              {getProviderModel(config) || "Defina um modelo"}
             </div>
           </div>
           <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800">
@@ -466,9 +757,29 @@ export function DrxClawTab() {
         </div>
       </div>
 
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {SUB_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSubTab(tab.id)}
+            className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
+              activeSubTab === tab.id
+                ? "border-indigo-500 bg-indigo-500/15 text-indigo-100"
+                : "border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-6">
         <div className="space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+              activeSubTab === "operacao" ? "" : "hidden"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-5">
               <Settings2 className="text-indigo-300" size={20} />
               <h4 className="text-lg font-semibold text-white">
@@ -571,7 +882,13 @@ export function DrxClawTab() {
             </Field>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+              activeSubTab === "operacao" || activeSubTab === "modelos"
+                ? ""
+                : "hidden"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-5">
               <KeyRound className="text-emerald-300" size={20} />
               <h4 className="text-lg font-semibold text-white">
@@ -670,23 +987,33 @@ export function DrxClawTab() {
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
                 <div className="flex items-center gap-2 text-slate-200 font-medium">
                   <Sparkles size={18} className="text-emerald-300" />
-                  OpenAI Compatible
+                  Modelo do provider remoto
                 </div>
-                <Field label="Base URL">
-                  <input
-                    value={config.openaiCompatible.baseUrl}
-                    onChange={(e) =>
-                      updateConfig({
-                        openaiCompatible: {
-                          ...config.openaiCompatible,
-                          baseUrl: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </Field>
-                <Field label="Modelo">
+                {usesFixedRemoteEndpoint(config.provider) ? (
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                    Este provider usa endpoint oficial fixo. Basta informar a
+                    chave da API e, se quiser, sobrescrever o modelo padrao.
+                  </div>
+                ) : (
+                  <Field label="Base URL">
+                    <input
+                      value={config.openaiCompatible.baseUrl}
+                      onChange={(e) =>
+                        updateConfig({
+                          openaiCompatible: {
+                            ...config.openaiCompatible,
+                            baseUrl: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </Field>
+                )}
+                <Field
+                  label={getRemoteModelLabel(config.provider)}
+                  hint={getRemoteModelHint(config.provider)}
+                >
                   <input
                     value={config.openaiCompatible.model}
                     onChange={(e) =>
@@ -704,7 +1031,250 @@ export function DrxClawTab() {
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+              activeSubTab === "modelos" ? "" : "hidden"
+            }`}
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <BrainCircuit className="text-emerald-300" size={20} />
+                  <h4 className="text-lg font-semibold text-white">
+                    Catalogo de modelos
+                  </h4>
+                </div>
+                <p className="text-sm text-slate-400 max-w-3xl">
+                  Lista operacional por provider com tentativa de consulta ao vivo
+                  quando a chave estiver preenchida. O listbox abaixo tambem
+                  aceita modelos personalizados para reduzir a margem de erro e
+                  acompanhar novos releases.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => loadCatalog(config)}
+                  disabled={catalogLoading}
+                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw
+                    size={16}
+                    className={catalogLoading ? "animate-spin" : ""}
+                  />
+                  Atualizar catalogo
+                </button>
+                <button
+                  onClick={validateCurrentProvider}
+                  disabled={validating}
+                  className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <CheckCircle2 size={16} />
+                  {validating ? "Validando..." : "Validar provider atual"}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-6">
+              {providerCatalog.map((entry) => (
+                <button
+                  key={entry.provider}
+                  onClick={() => updateConfig({ provider: entry.provider })}
+                  className={`text-left rounded-xl border p-4 transition-colors ${
+                    String(config.provider || "").toUpperCase() === entry.provider
+                      ? "border-indigo-500 bg-indigo-500/10"
+                      : "border-slate-800 bg-slate-950 hover:border-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium text-white">
+                      {entry.label}
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-[0.16em] ${
+                        entry.canValidate
+                          ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                          : entry.supported
+                            ? "bg-amber-500/10 border border-amber-500/20 text-amber-200"
+                            : "bg-slate-800 border border-slate-700 text-slate-400"
+                      }`}
+                    >
+                      {entry.canValidate
+                        ? "pronto"
+                        : entry.supported
+                          ? "configurar"
+                          : "indisponivel"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-2">
+                    {entry.selectedModel || entry.defaultModel || "Sem modelo"}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-3 line-clamp-2">
+                    {entry.note}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {selectedCatalog && (
+              <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-white">
+                          {selectedCatalog.label}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          {selectedCatalog.note}
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-slate-500">
+                        <div>
+                          {selectedCatalog.fetchedLiveModels
+                            ? "catalogo ao vivo"
+                            : "fallback oficial"}
+                        </div>
+                        <div className="mt-1">
+                          {selectedCatalog.models.length} modelo(s)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h5 className="text-white font-medium">ListBox de modelos</h5>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Toque em um item para definir o modelo do provider atual.
+                        </p>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        selecionado: {selectedCatalog.selectedModel || selectedCatalog.defaultModel}
+                      </div>
+                    </div>
+
+                    <div
+                      role="listbox"
+                      aria-label={`Modelos de ${selectedCatalog.label}`}
+                      className="mt-4 max-h-[420px] overflow-y-auto space-y-2 pr-1"
+                    >
+                      {selectedCatalog.models.map((model) => {
+                        const active =
+                          getProviderModel(config).trim().toLowerCase() ===
+                          model.id.trim().toLowerCase();
+                        const isCustom = model.source === "custom";
+
+                        return (
+                          <div
+                            key={`${selectedCatalog.provider}-${model.id}`}
+                            className={`rounded-xl border px-3 py-3 transition-colors ${
+                              active
+                                ? "border-indigo-500 bg-indigo-500/10"
+                                : "border-slate-800 bg-slate-950"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <button
+                                onClick={() => selectModel(model.id)}
+                                className="min-w-0 flex-1 text-left"
+                              >
+                                <div className="truncate text-sm font-medium text-white">
+                                  {model.label}
+                                </div>
+                                <div className="flex flex-wrap gap-2 mt-2 text-[10px] uppercase tracking-[0.16em]">
+                                  <span className="rounded-full border border-slate-700 px-2 py-1 text-slate-300">
+                                    {model.source}
+                                  </span>
+                                  <span className="rounded-full border border-slate-700 px-2 py-1 text-slate-400">
+                                    {model.status}
+                                  </span>
+                                </div>
+                              </button>
+
+                              {isCustom && (
+                                <button
+                                  onClick={() => removeCustomModel(model.id)}
+                                  className="p-2 rounded-lg border border-red-500/20 text-red-300 hover:bg-red-500/10 transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+                    <h5 className="text-white font-medium">Incluir novo modelo</h5>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Use quando o provider liberar um modelo novo antes do
+                      catalogo oficial aparecer aqui.
+                    </p>
+                    <div className="mt-4 flex gap-3">
+                      <input
+                        value={customModelInput}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        placeholder="Ex: gpt-4.1-mini"
+                        className="flex-1 px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        onClick={addCustomModel}
+                        className="px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-2"
+                      >
+                        <Plus size={16} />
+                        Incluir
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
+                    <h5 className="text-white font-medium">Prontidao do provider</h5>
+                    <div className="text-sm text-slate-300">
+                      {selectedCatalog.canValidate
+                        ? `${selectedCatalog.label} esta pronto para validacao ao vivo.`
+                        : selectedCatalog.note}
+                    </div>
+                    {providerValidation &&
+                      providerValidation.provider === selectedCatalog.provider && (
+                        <div
+                          className={`rounded-xl border px-4 py-3 text-sm ${
+                            providerValidation.ok
+                              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-100"
+                              : "border-amber-500/20 bg-amber-500/10 text-amber-100"
+                          }`}
+                        >
+                          <div className="font-medium">
+                            {providerValidation.ok
+                              ? "Validacao concluida"
+                              : "Validacao pendente"}
+                          </div>
+                          <div className="mt-2 text-xs">
+                            {providerValidation.model}
+                            {providerValidation.latencyMs
+                              ? ` • ${providerValidation.latencyMs} ms`
+                              : ""}
+                          </div>
+                          <div className="mt-2 whitespace-pre-wrap">
+                            {providerValidation.message}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+              activeSubTab === "skills" ? "" : "hidden"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-5">
               <Wand2 className="text-purple-300" size={20} />
               <h4 className="text-lg font-semibold text-white">
@@ -880,7 +1450,11 @@ export function DrxClawTab() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+              activeSubTab === "playground" ? "" : "hidden"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-5">
               <PlayCircle className="text-amber-300" size={20} />
               <h4 className="text-lg font-semibold text-white">
@@ -974,7 +1548,13 @@ export function DrxClawTab() {
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 ${
+              activeSubTab === "operacao" || activeSubTab === "modelos"
+                ? ""
+                : "hidden"
+            }`}
+          >
             <div className="flex items-center gap-3">
               <ClipboardList className="text-sky-300" size={20} />
               <h4 className="text-lg font-semibold text-white">
@@ -1019,7 +1599,7 @@ export function DrxClawTab() {
             </div>
           </div>
 
-          {playgroundResponse && (
+          {playgroundResponse && activeSubTab === "playground" && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>

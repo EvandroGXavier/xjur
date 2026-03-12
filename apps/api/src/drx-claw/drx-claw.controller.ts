@@ -16,6 +16,16 @@ export class DrxClawController {
     return this.drxClawService.getConfig(user.tenantId);
   }
 
+  @Post("catalog")
+  getCatalog(@CurrentUser() user: CurrentUserData, @Body() body: any) {
+    return this.drxClawService.getCatalog(user.tenantId, body);
+  }
+
+  @Post("validate")
+  validateProvider(@CurrentUser() user: CurrentUserData, @Body() body: any) {
+    return this.drxClawService.validateProvider(user.tenantId, body);
+  }
+
   @Post("config")
   saveConfig(@CurrentUser() user: CurrentUserData, @Body() body: any) {
     return this.drxClawService.saveConfig(user.tenantId, body);
