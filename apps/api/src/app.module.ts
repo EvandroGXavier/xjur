@@ -28,6 +28,7 @@ import { SecurityModule } from "./security/security.module";
 import { AgentModule } from "./agent/agent.module";
 import { DrxClawModule } from "./drx-claw/drx-claw.module";
 import { BackupModule } from "./backup/backup.module";
+import { TelegramModule } from "./telegram/telegram.module";
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { BackupModule } from "./backup/backup.module";
     AgentModule,
     DrxClawModule,
     BackupModule,
+    TelegramModule,
   ],
   controllers: [AppController],
   providers: [

@@ -54,13 +54,64 @@ export interface CEPData {
 
 @Injectable()
 export class EnrichmentService {
+  private isValidCNPJ(value: string) {
+    const digits = String(value || '').replace(/\D/g, '');
+
+    if (digits.length !== 14) return false;
+    if (/^(\d)\1{13}$/.test(digits)) return false;
+
+    const calculateDigit = (base: string, factor: number) => {
+      let total = 0;
+
+      for (const digit of base) {
+        total += Number(digit) * factor;
+        factor = factor === 2 ? 9 : factor - 1;
+      }
+
+      const remainder = total % 11;
+      return remainder < 2 ? 0 : 11 - remainder;
+    };
+
+    const firstDigit = calculateDigit(digits.slice(0, 12), 5);
+    const secondDigit = calculateDigit(
+      digits.slice(0, 12) + String(firstDigit),
+      6,
+    );
+
+    return digits.endsWith(`${firstDigit}${secondDigit}`);
+  }
+
+  private extractProviderMessage(error: any) {
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.response?.data?.details ||
+      error?.message ||
+      '';
+
+    return String(message || '').trim();
+  }
+
+  private isBusinessErrorMessage(message: string) {
+    const normalized = String(message || '').toLowerCase();
+
+    return (
+      normalized.includes('inválido') ||
+      normalized.includes('invalido') ||
+      normalized.includes('não encontrado') ||
+      normalized.includes('nao encontrado') ||
+      normalized.includes('bad_request') ||
+      normalized.includes('not found')
+    );
+  }
+
   /**
    * Consulta dados de CNPJ via API pública da Receita Federal
    * @param cnpj CNPJ sem formatação (apenas números)
    */
   async consultCNPJ(cnpj: string): Promise<CNPJData> {
     const cleanCNPJ = cnpj.replace(/\D/g, '');
-    if (cleanCNPJ.length !== 14) {
+    if (cleanCNPJ.length !== 14 || !this.isValidCNPJ(cleanCNPJ)) {
       throw new HttpException('CNPJ inválido', HttpStatus.BAD_REQUEST);
     }
 
@@ -82,7 +133,12 @@ export class EnrichmentService {
        // Se for erro de validação/negócio (404), relança.
        if (error instanceof HttpException) throw error;
        
-       console.warn(`ReceitaWS failed for ${cleanCNPJ}, trying BrasilAPI fallback...`, error.message);
+       const providerMessage = this.extractProviderMessage(error);
+       if (this.isBusinessErrorMessage(providerMessage)) {
+         throw new HttpException(providerMessage, HttpStatus.BAD_REQUEST);
+       }
+       
+       console.warn(`ReceitaWS failed for ${cleanCNPJ}, trying BrasilAPI fallback...`, providerMessage || error.message);
 
        // Tentativa 2: BrasilAPI
        try {
@@ -137,7 +193,11 @@ export class EnrichmentService {
          } as CNPJData;
 
        } catch (fallbackError: any) {
-          console.error(`BrasilAPI also failed for ${cleanCNPJ}`, fallbackError.message);
+          const fallbackMessage = this.extractProviderMessage(fallbackError);
+          console.error(`BrasilAPI also failed for ${cleanCNPJ}`, fallbackMessage || fallbackError.message);
+          if (this.isBusinessErrorMessage(fallbackMessage)) {
+            throw new HttpException(fallbackMessage, HttpStatus.BAD_REQUEST);
+          }
           throw new HttpException(
             'Não foi possível consultar o CNPJ em nenhum dos serviços disponíveis.',
             HttpStatus.SERVICE_UNAVAILABLE

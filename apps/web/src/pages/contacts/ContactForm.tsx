@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api, getApiUrl } from '../../services/api';
-import { masks } from '../../utils/masks';
+import { isValidCnpj, masks } from '../../utils/masks';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpContacts } from '../../data/helpManuals';
 import { useHotkeys } from '../../hooks/useHotkeys';
@@ -975,6 +975,22 @@ export function ContactForm() {
         };
 
         const rawPayload = { ...formData };
+        const normalizedName =
+          String(rawPayload.name || '').trim() ||
+          (rawPayload.personType === 'PJ'
+            ? String(rawPayload.companyName || '').trim()
+            : '');
+
+        if (normalizedName.length < 3) {
+            toast.warning(
+              rawPayload.personType === 'PJ'
+                ? 'Preencha o Nome Fantasia ou consulte um CNPJ valido antes de salvar.'
+                : 'Preencha o nome do contato antes de salvar.',
+            );
+            return;
+        }
+
+        rawPayload.name = normalizedName;
         
         // Convert specific date fields if they are in BR format or YYYY-MM-DD
         if (rawPayload.openingDate) rawPayload.openingDate = toISO(rawPayload.openingDate);
@@ -1068,6 +1084,11 @@ export function ContactForm() {
   const handleEnrichCNPJ = async () => {
     if (!formData.cnpj) {
       toast.warning('Digite um CNPJ para consultar');
+      return;
+    }
+
+    if (!isValidCnpj(formData.cnpj)) {
+      toast.warning('Digite um CNPJ valido antes de consultar');
       return;
     }
 
@@ -1711,7 +1732,7 @@ export function ContactForm() {
                                         <button
                                             type="button"
                                             onClick={handleEnrichCNPJ}
-                                            disabled={enriching || !formData.cnpj}
+                                            disabled={enriching || !formData.cnpj || !isValidCnpj(formData.cnpj)}
                                             className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 flex items-center justify-center"
                                             title="Consultar na Receita"
                                         >

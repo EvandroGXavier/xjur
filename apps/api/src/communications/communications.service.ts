@@ -34,7 +34,10 @@ export class CommunicationsService {
         OR: [
           { phone: { contains: dto.from } },
           { whatsapp: { contains: dto.from } },
-          { email: dto.from }
+          { email: dto.from },
+          ...(dto.channel === 'TELEGRAM'
+            ? [{ metadata: { path: ['telegramUserId'], equals: dto.from } } as any]
+            : []),
         ]
       }
     });
@@ -48,7 +51,14 @@ export class CommunicationsService {
           personType: 'LEAD',
           phone: (dto.channel === 'WHATSAPP' || dto.channel === 'PHONE') ? dto.from : undefined,
           email: dto.channel === 'EMAIL' ? dto.from : undefined,
-          category: 'LEAD'
+          category: 'LEAD',
+          metadata: dto.channel === 'TELEGRAM'
+            ? {
+                telegramUserId: dto.from,
+                telegramChatId: dto.externalThreadId || null,
+                telegramUsername: dto.metadata?.telegramUsername || null,
+              }
+            : undefined,
         }
       });
     }

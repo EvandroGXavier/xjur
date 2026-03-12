@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { CommunicationsService } from "../communications/communications.service";
 import { PrismaService } from "../prisma.service";
+import { TicketsService } from "../tickets/tickets.service";
 
 type ProviderId =
   | "LOCAL"
@@ -244,7 +246,11 @@ const DEFAULT_CONFIG: DrxClawConfig = {
 
 @Injectable()
 export class DrxClawService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly communicationsService: CommunicationsService,
+    private readonly ticketsService: TicketsService,
+  ) {}
 
   private normalizeProvider(providerInput?: string): ProviderId {
     const provider = String(providerInput || "LOCAL").toUpperCase();
@@ -1080,6 +1086,489 @@ export class DrxClawService {
       record: created,
       config: this.mergeConfig(created.config, tenant?.name),
     };
+  }
+
+  private extractJsonObject(payload: string) {
+    const text = String(payload || '').trim();
+    if (!text) return null;
+
+    const direct = text.match(/\{[\s\S]*\}/);
+    if (!direct) return null;
+
+    try {
+      return JSON.parse(direct[0]);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  private buildTelegramDisplayName(message: any) {
+    const parts = [
+      String(message?.from?.first_name || '').trim(),
+      String(message?.from?.last_name || '').trim(),
+    ].filter(Boolean);
+
+    return (
+      parts.join(' ') ||
+      String(message?.from?.username || '').trim() ||
+      String(message?.chat?.title || '').trim() ||
+      `Telegram ${String(message?.from?.id || message?.chat?.id || '').trim()}`
+    );
+  }
+
+  private sanitizeTelegramText(input: any) {
+    return String(input || '').trim();
+  }
+
+  private async buildTelegramActionPlan(input: {
+    config: DrxClawConfig;
+    runtime: ReturnType<typeof this.resolveRuntime>;
+    prompt: string;
+    context: Record<string, any>;
+    allowActions: boolean;
+  }) {
+    const systemPrompt = [
+      `Assistente: ${input.config.assistantName}`,
+      input.config.systemPrompt,
+      'Canal: Telegram.',
+      'Retorne APENAS JSON valido.',
+      'Formato: {"reply":"texto","actions":[{"type":"SEARCH_CONTACT","query":"..." }]}',
+      'Use "actions" apenas quando realmente precisar consultar ou atualizar o sistema.',
+      input.allowActions
+        ? 'Acoes permitidas: SEARCH_CONTACT(query), LIST_OPEN_TICKETS(limit,status), GET_PROCESS_SUMMARY(query), UPDATE_TICKET_STATUS(ticketCodeOrId,status), ADD_TICKET_NOTE(content).'
+        : 'Acoes desabilitadas para esta conversa. Responda apenas com "reply".',
+      'Nunca invente IDs, codigos, contatos ou processos.',
+      'A resposta em "reply" deve ser curta, clara e em portugues do Brasil.',
+    ].join('\n\n');
+
+    const result = await this.executeRuntimeRequest(
+      input.runtime,
+      systemPrompt,
+      JSON.stringify(
+        {
+          prompt: input.prompt,
+          context: input.context,
+          allowActions: input.allowActions,
+        },
+        null,
+        2,
+      ),
+      input.config,
+    );
+
+    const parsed = this.extractJsonObject(result.answer);
+    return {
+      raw: result.answer,
+      error: result.error,
+      reply:
+        this.sanitizeTelegramText(parsed?.reply) ||
+        this.sanitizeTelegramText(result.answer),
+      actions: Array.isArray(parsed?.actions) ? parsed.actions : [],
+    };
+  }
+
+  private async executeTelegramActions(input: {
+    tenantId: string;
+    currentTicketId: string;
+    allowActions: boolean;
+    actions: any[];
+  }) {
+    if (!input.allowActions || input.actions.length === 0) {
+      return [];
+    }
+
+    const results: Array<Record<string, any>> = [];
+
+    for (const action of input.actions.slice(0, 4)) {
+      const type = String(action?.type || '').trim().toUpperCase();
+
+      try {
+        if (type === 'SEARCH_CONTACT') {
+          const query = String(action?.query || '').trim();
+          if (!query) continue;
+
+          const contacts = await this.prisma.contact.findMany({
+            where: {
+              tenantId: input.tenantId,
+              OR: [
+                { name: { contains: query, mode: 'insensitive' as any } },
+                { email: { contains: query, mode: 'insensitive' as any } },
+                { phone: { contains: query } },
+                { whatsapp: { contains: query } },
+              ],
+            },
+            take: 5,
+            orderBy: { updatedAt: 'desc' },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              whatsapp: true,
+              category: true,
+            },
+          });
+
+          results.push({ type, query, contacts });
+          continue;
+        }
+
+        if (type === 'LIST_OPEN_TICKETS') {
+          const limit = Math.min(Math.max(Number(action?.limit || 5), 1), 10);
+          const status = String(action?.status || '').trim().toUpperCase();
+          const tickets = await this.prisma.ticket.findMany({
+            where: {
+              tenantId: input.tenantId,
+              status: status || { in: ['OPEN', 'IN_PROGRESS', 'WAITING'] },
+            } as any,
+            take: limit,
+            orderBy: { updatedAt: 'desc' },
+            include: {
+              contact: { select: { name: true, phone: true, email: true } },
+            },
+          });
+
+          results.push({
+            type,
+            tickets: tickets.map((ticket) => ({
+              id: ticket.id,
+              code: ticket.code,
+              title: ticket.title,
+              status: ticket.status,
+              channel: ticket.channel,
+              contact: ticket.contact?.name || null,
+            })),
+          });
+          continue;
+        }
+
+        if (type === 'GET_PROCESS_SUMMARY') {
+          const query = String(action?.query || '').trim();
+          if (!query) continue;
+
+          const processes = await this.prisma.process.findMany({
+            where: {
+              tenantId: input.tenantId,
+              OR: [
+                { cnj: { contains: query, mode: 'insensitive' as any } },
+                { code: { contains: query, mode: 'insensitive' as any } },
+                { title: { contains: query, mode: 'insensitive' as any } },
+              ],
+            },
+            take: 3,
+            orderBy: { updatedAt: 'desc' },
+            include: {
+              contact: { select: { name: true } },
+            },
+          });
+
+          results.push({
+            type,
+            query,
+            processes: processes.map((process) => ({
+              id: process.id,
+              cnj: process.cnj,
+              code: process.code,
+              title: process.title,
+              status: process.status,
+              contact: process.contact?.name || null,
+            })),
+          });
+          continue;
+        }
+
+        if (type === 'UPDATE_TICKET_STATUS') {
+          const ticketCodeOrId = String(action?.ticketCodeOrId || '').trim();
+          const status = String(action?.status || '').trim().toUpperCase();
+          if (!ticketCodeOrId || !status) continue;
+
+          const ticket = await this.prisma.ticket.findFirst({
+            where: {
+              tenantId: input.tenantId,
+              OR: [
+                { id: ticketCodeOrId },
+                ...(Number.isFinite(Number(ticketCodeOrId))
+                  ? [{ code: Number(ticketCodeOrId) }]
+                  : []),
+              ],
+            },
+          });
+
+          if (!ticket) {
+            results.push({ type, ticketCodeOrId, error: 'Ticket nao encontrado' });
+            continue;
+          }
+
+          await this.ticketsService.updateTicket(
+            ticket.id,
+            { status },
+            input.tenantId,
+          );
+          results.push({
+            type,
+            ticketId: ticket.id,
+            code: ticket.code,
+            status,
+          });
+          continue;
+        }
+
+        if (type === 'ADD_TICKET_NOTE') {
+          const content = String(action?.content || '').trim();
+          if (!content) continue;
+
+          const note = await this.ticketsService.createSystemMessage(
+            input.currentTicketId,
+            input.tenantId,
+            {
+              content: `[Nota DrX-Claw] ${content}`,
+              metadata: {
+                internal: true,
+                generatedBy: 'DRX_CLAW',
+              },
+            },
+          );
+
+          results.push({ type, ticketMessageId: note.id });
+        }
+      } catch (error: any) {
+        results.push({
+          type,
+          error: error?.message || 'Falha ao executar acao.',
+        });
+      }
+    }
+
+    return results;
+  }
+
+  private async synthesizeTelegramReply(input: {
+    config: DrxClawConfig;
+    runtime: ReturnType<typeof this.resolveRuntime>;
+    prompt: string;
+    baseReply: string;
+    actionResults: any[];
+  }) {
+    if (input.actionResults.length === 0) {
+      return input.baseReply;
+    }
+
+    const result = await this.executeRuntimeRequest(
+      input.runtime,
+      [
+        `Assistente: ${input.config.assistantName}`,
+        input.config.systemPrompt,
+        'Canal: Telegram.',
+        'Responda em portugues do Brasil.',
+        'Considere os resultados das acoes executadas e entregue uma resposta final curta e objetiva.',
+      ].join('\n\n'),
+      JSON.stringify(
+        {
+          prompt: input.prompt,
+          respostaBase: input.baseReply,
+          resultadosDasAcoes: input.actionResults,
+        },
+        null,
+        2,
+      ),
+      input.config,
+    );
+
+    return this.sanitizeTelegramText(result.answer) || input.baseReply;
+  }
+
+  async handleTelegramInbound(connectionId: string, update: any) {
+    const connection = await this.prisma.connection.findFirst({
+      where: { id: connectionId, type: 'TELEGRAM' },
+    });
+
+    if (!connection) {
+      return { ignored: true };
+    }
+
+    const message = update?.message || update?.edited_message;
+    if (!message || message?.from?.is_bot) {
+      return { ignored: true };
+    }
+
+    const chatId = String(message?.chat?.id || '').trim();
+    const userId = String(message?.from?.id || '').trim();
+    const prompt = this.sanitizeTelegramText(message?.text || message?.caption);
+    if (!chatId) {
+      return { ignored: true };
+    }
+
+    const { config } = await this.ensureConfigRecord(connection.tenantId);
+
+    if (!config.enabled) {
+      return {
+        tenantId: connection.tenantId,
+        ticketId: null,
+        chatId,
+        reply: 'O DrX-Claw esta desativado para esta empresa no momento.',
+        replyToMessageId: Number(message?.message_id) || undefined,
+      };
+    }
+
+    const whitelist = (config.telegramWhitelist || []).map((item) =>
+      String(item).trim(),
+    );
+    const authorized =
+      whitelist.length === 0 ||
+      whitelist.includes(chatId) ||
+      whitelist.includes(userId);
+    const allowActions =
+      whitelist.length > 0 &&
+      (whitelist.includes(chatId) || whitelist.includes(userId));
+
+    if (!authorized) {
+      return {
+        tenantId: connection.tenantId,
+        ticketId: null,
+        chatId,
+        reply: 'Acesso nao autorizado para este bot.',
+        replyToMessageId: Number(message?.message_id) || undefined,
+      };
+    }
+
+    if (!prompt) {
+      return {
+        tenantId: connection.tenantId,
+        ticketId: null,
+        chatId,
+        reply:
+          'Recebi sua mensagem, mas no momento consigo responder apenas textos e legendas.',
+        replyToMessageId: Number(message?.message_id) || undefined,
+      };
+    }
+
+    const inbound = await this.communicationsService.processIncoming({
+      tenantId: connection.tenantId,
+      channel: 'TELEGRAM',
+      from: userId,
+      name: this.buildTelegramDisplayName(message),
+      content: prompt,
+      connectionId,
+      externalThreadId: chatId,
+      externalMessageId: `${chatId}:${message?.message_id}`,
+      contentType: 'TEXT',
+      metadata: {
+        telegramChatId: chatId,
+        telegramUserId: userId,
+        telegramUsername: message?.from?.username || null,
+        telegramChatType: message?.chat?.type || null,
+        telegramMessageId: message?.message_id || null,
+        telegramMessageDate: message?.date || null,
+      },
+    } as any);
+
+    const ticketId = String(inbound?.ticketId || '').trim();
+    if (!ticketId) {
+      return { ignored: true };
+    }
+
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, tenantId: connection.tenantId },
+      include: {
+        contact: true,
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+        },
+      },
+    });
+
+    if (!ticket) {
+      return { ignored: true };
+    }
+
+    const runtime = this.resolveRuntime(config);
+    const context = {
+      tenantId: connection.tenantId,
+      ticket: {
+        id: ticket.id,
+        code: ticket.code,
+        title: ticket.title,
+        status: ticket.status,
+        priority: ticket.priority,
+        queue: ticket.queue,
+        channel: ticket.channel,
+      },
+      contact: ticket.contact
+        ? {
+            id: ticket.contact.id,
+            name: ticket.contact.name,
+            email: ticket.contact.email,
+            phone: ticket.contact.phone,
+            whatsapp: ticket.contact.whatsapp,
+            category: ticket.contact.category,
+          }
+        : null,
+      recentMessages: ticket.messages
+        .slice()
+        .reverse()
+        .map((item) => ({
+          senderType: item.senderType,
+          content: item.content,
+          createdAt: item.createdAt,
+        })),
+    };
+
+    const plan = await this.buildTelegramActionPlan({
+      config,
+      runtime,
+      prompt,
+      context,
+      allowActions,
+    });
+
+    const actionResults = await this.executeTelegramActions({
+      tenantId: connection.tenantId,
+      currentTicketId: ticket.id,
+      allowActions,
+      actions: plan.actions,
+    });
+
+    const reply = await this.synthesizeTelegramReply({
+      config,
+      runtime,
+      prompt,
+      baseReply:
+        plan.reply ||
+        'Recebi sua mensagem e estou processando os proximos passos no sistema.',
+      actionResults,
+    });
+
+    return {
+      tenantId: connection.tenantId,
+      ticketId: ticket.id,
+      chatId,
+      reply,
+      replyToMessageId: Number(message?.message_id) || undefined,
+      actionResults,
+    };
+  }
+
+  async registerTelegramOutbound(input: {
+    tenantId: string;
+    ticketId: string;
+    connectionId: string;
+    chatId: string;
+    content: string;
+    externalMessageId?: string | null;
+    replyToMessageId?: number;
+  }) {
+    return this.ticketsService.createSystemMessage(input.ticketId, input.tenantId, {
+      content: input.content,
+      externalId: input.externalMessageId || null,
+      metadata: {
+        connectionId: input.connectionId,
+        externalThreadId: input.chatId,
+        senderAddress: input.chatId,
+        channel: 'TELEGRAM',
+        replyToMessageId: input.replyToMessageId || null,
+      },
+    });
   }
 
   async getConfig(tenantId: string) {

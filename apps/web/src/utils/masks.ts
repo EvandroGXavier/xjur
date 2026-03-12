@@ -81,3 +81,27 @@ export const masks = {
 export const unmask = (value: string) => {
     return value.replace(/\D/g, '');
 };
+
+export const isValidCnpj = (value: string) => {
+    const digits = unmask(value || '');
+
+    if (digits.length !== 14) return false;
+    if (/^(\d)\1{13}$/.test(digits)) return false;
+
+    const calculateDigit = (base: string, factor: number) => {
+        let total = 0;
+
+        for (const digit of base) {
+            total += Number(digit) * factor;
+            factor = factor === 2 ? 9 : factor - 1;
+        }
+
+        const remainder = total % 11;
+        return remainder < 2 ? 0 : 11 - remainder;
+    };
+
+    const firstDigit = calculateDigit(digits.slice(0, 12), 5);
+    const secondDigit = calculateDigit(digits.slice(0, 12) + String(firstDigit), 6);
+
+    return digits.endsWith(`${firstDigit}${secondDigit}`);
+};

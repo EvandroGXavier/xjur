@@ -672,26 +672,26 @@ export function DrxClawTab() {
   }
 
   return (
-    <div className="space-y-6 animate-in slide-in-from-bottom-3 duration-500">
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-2xl p-6">
+    <div className="space-y-4 md:space-y-6 animate-in slide-in-from-bottom-3 duration-500">
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-2xl p-4 md:p-6">
         <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 text-xs font-medium mb-4">
               <Bot size={14} />
               Painel Operacional do DrX-Claw
             </div>
-            <h3 className="text-2xl font-semibold text-white">
+            <h3 className="text-xl md:text-2xl font-semibold text-white">
               Configuração por empresa, com teste na mesma tela
             </h3>
-            <p className="text-slate-400 mt-2 max-w-3xl">
+            <p className="text-sm md:text-base text-slate-400 mt-2 max-w-3xl">
               Configure provider, segurança, skills e um playground para o admin
               validar o comportamento antes de colocar o agente em produção.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 md:gap-3 w-full xl:w-auto">
             <button
               onClick={loadConfig}
-              className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2"
+              className="w-full sm:w-auto justify-center px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2"
             >
               <RefreshCw size={16} />
               Recarregar
@@ -699,7 +699,7 @@ export function DrxClawTab() {
             <button
               onClick={saveConfig}
               disabled={saving}
-              className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="w-full sm:w-auto justify-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <Save size={16} />
               {saving ? "Salvando..." : "Salvar configuração"}
@@ -707,62 +707,63 @@ export function DrxClawTab() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mt-5 md:mt-6">
+          <div className="p-3 md:p-4 rounded-xl bg-slate-950/80 border border-slate-800">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-2">
               Prontidão
             </p>
-            <div className="flex items-end justify-between gap-3">
-              <span className="text-3xl font-semibold text-white">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 sm:gap-3">
+              <span className="text-2xl md:text-3xl font-semibold text-white">
                 {readiness}%
               </span>
-              <span className="text-sm text-slate-400">
+              <span className="text-xs md:text-sm text-slate-400">
                 {config.enabled ? "ativo" : "pausado"}
               </span>
             </div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800">
+          <div className="p-3 md:p-4 rounded-xl bg-slate-950/80 border border-slate-800">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-2">
               Skills ativas
             </p>
-            <div className="flex items-end justify-between gap-3">
-              <span className="text-3xl font-semibold text-white">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 sm:gap-3">
+              <span className="text-2xl md:text-3xl font-semibold text-white">
                 {enabledSkills.length}
               </span>
-              <span className="text-sm text-slate-400">
+              <span className="text-xs md:text-sm text-slate-400">
                 {config.skills.length} cadastradas
               </span>
             </div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800">
+          <div className="p-3 md:p-4 rounded-xl bg-slate-950/80 border border-slate-800">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-2">
               Provider atual
             </p>
-            <div className="text-lg font-semibold text-white">
+            <div className="text-base md:text-lg font-semibold text-white">
               {config.provider}
             </div>
-            <div className="text-sm text-slate-400 mt-1">
+            <div className="text-xs md:text-sm text-slate-400 mt-1 break-words">
               {getProviderModel(config) || "Defina um modelo"}
             </div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800">
+          <div className="p-3 md:p-4 rounded-xl bg-slate-950/80 border border-slate-800">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-2">
               Whitelist Telegram
             </p>
-            <div className="text-3xl font-semibold text-white">
+            <div className="text-2xl md:text-3xl font-semibold text-white">
               {config.telegramWhitelist.length}
             </div>
-            <div className="text-sm text-slate-400 mt-1">IDs autorizados</div>
+            <div className="text-xs md:text-sm text-slate-400 mt-1">IDs autorizados</div>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="sticky top-2 z-20 -mx-1 px-1">
+        <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/85 px-2 py-2 backdrop-blur">
         {SUB_TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveSubTab(tab.id)}
-            className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
+            className={`shrink-0 rounded-xl border px-3 py-2 text-xs md:text-sm font-medium transition-colors ${
               activeSubTab === tab.id
                 ? "border-indigo-500 bg-indigo-500/15 text-indigo-100"
                 : "border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700"
@@ -771,12 +772,13 @@ export function DrxClawTab() {
             {tab.label}
           </button>
         ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-6">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4 md:gap-6">
+        <div className="space-y-4 md:space-y-6">
           <div
-            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 ${
               activeSubTab === "operacao" ? "" : "hidden"
             }`}
           >
@@ -883,7 +885,7 @@ export function DrxClawTab() {
           </div>
 
           <div
-            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 ${
               activeSubTab === "operacao" || activeSubTab === "modelos"
                 ? ""
                 : "hidden"
@@ -1032,11 +1034,11 @@ export function DrxClawTab() {
           </div>
 
           <div
-            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 ${
               activeSubTab === "modelos" ? "" : "hidden"
             }`}
           >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-3 md:gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-3">
                   <BrainCircuit className="text-emerald-300" size={20} />
@@ -1051,11 +1053,11 @@ export function DrxClawTab() {
                   acompanhar novos releases.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 md:gap-3">
                 <button
                   onClick={() => loadCatalog(config)}
                   disabled={catalogLoading}
-                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  className="w-full sm:w-auto justify-center px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   <RefreshCw
                     size={16}
@@ -1066,7 +1068,7 @@ export function DrxClawTab() {
                 <button
                   onClick={validateCurrentProvider}
                   disabled={validating}
-                  className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  className="w-full sm:w-auto justify-center px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   <CheckCircle2 size={16} />
                   {validating ? "Validando..." : "Validar provider atual"}
@@ -1074,12 +1076,12 @@ export function DrxClawTab() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3 mt-5 md:mt-6">
               {providerCatalog.map((entry) => (
                 <button
                   key={entry.provider}
                   onClick={() => updateConfig({ provider: entry.provider })}
-                  className={`text-left rounded-xl border p-4 transition-colors ${
+                  className={`text-left rounded-xl border p-3 md:p-4 transition-colors ${
                     String(config.provider || "").toUpperCase() === entry.provider
                       ? "border-indigo-500 bg-indigo-500/10"
                       : "border-slate-800 bg-slate-950 hover:border-slate-700"
@@ -1118,7 +1120,7 @@ export function DrxClawTab() {
             {selectedCatalog && (
               <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-3 md:p-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <div className="text-sm font-medium text-white">
@@ -1141,7 +1143,7 @@ export function DrxClawTab() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3 md:p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <h5 className="text-white font-medium">ListBox de modelos</h5>
@@ -1157,7 +1159,7 @@ export function DrxClawTab() {
                     <div
                       role="listbox"
                       aria-label={`Modelos de ${selectedCatalog.label}`}
-                      className="mt-4 max-h-[420px] overflow-y-auto space-y-2 pr-1"
+                      className="mt-4 max-h-[320px] md:max-h-[420px] overflow-y-auto space-y-2 pr-1"
                     >
                       {selectedCatalog.models.map((model) => {
                         const active =
@@ -1209,13 +1211,13 @@ export function DrxClawTab() {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3 md:p-4">
                     <h5 className="text-white font-medium">Incluir novo modelo</h5>
                     <p className="text-xs text-slate-500 mt-1">
                       Use quando o provider liberar um modelo novo antes do
                       catalogo oficial aparecer aqui.
                     </p>
-                    <div className="mt-4 flex gap-3">
+                    <div className="mt-4 flex flex-col sm:flex-row gap-3">
                       <input
                         value={customModelInput}
                         onChange={(e) => setCustomModelInput(e.target.value)}
@@ -1232,7 +1234,7 @@ export function DrxClawTab() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3 md:p-4 space-y-3">
                     <h5 className="text-white font-medium">Prontidao do provider</h5>
                     <div className="text-sm text-slate-300">
                       {selectedCatalog.canValidate
@@ -1271,7 +1273,7 @@ export function DrxClawTab() {
           </div>
 
           <div
-            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 ${
               activeSubTab === "skills" ? "" : "hidden"
             }`}
           >
@@ -1451,7 +1453,7 @@ export function DrxClawTab() {
 
         <div className="space-y-6">
           <div
-            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 ${
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 ${
               activeSubTab === "playground" ? "" : "hidden"
             }`}
           >
@@ -1549,7 +1551,7 @@ export function DrxClawTab() {
           </div>
 
           <div
-            className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 ${
+            className={`bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 space-y-4 ${
               activeSubTab === "operacao" || activeSubTab === "modelos"
                 ? ""
                 : "hidden"
@@ -1600,7 +1602,7 @@ export function DrxClawTab() {
           </div>
 
           {playgroundResponse && activeSubTab === "playground" && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h4 className="text-lg font-semibold text-white">

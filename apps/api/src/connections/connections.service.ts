@@ -4,12 +4,14 @@ import { PrismaService } from '../prisma.service';
 import { CreateConnectionDto, ConnectionType } from './dto/create-connection.dto';
 import { UpdateConnectionDto } from './dto/update-connection.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Injectable()
 export class ConnectionsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly whatsappService: WhatsappService
+    private readonly whatsappService: WhatsappService,
+    private readonly telegramService: TelegramService,
   ) {}
 
   onModuleInit() {
@@ -67,6 +69,9 @@ export class ConnectionsService implements OnModuleInit {
     if (connection.type === ConnectionType.WHATSAPP && connection.status !== 'DISCONNECTED') {
         await this.whatsappService.disconnect(id);
     }
+    if (connection.type === ConnectionType.TELEGRAM && connection.status !== 'DISCONNECTED') {
+        await this.telegramService.disconnect(id);
+    }
 
     return this.prisma.connection.delete({ where: { id } });
   }
@@ -112,6 +117,14 @@ export class ConnectionsService implements OnModuleInit {
         return { status: 'CONNECTED', message: 'Email Connected via IMAP/SMTP' };
     }
 
+    if (connection.type === ConnectionType.TELEGRAM) {
+        await this.prisma.connection.update({
+            where: { id },
+            data: { status: 'PAIRING' }
+        });
+        return this.telegramService.connect(id);
+    }
+
     throw new BadRequestException('Unsupported connection type');
   }
 
@@ -120,6 +133,9 @@ export class ConnectionsService implements OnModuleInit {
     
     if (connection.type === ConnectionType.WHATSAPP) {
         await this.whatsappService.disconnect(id);
+    }
+    if (connection.type === ConnectionType.TELEGRAM) {
+        await this.telegramService.disconnect(id);
     }
     
     return this.prisma.connection.update({
@@ -133,6 +149,15 @@ export class ConnectionsService implements OnModuleInit {
 
   async getStatus(id: string, tenantId: string) {
       const connection = await this.findOne(id, tenantId);
+      if (connection.type === ConnectionType.TELEGRAM) {
+          const status = await this.telegramService.getStatus(id);
+          return {
+              id: connection.id,
+              status: status.status,
+              updatedAt: connection.updatedAt,
+              ...status,
+          };
+      }
       return { 
           id: connection.id, 
           status: connection.status, 

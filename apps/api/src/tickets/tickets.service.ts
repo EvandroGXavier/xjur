@@ -416,6 +416,57 @@ export class TicketsService {
     return message;
   }
 
+  async createSystemMessage(
+    ticketId: string,
+    tenantId: string,
+    payload: {
+      content: string;
+      contentType?: string;
+      mediaUrl?: string | null;
+      externalId?: string | null;
+      metadata?: Record<string, any>;
+      status?: string;
+    },
+  ) {
+    const ticket = await this.findOne(ticketId, tenantId);
+    const message = await this.prisma.ticketMessage.create({
+      data: {
+        ticketId: ticket.id,
+        senderType: 'SYSTEM',
+        senderId: null,
+        content: payload.content || '',
+        contentType: payload.contentType || 'TEXT',
+        mediaUrl: payload.mediaUrl || null,
+        externalId: payload.externalId || null,
+        metadata: payload.metadata,
+        status: payload.status || 'SENT',
+      },
+    });
+
+    await this.prisma.ticket.update({
+      where: { id: ticket.id },
+      data: {
+        updatedAt: new Date(),
+        lastMessageAt: new Date(),
+        waitingReply: false,
+      } as any,
+    });
+
+    await this.captureTicketMessageForAgent(ticket, message, 'OUTBOUND', 'assistant');
+    this.ticketsGateway.emitNewMessage(tenantId, ticket.id, message);
+
+    const updatedTicket = await this.prisma.ticket.findFirst({
+      where: { id: ticket.id },
+      include: {
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        _count: { select: { messages: true } },
+      },
+    });
+    this.ticketsGateway.emitTicketUpdated(tenantId, updatedTicket);
+
+    return message;
+  }
+
   async deleteMessage(messageId: string, tenantId: string, userId: string) {
     const message = await this.prisma.ticketMessage.findFirst({
       where: { id: messageId, ticket: { tenantId } },

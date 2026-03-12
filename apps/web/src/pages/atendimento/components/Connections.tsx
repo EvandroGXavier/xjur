@@ -11,7 +11,7 @@ import { io, Socket } from 'socket.io-client';
 interface Connection {
     id: string;
     name: string;
-    type: 'WHATSAPP' | 'INSTAGRAM' | 'EMAIL';
+    type: 'WHATSAPP' | 'INSTAGRAM' | 'EMAIL' | 'TELEGRAM';
     status: 'CONNECTED' | 'DISCONNECTED' | 'PAIRING' | 'ERROR';
     qrCode?: string;
     updatedAt: string;
@@ -24,6 +24,11 @@ const defaultWaConfig = {
     evolutionApiKey: '',
     evolutionUrl: '',
     evolutionVersion: '2.3000.x'
+};
+
+const defaultTelegramConfig = {
+    botToken: '',
+    webhookBaseUrl: '',
 };
 
 interface ConnectionsProps {
@@ -47,6 +52,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
     const [formType, setFormType] = useState<'WHATSAPP' | 'INSTAGRAM' | 'EMAIL' | 'TELEGRAM'>('WHATSAPP');
     const [emailConfig, setEmailConfig] = useState({ email: '', password: '' });
     const [waConfig, setWaConfig] = useState(defaultWaConfig);
+    const [telegramConfig, setTelegramConfig] = useState(defaultTelegramConfig);
 
     const fetchConnections = useCallback(async () => {
         try {
@@ -172,6 +178,12 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             if (formType === 'EMAIL') {
                 payload.config = emailConfig;
             }
+            if (formType === 'TELEGRAM') {
+                payload.config = {
+                    botToken: telegramConfig.botToken.trim(),
+                    webhookBaseUrl: telegramConfig.webhookBaseUrl.trim(),
+                };
+            }
 
             await api.post('/connections', payload);
             toast.success('Conexão criada!');
@@ -200,6 +212,14 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             }
             if (formType === 'EMAIL') {
                 payload.config = emailConfig;
+            }
+            if (formType === 'TELEGRAM') {
+                const currentConfig = editingConnection.config || {};
+                payload.config = {
+                    ...currentConfig,
+                    botToken: telegramConfig.botToken.trim(),
+                    webhookBaseUrl: telegramConfig.webhookBaseUrl.trim(),
+                };
             }
 
             await api.patch(`/connections/${editingConnection.id}`, payload);
@@ -255,6 +275,48 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
         }
     };
 
+    const handleRefreshStatus = async (connection: Connection) => {
+        try {
+            const response = await api.get(`/connections/${connection.id}/status`);
+            const statusData = response.data || {};
+            const mergedConfig = {
+                ...(connection.config || {}),
+                webhookUrl: statusData.webhookUrl ?? connection.config?.webhookUrl,
+                botUsername: statusData.botUsername ?? connection.config?.botUsername,
+                pendingUpdateCount: statusData.pendingUpdateCount ?? connection.config?.pendingUpdateCount,
+                lastErrorMessage: statusData.lastErrorMessage ?? null,
+                lastErrorDate: statusData.lastErrorDate ?? null,
+            };
+
+            setConnections(prev => prev.map(item =>
+                item.id === connection.id
+                    ? { ...item, status: statusData.status ?? item.status, config: mergedConfig }
+                    : item
+            ));
+
+            if (settingsConnection?.id === connection.id) {
+                setSettingsConnection(prev => prev ? {
+                    ...prev,
+                    status: statusData.status ?? prev.status,
+                    config: mergedConfig,
+                } : prev);
+            }
+
+            if (connection.type === 'TELEGRAM') {
+                if (statusData.lastErrorMessage) {
+                    toast.warning(`Telegram: ${statusData.lastErrorMessage}`);
+                } else {
+                    toast.success(`Telegram ativo. Pendentes: ${statusData.pendingUpdateCount ?? 0}`);
+                }
+                return;
+            }
+
+            toast.success(`Status atualizado: ${statusData.status || connection.status}`);
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Nao foi possivel atualizar o status.');
+        }
+    };
+
     const handleEdit = (conn: Connection) => {
         const legacyEvolutionUrl = typeof conn.config?.evolutionNumber === 'string' && conn.config.evolutionNumber.startsWith('http')
             ? conn.config.evolutionNumber
@@ -269,6 +331,10 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             evolutionUrl: conn.config?.evolutionUrl ?? legacyEvolutionUrl,
             evolutionVersion: conn.config?.evolutionVersion ?? '2.3000.x'
         });
+        setTelegramConfig({
+            botToken: conn.config?.botToken ?? '',
+            webhookBaseUrl: conn.config?.webhookBaseUrl ?? '',
+        });
         setIsCreating(false);
     };
 
@@ -279,6 +345,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
         setFormType('WHATSAPP');
         setEmailConfig({ email: '', password: '' });
         setWaConfig(defaultWaConfig);
+        setTelegramConfig(defaultTelegramConfig);
     };
 
     const renderQrCode = (qrData: string | undefined | null) => {
@@ -471,6 +538,32 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                             </div>
                         </div>
                     )}
+                    {formType === 'TELEGRAM' && (
+                        <div className="grid grid-cols-1 gap-4 mb-4 p-4 bg-slate-950 rounded-lg border border-sky-500/20">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">Bot Token <span className="text-red-500">*</span></label>
+                                <input
+                                    type="password"
+                                    value={telegramConfig.botToken}
+                                    onChange={e => setTelegramConfig({ ...telegramConfig, botToken: e.target.value })}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition"
+                                    placeholder="Ex: 123456789:AA..."
+                                />
+                                <p className="text-[11px] text-slate-500 mt-1">Use o token gerado pelo BotFather para registrar o webhook.</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1">Webhook Base URL</label>
+                                <input
+                                    type="text"
+                                    value={telegramConfig.webhookBaseUrl}
+                                    onChange={e => setTelegramConfig({ ...telegramConfig, webhookBaseUrl: e.target.value })}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition"
+                                    placeholder="Ex: https://seu-dominio.com"
+                                />
+                                <p className="text-[11px] text-slate-500 mt-1">Opcional. Se ficar vazio, o backend usa TELEGRAM_WEBHOOK_BASE_URL ou APP_URL.</p>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex justify-end gap-2">
                         <button onClick={resetForm} className="text-slate-400 hover:text-white px-4 py-2 text-sm transition">Cancelar</button>
@@ -491,6 +584,11 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                     const isPairing = conn.status === 'PAIRING';
                     const isConnected = conn.status === 'CONNECTED';
                     const isThisConnecting = connectingId === conn.id;
+                    const isWhatsapp = conn.type === 'WHATSAPP';
+                    const isTelegram = conn.type === 'TELEGRAM';
+                    const botUsername = String(conn.config?.botUsername || '').trim();
+                    const webhookUrl = String(conn.config?.webhookUrl || '').trim();
+                    const lastTelegramError = String(conn.config?.lastErrorMessage || '').trim();
 
                         return (
                         <div key={conn.id} className={clsx(
@@ -556,7 +654,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                             <span className="text-slate-200 font-semibold text-sm">Pronto para uso</span>
                                             <span className="text-xs text-emerald-500/70 mt-1 flex items-center gap-1">
                                                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                                Sincronizado
+                                                {isTelegram ? 'Webhook sincronizado' : 'Sincronizado'}
                                             </span>
 
                                             <button 
