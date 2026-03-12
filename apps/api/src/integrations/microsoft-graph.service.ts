@@ -245,8 +245,22 @@ export class MicrosoftGraphService {
         return false;
       }
 
+      if (process.msDriveId && process.msFolderUrl) {
+        this.logger.log(`Processo ${processId} ja possui pasta Microsoft configurada.`);
+        return true;
+      }
+
       const processFolderName = process.code || process.cnj || processId.substring(0, 8);
-      const processFolder = await this.graphRequest<any>(
+      const rootChildren = await this.graphRequest<any>(
+        token,
+        `drives/${encodeURIComponent(context.driveId)}/items/${encodeURIComponent(context.rootFolderId)}/children`,
+      );
+
+      const existingFolder = rootChildren?.value?.find(
+        (item: any) => item?.folder && item.name === processFolderName,
+      );
+
+      const processFolder = existingFolder || await this.graphRequest<any>(
         token,
         `drives/${encodeURIComponent(context.driveId)}/items/${encodeURIComponent(context.rootFolderId)}/children`,
         {
@@ -265,6 +279,7 @@ export class MicrosoftGraphService {
         data: {
           msDriveId: processFolder.id,
           msFolderUrl: processFolder.webUrl,
+          folder: processFolder.webUrl,
         },
       });
 
@@ -276,7 +291,21 @@ export class MicrosoftGraphService {
         '8.1 - Peticoes em Elaboracao',
       ];
 
+      const processChildren = await this.graphRequest<any>(
+        token,
+        `drives/${encodeURIComponent(context.driveId)}/items/${encodeURIComponent(processFolder.id)}/children`,
+      );
+      const existingSubFolders = new Set(
+        (processChildren?.value || [])
+          .filter((item: any) => item?.folder)
+          .map((item: any) => item.name),
+      );
+
       for (const folderName of subFolders) {
+        if (existingSubFolders.has(folderName)) {
+          continue;
+        }
+
         await this.graphRequest(
           token,
           `drives/${encodeURIComponent(context.driveId)}/items/${encodeURIComponent(processFolder.id)}/children`,

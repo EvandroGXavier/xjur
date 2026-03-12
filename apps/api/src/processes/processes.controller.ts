@@ -129,6 +129,11 @@ export class ProcessesController {
         return this.processesService.update(id, body, user.tenantId);
     }
 
+    @Post(':id/microsoft-folder/sync')
+    async syncMicrosoftFolder(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.syncMicrosoftFolderForProcess(id, user.tenantId);
+    }
+
     @Delete(':id')
     async remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
         return this.processesService.remove(id, user.tenantId);

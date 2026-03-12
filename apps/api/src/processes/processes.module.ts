@@ -9,6 +9,7 @@ import { ProcessPartiesService } from './process-parties.service';
 import { ProcessTimelinesService } from './process-timelines.service';
 import { PartyQualificationsService } from './party-qualifications.service';
 import { ProcessIntegrationsService } from './process-integrations.service';
+import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
 
 @Module({
     imports: [
@@ -17,7 +18,7 @@ import { ProcessIntegrationsService } from './process-integrations.service';
         })
     ],
     controllers: [ProcessesController],
-    providers: [ProcessCrawlerService, ProcessesService, PrismaService, ProcessPdfService, ProcessPartiesService, ProcessTimelinesService, PartyQualificationsService, ProcessIntegrationsService],
+    providers: [ProcessCrawlerService, ProcessesService, PrismaService, ProcessPdfService, ProcessPartiesService, ProcessTimelinesService, PartyQualificationsService, ProcessIntegrationsService, MicrosoftGraphService],
     exports: [ProcessCrawlerService, ProcessesService, ProcessPdfService, ProcessPartiesService, ProcessTimelinesService, PartyQualificationsService, ProcessIntegrationsService]
 })
 export class ProcessesModule {}

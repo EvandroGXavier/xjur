@@ -42,13 +42,24 @@ export class ContactsController {
   }
 
   @Post()
-  create(@Body() createContactDto: CreateContactDto, @CurrentUser() user: CurrentUserData) {
-    console.log('Controller User:', user);
+  async create(@Body() createContactDto: CreateContactDto, @CurrentUser() user: CurrentUserData) {
+    console.log('--- CREATE CONTACT PAYLOAD ---');
+    console.dir(createContactDto, { depth: null });
+    
     if (!user || !user.tenantId) {
        console.error('User or tenantId missing in controller!');
        throw new Error('User context invalid');
     }
-    return this.contactsService.create(createContactDto, user.tenantId);
+    
+    try {
+       const result = await this.contactsService.create(createContactDto, user.tenantId);
+       console.log('--- CREATE CONTACT SUCCESS ---');
+       return result;
+    } catch (err) {
+       console.error('--- CREATE CONTACT FAILED ---');
+       console.error(err);
+       throw err;
+    }
   }
 
   @Get()
@@ -78,14 +89,42 @@ export class ContactsController {
     return this.contactsService.cleanupContacts(user.tenantId);
   }
 
+  // Enrichment endpoints
+  @Get('enrich/cnpj')
+  async enrichCNPJ(@Query('cnpj') cnpj: string) {
+    return this.enrichmentService.consultCNPJ(cnpj);
+  }
+
+  @Get('enrich/cep')
+  async enrichCEP(@Query('cep') cep: string) {
+    return this.enrichmentService.consultCEP(cep);
+  }
+
+  @Post('bulk-action')
+  async bulkAction(@Body() dto: any, @CurrentUser() user: CurrentUserData) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.contactsService.bulkAction(user.tenantId, dto);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.contactsService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateContactDto: UpdateContactDto) {
-    return this.contactsService.update(id, updateContactDto);
+  async update(@Param('id') id: string, @Body() updateContactDto: UpdateContactDto) {
+    console.log('--- UPDATE CONTACT PAYLOAD ---', id);
+    console.dir(updateContactDto, { depth: null });
+    
+    try {
+       const result = await this.contactsService.update(id, updateContactDto);
+       console.log('--- UPDATE CONTACT SUCCESS ---');
+       return result;
+    } catch (err) {
+       console.error('--- UPDATE CONTACT FAILED ---');
+       console.error(err);
+       throw err;
+    }
   }
 
   @Delete(':id')
@@ -297,22 +336,4 @@ export class ContactsController {
   getContactFinancialRecords(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.contactsService.getContactFinancialRecords(id, user.tenantId);
   }
-
-  // Enrichment endpoints
-  @Get('enrich/cnpj')
-  async enrichCNPJ(@Query('cnpj') cnpj: string) {
-    return this.enrichmentService.consultCNPJ(cnpj);
-  }
-
-  @Get('enrich/cep')
-  async enrichCEP(@Query('cep') cep: string) {
-    return this.enrichmentService.consultCEP(cep);
-  }
-
-  @Post('bulk-action')
-  async bulkAction(@Body() dto: any, @CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
-    return this.contactsService.bulkAction(user.tenantId, dto);
-  }
 }
-

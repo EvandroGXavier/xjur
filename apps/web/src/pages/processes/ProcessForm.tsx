@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
-import { ArrowLeft, Save, Loader2, FileText, Users, Calendar, Activity } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, FileText, Users, Calendar, Activity, FolderSync, ExternalLink } from 'lucide-react';
 import { masks } from '../../utils/masks';
 import { ProcessParties } from './ProcessParties';
 import { ProcessoAndamentos } from '../../components/processos/ProcessoAndamentos';
@@ -31,6 +31,7 @@ export function ProcessForm() {
     const [activeTab, setActiveTab] = useState('MAIN');
 
     const [loading, setLoading] = useState(false);
+    const [syncingMicrosoftFolder, setSyncingMicrosoftFolder] = useState(false);
     const [form, setForm] = useState({
         title: '',
         cnj: '',
@@ -73,7 +74,7 @@ export function ProcessForm() {
                 judge: data.judge || '',
                 value: data.value ? parseFloat(data.value) : 0,
                 description: data.description || '',
-                folder: data.folder || ''
+                folder: data.folder || data.msFolderUrl || ''
             });
         } catch (err) {
             toast.error('Erro ao carregar processo');
@@ -137,6 +138,41 @@ export function ProcessForm() {
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSyncMicrosoftFolder = async () => {
+        if (!isEditing || !id) {
+            toast.warning('Salve o processo primeiro para criar a pasta Microsoft 365.');
+            return;
+        }
+
+        try {
+            setSyncingMicrosoftFolder(true);
+            const response = await api.post(`/processes/${id}/microsoft-folder/sync`);
+            const process = response.data?.process;
+
+            if (process) {
+                setForm(current => ({
+                    ...current,
+                    folder: process.folder || process.msFolderUrl || current.folder,
+                }));
+            }
+
+            if (response.data?.success) {
+                toast.success(response.data?.message || 'Pasta Microsoft 365 sincronizada.');
+                return;
+            }
+
+            toast.warning(response.data?.message || 'Nao foi possivel sincronizar a pasta Microsoft 365.');
+        } catch (error: any) {
+            toast.error(
+                error?.response?.data?.message ||
+                error?.message ||
+                'Erro ao sincronizar a pasta Microsoft 365.',
+            );
+        } finally {
+            setSyncingMicrosoftFolder(false);
         }
     };
 
@@ -350,12 +386,40 @@ export function ProcessForm() {
 
                             <div className="space-y-1.5">
                                 <label className={labelClass}>Pasta na Nuvem</label>
-                                <input 
-                                    value={form.folder}
-                                    onChange={e => setForm({...form, folder: e.target.value})}
-                                    className={inputClass}
-                                    placeholder="Z:\Processos\... ou link do Google Drive"
-                                />
+                                <div className="flex flex-col gap-3 md:flex-row">
+                                    <input 
+                                        value={form.folder}
+                                        onChange={e => setForm({...form, folder: e.target.value})}
+                                        className={inputClass}
+                                        placeholder="Link da pasta Microsoft 365 ou caminho legado"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleSyncMicrosoftFolder}
+                                        disabled={!isEditing || syncingMicrosoftFolder || loading}
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {syncingMicrosoftFolder ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : (
+                                            <FolderSync size={16} />
+                                        )}
+                                        Criar/Sincronizar Pasta Microsoft 365
+                                    </button>
+                                    {form.folder && (
+                                        <button
+                                            type="button"
+                                            onClick={() => window.open(form.folder, '_blank', 'noopener,noreferrer')}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
+                                        >
+                                            <ExternalLink size={16} />
+                                            Abrir Pasta
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                    O teste do Microsoft 365 apenas valida acesso. Este botao cria ou sincroniza a pasta real do processo e suas subpastas padrao.
+                                </p>
                             </div>
 
                             <div className="space-y-1.5">

@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
 
 interface CreateProcessDto {
     tenantId?: string; // Opcional se pegarmos de algum lugar, por enquanto obrigatório ou fixo
@@ -30,7 +31,54 @@ interface CreateProcessDto {
 
 @Injectable()
 export class ProcessesService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private readonly microsoftGraphService: MicrosoftGraphService,
+    ) {}
+
+    private async syncMicrosoftFolder(tenantId: string, processId: string) {
+        try {
+            const tenant = await this.prisma.tenant.findUnique({
+                where: { id: tenantId },
+                select: { msStorageActive: true },
+            });
+
+            if (!tenant?.msStorageActive) {
+                return;
+            }
+
+            await this.microsoftGraphService.setupFolderStructure(tenantId, processId);
+        } catch (error: any) {
+            console.warn(`Microsoft folder sync failed for process ${processId}:`, error?.message || error);
+        }
+    }
+
+    async syncMicrosoftFolderForProcess(id: string, tenantId: string) {
+        const process = await this.findOne(id, tenantId);
+        const tenant = await this.prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { msStorageActive: true },
+        });
+
+        if (!tenant?.msStorageActive) {
+            return {
+                success: false,
+                message: 'Armazenamento Microsoft 365 desativado para esta empresa.',
+                process,
+            };
+        }
+
+        const success = await this.microsoftGraphService.setupFolderStructure(tenantId, process.id);
+        const updatedProcess = await this.findOne(process.id, tenantId);
+
+        return {
+            success,
+            message: success
+                ? 'Pasta Microsoft 365 sincronizada com sucesso.'
+                : 'Nao foi possivel sincronizar a pasta Microsoft 365.',
+            process: updatedProcess,
+        };
+    }
 
     // Helper público para obter tenantId (temporário até JWT)
     async getFirstTenantId(): Promise<string> {
@@ -208,7 +256,8 @@ export class ProcessesService {
                         .catch(err => console.error('Error syncing parties:', err));
                 }
 
-                return process;
+                await this.syncMicrosoftFolder(tenantId, process.id);
+                return this.prisma.process.findUnique({ where: { id: process.id } });
             } else {
                 const process = await this.prisma.process.create({
                     data: processData
@@ -223,7 +272,8 @@ export class ProcessesService {
                         .catch(err => console.error('Error syncing parties:', err));
                 }
 
-                return process;
+                await this.syncMicrosoftFolder(tenantId, process.id);
+                return this.prisma.process.findUnique({ where: { id: process.id } });
             }
         } catch (error) {
             this.logAudit('ERROR_SAVING', { error: error.message, stack: error.stack });
@@ -499,7 +549,8 @@ export class ProcessesService {
 
             this.logAudit('UPDATE_SUCCESS', { id, updated });
             console.log(`Process updated: ${id}`);
-            return updated;
+            await this.syncMicrosoftFolder(tenantId, updated.id);
+            return this.prisma.process.findUnique({ where: { id: updated.id } });
         } catch (error) {
             this.logAudit('UPDATE_ERROR', { id, error: error.message });
             console.error('Error updating process:', error);
