@@ -35,7 +35,7 @@ WORKDIR /app
 
 # Install runtime dependencies (Debian way)
 # Isso garante que a libssl correta esteja disponível para o Prisma
-RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y openssl ca-certificates postgresql-client && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
