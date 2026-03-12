@@ -153,9 +153,10 @@ export function DataGrid<T extends { id: string }>({
                   onClick={() => onRowClick && onRowClick(item)}
                   onDoubleClick={() => onRowDoubleClick && onRowDoubleClick(item)}
                 >
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     <input 
                       type="checkbox" 
+                      onClick={(e) => e.stopPropagation()}
                       className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500/20"
                       checked={selectedIds.includes(item.id)}
                       onChange={(e) => handleSelectOne(item.id, e.target.checked)}

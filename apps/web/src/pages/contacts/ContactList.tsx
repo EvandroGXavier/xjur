@@ -8,7 +8,11 @@ import {
     Phone,
     MessageSquare,
     ChevronRight,
-    User
+    User,
+    Trash2,
+    CheckCircle2,
+    MoreHorizontal,
+    Edit
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -19,8 +23,6 @@ import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpContacts } from '../../data/helpManuals';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { clsx } from 'clsx';
 import { useHotkeys } from '../../hooks/useHotkeys';
 
@@ -55,6 +57,8 @@ export function ContactList() {
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   
   const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('LIST'); // New state for view mode
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [openActionId, setOpenActionId] = useState<string | null>(null);
   
   useHotkeys({
       onNew: () => navigate('/contacts/new'),
@@ -85,20 +89,21 @@ export function ContactList() {
     }
   };
 
+  const handleDeleteContact = async (id: string, name: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o contato ${name}?`)) return;
+    try {
+       await api.delete(`/contacts/${id}`);
+       toast.success('Contato excluído com sucesso!');
+       fetchContacts();
+    } catch (err) {
+       console.error(err);
+       toast.error('Erro ao excluir contato');
+    }
+  };
+
   const getCleanDoc = (c: Contact) => {
       const doc = c.document || c.cpf || c.cnpj;
       return doc ? doc.replace(/\D/g, '') : '';
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '-';
-    try {
-      const date = new Date(dateString);
-      return format(date, 'dd/MM/yyyy HH:mm', { locale: ptBR });
-    } catch (error) {
-      console.error("Error formatting date:", dateString, error);
-      return dateString;
-    }
   };
 
   const stats = useMemo(() => {
@@ -210,7 +215,13 @@ export function ContactList() {
           <p className="text-slate-400 mt-1">Gerencie e analise sua base de clientes, leads e parceiros.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+            {selectedIds.length > 0 && (
+                <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-4 py-1.5 rounded-full text-sm font-semibold animate-in fade-in zoom-in-95 flex items-center gap-2">
+                    <CheckCircle2 size={16} />
+                    {selectedIds.length} selecionado{selectedIds.length > 1 ? 's' : ''}
+                </div>
+            )}
             <button 
                 onClick={() => setIsHelpOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition border border-slate-700"
@@ -314,21 +325,16 @@ export function ContactList() {
             onSort={(key, direction) => setSortConfig({ key: key as keyof Contact, direction })}
             totalItems={sortedContacts.length}
             isLoading={loading}
+            onSelect={setSelectedIds}
             onRowClick={(c) => navigate(`/contacts/${c.id}`)}
             columns={[
                 { key: 'name', label: 'Nome / Razão Social', sortable: true, render: (c) => (
                           <div className="flex flex-col gap-0.5">
-                              <span className="font-bold text-white hover:text-indigo-400 transition-colors cursor-pointer" onClick={() => navigate(`/contacts/${c.id}`)}>{c.name}</span>
+                              <span className="font-bold text-white hover:text-indigo-400 transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); navigate(`/contacts/${c.id}`); }}>{c.name}</span>
                               <div className="flex items-center gap-2">
                                   <span className="text-[10px] text-slate-500 uppercase font-mono">{formatDocument(c.document)}</span>
                                   {!c.active && <span className="bg-red-500/10 text-red-400 text-[8px] px-1 rounded border border-red-500/20 font-bold">INATIVO</span>}
                               </div>
-                          </div>
-                      ) },
-                      { key: 'createdAt', label: 'Cadastro / Atividade', sortable: true, render: (c) => (
-                          <div className="flex flex-col">
-                              <span className="text-slate-300 text-sm">{formatDate(c.createdAt)}</span>
-                              <span className="text-[10px] text-slate-500 italic">ID: {c.id.substring(0,8)}</span>
                           </div>
                       ) },
                 {
@@ -373,6 +379,42 @@ export function ContactList() {
                                 </div>
                             )}
                             {!c.phone && !c.whatsapp && <span className="text-slate-600">-</span>}
+                        </div>
+                    )
+                },
+                {
+                    key: 'actions' as any,
+                    label: '',
+                    render: (c) => (
+                        <div className="relative flex justify-end">
+                            <button 
+                                onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setOpenActionId(openActionId === c.id ? null : c.id); 
+                                }}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                            >
+                                <MoreHorizontal size={18} />
+                            </button>
+                            {openActionId === c.id && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenActionId(null); }}></div>
+                                    <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); navigate(`/contacts/${c.id}`); setOpenActionId(null); }}
+                                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 font-medium flex items-center gap-2"
+                                        >
+                                            <Edit size={14} /> Editar
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteContact(c.id, c.name); setOpenActionId(null); }}
+                                            className="w-full text-left px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 font-bold flex items-center gap-2 transition-colors border-t border-slate-700/50"
+                                        >
+                                            <Trash2 size={14} /> Excluir
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )
                 }
