@@ -120,13 +120,26 @@ export class ProcessesService {
 
         const parseDate = (d: any) => {
             if (!d) return undefined;
-            if (d instanceof Date) return d;
+            if (d instanceof Date) {
+                return Number.isNaN(d.getTime()) ? undefined : d;
+            }
             if (typeof d === 'string') {
                 if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
                    const [day, month, year] = d.split('/');
                    return new Date(`${year}-${month}-${day}`);
                 }
-                return new Date(d);
+                if (/^\d{8,14}$/.test(d)) {
+                    const year = d.slice(0, 4);
+                    const month = d.slice(4, 6) || '01';
+                    const day = d.slice(6, 8) || '01';
+                    const hour = d.slice(8, 10) || '00';
+                    const minute = d.slice(10, 12) || '00';
+                    const second = d.slice(12, 14) || '00';
+                    const parsedCompact = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+                    return Number.isNaN(parsedCompact.getTime()) ? undefined : parsedCompact;
+                }
+                const parsed = new Date(d);
+                return Number.isNaN(parsed.getTime()) ? undefined : parsed;
             }
             return undefined;
         };
@@ -234,7 +247,10 @@ export class ProcessesService {
         const createdContacts = [];
 
         // 1. Sync Judge if present
-        if (judgeName && judgeName !== 'Não informado') {
+        if (
+            judgeName &&
+            !['Não informado', 'Nao informado', 'Nao informado via DataJud', 'Não informado via DataJud'].includes(judgeName)
+        ) {
             const judgeExists = await this.prisma.contact.findFirst({
                 where: { tenantId, name: judgeName, category: 'MAGISTRADO' }
             });

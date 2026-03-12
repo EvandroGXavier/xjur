@@ -29,6 +29,22 @@ export const helpProcesses: HelpSection[] = [
     content: 'O módulo de <b>Processos</b> organiza todos os seus casos jurídicos, permitindo o acompanhamento do status, valores, e prazos.',
   },
   {
+    title: 'Configuração Geral de Processos',
+    content: 'Use o botão de <b>Configurações de Processos</b> para abrir a central do módulo. Nela você encontra a estratégia de consulta oficial, credenciais do <b>DataJud</b>, preparo do <b>Eproc MG</b>, teste de conectividade e importação por <b>CNJ</b> sem sair da própria tela.',
+  },
+  {
+    title: 'Estratégia Recomendada',
+    content: 'O melhor caminho inicial é usar <b>DataJud / CNJ</b> como fonte oficial de consulta por número do processo. Esse fluxo é mais estável para implantação, facilita testes e deixa o sistema pronto para conectores mais profundos depois.',
+  },
+  {
+    title: 'Eproc MG e Prontidão Institucional',
+    content: 'A seção <b>Eproc MG / Prontidão</b> serve para documentar pedido institucional, status de convênio, endpoint formal, responsável e credenciais autorizadas. Assim o sistema fica preparado para integração profunda sem depender de automação frágil como base do produto.',
+  },
+  {
+    title: 'Teste e Importação por CNJ',
+    content: 'Na central de configuração você pode: <ul><li><b>Testar Integração</b> para validar a chave e o endpoint configurado</li><li><b>Consultar CNJ</b> para buscar um preview do processo</li><li><b>Cadastrar processo no sistema</b> usando o retorno consultado</li></ul><br/>Isso reduz cliques e acelera a validação da implantação.',
+  },
+  {
     title: 'Como Cadastrar um Novo Processo',
     content: '1. Clique em <b>"Novo Processo"</b>.<br/>2. Preencha o <b>Número CNJ</b> do processo e os dados básicos (Ação, Vara, Comarca).<br/>3. Você pode vincular os contatos envolvidos (Cliente e Parte Contrária) diretamente na aba de Partes.<br/>4. Salve para registrar no sistema.',
   },

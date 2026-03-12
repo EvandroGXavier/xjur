@@ -293,7 +293,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                                             <input 
                                                 value={cnj}
                                                 onChange={e => setCnj(e.target.value)}
-                                                placeholder="CNJ, CPF ou Nome..."
+                                                placeholder="CNJ do processo..."
                                                 className="w-full bg-slate-800 border-slate-700 rounded-lg pl-4 pr-12 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                                             />
                                             <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />

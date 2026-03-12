@@ -1,0 +1,25 @@
+{
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "cnj": "03002923620158130231",
+  "category": "JUDICIAL",
+  "title": "Execução da Pena",
+  "code": "03002923620158130231",
+  "court": "TJMG",
+  "courtSystem": "Inválido",
+  "vars": "Vara de Execuções Criminais da Comarca de Belo Horizonte",
+  "district": "Vara de Execuções Criminais da Comarca de Belo Horizonte",
+  "status": "ATIVO",
+  "area": "Pena Privativa de Liberdade",
+  "subject": "Pena Privativa de Liberdade | Roubo Majorado",
+  "class": "Execução da Pena",
+  "distributionDate": null,
+  "judge": "Nao informado via DataJud",
+  "value": 0,
+  "parties": [],
+  "metadata": {
+    "source": "DATAJUD",
+    "tribunalAlias": "api_publica_tjmg",
+    "hitId": "TJMG_G1_03002923620158130231",
+    "importedAt": "2026-03-12T03:29:21.346Z"
+  }
+}

@@ -1,128 +1,332 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { 
-  ArrowLeft, Settings, Gavel, Layout, Database, FileSpreadsheet, 
-  ChevronRight, Users, Zap, Plus, Trash2, Save, Tags
-} from 'lucide-react';
-import { api } from '../../services/api';
-import { toast } from 'sonner';
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ChevronRight,
+  ExternalLink,
+  FilePlus2,
+  FileSearch,
+  HelpCircle,
+  Landmark,
+  Layout,
+  Loader2,
+  RefreshCcw,
+  Save,
+  Settings,
+  ShieldCheck,
+  Tags,
+  Users,
+  Workflow,
+  Zap,
+  Database,
+} from "lucide-react";
+import { clsx } from "clsx";
+import { toast } from "sonner";
+import { api } from "../../services/api";
+import { HelpModal, useHelpModal } from "../../components/HelpModal";
+import { helpProcesses } from "../../data/helpManuals";
+import { masks } from "../../utils/masks";
+
+type ViewMode = "cards" | "bulk" | "integrations";
 
 interface ConfigCard {
   id: string;
-  icon: React.ReactNode;
   title: string;
   description: string;
-  action: () => void;
-  badge?: string;
   gradient: string;
+  icon: ReactNode;
+  badge?: string;
+  action: () => void;
 }
+
+interface TribunalOption {
+  code: string;
+  label: string;
+  alias: string;
+  system: string;
+  recommended?: boolean;
+}
+
+interface IntegrationConfig {
+  enabled: boolean;
+  provider: "DATAJUD" | "MANUAL";
+  autoImportStrategy: "REVIEW_BEFORE_SAVE" | "AUTO_SAVE";
+  syncMode: "MANUAL" | "ON_DEMAND";
+  notes: string;
+  datajud: {
+    enabled: boolean;
+    apiKey: string;
+    tribunalCode: string;
+    tribunalAlias: string;
+    tribunalLabel: string;
+    baseUrl: string;
+    timeoutMs: number;
+    maxMovements: number;
+  };
+  eprocMg: {
+    requestStatus:
+      | "NAO_SOLICITADO"
+      | "EM_ANALISE"
+      | "HOMOLOGACAO"
+      | "LIBERADO";
+    institutionName: string;
+    accessLogin: string;
+    accessPassword: string;
+    endpointUrl: string;
+    notes: string;
+  };
+}
+
+const emptyConfig: IntegrationConfig = {
+  enabled: false,
+  provider: "DATAJUD",
+  autoImportStrategy: "REVIEW_BEFORE_SAVE",
+  syncMode: "ON_DEMAND",
+  notes: "",
+  datajud: {
+    enabled: true,
+    apiKey: "",
+    tribunalCode: "TJMG",
+    tribunalAlias: "api_publica_tjmg",
+    tribunalLabel: "Tribunal de Justica de Minas Gerais",
+    baseUrl: "https://api-publica.datajud.cnj.jus.br",
+    timeoutMs: 15000,
+    maxMovements: 12,
+  },
+  eprocMg: {
+    requestStatus: "NAO_SOLICITADO",
+    institutionName: "",
+    accessLogin: "",
+    accessPassword: "",
+    endpointUrl: "",
+    notes: "",
+  },
+};
 
 export function ProcessConfig() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+  const incomingFilters = location.state?.filters;
+
+  const [view, setView] = useState<ViewMode>("cards");
   const [loadingAction, setLoadingAction] = useState(false);
-  
-  // View state
-  const [view, setView] = useState<'cards' | 'bulk'>('cards');
   const [tags, setTags] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  
-  // Action States
-  const [selectedTag, setSelectedTag] = useState('');
-  const [selectedLawyer, setSelectedLawyer] = useState('');
-  const [targetStatus, setTargetStatus] = useState('');
+  const [selectedTag, setSelectedTag] = useState("");
+  const [selectedLawyer, setSelectedLawyer] = useState("");
+  const [targetStatus, setTargetStatus] = useState("");
 
-  // Get filters from previous page
-  const incomingFilters = location.state?.filters;
-  
+  const [config, setConfig] = useState<IntegrationConfig>(emptyConfig);
+  const [tribunals, setTribunals] = useState<TribunalOption[]>([]);
+  const [docs, setDocs] = useState<Array<{ label: string; url: string }>>([]);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [testingConfig, setTestingConfig] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewCnj, setPreviewCnj] = useState("");
+  const [previewData, setPreviewData] = useState<any | null>(null);
+  const [testResult, setTestResult] = useState<any | null>(null);
+
   useEffect(() => {
-    if (view === 'bulk') {
-        fetchTags();
-        fetchUsers();
+    if (view === "bulk") {
+      void fetchTags();
+      void fetchUsers();
+    }
+    if (view === "integrations" && tribunals.length === 0) {
+      void fetchIntegration();
     }
   }, [view]);
 
+  const ready = useMemo(
+    () => config.enabled && config.provider === "DATAJUD" && !!config.datajud.apiKey,
+    [config],
+  );
+
+  const updateConfig = (next: Partial<IntegrationConfig>) =>
+    setConfig((current) => ({ ...current, ...next }));
+
+  const updateTribunal = (tribunalCode: string) => {
+    const tribunal = tribunals.find((item) => item.code === tribunalCode);
+    if (!tribunal) return;
+    setConfig((current) => ({
+      ...current,
+      datajud: {
+        ...current.datajud,
+        tribunalCode: tribunal.code,
+        tribunalAlias: tribunal.alias,
+        tribunalLabel: tribunal.label,
+      },
+    }));
+  };
+
   const fetchTags = async () => {
     try {
-      const { data } = await api.get('/tags?scope=PROCESS');
+      const { data } = await api.get("/tags?scope=PROCESS");
       setTags(data);
-    } catch (err) { console.error(err); }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const fetchUsers = async () => {
     try {
-      const { data } = await api.get('/users');
+      const { data } = await api.get("/users");
       setUsers(data);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleBatchAction = async (action: string) => {
-    const filterDesc = incomingFilters 
-        ? "os processos filtrados na tela anterior" 
-        : "TODOS os processos da base";
-        
-    const confirmMsg = `Deseja aplicar esta ação a ${filterDesc}?`;
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-        setLoadingAction(true);
-        const payload: any = { 
-            action,
-            ...incomingFilters 
-        };
-
-        if (action.includes('TAG')) payload.tagId = selectedTag;
-        if (action === 'UPDATE_STATUS') payload.status = targetStatus;
-        if (action === 'UPDATE_LAWYER') payload.lawyerName = selectedLawyer;
-
-        const res = await api.post('/processes/bulk-action', payload);
-        toast.success(`Ação concluída! Itens afetados: ${res.data.updatedCount}`);
-    } catch (err: any) {
-        toast.error('Erro ao executar ação: ' + (err.response?.data?.message || err.message));
-    } finally {
-        setLoadingAction(false);
+    } catch (error) {
+      console.error(error);
     }
   };
 
-  const configCards: ConfigCard[] = [
+  const fetchIntegration = async () => {
+    try {
+      setLoadingConfig(true);
+      const { data } = await api.get("/processes/config/integrations");
+      setConfig(data.config || emptyConfig);
+      setTribunals(data.supportedTribunals || []);
+      setDocs(data.officialDocs || []);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao carregar a configuracao geral de processos");
+    } finally {
+      setLoadingConfig(false);
+    }
+  };
+
+  const handleBatchAction = async (action: string) => {
+    const filterDesc = incomingFilters
+      ? "os processos filtrados na tela anterior"
+      : "TODOS os processos da base";
+    if (!window.confirm(`Deseja aplicar esta acao a ${filterDesc}?`)) return;
+
+    try {
+      setLoadingAction(true);
+      const payload: any = { action, ...incomingFilters };
+      if (action.includes("TAG")) payload.tagId = selectedTag;
+      if (action === "UPDATE_STATUS") payload.status = targetStatus;
+      if (action === "UPDATE_LAWYER") payload.lawyerName = selectedLawyer;
+      const { data } = await api.post("/processes/bulk-action", payload);
+      toast.success(`Acao concluida. Itens afetados: ${data.updatedCount}`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.message);
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const saveIntegration = async () => {
+    try {
+      setSavingConfig(true);
+      const { data } = await api.post("/processes/config/integrations", config);
+      setConfig(data.config || config);
+      setTribunals(data.supportedTribunals || tribunals);
+      setDocs(data.officialDocs || docs);
+      toast.success("Configuracao geral de processos salva");
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Erro ao salvar configuracao");
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const testIntegration = async () => {
+    try {
+      setTestingConfig(true);
+      const { data } = await api.post("/processes/config/integrations/test", {
+        config,
+        cnj: previewCnj || undefined,
+      });
+      setTestResult(data);
+      if (data.success) toast.success(data.message || "Teste concluido");
+      else toast.error(data.message || "Falha na integracao");
+    } catch (error: any) {
+      const message = error.response?.data?.message || "Erro ao testar integracao";
+      setTestResult({ success: false, message });
+      toast.error(message);
+    } finally {
+      setTestingConfig(false);
+    }
+  };
+
+  const consultByCnj = async () => {
+    if (!previewCnj.trim()) {
+      toast.warning("Informe o CNJ para consultar");
+      return;
+    }
+    try {
+      setPreviewLoading(true);
+      const { data } = await api.post("/processes/config/integrations/import-cnj", {
+        cnj: previewCnj,
+      });
+      setPreviewData(data);
+      toast.success("Consulta por CNJ executada");
+    } catch (error: any) {
+      setPreviewData(null);
+      toast.error(error.response?.data?.message || "Erro ao consultar CNJ");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const importPreview = async () => {
+    if (!previewData) return;
+    try {
+      setPreviewLoading(true);
+      await api.post("/processes", { ...previewData, category: "JUDICIAL" });
+      toast.success("Processo cadastrado com sucesso");
+      navigate("/processes");
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Erro ao cadastrar processo");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const cards: ConfigCard[] = [
     {
-      id: 'bulk',
+      id: "integrations",
+      title: "Consulta Processual Oficial",
+      description:
+        "Credenciais, teste DataJud, preparo do Eproc MG e importacao por CNJ.",
+      gradient: "from-cyan-500 to-blue-600",
+      icon: <Landmark className="w-6 h-6" />,
+      action: () => setView("integrations"),
+    },
+    {
+      id: "bulk",
+      title: "Acoes em Massa",
+      description: "Status, etiquetas e responsavel em lote.",
+      gradient: "from-indigo-500 to-blue-600",
       icon: <Zap className="w-6 h-6" />,
-      title: 'Ações em Massa',
-      description: 'Atribua advogados, mude status ou etiquetas de múltiplos processos simultaneamente.',
-      action: () => setView('bulk'),
-      gradient: 'from-indigo-500 to-blue-600',
+      action: () => setView("bulk"),
     },
     {
-      id: 'automations',
+      id: "automations",
+      title: "Regras de Automacao",
+      description: "Camada pronta para futuras rotinas de sincronizacao.",
+      gradient: "from-emerald-500 to-teal-600",
       icon: <Layout className="w-6 h-6" />,
-      title: 'Regras de Automação',
-      description: 'Configure disparos automáticos de tarefas conforme a mudança de status do processo.',
-      action: () => {},
-      badge: 'Em breve',
-      gradient: 'from-emerald-500 to-teal-600',
+      action: () => undefined,
+      badge: "Em breve",
     },
     {
-      id: 'fields',
+      id: "fields",
+      title: "Campos do Processo",
+      description: "Customizacao dos metadados do modulo.",
+      gradient: "from-amber-500 to-orange-600",
       icon: <Database className="w-6 h-6" />,
-      title: 'Campos do Processo',
-      description: 'Personalize os campos e informações adicionais que deseja coletar por pasta.',
-      action: () => {},
-      badge: 'Em breve',
-      gradient: 'from-amber-500 to-orange-600',
+      action: () => undefined,
+      badge: "Em breve",
     },
   ];
 
   return (
     <div className="min-h-screen p-6 md:p-8 animate-in fade-in duration-500 text-slate-200">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => {
-              if (view === 'bulk') setView('cards');
-              else navigate('/processes');
-            }}
+            onClick={() => (view === "cards" ? navigate("/processes") : setView("cards"))}
             className="p-2.5 hover:bg-slate-800 rounded-xl transition-all border border-slate-800 group"
           >
             <ArrowLeft className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
@@ -132,150 +336,203 @@ export function ProcessConfig() {
               <div className="p-2 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 rounded-xl border border-indigo-500/20">
                 <Settings className="text-indigo-400 w-6 h-6" />
               </div>
-              {view === 'bulk' ? 'Ações em Massa (Processos)' : 'Configurações de Processos'}
+              {view === "bulk"
+                ? "Acoes em Massa (Processos)"
+                : view === "integrations"
+                  ? "Configuracao Geral de Processos"
+                  : "Configuracoes de Processos"}
             </h1>
             <p className="text-slate-400 mt-1 ml-14">
-                {view === 'bulk' 
-                    ? (incomingFilters ? "Aplicando ações aos processos filtrados na grid." : "Ações massivas para toda a base de processos.")
-                    : "Gerencie automações, campos e organização dos seus casos."
-                }
+              {view === "integrations"
+                ? "Painel central da consulta processual oficial e do preparo do Eproc MG."
+                : "Gerencie organizacao, integracoes e operacao do modulo."}
             </p>
           </div>
         </div>
+        <button
+          onClick={() => setIsHelpOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-200 hover:bg-slate-800 transition"
+        >
+          <HelpCircle className="h-4 w-4" />
+          Ajuda
+        </button>
       </div>
 
-      {view === 'bulk' ? (
-        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 max-w-5xl">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                
-                {/* TAGS */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-2 bg-indigo-500/20 rounded-lg border border-indigo-500/20">
-                            <Tags className="text-indigo-400" size={20} />
-                        </div>
-                        <h3 className="text-lg font-semibold text-white">Etiquetas</h3>
-                    </div>
-                    <div className="space-y-4">
-                        <select 
-                            value={selectedTag}
-                            onChange={(e) => setSelectedTag(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500"
-                        >
-                            <option value="">Selecione Etiqueta...</option>
-                            {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
-                        </select>
-                        <div className="grid grid-cols-2 gap-2">
-                             <button onClick={() => handleBatchAction('ADD_TAG')} disabled={loadingAction || !selectedTag} className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-30">Atribuir</button>
-                             <button onClick={() => handleBatchAction('REMOVE_TAG')} disabled={loadingAction || !selectedTag} className="bg-slate-800 hover:bg-red-600 text-slate-300 hover:text-white py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-30">Remover</button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* LAWYER */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-2 bg-blue-500/20 rounded-lg border border-blue-500/20">
-                            <Users className="text-blue-400" size={20} />
-                        </div>
-                        <h3 className="text-lg font-semibold text-white">Responsável</h3>
-                    </div>
-                    <div className="space-y-4">
-                        <select 
-                            value={selectedLawyer}
-                            onChange={(e) => setSelectedLawyer(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-blue-500"
-                        >
-                            <option value="">Selecione Advogado...</option>
-                            {users.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
-                        </select>
-                        <button onClick={() => handleBatchAction('UPDATE_LAWYER')} disabled={loadingAction || !selectedLawyer} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-30 flex items-center justify-center gap-2">
-                            <Save size={16} /> Atribuir em Massa
-                        </button>
-                    </div>
-                </div>
-
-                {/* STATUS */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-2 bg-amber-500/20 rounded-lg border border-amber-500/20">
-                            <Zap className="text-amber-400" size={20} />
-                        </div>
-                        <h3 className="text-lg font-semibold text-white">Alterar Status</h3>
-                    </div>
-                    <div className="space-y-4">
-                        <select 
-                            value={targetStatus}
-                            onChange={(e) => setTargetStatus(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
-                        >
-                            <option value="">Selecione Status...</option>
-                            <option value="ATIVO">Ativo</option>
-                            <option value="SUSPENSO">Suspenso</option>
-                            <option value="ARQUIVADO">Arquivado</option>
-                            <option value="OPORTUNIDADE">Oportunidade</option>
-                        </select>
-                        <button onClick={() => handleBatchAction('UPDATE_STATUS')} disabled={loadingAction || !targetStatus} className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-30">
-                            Confirmar Mudança
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {incomingFilters && (
-                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-3">
-                    <Zap size={18} className="text-indigo-400" />
-                    <p className="text-sm text-slate-400">
-                        <strong>Filtros Ativos:</strong> A ação será aplicada apenas aos processos que obedecem aos critérios da busca anterior.
-                    </p>
-                </div>
-            )}
-        </div>
-      ) : (
+      {view === "cards" && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {configCards.map((card) => {
-              const isDisabled = !!card.badge;
-              return (
-                <button
-                  key={card.id}
-                  onClick={card.action}
-                  disabled={isDisabled}
-                  className={`group relative text-left rounded-xl border transition-all duration-300 overflow-hidden
-                    ${isDisabled
-                      ? 'bg-slate-900/50 border-slate-800/50 cursor-not-allowed opacity-60'
-                      : 'bg-slate-900 border-slate-800 hover:border-slate-600 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5 active:scale-[0.98]'
-                    }
-                  `}
-                >
-                  <div className={`h-1 w-full bg-gradient-to-r ${card.gradient} ${isDisabled ? 'opacity-30' : 'opacity-70 group-hover:opacity-100'} transition-opacity`} />
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`p-3 rounded-xl bg-gradient-to-br ${card.gradient} ${isDisabled ? 'opacity-40' : 'opacity-80 group-hover:opacity-100 group-hover:scale-110'} transition-all duration-300 shadow-lg`}>
-                        <span className="text-white">{card.icon}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {card.badge && (
-                          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full border border-slate-700">
-                            {card.badge}
-                          </span>
-                        )}
-                        {!isDisabled && (
-                          <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all duration-300" />
-                        )}
-                      </div>
+          {cards.map((card) => {
+            const disabled = !!card.badge;
+            return (
+              <button
+                key={card.id}
+                onClick={card.action}
+                disabled={disabled}
+                className={clsx(
+                  "group relative text-left rounded-xl border transition-all duration-300 overflow-hidden",
+                  disabled
+                    ? "bg-slate-900/50 border-slate-800/50 cursor-not-allowed opacity-60"
+                    : "bg-slate-900 border-slate-800 hover:border-slate-600 hover:shadow-xl hover:-translate-y-0.5",
+                )}
+              >
+                <div className={`h-1 w-full bg-gradient-to-r ${card.gradient}`} />
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className={`p-3 rounded-xl bg-gradient-to-br ${card.gradient}`}>
+                      <span className="text-white">{card.icon}</span>
                     </div>
-                    <h3 className={`text-lg font-semibold mb-2 transition-colors ${isDisabled ? 'text-slate-500' : 'text-white group-hover:text-indigo-300'}`}>
-                      {card.title}
-                    </h3>
-                    <p className={`text-sm leading-relaxed ${isDisabled ? 'text-slate-600' : 'text-slate-400'}`}>
-                      {card.description}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      {card.badge && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full border border-slate-700">
+                          {card.badge}
+                        </span>
+                      )}
+                      {!disabled && <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all duration-300" />}
+                    </div>
                   </div>
-                </button>
-              );
-            })}
+                  <h3 className="text-lg font-semibold mb-2 text-white">{card.title}</h3>
+                  <p className="text-sm leading-relaxed text-slate-400">{card.description}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
+
+      {view === "bulk" && (
+        <div className="space-y-6 max-w-5xl">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-3"><Tags className="text-indigo-400" size={20} /><h3 className="text-lg font-semibold text-white">Etiquetas</h3></div>
+              <select value={selectedTag} onChange={(e) => setSelectedTag(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white">
+                <option value="">Selecione etiqueta...</option>
+                {tags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
+              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => handleBatchAction("ADD_TAG")} disabled={loadingAction || !selectedTag} className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm disabled:opacity-30">Atribuir</button>
+                <button onClick={() => handleBatchAction("REMOVE_TAG")} disabled={loadingAction || !selectedTag} className="bg-slate-800 hover:bg-red-600 text-slate-300 hover:text-white py-2 rounded-lg text-sm disabled:opacity-30">Remover</button>
+              </div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-3"><Users className="text-blue-400" size={20} /><h3 className="text-lg font-semibold text-white">Responsavel</h3></div>
+              <select value={selectedLawyer} onChange={(e) => setSelectedLawyer(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white">
+                <option value="">Selecione o advogado...</option>
+                {users.map((user) => <option key={user.id} value={user.name}>{user.name}</option>)}
+              </select>
+              <button onClick={() => handleBatchAction("UPDATE_LAWYER")} disabled={loadingAction || !selectedLawyer} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm disabled:opacity-30">Atribuir em massa</button>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+              <div className="flex items-center gap-3"><Zap className="text-amber-400" size={20} /><h3 className="text-lg font-semibold text-white">Status</h3></div>
+              <select value={targetStatus} onChange={(e) => setTargetStatus(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white">
+                <option value="">Selecione status...</option>
+                <option value="ATIVO">Ativo</option>
+                <option value="SUSPENSO">Suspenso</option>
+                <option value="ARQUIVADO">Arquivado</option>
+                <option value="OPORTUNIDADE">Oportunidade</option>
+              </select>
+              <button onClick={() => handleBatchAction("UPDATE_STATUS")} disabled={loadingAction || !targetStatus} className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg text-sm disabled:opacity-30">Confirmar mudanca</button>
+            </div>
+          </div>
+          {incomingFilters && <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-sm text-slate-300">A acao sera aplicada apenas aos processos filtrados na grade anterior.</div>}
+        </div>
+      )}
+
+      {view === "integrations" && (
+        <div className="space-y-6">
+          {loadingConfig ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 flex items-center justify-center gap-3 text-slate-300">
+              <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+              Carregando configuracao...
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex items-center gap-3"><ShieldCheck className="h-5 w-5 text-cyan-300" /><div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Provider</p><p className="text-white font-semibold">{config.provider === "DATAJUD" ? "DataJud / CNJ" : "Manual"}</p></div></div></div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex items-center gap-3"><Workflow className="h-5 w-5 text-indigo-300" /><div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tribunal inicial</p><p className="text-white font-semibold">{config.datajud.tribunalLabel}</p></div></div></div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex items-center gap-3">{ready ? <ShieldCheck className="h-5 w-5 text-emerald-300" /> : <AlertTriangle className="h-5 w-5 text-amber-300" />}<div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Prontidao</p><p className="text-white font-semibold">{ready ? "DataJud pronto para consulta" : "Falta completar credenciais"}</p></div></div></div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-6">
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+                    <h2 className="text-lg font-semibold text-white">Estrategia Geral</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <label className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4"><input type="checkbox" checked={config.enabled} onChange={(e) => updateConfig({ enabled: e.target.checked })} className="rounded border-slate-700 bg-slate-900 text-cyan-500" /><span className="text-sm text-white">Ativar integracao processual</span></label>
+                      <label className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4"><input type="checkbox" checked={config.datajud.enabled} onChange={(e) => setConfig((current) => ({ ...current, datajud: { ...current.datajud, enabled: e.target.checked } }))} className="rounded border-slate-700 bg-slate-900 text-cyan-500" /><span className="text-sm text-white">Usar DataJud como fonte oficial</span></label>
+                      <select value={config.provider} onChange={(e) => updateConfig({ provider: e.target.value as "DATAJUD" | "MANUAL" })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white"><option value="DATAJUD">DataJud / CNJ</option><option value="MANUAL">Manual</option></select>
+                      <select value={config.datajud.tribunalCode} onChange={(e) => updateTribunal(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white">{tribunals.map((tribunal) => <option key={tribunal.code} value={tribunal.code}>{tribunal.label}{tribunal.recommended ? " (Recomendado)" : ""}</option>)}</select>
+                    </div>
+                    <textarea value={config.notes} onChange={(e) => updateConfig({ notes: e.target.value })} rows={3} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white resize-y" placeholder="Observacoes operacionais do modulo, regras internas e fluxo recomendado." />
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+                    <h2 className="text-lg font-semibold text-white">DataJud / CNJ</h2>
+                    <input type="password" value={config.datajud.apiKey} onChange={(e) => setConfig((current) => ({ ...current, datajud: { ...current.datajud, apiKey: e.target.value } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="API Key publica vigente do CNJ / DataJud" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <input value={config.datajud.tribunalAlias} onChange={(e) => setConfig((current) => ({ ...current, datajud: { ...current.datajud, tribunalAlias: e.target.value } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Alias oficial" />
+                      <input value={config.datajud.baseUrl} onChange={(e) => setConfig((current) => ({ ...current, datajud: { ...current.datajud, baseUrl: e.target.value } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Base URL" />
+                      <input type="number" min={3000} max={60000} value={config.datajud.timeoutMs} onChange={(e) => setConfig((current) => ({ ...current, datajud: { ...current.datajud, timeoutMs: Number(e.target.value || 15000) } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Timeout" />
+                      <input type="number" min={3} max={50} value={config.datajud.maxMovements} onChange={(e) => setConfig((current) => ({ ...current, datajud: { ...current.datajud, maxMovements: Number(e.target.value || 12) } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Maximo de movimentos" />
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+                    <h2 className="text-lg font-semibold text-white">Eproc MG / Prontidao</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <select value={config.eprocMg.requestStatus} onChange={(e) => setConfig((current) => ({ ...current, eprocMg: { ...current.eprocMg, requestStatus: e.target.value as IntegrationConfig["eprocMg"]["requestStatus"] } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white"><option value="NAO_SOLICITADO">Nao solicitado</option><option value="EM_ANALISE">Em analise</option><option value="HOMOLOGACAO">Homologacao</option><option value="LIBERADO">Liberado</option></select>
+                      <input value={config.eprocMg.institutionName} onChange={(e) => setConfig((current) => ({ ...current, eprocMg: { ...current.eprocMg, institutionName: e.target.value } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Instituicao / responsavel" />
+                      <input value={config.eprocMg.accessLogin} onChange={(e) => setConfig((current) => ({ ...current, eprocMg: { ...current.eprocMg, accessLogin: e.target.value } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Login institucional (se houver)" />
+                      <input type="password" value={config.eprocMg.accessPassword} onChange={(e) => setConfig((current) => ({ ...current, eprocMg: { ...current.eprocMg, accessPassword: e.target.value } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Senha / token (preparacao)" />
+                    </div>
+                    <input value={config.eprocMg.endpointUrl} onChange={(e) => setConfig((current) => ({ ...current, eprocMg: { ...current.eprocMg, endpointUrl: e.target.value } }))} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="Endpoint ou referencia tecnica formal" />
+                    <textarea value={config.eprocMg.notes} onChange={(e) => setConfig((current) => ({ ...current, eprocMg: { ...current.eprocMg, notes: e.target.value } }))} rows={3} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white resize-y" placeholder="Documente contato com o tribunal, MNI, exigencias e proximo passo." />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+                    <h2 className="text-lg font-semibold text-white">Teste e Importacao por CNJ</h2>
+                    <input value={previewCnj} onChange={(e) => setPreviewCnj(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" placeholder="0000000-00.0000.0.00.0000" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button onClick={testIntegration} disabled={testingConfig} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 font-medium disabled:opacity-50">{testingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}Testar integracao</button>
+                      <button onClick={consultByCnj} disabled={previewLoading} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 font-medium disabled:opacity-50">{previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4" />}Consultar CNJ</button>
+                    </div>
+                    {testResult && <div className={clsx("rounded-xl border p-4 text-sm", testResult.success ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-100" : "border-red-500/20 bg-red-500/10 text-red-100")}>{testResult.message}{testResult.endpoint ? <div className="mt-2 text-xs break-all opacity-80">{testResult.endpoint}</div> : null}</div>}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+                    <h2 className="text-lg font-semibold text-white">Preview do Cadastro</h2>
+                    {previewData ? (
+                      <>
+                        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-2 text-sm">
+                          <div><span className="text-slate-500">CNJ:</span> <span className="text-white">{previewData.cnj ? masks.cnj(previewData.cnj) : "-"}</span></div>
+                          <div><span className="text-slate-500">Tribunal:</span> <span className="text-white">{previewData.court || "-"}</span></div>
+                          <div><span className="text-slate-500">Sistema:</span> <span className="text-white">{previewData.courtSystem || "-"}</span></div>
+                          <div><span className="text-slate-500">Classe:</span> <span className="text-white">{previewData.class || "-"}</span></div>
+                          <div><span className="text-slate-500">Assunto:</span> <span className="text-white">{previewData.subject || previewData.area || "-"}</span></div>
+                          <div><span className="text-slate-500">Orgao:</span> <span className="text-white">{previewData.vars || "-"}</span></div>
+                        </div>
+                        <button onClick={importPreview} disabled={previewLoading} className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-4 py-3 font-medium disabled:opacity-50">{previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}Cadastrar processo no sistema</button>
+                      </>
+                    ) : <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/50 p-6 text-center text-sm text-slate-400">Consulte um CNJ para ver o retorno antes de cadastrar.</div>}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-3">
+                    <h2 className="text-lg font-semibold text-white">Ajuda Operacional</h2>
+                    {docs.map((doc) => <a key={doc.url} href={doc.url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-slate-200 hover:border-slate-700 hover:bg-slate-900 transition"><span>{doc.label}</span><ExternalLink className="h-4 w-4 text-slate-500" /></a>)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 justify-end">
+                <button onClick={() => setView("cards")} className="px-5 py-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-200 hover:bg-slate-800 transition">Voltar</button>
+                <button onClick={saveIntegration} disabled={savingConfig} className="px-5 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-medium transition disabled:opacity-50 flex items-center gap-2 justify-center">{savingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar configuracao geral</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Processos" sections={helpProcesses} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, UnauthorizedException } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -14,7 +14,7 @@ export class AppointmentsController {
   @Post()
   create(@Body() createAppointmentDto: CreateAppointmentDto, @CurrentUser() user: CurrentUserData) {
     if (!user || !user.tenantId) {
-        throw new Error('User context invalid');
+        throw new UnauthorizedException('Contexto do usuário inválido');
     }
     return this.appointmentsService.create(createAppointmentDto, user.tenantId);
   }
@@ -22,7 +22,7 @@ export class AppointmentsController {
   @Get()
   findAll(@CurrentUser() user: CurrentUserData, @Query('start') start?: string, @Query('end') end?: string, @Query('processId') processId?: string) {
     if (!user || !user.tenantId) {
-        throw new Error('User context invalid');
+        throw new UnauthorizedException('Contexto do usuário inválido');
     }
     return this.appointmentsService.findAll(user.tenantId, start, end, processId);
   }
@@ -30,7 +30,7 @@ export class AppointmentsController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     if (!user || !user.tenantId) {
-        throw new Error('User context invalid');
+        throw new UnauthorizedException('Contexto do usuário inválido');
     }
     return this.appointmentsService.findOne(id, user.tenantId);
   }
@@ -38,7 +38,7 @@ export class AppointmentsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateAppointmentDto: UpdateAppointmentDto, @CurrentUser() user: CurrentUserData) {
     if (!user || !user.tenantId) {
-        throw new Error('User context invalid');
+        throw new UnauthorizedException('Contexto do usuário inválido');
     }
     return this.appointmentsService.update(id, updateAppointmentDto, user.tenantId);
   }
@@ -46,7 +46,7 @@ export class AppointmentsController {
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     if (!user || !user.tenantId) {
-        throw new Error('User context invalid');
+        throw new UnauthorizedException('Contexto do usuário inválido');
     }
     return this.appointmentsService.remove(id, user.tenantId);
   }

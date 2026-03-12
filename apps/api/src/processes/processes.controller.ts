@@ -7,6 +7,7 @@ import { ProcessPdfService } from './process-pdf.service';
 import { ProcessPartiesService } from './process-parties.service';
 import { ProcessTimelinesService } from './process-timelines.service';
 import { PartyQualificationsService } from './party-qualifications.service';
+import { ProcessIntegrationsService } from './process-integrations.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Public } from '../auth/public.decorator';
@@ -21,6 +22,7 @@ export class ProcessesController {
         private readonly partiesService: ProcessPartiesService,
         private readonly timelinesService: ProcessTimelinesService,
         private readonly qualificationsService: PartyQualificationsService,
+        private readonly integrationsService: ProcessIntegrationsService,
     ) {}
     
     // --- IMPORT VIA PDF ---
@@ -88,6 +90,33 @@ export class ProcessesController {
             excludedTags, 
             status 
         });
+    }
+
+    @Get('config/integrations')
+    async getIntegrationConfig(@CurrentUser() user: CurrentUserData) {
+        return this.integrationsService.getIntegrationConfig(user.tenantId);
+    }
+
+    @Post('config/integrations')
+    async saveIntegrationConfig(@Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.integrationsService.saveIntegrationConfig(user.tenantId, body);
+    }
+
+    @Post('config/integrations/test')
+    async testIntegrationConfig(@Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.integrationsService.testIntegration(user.tenantId, body);
+    }
+
+    @Post('config/integrations/import-cnj')
+    async importByConfiguredIntegration(@Body() body: { cnj: string }, @CurrentUser() user: CurrentUserData) {
+        if (!body?.cnj) {
+            throw new BadRequestException('Informe o CNJ para consultar.');
+        }
+        const result = await this.integrationsService.importByCnj(user.tenantId, body.cnj);
+        if (!result) {
+            throw new BadRequestException('Ative e configure o DataJud na configuracao geral de processos antes de consultar por CNJ.');
+        }
+        return result;
     }
 
     @Get(':id')
@@ -192,13 +221,13 @@ export class ProcessesController {
     // --- AUTOMATION ---
 
     @Post('automator/cnj')
-    async crawlByCnj(@Body() body: { cnj: string }) {
-        return this.crawlerService.crawlByCnj(body.cnj);
+    async crawlByCnj(@Body() body: { cnj: string }, @CurrentUser() user: CurrentUserData) {
+        return this.crawlerService.crawlByCnj(body.cnj, user.tenantId);
     }
 
     @Post('automator/search')
-    async search(@Body() body: { term: string }) {
-        return this.crawlerService.search(body.term);
+    async search(@Body() body: { term: string }, @CurrentUser() user: CurrentUserData) {
+        return this.crawlerService.search(body.term, user.tenantId);
     }
 
     @Post('bulk-action')

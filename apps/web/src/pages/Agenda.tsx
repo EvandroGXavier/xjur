@@ -6,7 +6,7 @@ import { DataGrid } from '../components/ui/DataGrid';
 import { Badge } from '../components/ui/Badge';
 import { AppointmentModal } from '../components/agenda/AppointmentModal';
 import { CalendarMonthView } from '../components/agenda/CalendarMonthView';
-import { startOfMonth, endOfMonth } from 'date-fns';
+import { addMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpAgenda } from '../data/helpManuals';
 import { useHotkeys } from '../hooks/useHotkeys';
@@ -15,7 +15,7 @@ interface Appointment {
   id: string;
   title: string;
   description?: string;
-  type: 'AUDIENCIA' | 'PRAZO' | 'REUNIAO' | 'INTIMACAO';
+  type: 'AUDIENCIA' | 'PRAZO' | 'REUNIAO' | 'INTIMACAO' | 'DILIGENCIA' | 'PERICIA';
   startAt: string;
   endAt: string;
   status: 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'DONE' | 'CANCELED' | 'RESCHEDULED';
@@ -30,6 +30,7 @@ export function Agenda() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [draftDate, setDraftDate] = useState<Date | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Appointment | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   
@@ -101,31 +102,13 @@ export function Agenda() {
 
   const handleEdit = (appointment: Appointment) => {
       setSelectedAppointment(appointment);
+      setDraftDate(null);
       setIsModalOpen(true);
   };
 
   const handleNew = (date?: Date) => {
       setSelectedAppointment(null);
-      // Logic to pass date to modal could be done by setting a 'initialDate' state or modify selectedAppointment to a partial object
-      // For simplicity, let's just open the modal. To properly support pre-filling, AppointmentModal needs to accept an initialDate prop or we assume 'now' if null.
-      // Let's modify AppointmentModal to accept initialDate, or just rely on 'now' for now.
-      // Wait, I can pass a "stub" appointment with just startAt set.
-      if (date) {
-         // Create a stub appointment for new entry on that date
-         const stub = {
-             id: '',
-             title: '',
-             type: 'AUDIENCIA',
-             // Set default time to 09:00 of that day
-             startAt: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
-             // Default 1 hour duration
-             endAt: new Date(date.setHours(10, 0, 0, 0)).toISOString(),
-             status: 'SCHEDULED'
-         } as Appointment;
-         setSelectedAppointment(stub);
-      } else {
-         setSelectedAppointment(null);
-      }
+      setDraftDate(date ? new Date(date) : null);
       setIsModalOpen(true);
   };
 
@@ -244,7 +227,7 @@ export function Agenda() {
                      </h2>
                      <div className="flex gap-2">
                          <button 
-                            onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
+                            onClick={() => setCurrentDate((prev) => addMonths(prev, -1))}
                             className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"
                          >
                              Anterior
@@ -256,7 +239,7 @@ export function Agenda() {
                              Hoje
                          </button>
                          <button 
-                            onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
+                            onClick={() => setCurrentDate((prev) => addMonths(prev, 1))}
                             className="p-2 hover:bg-slate-800 rounded-lg text-slate-400"
                          >
                              Próximo
@@ -277,9 +260,14 @@ export function Agenda() {
 
       <AppointmentModal 
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedAppointment(null);
+          setDraftDate(null);
+        }}
         onSave={fetchAppointments}
         appointment={selectedAppointment}
+        initialDate={draftDate}
       />
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Agenda" sections={helpAgenda} />
     </div>

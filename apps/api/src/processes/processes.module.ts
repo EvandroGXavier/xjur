@@ -8,6 +8,7 @@ import { ProcessPdfService } from './process-pdf.service';
 import { ProcessPartiesService } from './process-parties.service';
 import { ProcessTimelinesService } from './process-timelines.service';
 import { PartyQualificationsService } from './party-qualifications.service';
+import { ProcessIntegrationsService } from './process-integrations.service';
 
 @Module({
     imports: [
@@ -16,7 +17,7 @@ import { PartyQualificationsService } from './party-qualifications.service';
         })
     ],
     controllers: [ProcessesController],
-    providers: [ProcessCrawlerService, ProcessesService, PrismaService, ProcessPdfService, ProcessPartiesService, ProcessTimelinesService, PartyQualificationsService],
-    exports: [ProcessCrawlerService, ProcessesService, ProcessPdfService, ProcessPartiesService, ProcessTimelinesService, PartyQualificationsService]
+    providers: [ProcessCrawlerService, ProcessesService, PrismaService, ProcessPdfService, ProcessPartiesService, ProcessTimelinesService, PartyQualificationsService, ProcessIntegrationsService],
+    exports: [ProcessCrawlerService, ProcessesService, ProcessPdfService, ProcessPartiesService, ProcessTimelinesService, PartyQualificationsService, ProcessIntegrationsService]
 })
 export class ProcessesModule {}
