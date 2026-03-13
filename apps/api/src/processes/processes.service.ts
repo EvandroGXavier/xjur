@@ -5,18 +5,17 @@ import * as path from 'path';
 import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
 
 interface CreateProcessDto {
-    tenantId?: string; // Opcional se pegarmos de algum lugar, por enquanto obrigatório ou fixo
+    tenantId?: string;
     contactId?: string;
     cnj?: string;
-    category: 'JUDICIAL' | 'EXTRAJUDICIAL';
+    category: 'JUDICIAL' | 'EXTRAJUDICIAL' | 'ADMINISTRATIVO';
     title?: string;
     code?: string;
     description?: string;
     folder?: string;
     subject?: string;
-    value?: number;
+    value?: number | string;
     status?: string;
-    // ... outros campos crawler
     court?: string;
     courtSystem?: string;
     vars?: string;
@@ -80,7 +79,6 @@ export class ProcessesService {
         };
     }
 
-    // Helper público para obter tenantId (temporário até JWT)
     async getFirstTenantId(): Promise<string> {
         const tenant = await this.prisma.tenant.findFirst();
         if (!tenant) throw new NotFoundException('Nenhum tenant encontrado');
@@ -102,294 +100,529 @@ export class ProcessesService {
         }
     }
 
+    private normalizeText(value?: string | null) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toUpperCase();
+    }
+
+    private normalizeDocument(value?: string | null) {
+        const digits = String(value || '').replace(/\D/g, '');
+        return digits || null;
+    }
+
+    private parseDate(value: any) {
+        if (!value) return undefined;
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? undefined : value;
+        }
+        if (typeof value === 'string') {
+            if (/^\d{2}\/\d{2}\/\d{4}/.test(value)) {
+                const [day, month, year] = value.split('/');
+                const parsed = new Date(`${year}-${month}-${day}`);
+                return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+            }
+            if (/^\d{8,14}$/.test(value)) {
+                const year = value.slice(0, 4);
+                const month = value.slice(4, 6) || '01';
+                const day = value.slice(6, 8) || '01';
+                const hour = value.slice(8, 10) || '00';
+                const minute = value.slice(10, 12) || '00';
+                const second = value.slice(12, 14) || '00';
+                const parsedCompact = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+                return Number.isNaN(parsedCompact.getTime()) ? undefined : parsedCompact;
+            }
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+        }
+        return undefined;
+    }
+
+    private parseMoneyValue(value: any) {
+        if (value === undefined || value === null || value === '') {
+            return undefined;
+        }
+        if (typeof value === 'number') {
+            return value;
+        }
+        const parsed = parseFloat(
+            String(value)
+                .replace('R$', '')
+                .trim()
+                .replace(/\./g, '')
+                .replace(',', '.'),
+        );
+        return Number.isNaN(parsed) ? undefined : parsed;
+    }
+
+    private isInformativeJudgeName(value?: string | null) {
+        const normalized = this.normalizeText(value);
+        return Boolean(
+            normalized &&
+            ![
+                'NAO INFORMADO',
+                'NAO INFORMADO VIA DATAJUD',
+                'NAO IDENTIFICADO',
+                'DESCONHECIDO',
+                '-',
+            ].includes(normalized),
+        );
+    }
+
+    private normalizeImportedRole(rawType?: string | null) {
+        const normalized = this.normalizeText(rawType);
+        if (!normalized) return 'TERCEIRO';
+
+        if (['AUTOR', 'AUTORA', 'REQUERENTE', 'EXEQUENTE', 'IMPETRANTE', 'RECLAMANTE', 'APELANTE', 'AGRAVANTE', 'EMBARGANTE'].some(term => normalized.includes(term))) {
+            if (normalized.includes('AUTORA')) return 'AUTORA';
+            if (normalized.includes('REQUERENTE')) return 'REQUERENTE';
+            if (normalized.includes('EXEQUENTE')) return 'EXEQUENTE';
+            if (normalized.includes('RECLAMANTE')) return 'RECLAMANTE';
+            return 'AUTOR';
+        }
+
+        if (['REU', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'IMPETRADO', 'RECLAMADO', 'RECLAMADA', 'APELADO', 'AGRAVADO', 'EMBARGADO'].some(term => normalized.includes(term))) {
+            if (normalized.includes('REQUERIDA')) return 'REQUERIDA';
+            if (normalized.includes('REQUERIDO')) return 'REQUERIDO';
+            if (normalized.includes('EXECUTADA')) return 'EXECUTADA';
+            if (normalized.includes('EXECUTADO')) return 'EXECUTADO';
+            if (normalized.includes('RECLAMADA')) return 'RECLAMADA';
+            if (normalized.includes('RECLAMADO')) return 'RECLAMADO';
+            return 'REU';
+        }
+
+        if (['ADVOGADO', 'ADVOGADA', 'PROCURADOR', 'PROCURADORA', 'DEFENSOR'].some(term => normalized.includes(term))) {
+            return normalized.includes('CONTRAR') ? 'ADVOGADO CONTRARIO' : 'ADVOGADO';
+        }
+
+        if (['JUIZ', 'MAGISTRADO', 'RELATOR'].some(term => normalized.includes(term))) return 'MAGISTRADO';
+        if (normalized.includes('PROMOTOR')) return 'PROMOTOR';
+        if (normalized.includes('PERITO')) return 'PERITO';
+        if (normalized.includes('TESTEMUNHA')) return 'TESTEMUNHA';
+        if (normalized.includes('CURADORA')) return 'CURADORA';
+        if (normalized.includes('CURADOR')) return 'CURADOR';
+        if (normalized.includes('INVENTARIANTE')) return 'INVENTARIANTE';
+        if (normalized.includes('HERDEIRA')) return 'HERDEIRA';
+        if (normalized.includes('HERDEIRO')) return 'HERDEIRO';
+        if (normalized.includes('MEEIRA')) return 'MEEIRA';
+        if (normalized.includes('MEEIRO')) return 'MEEIRO';
+
+        return normalized.slice(0, 80);
+    }
+
+    private inferRoleCategory(roleName: string) {
+        const normalized = this.normalizeText(roleName);
+        if (['AUTOR', 'AUTORA', 'REQUERENTE', 'EXEQUENTE', 'IMPETRANTE', 'RECLAMANTE', 'APELANTE', 'AGRAVANTE', 'EMBARGANTE'].some(term => normalized.includes(term))) {
+            return 'POLO_ATIVO';
+        }
+        if (['REU', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'IMPETRADO', 'RECLAMADO', 'RECLAMADA', 'APELADO', 'AGRAVADO', 'EMBARGADO'].some(term => normalized.includes(term))) {
+            return 'POLO_PASSIVO';
+        }
+        return 'OUTROS';
+    }
+
+    private getQualificationNameForRole(roleName: string) {
+        const category = this.inferRoleCategory(roleName);
+        if (category === 'POLO_ATIVO') return 'CLIENTE';
+        if (category === 'POLO_PASSIVO') return 'CONTRARIO';
+
+        const normalized = this.normalizeText(roleName);
+        if (normalized.includes('PERITO')) return 'PERITO';
+        if (normalized.includes('TESTEMUNHA')) return 'TESTEMUNHA';
+
+        return null;
+    }
+
+    private async ensureRole(tenantId: string, roleName: string) {
+        const normalizedRoleName = this.normalizeImportedRole(roleName);
+        const existing = await this.prisma.partyRole.findUnique({
+            where: {
+                tenantId_name: {
+                    tenantId,
+                    name: normalizedRoleName,
+                },
+            },
+        });
+
+        if (existing) {
+            if (!existing.active) {
+                return this.prisma.partyRole.update({
+                    where: { id: existing.id },
+                    data: { active: true },
+                });
+            }
+            return existing;
+        }
+
+        return this.prisma.partyRole.create({
+            data: {
+                tenantId,
+                name: normalizedRoleName,
+                category: this.inferRoleCategory(normalizedRoleName),
+            },
+        });
+    }
+
+    private async ensureQualification(tenantId: string, name: string) {
+        const normalizedName = this.normalizeText(name);
+        if (!normalizedName) return null;
+
+        const existingList = await this.prisma.partyQualification.findMany({
+            where: { tenantId },
+            select: { id: true, name: true, active: true },
+        });
+
+        const existing = existingList.find(item => this.normalizeText(item.name) === normalizedName);
+        if (existing) {
+            if (!existing.active) {
+                return this.prisma.partyQualification.update({
+                    where: { id: existing.id },
+                    data: { active: true },
+                });
+            }
+            return existing;
+        }
+
+        return this.prisma.partyQualification.create({
+            data: {
+                tenantId,
+                name: normalizedName,
+            },
+        });
+    }
+
+    private async findExistingImportedContact(tenantId: string, name: string, cleanDoc?: string | null) {
+        if (cleanDoc) {
+            if (cleanDoc.length <= 11) {
+                const byCpf = await this.prisma.contact.findFirst({
+                    where: {
+                        tenantId,
+                        OR: [
+                            { document: cleanDoc },
+                            { pfDetails: { cpf: cleanDoc } },
+                        ],
+                    },
+                    select: { id: true },
+                });
+                if (byCpf) return byCpf;
+            } else {
+                const byCnpj = await this.prisma.contact.findFirst({
+                    where: {
+                        tenantId,
+                        OR: [
+                            { document: cleanDoc },
+                            { pjDetails: { cnpj: cleanDoc } },
+                        ],
+                    },
+                    select: { id: true },
+                });
+                if (byCnpj) return byCnpj;
+            }
+        }
+
+        return this.prisma.contact.findFirst({
+            where: {
+                tenantId,
+                name: {
+                    equals: name,
+                    mode: 'insensitive',
+                },
+            },
+            select: { id: true },
+        });
+    }
+
+    private async findOrCreateImportedContact(
+        tenantId: string,
+        name: string,
+        roleName: string,
+        document?: string | null,
+    ) {
+        const trimmedName = String(name || '').trim().slice(0, 100);
+        if (!trimmedName) return null;
+
+        const cleanDoc = this.normalizeDocument(document);
+        const existing = await this.findExistingImportedContact(tenantId, trimmedName, cleanDoc);
+        if (existing) {
+            return existing.id;
+        }
+
+        const personType = cleanDoc && cleanDoc.length > 11 ? 'PJ' : 'PF';
+        const category = roleName === 'MAGISTRADO' ? 'MAGISTRADO' : roleName;
+
+        const created = await this.prisma.contact.create({
+            data: {
+                tenantId,
+                name: trimmedName,
+                personType,
+                document: cleanDoc || undefined,
+                category,
+                notes: 'Importado automaticamente via processo',
+                pfDetails: personType === 'PF' && cleanDoc
+                    ? {
+                        create: { cpf: cleanDoc },
+                    }
+                    : undefined,
+                pjDetails: personType === 'PJ' && cleanDoc
+                    ? {
+                        create: {
+                            cnpj: cleanDoc,
+                            companyName: trimmedName,
+                        },
+                    }
+                    : undefined,
+            },
+            select: { id: true },
+        });
+
+        return created.id;
+    }
+
+    private async upsertImportedProcessParty(
+        tenantId: string,
+        processId: string,
+        contactId: string,
+        roleName: string,
+        notes?: string,
+    ) {
+        const role = await this.ensureRole(tenantId, roleName);
+        const qualificationName = this.getQualificationNameForRole(role.name);
+        const qualification = qualificationName
+            ? await this.ensureQualification(tenantId, qualificationName)
+            : null;
+
+        const roleCategory = this.normalizeText(role.category);
+
+        return this.prisma.processParty.upsert({
+            where: {
+                processId_contactId_roleId: {
+                    processId,
+                    contactId,
+                    roleId: role.id,
+                },
+            },
+            update: {
+                qualificationId: qualification?.id || null,
+                isClient: roleCategory === 'POLO_ATIVO',
+                isOpposing: roleCategory === 'POLO_PASSIVO',
+                notes: notes || undefined,
+            },
+            create: {
+                tenantId,
+                processId,
+                contactId,
+                roleId: role.id,
+                qualificationId: qualification?.id || undefined,
+                isClient: roleCategory === 'POLO_ATIVO',
+                isOpposing: roleCategory === 'POLO_PASSIVO',
+                notes,
+            },
+        });
+    }
+
+    private async syncImportedProcessParties(
+        processId: string,
+        tenantId: string,
+        parties: any[] = [],
+        judgeName?: string,
+    ) {
+        const safeParties = Array.isArray(parties) ? parties : [];
+
+        for (const party of safeParties) {
+            const name = String(party?.name || '').trim();
+            if (!name) continue;
+
+            const roleName = this.normalizeImportedRole(party?.type);
+            const contactId = await this.findOrCreateImportedContact(
+                tenantId,
+                name,
+                roleName,
+                party?.document,
+            );
+
+            if (!contactId) continue;
+
+            await this.upsertImportedProcessParty(
+                tenantId,
+                processId,
+                contactId,
+                roleName,
+                'Importado automaticamente via consulta/processo',
+            );
+        }
+
+        if (this.isInformativeJudgeName(judgeName)) {
+            const judgeContactId = await this.findOrCreateImportedContact(
+                tenantId,
+                String(judgeName).trim(),
+                'MAGISTRADO',
+            );
+
+            if (judgeContactId) {
+                await this.upsertImportedProcessParty(
+                    tenantId,
+                    processId,
+                    judgeContactId,
+                    'MAGISTRADO',
+                    'Magistrado importado automaticamente via consulta/processo',
+                );
+            }
+        }
+    }
+
+    private async resolveTenantId(inputTenantId?: string) {
+        if (inputTenantId) {
+            return inputTenantId;
+        }
+
+        const defaultTenant = await this.prisma.tenant.findFirst();
+        if (defaultTenant) {
+            return defaultTenant.id;
+        }
+
+        const newTenant = await this.prisma.tenant.create({
+            data: {
+                name: 'Escritorio Principal',
+                document: '00000000000191',
+            },
+        });
+
+        return newTenant.id;
+    }
+
+    private async buildProcessCode(tenantId: string, data: CreateProcessDto) {
+        if (data.category !== 'EXTRAJUDICIAL') {
+            return data.code || data.cnj;
+        }
+
+        const year = new Date().getFullYear();
+        const codes = await this.prisma.process.findMany({
+            where: {
+                tenantId,
+                code: { startsWith: `CASO-${year}-` },
+            },
+            select: { code: true },
+        });
+
+        let maxSeq = 0;
+        for (const item of codes) {
+            if (!item.code) continue;
+            const parts = item.code.split('-');
+            if (parts.length !== 3) continue;
+            const seq = parseInt(parts[2], 10);
+            if (!Number.isNaN(seq) && seq > maxSeq) {
+                maxSeq = seq;
+            }
+        }
+
+        return `CASO-${year}-${String(maxSeq + 1).padStart(4, '0')}`;
+    }
+
     async create(data: CreateProcessDto) {
         this.logAudit('1_RECEIVED_PAYLOAD', data);
         console.log('Creating process payload:', JSON.stringify(data, null, 2));
 
-        // Validação Mínima
-        // ... (código existente de validação e tenant)
-        // ... (repetir lógica de tenant e code do código anterior, mantendo consistência)
-        
-        // RECUPERANDO trechos anteriores para contexto (simplificado para replace)
         if (data.category === 'JUDICIAL' && !data.cnj) {
-             throw new BadRequestException('CNJ é obrigatório para processos judiciais.');
+            throw new BadRequestException('CNJ e obrigatorio para processos judiciais.');
         }
         if (data.category === 'EXTRAJUDICIAL' && !data.title) {
-             throw new BadRequestException('Título é obrigatório para casos.');
+            throw new BadRequestException('Titulo e obrigatorio para casos.');
         }
 
-        let tenantId = data.tenantId;
-        if (!tenantId) {
-            const defaultTenant = await this.prisma.tenant.findFirst();
-            if (!defaultTenant) {
-                 const newTenant = await this.prisma.tenant.create({
-                     data: {
-                         name: 'Escritório Principal',
-                         document: '00000000000191'
-                     }
-                 });
-                 tenantId = newTenant.id;
-            } else {
-                 tenantId = defaultTenant.id;
-            }
-        }
+        const tenantId = await this.resolveTenantId(data.tenantId);
+        const code = await this.buildProcessCode(tenantId, data);
 
-        let code = data.cnj;
-        if (data.category === 'EXTRAJUDICIAL') {
-             const year = new Date().getFullYear();
-             
-             // Fetch all codes to safely determine max sequence in memory
-             // This avoids issues with string sorting of different lengths (e.g. "CASO-2026-9" > "CASO-2026-10")
-             const codes = await this.prisma.process.findMany({
-                 where: { 
-                     tenantId, 
-                     code: { startsWith: `CASO-${year}-` }
-                 },
-                 select: { code: true }
-             });
-
-             let maxSeq = 0;
-             for (const p of codes) {
-                 if (p.code) {
-                     const parts = p.code.split('-');
-                     if (parts.length === 3) {
-                         const seq = parseInt(parts[2]);
-                         if (!isNaN(seq) && seq > maxSeq) {
-                             maxSeq = seq;
-                         }
-                     }
-                 }
-             }
-
-             const nextSeq = maxSeq + 1;
-             const seq = String(nextSeq).padStart(4, '0');
-             code = `CASO-${year}-${seq}`;
-        }
-
-        const parseDate = (d: any) => {
-            if (!d) return undefined;
-            if (d instanceof Date) {
-                return Number.isNaN(d.getTime()) ? undefined : d;
-            }
-            if (typeof d === 'string') {
-                if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
-                   const [day, month, year] = d.split('/');
-                   return new Date(`${year}-${month}-${day}`);
-                }
-                if (/^\d{8,14}$/.test(d)) {
-                    const year = d.slice(0, 4);
-                    const month = d.slice(4, 6) || '01';
-                    const day = d.slice(6, 8) || '01';
-                    const hour = d.slice(8, 10) || '00';
-                    const minute = d.slice(10, 12) || '00';
-                    const second = d.slice(12, 14) || '00';
-                    const parsedCompact = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
-                    return Number.isNaN(parsedCompact.getTime()) ? undefined : parsedCompact;
-                }
-                const parsed = new Date(d);
-                return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-            }
-            return undefined;
-        };
-
-        // PREPARE DATA
         const processData = {
             tenantId,
             contactId: data.contactId,
-            cnj: (data.cnj && data.cnj.trim() !== '') ? data.cnj : null,
+            cnj: data.cnj?.trim() ? data.cnj : null,
             category: data.category,
             title: data.title || `Processo ${data.cnj}`,
-            code: code,
+            code,
             description: data.description,
             folder: data.folder,
-            
             court: data.court,
             courtSystem: data.courtSystem,
             vars: data.vars,
             district: data.district,
             status: data.status || 'ATIVO',
-            
             area: data.area,
             subject: data.subject,
             class: data.class,
-            distributionDate: parseDate(data.distributionDate),
+            distributionDate: this.parseDate(data.distributionDate),
             judge: data.judge,
-            value: typeof data.value === 'string' 
-                ? parseFloat(String(data.value).replace('R$', '').trim().replace(/\./g, '').replace(',', '.')) 
-                : data.value,
-            
-            parties: data.parties || [],
+            value: this.parseMoneyValue(data.value),
+            parties: Array.isArray(data.parties) ? data.parties : [],
             metadata: data.metadata || {},
         };
 
         this.logAudit('2_MAPPED_DATA', processData);
 
         try {
-            if (data.category === 'JUDICIAL' && data.cnj) {
-                // Upsert usando CNJ como chave única
-                const process = await this.prisma.process.upsert({
-                    where: { cnj: data.cnj },
-                    update: {
-                        status: processData.status,
-                        value: processData.value,
-                        court: processData.court,
-                        district: processData.district,
-                        judge: processData.judge,
-                        parties: processData.parties, 
-                        metadata: processData.metadata,
-                        courtSystem: processData.courtSystem,
-                        vars: processData.vars,
-                        area: processData.area,
-                        subject: processData.subject,
-                        class: processData.class,
-                        distributionDate: processData.distributionDate,
-                    },
-                    create: processData
-                });
-                
-                this.logAudit('3_SAVED_RESULT_UPSERT', process);
-                console.log('Process upserted successfully:', process.id);
-                
-                // 4. Sync Parties
-                if (processData.parties && Array.isArray(processData.parties)) {
-                    this.syncParties(processData.parties as any[], tenantId, processData.judge)
-                        .catch(err => console.error('Error syncing parties:', err));
-                }
+            const process =
+                data.category === 'JUDICIAL' && data.cnj
+                    ? await this.prisma.process.upsert({
+                        where: { cnj: data.cnj },
+                        update: {
+                            contactId: processData.contactId,
+                            cnj: processData.cnj,
+                            category: processData.category,
+                            title: processData.title,
+                            code: processData.code,
+                            description: processData.description,
+                            folder: processData.folder,
+                            court: processData.court,
+                            courtSystem: processData.courtSystem,
+                            vars: processData.vars,
+                            district: processData.district,
+                            status: processData.status,
+                            area: processData.area,
+                            subject: processData.subject,
+                            class: processData.class,
+                            distributionDate: processData.distributionDate,
+                            judge: processData.judge,
+                            value: processData.value,
+                            parties: processData.parties,
+                            metadata: processData.metadata,
+                        },
+                        create: processData,
+                    })
+                    : await this.prisma.process.create({
+                        data: processData,
+                    });
 
-                await this.syncMicrosoftFolder(tenantId, process.id);
-                return this.prisma.process.findUnique({ where: { id: process.id } });
-            } else {
-                const process = await this.prisma.process.create({
-                    data: processData
-                });
-                
-                this.logAudit('3_SAVED_RESULT_CREATE', process);
-                console.log('Process created successfully:', process.id);
+            this.logAudit('3_SAVED_RESULT', process);
+            console.log(`Process saved successfully: ${process.id}`);
 
-                // 4. Sync Parties
-                if (processData.parties && Array.isArray(processData.parties)) {
-                    this.syncParties(processData.parties as any[], tenantId, processData.judge)
-                        .catch(err => console.error('Error syncing parties:', err));
-                }
-
-                await this.syncMicrosoftFolder(tenantId, process.id);
-                return this.prisma.process.findUnique({ where: { id: process.id } });
+            if (
+                (Array.isArray(processData.parties) && processData.parties.length > 0) ||
+                this.isInformativeJudgeName(processData.judge)
+            ) {
+                this.syncImportedProcessParties(
+                    process.id,
+                    tenantId,
+                    processData.parties as any[],
+                    processData.judge,
+                ).catch(err => console.error('Error syncing imported process parties:', err));
             }
-        } catch (error) {
+
+            await this.syncMicrosoftFolder(tenantId, process.id);
+            return this.prisma.process.findUnique({ where: { id: process.id } });
+        } catch (error: any) {
             this.logAudit('ERROR_SAVING', { error: error.message, stack: error.stack });
             console.error('Error creating/upserting process:', error);
             throw error;
         }
     }
 
-    private normalizePartyType(rawType: string): string {
-        const type = rawType ? rawType.toUpperCase() : '';
-        if (['AUTOR', 'REQUERENTE', 'EXEQUENTE', 'IMPETRANTE', 'RECLAMANTE'].some(t => type.includes(t))) return 'ENVOLVIDO (POLO ATIVO)';
-        if (['RÉU', 'REU', 'REQUERIDO', 'EXECUTADO', 'IMPETRADO', 'RECLAMADO'].some(t => type.includes(t))) return 'ENVOLVIDO (POLO PASSIVO)';
-        if (['ADVOGADO', 'PROCURADOR', 'DEFENSOR'].some(t => type.includes(t))) return 'ADVOGADO';
-        if (['PERITO', 'ASSISTENTE'].some(t => type.includes(t))) return 'PERITO';
-        if (['TESTEMUNHA'].some(t => type.includes(t))) return 'TESTEMUNHA';
-        if (['JUIZ', 'MAGISTRADO', 'RELATOR'].some(t => type.includes(t))) return 'MAGISTRADO';
-        return 'TERCEIRO';
-    }
-
-    private async syncParties(parties: any[], tenantId: string, judgeName?: string) {
-        const createdContacts = [];
-
-        // 1. Sync Judge if present
-        if (
-            judgeName &&
-            !['Não informado', 'Nao informado', 'Nao informado via DataJud', 'Não informado via DataJud'].includes(judgeName)
-        ) {
-            const judgeExists = await this.prisma.contact.findFirst({
-                where: { tenantId, name: judgeName, category: 'MAGISTRADO' }
-            });
-            if (!judgeExists) {
-                try {
-                     const newJudge = await this.prisma.contact.create({
-                        data: {
-                            tenantId,
-                            name: judgeName,
-                            personType: 'PF', // Juiz é sempre PF
-                            category: 'MAGISTRADO',
-                            notes: 'Importado automaticamente via Processo'
-                        }
-                    });
-                    console.log(`Created Magistrate contact: ${judgeName}`);
-                    createdContacts.push({ name: judgeName, type: 'MAGISTRADO', id: newJudge.id });
-                } catch (e) { console.warn('Error creating judge:', e); }
-            }
-        }
-
-        // 2. Sync Parties
-        if (!parties || !Array.isArray(parties)) return;
-
-        for (const party of parties) {
-            const { name, document, type } = party;
-            if (!name) continue;
-
-            const cleanDoc = document ? String(document).replace(/\D/g, '') : null;
-            let existingContact = null;
-
-            if (cleanDoc) {
-                if (cleanDoc.length <= 11) { // CPF
-                     existingContact = await this.prisma.contact.findFirst({
-                         where: { 
-                             tenantId,
-                             pfDetails: { cpf: cleanDoc }
-                         }
-                     });
-                } else { // CNPJ
-                     existingContact = await this.prisma.contact.findFirst({
-                         where: { 
-                             tenantId,
-                             pjDetails: { cnpj: cleanDoc }
-                         }
-                     });
-                }
-            }
-
-            // Normalizar Categoria
-            const normalizedCategory = this.normalizePartyType(type);
-
-            if (!existingContact) {
-                const isPJ = cleanDoc && cleanDoc.length > 11;
-                const personType = isPJ ? 'PJ' : 'PF';
-
-                try {
-                    const newContact = await this.prisma.contact.create({
-                        data: {
-                            tenantId,
-                            name: name.substring(0, 100), 
-                            personType,
-                            category: normalizedCategory, 
-                            pfDetails: !isPJ ? {
-                                create: { cpf: cleanDoc }
-                            } : undefined,
-                            pjDetails: isPJ ? {
-                                create: { cnpj: cleanDoc, companyName: name }
-                            } : undefined
-                        }
-                    });
-                    console.log(`Created contact for party: ${name} (${normalizedCategory})`);
-                    createdContacts.push({ name, personType, id: newContact.id });
-                } catch (e) {
-                    console.warn(`Failed to create contact for ${name}:`, e.message);
-                }
-            }
-        }
-        
-        if (createdContacts.length > 0) {
-            this.logAudit('4_CREATED_CONTACTS', createdContacts);
-        }
-    }
-    
-    async findAll(params: { 
-        tenantId: string, 
-        search?: string, 
-        includedTags?: string, 
+    async findAll(params: {
+        tenantId: string,
+        search?: string,
+        includedTags?: string,
         excludedTags?: string,
-        status?: string 
+        status?: string
     }) {
         if (!params.tenantId) {
             throw new BadRequestException('Tenant ID is required');
@@ -398,7 +631,6 @@ export class ProcessesService {
 
         const where: any = { tenantId };
 
-        // Search Logic
         if (search) {
             where.OR = [
                 { cnj: { contains: search, mode: 'insensitive' } },
@@ -409,21 +641,19 @@ export class ProcessesService {
             ];
         }
 
-        // Status Logic
         if (status && status !== 'ALL') {
-             where.status = status;
+            where.status = status;
         }
 
-        // Tag Filtering
         if (includedTags || excludedTags) {
             if (!where.AND) where.AND = [];
-            
+
             if (includedTags) {
                 const incArray = includedTags.split(',');
                 where.AND.push({
                     tags: {
-                        some: { tagId: { in: incArray } }
-                    }
+                        some: { tagId: { in: incArray } },
+                    },
                 });
             }
 
@@ -431,38 +661,37 @@ export class ProcessesService {
                 const excArray = excludedTags.split(',');
                 where.AND.push({
                     tags: {
-                        none: { tagId: { in: excArray } }
-                    }
+                        none: { tagId: { in: excArray } },
+                    },
                 });
             }
         }
 
-        const results = await this.prisma.process.findMany({
+        return this.prisma.process.findMany({
             where,
             include: {
                 tags: {
                     include: {
-                        tag: true
-                    }
+                        tag: true,
+                    },
                 },
                 processParties: {
                     include: {
                         contact: {
-                            select: { id: true, name: true, email: true, phone: true, whatsapp: true }
+                            select: { id: true, name: true, email: true, phone: true, whatsapp: true },
                         },
                         role: { select: { name: true, category: true } },
-                        qualification: { select: { name: true } }
-                    }
+                        qualification: { select: { name: true } },
+                    },
                 },
                 timeline: {
                     orderBy: { date: 'desc' },
                     take: 1,
-                    select: { date: true, title: true, description: true }
-                }
+                    select: { date: true, title: true, description: true },
+                },
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
         });
-        return results;
     }
 
     async findOne(id: string, tenantId: string) {
@@ -474,46 +703,31 @@ export class ProcessesService {
                 contact: true,
                 tags: {
                     include: {
-                        tag: true
-                    }
-                }
-            }
+                        tag: true,
+                    },
+                },
+            },
         });
 
         if (!process) {
-            throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
+            throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
         }
 
         return process;
     }
 
     async update(id: string, data: Partial<CreateProcessDto>, tenantId: string) {
-        // Verificar se existe e pertence ao tenant
         const existing = await this.prisma.process.findFirst({ where: { id, tenantId } });
         if (!existing) {
-            throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
+            throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
         }
 
         this.logAudit('UPDATE_RECEIVED', { id, data });
 
-        const parseDate = (d: any) => {
-            if (!d) return undefined;
-            if (d instanceof Date) return d;
-            if (typeof d === 'string') {
-                if (/^\d{2}\/\d{2}\/\d{4}/.test(d)) {
-                   const [day, month, year] = d.split('/');
-                   return new Date(`${year}-${month}-${day}`);
-                }
-                return new Date(d);
-            }
-            return undefined;
-        };
-
-        // Construir objeto de update apenas com campos enviados
         const updateData: any = {};
 
         if (data.title !== undefined) updateData.title = data.title;
-        if (data.cnj !== undefined) updateData.cnj = (data.cnj && data.cnj.trim() !== '') ? data.cnj : null;
+        if (data.cnj !== undefined) updateData.cnj = data.cnj?.trim() ? data.cnj : null;
         if (data.category !== undefined) updateData.category = data.category;
         if (data.description !== undefined) updateData.description = data.description;
         if (data.folder !== undefined) updateData.folder = data.folder;
@@ -531,27 +745,37 @@ export class ProcessesService {
         if (data.contactId !== undefined) updateData.contactId = data.contactId;
 
         if (data.distributionDate !== undefined) {
-            const parsed = parseDate(data.distributionDate);
-            if (parsed) updateData.distributionDate = parsed;
+            updateData.distributionDate = this.parseDate(data.distributionDate);
         }
 
         if (data.value !== undefined) {
-            updateData.value = typeof data.value === 'string'
-                ? parseFloat(String(data.value).replace('R$', '').trim().replace(/\./g, '').replace(',', '.'))
-                : data.value;
+            updateData.value = this.parseMoneyValue(data.value);
         }
 
         try {
             const updated = await this.prisma.process.update({
-                where: { id }, // tenantId já garantido pelo findFirst acima? Sim, mas idealmente usar updateMany ou garantir id unico
+                where: { id },
                 data: updateData,
             });
 
             this.logAudit('UPDATE_SUCCESS', { id, updated });
             console.log(`Process updated: ${id}`);
+
+            if (
+                (Array.isArray(data.parties) && data.parties.length > 0) ||
+                this.isInformativeJudgeName(data.judge)
+            ) {
+                await this.syncImportedProcessParties(
+                    updated.id,
+                    tenantId,
+                    Array.isArray(data.parties) ? data.parties : [],
+                    data.judge,
+                );
+            }
+
             await this.syncMicrosoftFolder(tenantId, updated.id);
             return this.prisma.process.findUnique({ where: { id: updated.id } });
-        } catch (error) {
+        } catch (error: any) {
             this.logAudit('UPDATE_ERROR', { id, error: error.message });
             console.error('Error updating process:', error);
             throw error;
@@ -561,88 +785,84 @@ export class ProcessesService {
     async remove(id: string, tenantId: string) {
         const existing = await this.prisma.process.findFirst({ where: { id, tenantId } });
         if (!existing) {
-            throw new NotFoundException(`Processo não encontrado (ID: ${id})`);
+            throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
         }
 
         this.logAudit('DELETE', { id, title: existing.title, cnj: existing.cnj });
 
-        // Deletar timeline associada primeiro (relação)
         await this.prisma.processTimeline.deleteMany({ where: { processId: id } });
 
         const deleted = await this.prisma.process.delete({ where: { id } });
-    console.log(`Process deleted: ${id} (${existing.title || existing.cnj})`);
-    return { success: true, deleted: { id: deleted.id, title: deleted.title } };
-  }
-
-  // --- Bulk Actions ---
-  async bulkAction(tenantId: string, dto: any) {
-    const { action, tagId, status, lawyerName, category, processIds } = dto;
-    const whereClause: any = { tenantId };
-
-    if (processIds && processIds.length > 0) {
-      whereClause.id = { in: processIds };
-    } else {
-      // Apply filters if no specific IDs provided
-      if (category) whereClause.category = category;
-      if (status) whereClause.status = status;
-      if (dto.search) {
-        whereClause.OR = [
-          { title: { contains: dto.search, mode: 'insensitive' } },
-          { cnj: { contains: dto.search, mode: 'insensitive' } },
-          { client: { contains: dto.search, mode: 'insensitive' } },
-        ];
-      }
+        console.log(`Process deleted: ${id} (${existing.title || existing.cnj})`);
+        return { success: true, deleted: { id: deleted.id, title: deleted.title } };
     }
 
-    const processes = await this.prisma.process.findMany({
-      where: whereClause,
-      select: { id: true }
-    });
+    async bulkAction(tenantId: string, dto: any) {
+        const { action, tagId, status, lawyerName, category, processIds } = dto;
+        const whereClause: any = { tenantId };
 
-    const ids = processes.map(p => p.id);
-    if (ids.length === 0) return { updatedCount: 0 };
+        if (processIds && processIds.length > 0) {
+            whereClause.id = { in: processIds };
+        } else {
+            if (category) whereClause.category = category;
+            if (status) whereClause.status = status;
+            if (dto.search) {
+                whereClause.OR = [
+                    { title: { contains: dto.search, mode: 'insensitive' } },
+                    { cnj: { contains: dto.search, mode: 'insensitive' } },
+                    { client: { contains: dto.search, mode: 'insensitive' } },
+                ];
+            }
+        }
 
-    switch (action) {
-      case 'ADD_TAG':
-        if (!tagId) throw new BadRequestException('Tag ID is required');
-        const tagOperations = ids.map(id => ({
-          processId: id,
-          tagId: tagId
-        }));
-        await this.prisma.processTag.createMany({
-          data: tagOperations,
-          skipDuplicates: true
+        const processes = await this.prisma.process.findMany({
+            where: whereClause,
+            select: { id: true },
         });
-        return { updatedCount: ids.length };
 
-      case 'REMOVE_TAG':
-        if (!tagId) throw new BadRequestException('Tag ID is required');
-        await this.prisma.processTag.deleteMany({
-          where: {
-            processId: { in: ids },
-            tagId: tagId
-          }
-        });
-        return { updatedCount: ids.length };
+        const ids = processes.map(p => p.id);
+        if (ids.length === 0) return { updatedCount: 0 };
 
-      case 'UPDATE_STATUS':
-        if (!status) throw new BadRequestException('Status is required');
-        await this.prisma.process.updateMany({
-          where: { id: { in: ids } },
-          data: { status }
-        });
-        return { updatedCount: ids.length };
+        switch (action) {
+            case 'ADD_TAG':
+                if (!tagId) throw new BadRequestException('Tag ID is required');
+                await this.prisma.processTag.createMany({
+                    data: ids.map(processId => ({
+                        processId,
+                        tagId,
+                    })),
+                    skipDuplicates: true,
+                });
+                return { updatedCount: ids.length };
 
-      case 'UPDATE_LAWYER':
-        if (!lawyerName) throw new BadRequestException('Lawyer name is required');
-        await this.prisma.process.updateMany({
-          where: { id: { in: ids } },
-          data: { responsibleLawyer: lawyerName }
-        });
-        return { updatedCount: ids.length };
+            case 'REMOVE_TAG':
+                if (!tagId) throw new BadRequestException('Tag ID is required');
+                await this.prisma.processTag.deleteMany({
+                    where: {
+                        processId: { in: ids },
+                        tagId,
+                    },
+                });
+                return { updatedCount: ids.length };
 
-      default:
-        throw new BadRequestException('Invalid bulk action');
+            case 'UPDATE_STATUS':
+                if (!status) throw new BadRequestException('Status is required');
+                await this.prisma.process.updateMany({
+                    where: { id: { in: ids } },
+                    data: { status },
+                });
+                return { updatedCount: ids.length };
+
+            case 'UPDATE_LAWYER':
+                if (!lawyerName) throw new BadRequestException('Lawyer name is required');
+                await this.prisma.process.updateMany({
+                    where: { id: { in: ids } },
+                    data: { responsibleLawyer: lawyerName },
+                });
+                return { updatedCount: ids.length };
+
+            default:
+                throw new BadRequestException('Invalid bulk action');
+        }
     }
-  }
 }

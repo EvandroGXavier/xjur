@@ -32,6 +32,7 @@ import { helpProcesses } from '../../data/helpManuals';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getOfficeFolderDisplayPath } from '../../utils/officePath';
 
 interface Process {
     id: string;
@@ -417,7 +418,9 @@ export function ProcessList() {
                                     <div className="flex flex-col gap-1 min-w-[200px] py-1">
                                         <div className="flex items-center gap-1.5 text-[11px]">
                                             <span className="text-slate-500 font-bold uppercase w-12 shrink-0">Pasta:</span>
-                                            <span className="text-indigo-400 font-mono font-bold bg-indigo-500/5 px-1 rounded">{process.folder || '-'}</span>
+                                            <span className="text-indigo-400 font-mono font-bold bg-indigo-500/5 px-1 rounded" title={process.folder || '-'}>
+                                                {process.folder ? getOfficeFolderDisplayPath(process.folder) : '-'}
+                                            </span>
                                         </div>
                                         <div className="flex items-start gap-1.5 text-[10px]">
                                             <span className="text-slate-500 font-bold uppercase w-12 shrink-0">Vara/Juiz:</span>

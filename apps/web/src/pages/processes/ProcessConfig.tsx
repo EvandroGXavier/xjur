@@ -273,9 +273,13 @@ export function ProcessConfig() {
     if (!previewData) return;
     try {
       setPreviewLoading(true);
-      await api.post("/processes", { ...previewData, category: "JUDICIAL" });
-      toast.success("Processo cadastrado com sucesso");
-      navigate("/processes");
+      const { data } = await api.post("/processes", {
+        ...previewData,
+        category: "JUDICIAL",
+        parties: Array.isArray(previewData?.parties) ? previewData.parties : [],
+      });
+      toast.success("Processo cadastrado com sucesso com capa e partes sincronizadas");
+      navigate(`/processes/${data.id}`);
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Erro ao cadastrar processo");
     } finally {
@@ -510,6 +514,7 @@ export function ProcessConfig() {
                           <div><span className="text-slate-500">Classe:</span> <span className="text-white">{previewData.class || "-"}</span></div>
                           <div><span className="text-slate-500">Assunto:</span> <span className="text-white">{previewData.subject || previewData.area || "-"}</span></div>
                           <div><span className="text-slate-500">Orgao:</span> <span className="text-white">{previewData.vars || "-"}</span></div>
+                          <div><span className="text-slate-500">Partes:</span> <span className="text-white">{Array.isArray(previewData.parties) ? previewData.parties.length : 0}</span></div>
                         </div>
                         <button onClick={importPreview} disabled={previewLoading} className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-4 py-3 font-medium disabled:opacity-50">{previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}Cadastrar processo no sistema</button>
                       </>

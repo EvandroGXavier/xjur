@@ -136,12 +136,20 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
 
         setLoading(true);
         try {
-            const response = await api.post('/processes/automator/search', { term: cnj });
-            const data = Array.isArray(response.data) ? response.data[0] : response.data;
+            let data: any = null;
+
+            try {
+                const official = await api.post('/processes/config/integrations/import-cnj', { cnj });
+                data = official.data;
+            } catch {
+                const response = await api.post('/processes/automator/search', { term: cnj });
+                data = Array.isArray(response.data) ? response.data[0] : response.data;
+            }
+
             if (!data) throw new Error('Nenhum processo encontrado');
             setPreviewData(data);
             setStep(2);
-            toast.success('Processo encontrado!');
+            toast.success(`Processo encontrado! ${Array.isArray(data.parties) ? `${data.parties.length} parte(s) pronta(s) para importar.` : ''}`);
         } catch (err) {
             console.error(err);
             toast.error('Nenhum processo encontrado com esses dados.');
@@ -153,8 +161,12 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
     const handleSaveProcess = async () => {
         setLoading(true);
         try {
-            await api.post('/processes', { ...previewData, category: 'JUDICIAL' });
-            toast.success('Processo importado com sucesso!');
+            await api.post('/processes', {
+                ...previewData,
+                category: 'JUDICIAL',
+                parties: Array.isArray(previewData?.parties) ? previewData.parties : [],
+            });
+            toast.success('Processo importado com sucesso! Capa e partes foram sincronizadas.');
             onSuccess();
             onClose();
         } catch (err) {
@@ -366,6 +378,9 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                                             {loading ? <Loader2 className="animate-spin" /> : 'Confirmar Importação'}
                                         </button>
                                     </div>
+                                    <p className="text-xs text-slate-400">
+                                        Esta confirmação cadastra no mínimo a capa do processo e as partes encontradas na consulta.
+                                    </p>
                                 </div>
                             )}
                         </>

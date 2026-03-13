@@ -409,6 +409,134 @@ export class ProcessIntegrationsService {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
 
+  private normalizeText(value?: string | null) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toUpperCase();
+  }
+
+  private extractPartyName(item: any) {
+    return String(
+      item?.nome ||
+        item?.nomeParte ||
+        item?.nomePessoa ||
+        item?.parte ||
+        item?.participantName ||
+        item?.pessoa?.nome ||
+        item?.pessoa?.nomeCompleto ||
+        "",
+    ).trim();
+  }
+
+  private extractPartyDocument(item: any) {
+    const raw = String(
+      item?.documento ||
+        item?.numeroDocumento ||
+        item?.cpfCnpj ||
+        item?.document ||
+        item?.pessoa?.numeroDocumento ||
+        item?.pessoa?.cpfCnpj ||
+        "",
+    ).trim();
+
+    return raw ? raw.replace(/\D/g, "") : undefined;
+  }
+
+  private extractPartyType(item: any, fallbackType: string) {
+    const explicitType = String(
+      item?.tipoParte ||
+        item?.tipo ||
+        item?.papel ||
+        item?.polo ||
+        item?.qualidadeParte ||
+        item?.descricaoTipoParte ||
+        item?.representacao ||
+        fallbackType,
+    ).trim();
+
+    const normalized = this.normalizeText(explicitType);
+
+    if (
+      ["AUTOR", "AUTORA", "REQUERENTE", "EXEQUENTE", "IMPETRANTE", "RECLAMANTE"].some(
+        term => normalized.includes(term),
+      )
+    ) {
+      return "AUTOR";
+    }
+
+    if (
+      ["REU", "REQUERIDO", "REQUERIDA", "EXECUTADO", "RECLAMADO", "RECLAMADA"].some(
+        term => normalized.includes(term),
+      )
+    ) {
+      return "REU";
+    }
+
+    if (
+      ["ADVOGADO", "ADVOGADA", "PROCURADOR", "PROCURADORA", "DEFENSOR"].some(
+        term => normalized.includes(term),
+      )
+    ) {
+      return normalized.includes("CONTRAR") ? "ADVOGADO CONTRARIO" : "ADVOGADO";
+    }
+
+    if (["JUIZ", "MAGISTRADO", "RELATOR"].some(term => normalized.includes(term))) {
+      return "MAGISTRADO";
+    }
+
+    if (normalized.includes("PERITO")) return "PERITO";
+    if (normalized.includes("TESTEMUNHA")) return "TESTEMUNHA";
+
+    return fallbackType;
+  }
+
+  private appendParties(target: Array<{ name: string; type: string; document?: string }>, items: any, fallbackType: string) {
+    if (!Array.isArray(items)) return;
+
+    for (const item of items) {
+      const name = this.extractPartyName(item);
+      if (!name) continue;
+
+      target.push({
+        name,
+        type: this.extractPartyType(item, fallbackType),
+        document: this.extractPartyDocument(item),
+      });
+    }
+  }
+
+  private extractPartiesFromSource(source: any) {
+    const collected: Array<{ name: string; type: string; document?: string }> = [];
+
+    this.appendParties(collected, source?.poloAtivo, "AUTOR");
+    this.appendParties(collected, source?.poloPassivo, "REU");
+    this.appendParties(collected, source?.partes, "TERCEIRO");
+    this.appendParties(collected, source?.partesProcessuais, "TERCEIRO");
+    this.appendParties(collected, source?.participantes, "TERCEIRO");
+    this.appendParties(collected, source?.advogados, "ADVOGADO");
+    this.appendParties(collected, source?.representantes, "ADVOGADO");
+
+    const uniqueMap = new Map<string, { name: string; type: string; document?: string }>();
+
+    for (const party of collected) {
+      const normalizedName = this.normalizeText(party.name);
+      if (!normalizedName) continue;
+
+      const key = `${normalizedName}|${party.type}|${party.document || ""}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, {
+          name: party.name,
+          type: party.type,
+          document: party.document,
+        });
+      }
+    }
+
+    return Array.from(uniqueMap.values());
+  }
+
   private mapDataJudHit(hit: any, config: ProcessIntegrationConfig) {
     const source = this.extractSourcePayload(hit);
     const assuntos = Array.isArray(source.assuntos)
@@ -461,7 +589,7 @@ export class ProcessIntegrationsService {
       distributionDate: this.parseCompactDate(source?.dataAjuizamento),
       judge: "Nao informado via DataJud",
       value: numericValue || 0,
-      parties: [],
+      parties: this.extractPartiesFromSource(source),
       movements,
       metadata: {
         source: "DATAJUD",
