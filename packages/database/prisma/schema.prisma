@@ -66,6 +66,7 @@ model Tenant {
   partyRoles          PartyRole[]
   partyQualifications PartyQualification[]
   processParties      ProcessParty[]
+  processPartyRepresentations ProcessPartyRepresentation[]
   purchaseOrders      PurchaseOrder[]
   paymentConditions   PaymentCondition[]
   securitySecrets     SecuritySecret[]
@@ -371,6 +372,7 @@ model Process {
   financials     FinancialRecord[]
   appointments   Appointment[]
   processParties ProcessParty[]
+  processPartyRepresentations ProcessPartyRepresentation[]
   tags           ProcessTag[]
 
   @@unique([tenantId, code])
@@ -427,9 +429,30 @@ model ProcessParty {
   role          PartyRole           @relation(fields: [roleId], references: [id])
   qualification PartyQualification? @relation(fields: [qualificationId], references: [id])
   tenant        Tenant              @relation(fields: [tenantId], references: [id])
+  representativeLinks ProcessPartyRepresentation[] @relation("ProcessPartyPrincipal")
+  representedPartyLinks ProcessPartyRepresentation[] @relation("ProcessPartyRepresentative")
 
   @@unique([processId, contactId, roleId]) // Evita duplicata exata
   @@map("process_parties")
+}
+
+model ProcessPartyRepresentation {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  processId             String
+  partyId               String
+  representativePartyId String
+  createdAt             DateTime @default(now())
+
+  tenant              Tenant      @relation(fields: [tenantId], references: [id])
+  process             Process     @relation(fields: [processId], references: [id], onDelete: Cascade)
+  party               ProcessParty @relation("ProcessPartyPrincipal", fields: [partyId], references: [id], onDelete: Cascade)
+  representativeParty ProcessParty @relation("ProcessPartyRepresentative", fields: [representativePartyId], references: [id], onDelete: Cascade)
+
+  @@unique([partyId, representativePartyId])
+  @@index([processId, partyId])
+  @@index([processId, representativePartyId])
+  @@map("process_party_representations")
 }
 
 model ProcessTimeline {

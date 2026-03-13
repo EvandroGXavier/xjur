@@ -1,9 +1,7 @@
-import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
-// Roles padrão pré-cadastrados por tenant
 const DEFAULT_ROLES = [
-    // Polo Ativo
     { name: 'AUTOR', category: 'POLO_ATIVO' },
     { name: 'AUTORA', category: 'POLO_ATIVO' },
     { name: 'REQUERENTE', category: 'POLO_ATIVO' },
@@ -13,9 +11,7 @@ const DEFAULT_ROLES = [
     { name: 'APELANTE', category: 'POLO_ATIVO' },
     { name: 'AGRAVANTE', category: 'POLO_ATIVO' },
     { name: 'EMBARGANTE', category: 'POLO_ATIVO' },
-    // Polo Passivo
-    { name: 'RÉU', category: 'POLO_PASSIVO' },
-    { name: 'RÉ', category: 'POLO_PASSIVO' },
+    { name: 'REU', category: 'POLO_PASSIVO' },
     { name: 'REQUERIDO', category: 'POLO_PASSIVO' },
     { name: 'REQUERIDA', category: 'POLO_PASSIVO' },
     { name: 'EXECUTADO', category: 'POLO_PASSIVO' },
@@ -26,14 +22,19 @@ const DEFAULT_ROLES = [
     { name: 'APELADO', category: 'POLO_PASSIVO' },
     { name: 'AGRAVADO', category: 'POLO_PASSIVO' },
     { name: 'EMBARGADO', category: 'POLO_PASSIVO' },
-    // Outros
+    { name: 'ADVOGADO', category: 'OUTROS' },
+    { name: 'ADVOGADA', category: 'OUTROS' },
+    { name: 'PROCURADOR', category: 'OUTROS' },
+    { name: 'PROCURADORA', category: 'OUTROS' },
+    { name: 'ADVOGADO CONTRARIO', category: 'OUTROS' },
+    { name: 'ADVOGADA CONTRARIA', category: 'OUTROS' },
     { name: 'TESTEMUNHA', category: 'OUTROS' },
     { name: 'PERITO', category: 'OUTROS' },
-    { name: 'ASSISTENTE TÉCNICO', category: 'OUTROS' },
+    { name: 'ASSISTENTE TECNICO', category: 'OUTROS' },
     { name: 'JUIZ', category: 'OUTROS' },
     { name: 'MAGISTRADO', category: 'OUTROS' },
     { name: 'PROMOTOR', category: 'OUTROS' },
-    { name: 'DEFENSOR PÚBLICO', category: 'OUTROS' },
+    { name: 'DEFENSOR PUBLICO', category: 'OUTROS' },
     { name: 'TERCEIRO INTERESSADO', category: 'OUTROS' },
     { name: 'LITISCONSORTE', category: 'OUTROS' },
     { name: 'HERDEIRO', category: 'OUTROS' },
@@ -44,25 +45,106 @@ const DEFAULT_ROLES = [
     { name: 'CURADOR', category: 'OUTROS' },
     { name: 'CURADORA', category: 'OUTROS' },
     { name: 'INTERVENIENTE', category: 'OUTROS' },
-    { name: 'ADVOGADO CONTRÁRIO', category: 'OUTROS' },
     { name: 'DENUNCIADO', category: 'OUTROS' },
 ];
 
+type PoleKey = 'active' | 'passive';
+
+interface QuickContactInput {
+    name: string;
+    document?: string;
+    phone?: string;
+    email?: string;
+    personType?: string;
+}
+
+const normalizeText = (value?: string) =>
+    (value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+
 @Injectable()
 export class ProcessPartiesService implements OnModuleInit {
-
     constructor(private prisma: PrismaService) {}
 
-    // ─── INICIALIZAÇÃO: Seed de roles padrão ───────────────
+    private readonly baseContactSelect = {
+        id: true,
+        name: true,
+        personType: true,
+        document: true,
+        email: true,
+        phone: true,
+        whatsapp: true,
+        category: true,
+        additionalContacts: {
+            select: {
+                type: true,
+                value: true,
+            },
+        },
+    };
+
+    private readonly basePartyInclude = {
+        contact: { select: this.baseContactSelect },
+        role: {
+            select: {
+                id: true,
+                name: true,
+                category: true,
+            },
+        },
+        qualification: {
+            select: {
+                id: true,
+                name: true,
+            },
+        },
+        representativeLinks: {
+            orderBy: { createdAt: 'asc' as const },
+            select: {
+                id: true,
+                partyId: true,
+                representativePartyId: true,
+                createdAt: true,
+                representativeParty: {
+                    include: {
+                        contact: { select: this.baseContactSelect },
+                        role: {
+                            select: {
+                                id: true,
+                                name: true,
+                                category: true,
+                            },
+                        },
+                        qualification: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        representedPartyLinks: {
+            select: {
+                id: true,
+                partyId: true,
+                representativePartyId: true,
+            },
+        },
+    };
+
     async onModuleInit() {
         await this.seedDefaultRoles();
     }
 
     private async seedDefaultRoles() {
         try {
-            // Buscar todos os tenants
             const tenants = await this.prisma.tenant.findMany({ select: { id: true } });
-            
+
             for (const tenant of tenants) {
                 for (const role of DEFAULT_ROLES) {
                     await this.prisma.partyRole.upsert({
@@ -70,69 +152,166 @@ export class ProcessPartiesService implements OnModuleInit {
                             tenantId_name: {
                                 tenantId: tenant.id,
                                 name: role.name,
-                            }
+                            },
                         },
-                        update: {},  // Não atualiza se já existir
+                        update: {},
                         create: {
                             tenantId: tenant.id,
                             name: role.name,
                             category: role.category,
                             isDefault: true,
-                        }
+                        },
                     });
                 }
             }
-            console.log(`[ProcessParties] Seeded default roles for ${tenants.length} tenant(s)`);
-        } catch (error) {
+        } catch (error: any) {
             console.error('[ProcessParties] Error seeding default roles:', error.message);
         }
     }
 
-    // ─── PARTY ROLES (CRUD) ───────────────────────────────
-    
+    private async getProcessContext(processId: string) {
+        const process = await this.prisma.process.findUnique({
+            where: { id: processId },
+            select: { id: true, tenantId: true },
+        });
+
+        if (!process) throw new NotFoundException('Processo nao encontrado');
+        return process;
+    }
+
+    private async ensureContactExists(contactId: string) {
+        const contact = await this.prisma.contact.findUnique({
+            where: { id: contactId },
+            select: { id: true, name: true },
+        });
+
+        if (!contact) throw new NotFoundException('Contato nao encontrado');
+        return contact;
+    }
+
+    private async getTenantRoles(tenantId: string) {
+        return this.prisma.partyRole.findMany({
+            where: { tenantId, active: true },
+            select: { id: true, name: true, category: true },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
+
+    private async resolveRoleId(tenantId: string, candidateNames: string[]) {
+        const normalizedCandidates = candidateNames.map(name => normalizeText(name));
+        const roles = await this.getTenantRoles(tenantId);
+
+        for (const candidate of normalizedCandidates) {
+            const role = roles.find(item => normalizeText(item.name) === candidate);
+            if (role) return role.id;
+        }
+
+        throw new NotFoundException(`Tipo de parte padrao nao encontrado: ${candidateNames[0]}`);
+    }
+
+    private getPrincipalRoleCandidates(pole: PoleKey) {
+        return pole === 'active' ? ['AUTOR', 'AUTORA', 'REQUERENTE'] : ['REU', 'REQUERIDO', 'REQUERIDA'];
+    }
+
+    private getRepresentativeRoleCandidates(pole: PoleKey) {
+        return pole === 'active'
+            ? ['ADVOGADO', 'ADVOGADA', 'PROCURADOR', 'PROCURADORA']
+            : ['ADVOGADO CONTRARIO', 'ADVOGADA CONTRARIA', 'ADVOGADO', 'ADVOGADA', 'PROCURADOR', 'PROCURADORA'];
+    }
+
+    private inferPoleFromRole(roleName?: string, category?: string | null): PoleKey | null {
+        const normalizedCategory = normalizeText(category || '');
+        if (normalizedCategory === 'POLO_ATIVO') return 'active';
+        if (normalizedCategory === 'POLO_PASSIVO') return 'passive';
+
+        const normalizedName = normalizeText(roleName);
+        if (['AUTOR', 'AUTORA', 'REQUERENTE', 'EXEQUENTE', 'RECLAMANTE', 'IMPETRANTE', 'APELANTE', 'AGRAVANTE', 'EMBARGANTE'].some(term => normalizedName.includes(term))) {
+            return 'active';
+        }
+        if (['REU', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'RECLAMADO', 'RECLAMADA', 'IMPETRADO', 'APELADO', 'AGRAVADO', 'EMBARGADO'].some(term => normalizedName.includes(term))) {
+            return 'passive';
+        }
+
+        return null;
+    }
+
+    private isLawyerRole(roleName?: string) {
+        const normalizedName = normalizeText(roleName);
+        return ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'].some(term => normalizedName.includes(term));
+    }
+
+    private async createQuickContact(tenantId: string, data: QuickContactInput, category = 'Outro') {
+        if (!data?.name?.trim()) {
+            throw new ConflictException('Informe o nome do contato');
+        }
+
+        return this.prisma.contact.create({
+            data: {
+                tenantId,
+                name: data.name.trim(),
+                document: data.document,
+                phone: data.phone || '',
+                email: data.email,
+                personType: data.personType || 'PF',
+                category,
+            },
+            select: { id: true, name: true },
+        });
+    }
+
+    private async resolveContactId(
+        processId: string,
+        contactId?: string,
+        quickContact?: QuickContactInput,
+        category = 'Outro',
+    ) {
+        if (contactId) {
+            const contact = await this.ensureContactExists(contactId);
+            return contact.id;
+        }
+
+        const process = await this.getProcessContext(processId);
+        const contact = await this.createQuickContact(process.tenantId, quickContact!, category);
+        return contact.id;
+    }
+
     async findAllRoles(tenantId: string) {
         return this.prisma.partyRole.findMany({
             where: { tenantId, active: true },
-            orderBy: [
-                { category: 'asc' },
-                { name: 'asc' },
-            ],
+            orderBy: [{ category: 'asc' }, { name: 'asc' }],
         });
     }
 
     async createRole(tenantId: string, name: string, category?: string) {
-        // Verificar se já existe
+        const normalizedName = normalizeText(name);
         const existing = await this.prisma.partyRole.findUnique({
-            where: { tenantId_name: { tenantId, name: name.toUpperCase().trim() } }
+            where: { tenantId_name: { tenantId, name: normalizedName } },
         });
 
         if (existing) {
             if (!existing.active) {
-                // Reativar role desativado
                 return this.prisma.partyRole.update({
                     where: { id: existing.id },
                     data: { active: true },
                 });
             }
-            throw new ConflictException(`O tipo de parte "${name}" já existe`);
+            throw new ConflictException(`O tipo de parte "${name}" ja existe`);
         }
 
         return this.prisma.partyRole.create({
             data: {
                 tenantId,
-                name: name.toUpperCase().trim(),
+                name: normalizedName,
                 category: category || 'OUTROS',
                 isDefault: false,
-            }
+            },
         });
     }
 
     async deleteRole(id: string) {
-        // Verificar se está em uso
         const usage = await this.prisma.processParty.count({ where: { roleId: id } });
 
         if (usage > 0) {
-            // Desativar em vez de deletar
             return this.prisma.partyRole.update({
                 where: { id },
                 data: { active: false },
@@ -142,48 +321,11 @@ export class ProcessPartiesService implements OnModuleInit {
         return this.prisma.partyRole.delete({ where: { id } });
     }
 
-    // ─── PROCESS PARTIES (CRUD) ────────────────────────────
-
     async findByProcess(processId: string) {
         return this.prisma.processParty.findMany({
             where: { processId },
-            include: {
-                contact: {
-                    select: {
-                        id: true,
-                        name: true,
-                        personType: true,
-                        document: true,
-                        email: true,
-                        phone: true,
-                        whatsapp: true,
-                        category: true,
-                        additionalContacts: {
-                            select: {
-                                type: true,
-                                value: true
-                            }
-                        }
-                    }
-                },
-                role: {
-                    select: {
-                        id: true,
-                        name: true,
-                        category: true,
-                    }
-                },
-                qualification: {
-                    select: {
-                        id: true,
-                        name: true,
-                    }
-                }
-            },
-            orderBy: [
-                { role: { category: 'asc' } },
-                { createdAt: 'asc' },
-            ]
+            include: this.basePartyInclude,
+            orderBy: { createdAt: 'asc' },
         });
     }
 
@@ -196,29 +338,17 @@ export class ProcessPartiesService implements OnModuleInit {
         isOpposing?: boolean;
         notes?: string;
     }) {
-        // Buscar processo para obter tenantId
-        const process = await this.prisma.process.findUnique({
-            where: { id: data.processId },
-            select: { tenantId: true },
-        });
-        if (!process) throw new NotFoundException('Processo não encontrado');
+        const process = await this.getProcessContext(data.processId);
+        await this.ensureContactExists(data.contactId);
 
-        // Verificar se contato existe
-        const contact = await this.prisma.contact.findUnique({
-            where: { id: data.contactId },
-            select: { id: true },
-        });
-        if (!contact) throw new NotFoundException('Contato não encontrado');
-
-        // Verificar se role existe
         const role = await this.prisma.partyRole.findUnique({
             where: { id: data.roleId },
             select: { id: true },
         });
-        if (!role) throw new NotFoundException('Tipo de parte não encontrado');
+        if (!role) throw new NotFoundException('Tipo de parte nao encontrado');
 
         try {
-            const party = await this.prisma.processParty.create({
+            return await this.prisma.processParty.create({
                 data: {
                     tenantId: process.tenantId,
                     processId: data.processId,
@@ -229,27 +359,129 @@ export class ProcessPartiesService implements OnModuleInit {
                     isOpposing: data.isOpposing || false,
                     notes: data.notes,
                 },
-                include: {
-                    contact: {
-                        select: { id: true, name: true, personType: true, document: true }
-                    },
-                    role: {
-                        select: { id: true, name: true, category: true }
-                    },
-                    qualification: {
-                        select: { id: true, name: true }
-                    }
-                }
+                include: this.basePartyInclude,
             });
-
-            console.log(`[Party] Added ${party.contact.name} as ${party.role.name} to process ${data.processId}`);
-            return party;
-        } catch (error) {
+        } catch (error: any) {
             if (error.code === 'P2002') {
-                throw new ConflictException('Este contato já tem este papel neste processo');
+                throw new ConflictException('Este contato ja tem este papel neste processo');
             }
             throw error;
         }
+    }
+
+    async addPrincipalParty(data: {
+        processId: string;
+        pole: PoleKey;
+        contactId?: string;
+        quickContact?: QuickContactInput;
+        notes?: string;
+    }) {
+        const process = await this.getProcessContext(data.processId);
+        const resolvedContactId = await this.resolveContactId(
+            data.processId,
+            data.contactId,
+            data.quickContact,
+            'Parte',
+        );
+        const roleId = await this.resolveRoleId(process.tenantId, this.getPrincipalRoleCandidates(data.pole));
+
+        return this.addParty({
+            processId: data.processId,
+            contactId: resolvedContactId,
+            roleId,
+            notes: data.notes,
+        });
+    }
+
+    async addRepresentative(data: {
+        processId: string;
+        partyId: string;
+        contactId?: string;
+        quickContact?: QuickContactInput;
+        notes?: string;
+    }) {
+        const process = await this.getProcessContext(data.processId);
+
+        const principalParty = await this.prisma.processParty.findFirst({
+            where: { id: data.partyId, processId: data.processId },
+            include: {
+                role: {
+                    select: {
+                        id: true,
+                        name: true,
+                        category: true,
+                    },
+                },
+            },
+        });
+
+        if (!principalParty) throw new NotFoundException('Parte principal nao encontrada');
+
+        const pole = this.inferPoleFromRole(principalParty.role.name, principalParty.role.category) || 'active';
+        const resolvedContactId = await this.resolveContactId(
+            data.processId,
+            data.contactId,
+            data.quickContact,
+            'Advogado',
+        );
+        const roleId = await this.resolveRoleId(process.tenantId, this.getRepresentativeRoleCandidates(pole));
+
+        let representativeParty = await this.prisma.processParty.findFirst({
+            where: {
+                processId: data.processId,
+                contactId: resolvedContactId,
+                roleId,
+            },
+            include: this.basePartyInclude,
+        });
+
+        if (!representativeParty) {
+            representativeParty = await this.prisma.processParty.create({
+                data: {
+                    tenantId: process.tenantId,
+                    processId: data.processId,
+                    contactId: resolvedContactId,
+                    roleId,
+                    notes: data.notes,
+                },
+                include: this.basePartyInclude,
+            });
+        }
+
+        try {
+            await this.prisma.processPartyRepresentation.create({
+                data: {
+                    tenantId: process.tenantId,
+                    processId: data.processId,
+                    partyId: data.partyId,
+                    representativePartyId: representativeParty.id,
+                },
+            });
+        } catch (error: any) {
+            if (error.code === 'P2002') {
+                throw new ConflictException('Este procurador ja esta vinculado a esta parte');
+            }
+            throw error;
+        }
+
+        return this.findByProcess(data.processId);
+    }
+
+    async unlinkRepresentative(processId: string, partyId: string, representativePartyId: string) {
+        const link = await this.prisma.processPartyRepresentation.findFirst({
+            where: {
+                processId,
+                partyId,
+                representativePartyId,
+            },
+        });
+
+        if (!link) throw new NotFoundException('Vinculo de procurador nao encontrado');
+
+        await this.prisma.processPartyRepresentation.delete({ where: { id: link.id } });
+        await this.cleanupOrphanRepresentativeParties(processId, [representativePartyId]);
+
+        return { success: true };
     }
 
     async updateParty(id: string, data: {
@@ -260,7 +492,7 @@ export class ProcessPartiesService implements OnModuleInit {
         notes?: string;
     }) {
         const existing = await this.prisma.processParty.findUnique({ where: { id } });
-        if (!existing) throw new NotFoundException('Parte não encontrada');
+        if (!existing) throw new NotFoundException('Parte nao encontrada');
 
         return this.prisma.processParty.update({
             where: { id },
@@ -271,33 +503,64 @@ export class ProcessPartiesService implements OnModuleInit {
                 isOpposing: data.isOpposing !== undefined ? data.isOpposing : undefined,
                 notes: data.notes !== undefined ? data.notes : undefined,
             },
+            include: this.basePartyInclude,
+        });
+    }
+
+    private async cleanupOrphanRepresentativeParties(processId: string, partyIds: string[]) {
+        if (!partyIds.length) return;
+
+        const candidates = await this.prisma.processParty.findMany({
+            where: {
+                id: { in: partyIds },
+                processId,
+            },
             include: {
-                contact: {
-                    select: { id: true, name: true, personType: true, document: true }
+                representedPartyLinks: {
+                    select: { id: true },
                 },
                 role: {
-                    select: { id: true, name: true, category: true }
+                    select: { name: true },
                 },
-                qualification: {
-                    select: { id: true, name: true }
-                }
-            }
+            },
         });
+
+        const orphanIds = candidates
+            .filter(item => this.isLawyerRole(item.role?.name) && item.representedPartyLinks.length === 0)
+            .map(item => item.id);
+
+        if (orphanIds.length > 0) {
+            await this.prisma.processParty.deleteMany({
+                where: { id: { in: orphanIds } },
+            });
+        }
     }
 
     async removeParty(id: string) {
         const existing = await this.prisma.processParty.findUnique({
             where: { id },
-            include: { contact: { select: { name: true } }, role: { select: { name: true } } }
+            include: {
+                contact: { select: { name: true } },
+                role: { select: { name: true } },
+                representativeLinks: { select: { representativePartyId: true } },
+            },
         });
-        if (!existing) throw new NotFoundException('Parte não encontrada');
+        if (!existing) throw new NotFoundException('Parte nao encontrada');
+
+        const linkedRepresentativeIds = existing.representativeLinks.map(link => link.representativePartyId);
 
         await this.prisma.processParty.delete({ where: { id } });
-        console.log(`[Party] Removed ${existing.contact.name} (${existing.role.name}) from process ${existing.processId}`);
-        return { success: true, removed: { name: existing.contact.name, role: existing.role.name } };
+        await this.cleanupOrphanRepresentativeParties(existing.processId, linkedRepresentativeIds);
+
+        return {
+            success: true,
+            removed: {
+                name: existing.contact.name,
+                role: existing.role.name,
+            },
+        };
     }
 
-    // ─── QUICK CONTACT: Cria contato + adiciona como parte ───
     async quickContactAndParty(data: {
         processId: string;
         name: string;
@@ -310,27 +573,20 @@ export class ProcessPartiesService implements OnModuleInit {
         isClient?: boolean;
         isOpposing?: boolean;
     }) {
-        const process = await this.prisma.process.findUnique({
-            where: { id: data.processId },
-            select: { tenantId: true },
-        });
-        if (!process) throw new NotFoundException('Processo não encontrado');
-
-        // Criar contato
-        const contact = await this.prisma.contact.create({
-            data: {
-                tenantId: process.tenantId,
+        const process = await this.getProcessContext(data.processId);
+        const contact = await this.createQuickContact(
+            process.tenantId,
+            {
                 name: data.name,
                 document: data.document,
-                phone: data.phone || '',
+                phone: data.phone,
                 email: data.email,
-                personType: data.personType || 'PF',
-                category: data.isClient ? 'Cliente' : data.isOpposing ? 'Parte Contrária' : 'Outro',
-            }
-        });
+                personType: data.personType,
+            },
+            data.isClient ? 'Cliente' : data.isOpposing ? 'Parte Contraria' : 'Outro',
+        );
 
-        // Adicionar como parte
-        const party = await this.addParty({
+        return this.addParty({
             processId: data.processId,
             contactId: contact.id,
             roleId: data.roleId,
@@ -338,8 +594,5 @@ export class ProcessPartiesService implements OnModuleInit {
             isClient: data.isClient,
             isOpposing: data.isOpposing,
         });
-
-        console.log(`[QuickParty] Created contact "${data.name}" and added as party to process ${data.processId}`);
-        return party;
     }
 }

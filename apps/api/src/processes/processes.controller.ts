@@ -208,6 +208,29 @@ export class ProcessesController {
         return this.partiesService.addParty({ processId, ...body });
     }
 
+    @Post(':id/parties/principal')
+    async addPrincipalParty(@Param('id') processId: string, @Body() body: any) {
+        return this.partiesService.addPrincipalParty({ processId, ...body });
+    }
+
+    @Post(':id/parties/:partyId/representatives')
+    async addRepresentative(
+        @Param('id') processId: string,
+        @Param('partyId') partyId: string,
+        @Body() body: any,
+    ) {
+        return this.partiesService.addRepresentative({ processId, partyId, ...body });
+    }
+
+    @Delete(':id/parties/:partyId/representatives/:representativePartyId')
+    async unlinkRepresentative(
+        @Param('id') processId: string,
+        @Param('partyId') partyId: string,
+        @Param('representativePartyId') representativePartyId: string,
+    ) {
+        return this.partiesService.unlinkRepresentative(processId, partyId, representativePartyId);
+    }
+
     @Patch(':id/parties/:partyId')
     async updateParty(@Param('partyId') partyId: string, @Body() body: any) {
         return this.partiesService.updateParty(partyId, body);

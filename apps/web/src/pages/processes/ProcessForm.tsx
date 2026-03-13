@@ -86,6 +86,7 @@ export function ProcessForm() {
 
     useHotkeys({
         onNew: () => {
+            if (activeTab === 'PARTIES') return;
             if (!isEditing) {
                 // Foco manual no título se não for edição
                 document.getElementById('focus-title')?.focus();
