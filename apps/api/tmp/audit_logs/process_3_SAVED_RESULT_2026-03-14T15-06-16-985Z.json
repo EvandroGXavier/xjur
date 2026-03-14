@@ -1,0 +1,54 @@
+{
+  "id": "a49862b3-41f7-4887-91c6-ae7e8b7fc2d6",
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "contactId": null,
+  "cnj": "51092318820258130024",
+  "category": "JUDICIAL",
+  "title": "CÍVEL DIVÓRCIO LITIGIOSO - 51092318820258130024",
+  "code": "51092318820258130024",
+  "folder": "",
+  "description": "Número do documento: 26020510014775700010616326853\n\nAVENIDA AUGUSTO DE LIMA, 1234, 11º Andar, BARRO PRETO, Belo Horizonte -\nMG - CEP: 30190-003\n\nASSUNTO: [Dissolução]\nAUTOR: VLADIMIR ANSELMO CPF: 293.624.236-34\nRÉU: WANIA DO NASCIMENTO NONATO ANSELMO CPF: 507.389.926-15\nSENTENÇA\nI - RELATÓRIO\nTrata-se de Ação de Divórcio Litigioso ajuizada por Vladimir Anselmo em face de Wânia\ndo Nascimento Nonato Anselmo.\nEm síntese, relata que as partes contraíram matrimônio em 24 de junho de 1978, sob o\nregime da comunhão parcial de bens, e encontram-se separados de fato há mais de 30 (trinta) anos. Relata\nque da união adveio o nascimento de dois filhos, ambos maiores e capazes. Informam que da constância\ndo casamento adquiriram bens em conjunto, que devem ser partilhados.\n\nNúmero do documento: 26020510014775700010616326853\nDesta forma, requer a decretação do divórcio do casal, bem como a partilha de bens. Por\nfim, pede a concessão da justiça gratuita.\nConcedida a gratuidade da justiça ao requerente em decisão de ID.10451506511.\nMandado de citação devidamente cumprido em ID.10478039596.\nAudiência de conciliação em ID.10499572497.\nContestação apresentada em ID.10513000358.\nEm sede de preliminar, ",
+  "msDriveId": null,
+  "msFolderUrl": null,
+  "npu": "51092318820258130024",
+  "court": "Minas Gerais",
+  "courtSystem": "PJe",
+  "vars": "Belo Horizonte / 2ª Vara de Família da Comarca de Belo Horizonte",
+  "district": "Belo Horizonte",
+  "status": "ATIVO",
+  "responsibleLawyer": null,
+  "area": "Familia",
+  "subject": "[Dissolução]",
+  "class": "CÍVEL DIVÓRCIO LITIGIOSO",
+  "distributionDate": null,
+  "judge": "VIVIANE QUEIROZ DA SILVEIRA CANDIDO",
+  "value": "455000",
+  "parties": [
+    {
+      "name": "VLADIMIR ANSELMO",
+      "type": "AUTOR",
+      "document": "293.624.236-34"
+    },
+    {
+      "name": "WANIA DO NASCIMENTO NONATO ANSELMO",
+      "type": "REU",
+      "document": "507.389.926-15"
+    }
+  ],
+  "lastCrawledAt": null,
+  "autoUpdate": true,
+  "metadata": {
+    "pageCount": 7,
+    "textLength": 11999,
+    "courtSystem": "PJe",
+    "documentIds": [
+      "10620174284"
+    ],
+    "importSource": "PJE_PROCESS_PDF",
+    "proceduralStatus": "ATIVO",
+    "timelineReferenceType": "DOCUMENT_ID",
+    "containsSelectableText": true
+  },
+  "createdAt": "2026-03-14T15:06:16.858Z",
+  "updatedAt": "2026-03-14T15:06:16.858Z"
+}

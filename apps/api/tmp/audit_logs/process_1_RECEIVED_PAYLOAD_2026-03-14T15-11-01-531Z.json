@@ -1,0 +1,71 @@
+{
+  "cnj": "10447343620258130024",
+  "title": "PROCEDIMENTO COMUM CÍVEL - 10447343620258130024",
+  "category": "JUDICIAL",
+  "court": "TJMG",
+  "courtSystem": "Eproc",
+  "vars": "9ª Vara Cível da Comarca de Belo Horizonte",
+  "district": "Belo Horizonte",
+  "status": "ARQUIVADO",
+  "area": "Familia",
+  "subject": "Abatimento proporcional do preço, Responsabilidade do Fornecedor, DIREITO DO CONSUMIDOR",
+  "class": "PROCEDIMENTO COMUM CÍVEL",
+  "distributionDate": "29/08/2025",
+  "judge": "MOEMA MIRANDA GONCALVES",
+  "value": 120000,
+  "description": "AO JUÍZO DA VARA CÍVEL DA COMARCA DE BELO\nHORIZONTE/MG\nTHALLYSON JOSE VIANA, brasileiro, Casado (a), operador de produção, inscrito no CPF Nº\n128.325.926-51, Inscrito no RG Nº 18759030, residente e domiciliado; Rua Francisca Cassiana, 164 ,\nRavenópolis (Ravena), Sabará, MG, CEP: 34516-309, E-mail: thallysonjviana@gmail.com, data de\nnascimento: 13/01/2000, filiação: NILDON JOSE VIANA, ROSANGELA SHIRLEY VIANA, por seu\nprocurador, EVANDRO GERALDO XAVIER, brasileiro, advogado, OAB/MG 158 592, Escritório situado\na Rua da Bahia, 603, loja 07, centro, CEP 30.160-010, Belo Horizonte/MG, Telefone:31-2534-7575, celular\n31-99981-1174, E-mail: evandro@conectionmg.com.br, infra assinado, vem à Vossa Presença, com\nelevado acatamento, por seu Advogado infra-assinado (Procuração anexa), propor a presente:\nAÇÃO DE REVISÃO CONTRATUAL C/C\nABATIMENTO PROPORCIONAL DO PREÇO\nE INDENIZAÇÃO POR DANOS MORAIS\nem face de UNIDAS LOCADORA S.A., CNPJ nº 45.736.131/0083-16, com sede na Av. Barão Homem\nde Melo, nº 1319, Bairro Nova Granada, Belo Horizonte/MG, CEP 30431-425, pelos fatos e fundamentos\na seguir expostos.\nI. DOS FATOS\nO Autor exerce a atividade de motorista de aplicativo, sendo o automóvel sua ferrame",
+  "folder": "",
+  "metadata": {
+    "importSource": "EPROC_PROCESS_PDF",
+    "courtSystem": "Eproc",
+    "timelineReferenceType": "EVENT",
+    "pageCount": 268,
+    "textLength": 428058,
+    "documentIds": [
+      "1",
+      "3",
+      "4",
+      "6",
+      "9",
+      "10",
+      "14",
+      "16",
+      "20",
+      "21",
+      "23",
+      "28",
+      "29",
+      "32",
+      "34",
+      "43",
+      "44",
+      "47",
+      "48",
+      "51",
+      "54"
+    ],
+    "containsSelectableText": true,
+    "proceduralStatus": "ARQUIVADO"
+  },
+  "parties": [
+    {
+      "name": "VIANA e",
+      "type": "PARTE",
+      "document": "128.325.926-51."
+    },
+    {
+      "name": "THALLYSON JOSE VIANA",
+      "type": "AUTOR"
+    },
+    {
+      "name": "UNIDAS LOCADORA S.A.",
+      "type": "REU"
+    },
+    {
+      "name": "ERICK LEMOS TEIXEIRA (101.608.786-16)",
+      "type": "PARTE",
+      "document": "101.608.786-16"
+    }
+  ],
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903"
+}

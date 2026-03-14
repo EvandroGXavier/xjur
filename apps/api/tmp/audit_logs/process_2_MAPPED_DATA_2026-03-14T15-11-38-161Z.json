@@ -1,0 +1,87 @@
+{
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "cnj": "51081677720248130024",
+  "category": "JUDICIAL",
+  "title": "CÍVEL DESPEJO POR FALTA DE PAGAMENTO CUMULADO COM COBRANÇA - 51081677720248130024",
+  "code": "51081677720248130024",
+  "description": "Número do documento: 24050310094473400010205491009\nAO JUÍZO DA __VARA CÍVEL DA \nHORIZONTE/MG\n, brasileira, Natural de Belo Horizonte/MG, Solteiro (a), Do lar,\tANDREA APARECIDA DOS SANTOS\ninscrito no , Inscrito no RG Nº MGF-4.336.649 , residente e domiciliado; Praça\tCPF Nº 698.824.016-00\nUruguaiana, 77, cx 03, Santo André, Belo Horizonte, MG, CEP: 31230-630, E-mail: nã@tem.com, data\nde nascimento: 05/02/1965, filiação: ARMANDO NOGUEIRA AMARAL, JANDIRA OLIVEIRA DOS\nSANTOS., por seu advogado, , brasileiro, advogado,\tEVANDRO GERALDO XAVIER OAB/MG 158\n, Escritório situado a Rua da Bahia, 603, loja 07, centro, CEP 30.160-010, Belo Horizonte/MG,\t592\nTelefone:31-2534-7575, E-mail: , onde recebe\tcelular 31-99981-1174, evandro@conectionmg.com.br\nnotificações e intimações, vem respeitosamente à presença de Vossa Excelência, com fundamento no\nartigo 59, inciso IX, da Lei nº 8.245/91, propor a presente\nAÇÃO DE DESPEJO E COBRANÇA POR FALTA DE PAGAMENTO\nEm face de , brasileira, divorciada, inscrito no CPF sob o Nº\tFABIANA DOS SANTOS LUCAS\n, Inscrito no RG Nº MG-9.325.570, residente e domiciliado; Rua Mendes de Oliveira,\t032.458.756-22\n1016 , Santo André, Belo Horizonte, MG, CEP: 31230-800, diaris",
+  "folder": "",
+  "court": "Minas Gerais",
+  "courtSystem": "PJe",
+  "npu": "51081677720248130024",
+  "vars": "Belo Horizonte / 14ª Vara Cível da Comarca de Belo Horizonte",
+  "district": "Belo Horizonte",
+  "status": "ATIVO",
+  "area": "Familia",
+  "subject": "[Inadimplemento, Locação de Imóvel]",
+  "class": "CÍVEL DESPEJO POR FALTA DE PAGAMENTO CUMULADO COM COBRANÇA",
+  "judge": "Luís Fernando Nigro Corrêa",
+  "value": 10104.64,
+  "parties": [
+    {
+      "name": "ANDREA APARECIDA DOS SANTOS",
+      "type": "AUTOR"
+    },
+    {
+      "name": "FABIANA DOS SANTOS LUCAS MAGALHAES",
+      "type": "REU",
+      "document": "032.458.756-22"
+    },
+    {
+      "name": "ANDREA APARECIDA DOS SANTOS",
+      "type": "PARTE",
+      "document": "698.824.016-00"
+    },
+    {
+      "name": "FABIANA DOS SANTOS LUCAS MAGALHAES",
+      "type": "PARTE",
+      "document": "032.458.756-22"
+    }
+  ],
+  "metadata": {
+    "importSource": "PJE_PROCESS_PDF",
+    "courtSystem": "PJe",
+    "timelineReferenceType": "DOCUMENT_ID",
+    "pageCount": 79,
+    "textLength": 86499,
+    "documentIds": [
+      "10209422240",
+      "10219949085",
+      "10219955346",
+      "10219938456",
+      "10219965232",
+      "10209524635",
+      "10209450817",
+      "10220509949",
+      "10220521605",
+      "10220546013",
+      "10224247295",
+      "10253570243",
+      "10250168161",
+      "10250169194",
+      "10250176670",
+      "10262995759",
+      "10296856913",
+      "10301183135",
+      "10332054838",
+      "10332060839",
+      "10395974270",
+      "10397557333",
+      "10397559281",
+      "10409136291",
+      "10409149342",
+      "10453260046",
+      "10462818955",
+      "10586930770",
+      "10600945273",
+      "10611456086",
+      "10612590880",
+      "10629232318",
+      "10629248068",
+      "10629241372",
+      "10630128367"
+    ],
+    "containsSelectableText": true,
+    "proceduralStatus": "ATIVO"
+  }
+}

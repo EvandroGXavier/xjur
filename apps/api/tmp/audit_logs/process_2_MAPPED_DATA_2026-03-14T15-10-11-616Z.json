@@ -1,0 +1,55 @@
+{
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "cnj": "10792221720258130024",
+  "category": "JUDICIAL",
+  "title": "PROCEDIMENTO DO JUIZADO ESPECIAL CÍVEL - 10792221720258130024",
+  "code": "10792221720258130024",
+  "description": "PROCURAÇÃO\nPor este instrumento particular de procuração, eu, Ronaldo Aguiar\nAmaral, brasileiro, casado, advogado inscrito na OAB/MG sob o\nnº 32.436, RG M-384.540 SSP/MG, CPF 369.784.346-04,\nresidente à Rua Visconde do Rio da Velhas, 57, aptº 104, Bairro\nVila Paris, CEP 30380-740, em Belo Horizonte/MG, nomeio e\nconstituo como meu bastante procurador, o advogado, Dr. Caio\nLívio Amaral Nunes, brasileiro, casado, inscrito na OAB/MG sob\no nº 75.196, CPF nº 992.091.956-04, representante legal da pessoa\njurídica ‘Caio Nunes Sociedade Individual de Advocacia’, CNPJ\n55.085.176/0001-85, com sede na Rua Padre José Tibúrcio, 10,\nCentro, CEP 38900-000, em Bambuí/MG, e-mail\ncaionunesadv@gmail.com, a quem outorgo os poderes das\ncláusulas ad e extra judicia, para me representar em qualquer\nComarca, Juízo ou Instância, como autor, réu, indiciado, oponente,\ninventariante ou herdeiro, litisconsorte, embargante, exequente,\nreconvinte ou recorrente, podendo requerer o que for necessário,\nreceber e dar quitação, firmar compromisso, pleitear o deferimento\nde gratuidade judiciária, transigir, desistir, assinar termos judiciais\ne extrajudiciais, e praticar todo e qualquer ato necessário ao bom\ndesempenho ",
+  "folder": "",
+  "court": "TJMG",
+  "courtSystem": "Eproc",
+  "npu": "10792221720258130024",
+  "vars": "8ª Unidade Jurisdicional Cível - 24º JD da Comarca de Belo Horizonte",
+  "district": "Belo Horizonte",
+  "status": "SUSPENSO",
+  "area": "Familia",
+  "subject": "Acidente de Trânsito, Indenização por Dano Material, Responsabilidade Civil, DIREITO CIVIL",
+  "class": "PROCEDIMENTO DO JUIZADO ESPECIAL CÍVEL",
+  "distributionDate": "2025-10-30T00:00:00.000Z",
+  "judge": "MAURO FERREIRA",
+  "value": 19950,
+  "parties": [
+    {
+      "name": "RONALDO AGUIAR AMARAL",
+      "type": "AUTOR",
+      "document": "369.784.346-04"
+    },
+    {
+      "name": "CAIO LIVIO AMARAL NUNES MG075196 JOSE BARRETO DA SILVA",
+      "type": "REU",
+      "document": "710.978.646-34"
+    }
+  ],
+  "metadata": {
+    "importSource": "EPROC_PROCESS_PDF",
+    "courtSystem": "Eproc",
+    "timelineReferenceType": "EVENT",
+    "pageCount": 67,
+    "textLength": 39845,
+    "documentIds": [
+      "1",
+      "3",
+      "6",
+      "9",
+      "10",
+      "11",
+      "14",
+      "15",
+      "16",
+      "17",
+      "23"
+    ],
+    "containsSelectableText": true,
+    "proceduralStatus": "SUSPENSO"
+  }
+}

@@ -34,7 +34,24 @@ export class ProcessesController {
         return this.pdfService.extractDataFromPdf(file.buffer);
     }
 
+    @Post('import-pdf/full-analysis')
+    @UseInterceptors(FileInterceptor('file'))
+    async analyzeFullProcessPdf(@UploadedFile() file: any) {
+        if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
+        return this.pdfService.analyzeFullProcessPdf(file.buffer);
+    }
+
     // --- PARTY ROLES (Tipos de Parte - Cadastrável) ---
+
+    @Post('pdf-dossier/import')
+    @UseInterceptors(FileInterceptor('file'))
+    async importProcessPdfAndUpsert(
+        @UploadedFile() file: any,
+        @CurrentUser() user: CurrentUserData,
+    ) {
+        if (!file) throw new BadRequestException('Nenhum PDF do processo foi enviado.');
+        return this.processesService.importProcessPdfAndUpsertProcess(user.tenantId, file.buffer, file.originalname);
+    }
 
     @Get('party-roles')
     async findAllRoles(@CurrentUser() user: CurrentUserData) {
@@ -117,6 +134,27 @@ export class ProcessesController {
             throw new BadRequestException('Ative e configure o DataJud na configuracao geral de processos antes de consultar por CNJ.');
         }
         return result;
+    }
+
+    @Get(':id/cnj-movements/status')
+    async getCnjTimelineImportStatus(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.getCnjTimelineImportStatus(id, user.tenantId);
+    }
+
+    @Post(':id/cnj-movements/import')
+    async importCnjTimelines(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.importCnjTimelines(id, user.tenantId);
+    }
+
+    @Post(':id/pdf-dossier/import')
+    @UseInterceptors(FileInterceptor('file'))
+    async importProcessPdfDossier(
+        @Param('id') id: string,
+        @UploadedFile() file: any,
+        @CurrentUser() user: CurrentUserData,
+    ) {
+        if (!file) throw new BadRequestException('Nenhum PDF do processo foi enviado.');
+        return this.processesService.importProcessPdfDossier(id, user.tenantId, file.buffer, file.originalname);
     }
 
     @Get(':id')

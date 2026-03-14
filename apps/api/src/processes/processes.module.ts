@@ -10,9 +10,11 @@ import { ProcessTimelinesService } from './process-timelines.service';
 import { PartyQualificationsService } from './party-qualifications.service';
 import { ProcessIntegrationsService } from './process-integrations.service';
 import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
+import { DrxClawModule } from '../drx-claw/drx-claw.module';
 
 @Module({
     imports: [
+        DrxClawModule,
         MulterModule.register({
             limits: { fileSize: 500 * 1024 * 1024 } // 500MB
         })

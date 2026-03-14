@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { toast } from 'sonner';
 import {
     ArrowLeft,
+    ArrowDownToLine,
     Save,
     Loader2,
     FileText,
@@ -91,6 +92,50 @@ type ImportedParty = {
     representedNames?: string[];
 };
 
+type CnjTimelineImportStatus = {
+    canImport: boolean;
+    reasonCode: string;
+    message: string;
+    actionLabel: string;
+    checkedAt: string;
+    cnj: string | null;
+    totalAvailableCount: number;
+    importedTimelineCount: number;
+    newMovementCount: number;
+    lastSourceUpdateAt: string | null;
+    sourceSystem: string | null;
+    sourceCourt: string | null;
+    isProcessSaved: boolean;
+};
+
+type PdfDossierImportResult = {
+    success: boolean;
+    processId?: string;
+    processAction?: 'CREATED' | 'UPDATED';
+    importedCount: number;
+    skippedCount: number;
+    totalCandidateCount: number;
+    deadlineCount: number;
+    explicitFatalDateCount: number;
+    cnjMovementCount: number;
+    message: string;
+    process?: {
+        id: string;
+    };
+    drxSummary?: {
+        answer?: string | null;
+    };
+    analysis?: {
+        pageCount?: number;
+        documentCount?: number;
+        proceduralActCount?: number;
+        textLength?: number;
+        ocrStatus?: string;
+    };
+};
+
+const normalizeCnjDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
+
 export function ProcessForm() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -100,16 +145,29 @@ export function ProcessForm() {
     const [loading, setLoading] = useState(false);
     const [syncingMicrosoftFolder, setSyncingMicrosoftFolder] = useState(false);
     const [consultingCnj, setConsultingCnj] = useState(false);
+    const [checkingCnjTimelineStatus, setCheckingCnjTimelineStatus] = useState(false);
+    const [importingCnjTimelines, setImportingCnjTimelines] = useState(false);
+    const [importingPdfDossier, setImportingPdfDossier] = useState(false);
     const [importedParties, setImportedParties] = useState<ImportedParty[]>([]);
     const [importedMovements, setImportedMovements] = useState<any[]>([]);
+    const [cnjTimelineStatus, setCnjTimelineStatus] = useState<CnjTimelineImportStatus | null>(null);
+    const [savedProcessCnj, setSavedProcessCnj] = useState('');
+    const [timelineRefreshToken, setTimelineRefreshToken] = useState(0);
     const [lastConsultSummary, setLastConsultSummary] = useState('');
+    const [lastPdfImportSummary, setLastPdfImportSummary] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
 
     useEffect(() => {
         if (isEditing) {
             void fetchProcess();
+            void fetchCnjTimelineStatus(id);
+            return;
         }
-    }, [id]);
+
+        setCnjTimelineStatus(null);
+        setSavedProcessCnj('');
+        setLastPdfImportSummary('');
+    }, [id, isEditing]);
 
     const mergeImportedDataIntoForm = (payload: any) => ({
         ...form,
@@ -143,6 +201,7 @@ export function ProcessForm() {
             setLoading(true);
             const res = await api.get(`/processes/${id}`);
             const data = res.data;
+            setSavedProcessCnj(String(data.cnj || ''));
             setForm({
                 title: data.title || '',
                 cnj: data.cnj ? masks.cnj(data.cnj) : '',
@@ -171,11 +230,32 @@ export function ProcessForm() {
                     ? `${data.parties.length} parte(s) prontas para sincronizacao`
                     : '',
             );
+            const pdfImport = data.metadata?.pdfDossierImport;
+            setLastPdfImportSummary(
+                pdfImport
+                    ? `${pdfImport.importedCount || 0} andamento(s) extraido(s) do PDF do processo, ${pdfImport.explicitFatalDateCount || 0} com prazo fatal expresso e ${pdfImport.cnjMovementCount || 0} movimento(s) oficiais em paralelo no CNJ/DataJud.`
+                    : '',
+            );
         } catch {
             toast.error('Erro ao carregar processo');
             navigate('/processes');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchCnjTimelineStatus = async (processId?: string) => {
+        if (!processId) return;
+
+        try {
+            setCheckingCnjTimelineStatus(true);
+            const res = await api.get(`/processes/${processId}/cnj-movements/status`);
+            setCnjTimelineStatus(res.data);
+        } catch (error) {
+            console.error('Error fetching CNJ timeline status:', error);
+            setCnjTimelineStatus(null);
+        } finally {
+            setCheckingCnjTimelineStatus(false);
         }
     };
 
@@ -265,6 +345,8 @@ export function ProcessForm() {
             if (isEditing) {
                 await api.patch(`/processes/${id}`, payload);
                 toast.success('Processo atualizado!');
+                await fetchProcess();
+                await fetchCnjTimelineStatus(id);
                 if (shouldClose) navigate('/processes');
             } else {
                 const res = await api.post('/processes', payload);
@@ -290,6 +372,103 @@ export function ProcessForm() {
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleImportCnjTimelines = async () => {
+        if (!id) {
+            toast.warning('Salve o processo antes de importar os andamentos oficiais.');
+            return;
+        }
+
+        try {
+            setImportingCnjTimelines(true);
+            const response = await api.post(`/processes/${id}/cnj-movements/import`);
+            const importedCount = Number(response.data?.importedCount || 0);
+            const skippedCount = Number(response.data?.skippedCount || 0);
+
+            toast.success(importedCount > 0 ? 'Andamentos oficiais importados.' : 'Nenhum novo andamento para importar.', {
+                description:
+                    importedCount > 0
+                        ? `${importedCount} novo(s) andamento(s) adicionados e ${skippedCount} ja existente(s) preservados.`
+                        : response.data?.message || 'O historico atual do processo foi preservado.',
+            });
+
+            setActiveTab('TIMELINE');
+            setTimelineRefreshToken((current) => current + 1);
+            await fetchProcess();
+            await fetchCnjTimelineStatus(id);
+        } catch (error: any) {
+            toast.error(
+                error?.response?.data?.message ||
+                    error?.message ||
+                    'Nao foi possivel importar os andamentos do CNJ.',
+            );
+        } finally {
+            setImportingCnjTimelines(false);
+        }
+    };
+
+    const handleImportProcessPdf = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+
+        if (!file) {
+            return;
+        }
+
+        if (file.type !== 'application/pdf') {
+            toast.warning('Envie um arquivo PDF valido do processo.');
+            return;
+        }
+
+        try {
+            setImportingPdfDossier(true);
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const endpoint = isEditing && id ? `/processes/${id}/pdf-dossier/import` : '/processes/pdf-dossier/import';
+            const response = await api.post(endpoint, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            const result = response.data as PdfDossierImportResult;
+
+            setLastPdfImportSummary(
+                `${result.importedCount || 0} andamento(s) novo(s) a partir do PDF do processo, ${result.explicitFatalDateCount || 0} com prazo fatal expresso e ${result.cnjMovementCount || 0} movimento(s) oficiais considerados em paralelo.`,
+            );
+
+            toast.success(result.importedCount > 0 ? 'PDF do processo importado com sucesso.' : 'PDF analisado sem novos andamentos.', {
+                description:
+                    result.message ||
+                    `${result.importedCount || 0} registro(s) novo(s), ${result.skippedCount || 0} ja existente(s) preservado(s).`,
+            });
+
+            if (result.drxSummary?.answer) {
+                toast.info('DrX-Claw gerou uma leitura operacional do processo.', {
+                    description: result.drxSummary.answer.slice(0, 220),
+                    duration: 10000,
+                });
+            }
+
+            if (!isEditing && result.processId) {
+                navigate(`/processes/${result.processId}`);
+                return;
+            }
+
+            setActiveTab('TIMELINE');
+            setTimelineRefreshToken((current) => current + 1);
+            await fetchProcess();
+            if (id) {
+                await fetchCnjTimelineStatus(id);
+            }
+        } catch (error: any) {
+            toast.error(
+                error?.response?.data?.message ||
+                    error?.message ||
+                    'Nao foi possivel importar o PDF do processo.',
+            );
+        } finally {
+            setImportingPdfDossier(false);
         }
     };
 
@@ -334,6 +513,40 @@ export function ProcessForm() {
 
     const inputClass = 'w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors placeholder-slate-600';
     const labelClass = 'text-sm font-medium text-slate-300';
+    const hasUnsavedCnjChange = isEditing && normalizeCnjDigits(form.cnj) !== normalizeCnjDigits(savedProcessCnj);
+    const shouldShowCnjTimelineCard = isEditing || form.category === 'JUDICIAL' || Boolean(form.cnj);
+    const cnjTimelineCardState = !isEditing
+        ? {
+              canImport: false,
+              message: 'Salve o processo para liberar a importacao incremental dos andamentos oficiais do CNJ.',
+              actionLabel: 'Salvar para habilitar',
+              newMovementCount: 0,
+              totalAvailableCount: 0,
+              importedTimelineCount: 0,
+              lastSourceUpdateAt: null,
+              sourceSystem: null,
+              sourceCourt: null,
+          }
+        : hasUnsavedCnjChange
+        ? {
+              canImport: false,
+              message: 'O numero CNJ foi alterado. Salve o processo para consultar e importar o historico correto.',
+              actionLabel: 'Salvar para atualizar CNJ',
+              newMovementCount: 0,
+              totalAvailableCount: 0,
+              importedTimelineCount: cnjTimelineStatus?.importedTimelineCount || 0,
+              lastSourceUpdateAt: cnjTimelineStatus?.lastSourceUpdateAt || null,
+              sourceSystem: cnjTimelineStatus?.sourceSystem || null,
+              sourceCourt: cnjTimelineStatus?.sourceCourt || null,
+          }
+        : cnjTimelineStatus;
+    const cnjTimelineCardClass = cnjTimelineCardState?.canImport
+        ? 'border-emerald-500/20 bg-emerald-500/10'
+        : 'border-amber-500/20 bg-amber-500/10';
+    const cnjTimelineBadgeClass = cnjTimelineCardState?.canImport
+        ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200'
+        : 'border-amber-500/30 bg-amber-500/15 text-amber-100';
+    const pdfDossierInputId = isEditing ? `process-dossier-upload-${id}` : 'process-dossier-upload';
 
     const TabButton = ({ tabId, label, icon: Icon }: any) => (
         <button
@@ -419,6 +632,149 @@ export function ProcessForm() {
                             {lastConsultSummary && (
                                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
                                     {lastConsultSummary}
+                                </div>
+                            )}
+                            {shouldShowCnjTimelineCard && (
+                                <div className="grid gap-4 xl:grid-cols-2">
+                                    <div className={`rounded-xl border px-4 py-4 ${cnjTimelineCardClass}`}>
+                                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                            <div className="space-y-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-sm font-semibold text-white">CNJ / Andamentos Oficiais</span>
+                                                    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${cnjTimelineBadgeClass}`}>
+                                                        {checkingCnjTimelineStatus
+                                                            ? 'Verificando'
+                                                            : cnjTimelineCardState?.canImport
+                                                            ? 'Pronto para sincronizar'
+                                                            : 'Bloqueado'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-slate-200">
+                                                    {checkingCnjTimelineStatus
+                                                        ? 'Validando a comunicacao com o CNJ/DataJud para este processo...'
+                                                        : cnjTimelineCardState?.message || 'Sem informacoes sobre a sincronizacao oficial.'}
+                                                </p>
+                                                <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                        Andamentos oficiais: {cnjTimelineCardState?.totalAvailableCount || 0}
+                                                    </span>
+                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                        Ja importados: {cnjTimelineCardState?.importedTimelineCount || 0}
+                                                    </span>
+                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                        Novos agora: {cnjTimelineCardState?.newMovementCount || 0}
+                                                    </span>
+                                                    {cnjTimelineCardState?.sourceSystem && (
+                                                        <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                            Sistema: {cnjTimelineCardState.sourceSystem}
+                                                        </span>
+                                                    )}
+                                                    {cnjTimelineCardState?.sourceCourt && (
+                                                        <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                            Tribunal: {cnjTimelineCardState.sourceCourt}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {cnjTimelineCardState?.lastSourceUpdateAt && (
+                                                    <p className="text-xs text-slate-400">
+                                                        Ultima atualizacao oficial detectada: {new Date(cnjTimelineCardState.lastSourceUpdateAt).toLocaleString('pt-BR')}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex min-w-[240px] flex-col gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleImportCnjTimelines()}
+                                                    disabled={
+                                                        !cnjTimelineCardState?.canImport ||
+                                                        importingCnjTimelines ||
+                                                        checkingCnjTimelineStatus
+                                                    }
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/15 px-4 py-3 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    title="Importa apenas os movimentos novos do CNJ, preservando o historico ja trabalhado pelo escritorio."
+                                                >
+                                                    {importingCnjTimelines ? (
+                                                        <Loader2 size={17} className="animate-spin" />
+                                                    ) : (
+                                                        <ArrowDownToLine size={17} />
+                                                    )}
+                                                    {cnjTimelineCardState?.actionLabel || 'Buscar andamentos do CNJ'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void fetchCnjTimelineStatus(id)}
+                                                    disabled={!isEditing || checkingCnjTimelineStatus || importingCnjTimelines}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                                                >
+                                                    {checkingCnjTimelineStatus ? (
+                                                        <Loader2 size={16} className="animate-spin" />
+                                                    ) : (
+                                                        <RefreshCcw size={16} />
+                                                    )}
+                                                    Atualizar status do CNJ
+                                                </button>
+                                                <p className="text-xs text-slate-400">
+                                                    Fluxo pensado para o advogado: consulta a disponibilidade oficial, importa somente novidades e preserva os andamentos ja tratados.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 px-4 py-4">
+                                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                            <div className="space-y-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-sm font-semibold text-white">PDF Integral do Processo</span>
+                                                    <span className="rounded-full border border-violet-500/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-100">
+                                                        Cadastro/atualizacao + PDF + DrX
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-slate-200">
+                                                    Detecta `PJe` ou `Eproc`, cadastra ou atualiza o processo pelo CNJ, sincroniza partes, importa andamentos por `ID` ou `EVENTO` e pede ao DrX-Claw um resumo operacional com proximo passo.
+                                                </p>
+                                                <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                        Fonte: autos completos do tribunal
+                                                    </span>
+                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                        OCR: sob demanda
+                                                    </span>
+                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
+                                                        Nao sobrescreve historico existente
+                                                    </span>
+                                                </div>
+                                                {lastPdfImportSummary && (
+                                                    <p className="text-xs text-violet-100/90">
+                                                        {lastPdfImportSummary}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex min-w-[240px] flex-col gap-2">
+                                                <input
+                                                    id={pdfDossierInputId}
+                                                    type="file"
+                                                    accept=".pdf,application/pdf"
+                                                    className="hidden"
+                                                    onChange={(event) => void handleImportProcessPdf(event)}
+                                                />
+                                                <label
+                                                    htmlFor={pdfDossierInputId}
+                                                    className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/15 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/25 ${importingPdfDossier ? 'pointer-events-none opacity-60' : ''}`}
+                                                    title="Le o PDF do processo, cria ou atualiza o cadastro e importa apenas atos novos."
+                                                >
+                                                    {importingPdfDossier ? (
+                                                        <Loader2 size={17} className="animate-spin" />
+                                                    ) : (
+                                                        <FileText size={17} />
+                                                    )}
+                                                    {importingPdfDossier ? 'Importando PDF do processo...' : 'Importar PDF do processo'}
+                                                </label>
+                                                <p className="text-xs text-slate-400">
+                                                    Melhor uso para o advogado: subir autos completos do PJe ou EPROC para montar o processo, enriquecer o historico e receber uma orientacao inicial do DrX-Claw.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -541,7 +897,7 @@ export function ProcessForm() {
                 {activeTab === 'TIMELINE' && (
                     <div className="animate-in fade-in">
                         {isEditing ? (
-                            <ProcessoAndamentos processId={id!} />
+                            <ProcessoAndamentos key={`${id}-${timelineRefreshToken}`} processId={id!} />
                         ) : (
                             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                                 <div className="p-4 border-b border-slate-800 bg-slate-800/50">

@@ -1,0 +1,611 @@
+{
+  "id": "ec052e58-db8e-4635-8948-d64c9498744d",
+  "data": {
+    "title": "Ação de Partilha",
+    "cnj": "5000263-21.2022.8.13.0718",
+    "court": "TJMG",
+    "courtSystem": "PJe",
+    "vars": "Vara Única da Comarca de Virginópolis",
+    "district": "Vara Única da Comarca de Virginópolis",
+    "status": "ATIVO",
+    "category": "JUDICIAL",
+    "area": "Dissolução",
+    "subject": "Dissolução",
+    "class": "Ação de Partilha",
+    "distributionDate": "2022-03-08",
+    "judge": "Nao informado via DataJud",
+    "value": 0,
+    "description": "",
+    "folder": "",
+    "metadata": {
+      "raw": {
+        "id": "TJMG_G1_50002632120228130718",
+        "grau": "G1",
+        "classe": {
+          "nome": "Ação de Partilha",
+          "codigo": 12389
+        },
+        "formato": {
+          "nome": "Eletrônico",
+          "codigo": 1
+        },
+        "sistema": {
+          "nome": "PJe",
+          "codigo": 1
+        },
+        "assuntos": [
+          {
+            "nome": "Dissolução",
+            "codigo": 7664
+          }
+        ],
+        "tribunal": "TJMG",
+        "@timestamp": "2025-06-18T02:20:16.309000Z",
+        "movimentos": [
+          {
+            "nome": "Distribuição",
+            "codigo": 26,
+            "dataHora": "2022-03-08T10:17:15.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "sorteio",
+                "valor": 2,
+                "codigo": 2,
+                "descricao": "tipo_de_distribuicao_redistribuicao"
+              }
+            ]
+          },
+          {
+            "nome": "Conclusão",
+            "codigo": 51,
+            "dataHora": "2022-03-08T10:46:00.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "para despacho",
+                "valor": 5,
+                "codigo": 3,
+                "descricao": "tipo_de_conclusao"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2022-03-08T10:45:54.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Certidão",
+                "valor": 107,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2022-03-08T10:45:54.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Certidão",
+                "valor": 107,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2022-06-13T18:10:02.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Petição",
+            "codigo": 85,
+            "dataHora": "2022-07-07T17:32:11.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Petição (outras)",
+                "valor": 57,
+                "codigo": 19,
+                "descricao": "tipo_de_peticao"
+              }
+            ]
+          },
+          {
+            "nome": "Conclusão",
+            "codigo": 51,
+            "dataHora": "2022-07-07T17:52:25.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "para despacho",
+                "valor": 5,
+                "codigo": 3,
+                "descricao": "tipo_de_conclusao"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2023-01-31T15:32:42.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2023-02-08T15:54:22.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Certidão",
+                "valor": 107,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Petição",
+            "codigo": 85,
+            "dataHora": "2023-02-08T21:04:18.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Petição (outras)",
+                "valor": 57,
+                "codigo": 19,
+                "descricao": "tipo_de_peticao"
+              }
+            ]
+          },
+          {
+            "nome": "Conclusão",
+            "codigo": 51,
+            "dataHora": "2023-02-14T17:17:05.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "para decisão",
+                "valor": 6,
+                "codigo": 3,
+                "descricao": "tipo_de_conclusao"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2023-09-01T12:32:19.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Petição",
+            "codigo": 85,
+            "dataHora": "2023-09-29T16:30:31.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Petição (outras)",
+                "valor": 57,
+                "codigo": 19,
+                "descricao": "tipo_de_peticao"
+              }
+            ]
+          },
+          {
+            "nome": "Conclusão",
+            "codigo": 51,
+            "dataHora": "2023-09-29T16:41:12.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "para despacho",
+                "valor": 5,
+                "codigo": 3,
+                "descricao": "tipo_de_conclusao"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2024-03-18T17:16:15.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2024-03-22T12:47:03.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Petição",
+            "codigo": 85,
+            "dataHora": "2024-04-15T18:44:10.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Petição (outras)",
+                "valor": 57,
+                "codigo": 19,
+                "descricao": "tipo_de_peticao"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2024-04-17T15:40:24.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Certidão",
+                "valor": 107,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2024-06-19T17:23:20.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2024-06-19T17:16:15.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Certidão",
+                "valor": 107,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2024-06-19T17:19:35.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Petição",
+            "codigo": 85,
+            "dataHora": "2024-07-22T10:43:23.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Petição (outras)",
+                "valor": 57,
+                "codigo": 19,
+                "descricao": "tipo_de_peticao"
+              }
+            ]
+          },
+          {
+            "nome": "Petição",
+            "codigo": 85,
+            "dataHora": "2024-07-30T12:01:24.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Petição (outras)",
+                "valor": 57,
+                "codigo": 19,
+                "descricao": "tipo_de_peticao"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2024-09-19T19:17:54.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Petição",
+            "codigo": 85,
+            "dataHora": "2024-10-04T14:13:53.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Petição (outras)",
+                "valor": 57,
+                "codigo": 19,
+                "descricao": "tipo_de_peticao"
+              }
+            ]
+          },
+          {
+            "nome": "Expedição de documento",
+            "codigo": 60,
+            "dataHora": "2025-05-29T14:21:45.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            },
+            "complementosTabelados": [
+              {
+                "nome": "Outros documentos",
+                "valor": 80,
+                "codigo": 4,
+                "descricao": "tipo_de_documento"
+              }
+            ]
+          },
+          {
+            "nome": "Evolução da Classe Processual",
+            "codigo": 14739,
+            "dataHora": "2022-03-08T10:17:15.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Mero expediente",
+            "codigo": 11010,
+            "dataHora": "2022-06-13T17:03:48.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Gratuidade da Justiça",
+            "codigo": 334,
+            "dataHora": "2023-01-26T10:17:54.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Mero expediente",
+            "codigo": 11010,
+            "dataHora": "2023-09-01T08:49:19.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Homologação de Transação",
+            "codigo": 466,
+            "dataHora": "2023-10-10T15:42:19.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Expedida/Certificada",
+            "codigo": 12282,
+            "dataHora": "2025-06-05T12:08:35.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Disponibilização no Diário da Justiça Eletrônico",
+            "codigo": 1061,
+            "dataHora": "2025-06-07T00:26:34.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Publicação",
+            "codigo": 92,
+            "dataHora": "2025-06-09T00:13:15.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          },
+          {
+            "nome": "Decurso de Prazo",
+            "codigo": 1051,
+            "dataHora": "2025-06-17T00:38:13.000Z",
+            "orgaoJulgador": {
+              "nome": "Vara Única da Comarca de Virginópolis",
+              "codigo": "5807"
+            }
+          }
+        ],
+        "nivelSigilo": 0,
+        "orgaoJulgador": {
+          "nome": "Vara Única da Comarca de Virginópolis",
+          "codigo": 5807,
+          "codigoMunicipioIBGE": 3171808
+        },
+        "numeroProcesso": "50002632120228130718",
+        "dataAjuizamento": "20220308101715",
+        "dataHoraUltimaAtualizacao": "2025-06-18T02:20:16.309000Z"
+      },
+      "grau": "G1",
+      "hitId": "TJMG_G1_50002632120228130718",
+      "source": "DATAJUD",
+      "sistema": {
+        "nome": "PJe",
+        "codigo": 1
+      },
+      "assuntos": [
+        "Dissolução"
+      ],
+      "importedAt": "2026-03-14T12:06:02.348Z",
+      "nivelSigilo": 0,
+      "partiesCount": 0,
+      "orgaoJulgador": {
+        "nome": "Vara Única da Comarca de Virginópolis",
+        "codigo": 5807,
+        "codigoMunicipioIBGE": 3171808
+      },
+      "tribunalAlias": "api_publica_tjmg",
+      "proceduralStatus": "Decurso de Prazo",
+      "cnjTimelineImport": {
+        "source": "DATAJUD",
+        "importedAt": "2026-03-14T13:00:23.800Z",
+        "skippedCount": 1,
+        "sourceSystem": "PJe",
+        "importedCount": 34,
+        "lastSourceUpdateAt": "2025-06-18T02:20:16.309000Z",
+        "totalAvailableCount": 35
+      },
+      "dataHoraUltimaAtualizacao": "2025-06-18T02:20:16.309000Z"
+    }
+  }
+}

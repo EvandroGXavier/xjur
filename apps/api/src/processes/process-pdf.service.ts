@@ -1,237 +1,1035 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdf = require('pdf-parse');
+import { Injectable } from '@nestjs/common';
 
-export interface ExtractedProcessData {
+type LegacyImportedParty = {
+    name: string;
+    type: string;
+    document?: string;
+    email?: string;
+    phone?: string;
+    oab?: string;
+};
+
+export type ExtractedProcessData = {
     cnj?: string;
-    description?: string;
-    parts?: Array<{ name: string; type: string; document?: string }>;
-    value?: number;
-    distributionDate?: Date;
+    title?: string;
     court?: string;
+    courtSystem?: string;
     vars?: string;
     district?: string;
-    area?: string;
-    judge?: string;
-    title?: string;
     status?: string;
-}
+    area?: string;
+    subject?: string;
+    class?: string;
+    distributionDate?: string;
+    judge?: string;
+    value?: number;
+    description?: string;
+    metadata?: Record<string, any>;
+    parts: LegacyImportedParty[];
+    textLength: number;
+    pageCount: number;
+};
+
+export type PdfDeadlineCandidate = {
+    sourceDocumentId?: string | null;
+    documentType?: string | null;
+    excerpt: string;
+    deadlineDays?: number | null;
+    fatalDate?: string | null;
+    confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+};
+
+export type PdfProcessDocument = {
+    documentId: string;
+    referenceType?: 'DOCUMENT_ID' | 'EVENT';
+    referenceCode?: string | null;
+    eventSequence?: string | null;
+    actorName?: string | null;
+    signedAt?: string | null;
+    label: string;
+    documentType?: string | null;
+    pageHint?: number | null;
+    contentText?: string | null;
+    contentPreview?: string | null;
+    deadlineCandidates: PdfDeadlineCandidate[];
+};
+
+export type FullProcessPdfAnalysis = {
+    cnj?: string;
+    title?: string;
+    court?: string;
+    courtSystem?: string;
+    vars?: string;
+    district?: string;
+    status?: string;
+    area?: string;
+    subject?: string;
+    class?: string;
+    distributionDate?: string;
+    judge?: string;
+    value?: number;
+    description?: string;
+    parts: LegacyImportedParty[];
+    pageCount: number;
+    textLength: number;
+    hasSelectableText: boolean;
+    ocrStatus: 'NOT_NEEDED' | 'REQUIRED_NOT_IMPLEMENTED';
+    rawTextExcerpt: string;
+    documents: PdfProcessDocument[];
+    proceduralActs: PdfProcessDocument[];
+    deadlineCandidates: PdfDeadlineCandidate[];
+    importSource: string;
+    timelineReferenceType: 'DOCUMENT_ID' | 'EVENT';
+    metadata: Record<string, any>;
+};
+
+const DOCUMENT_TYPE_HINTS = [
+    'Intimacao',
+    'Intimação',
+    'Despacho',
+    'Decisao',
+    'Decisão',
+    'Sentenca',
+    'Sentença',
+    'Certidao',
+    'Certidão',
+    'Mandado',
+    'Peticao',
+    'Petição',
+    'Manifestacao',
+    'Manifestação',
+    'Comprovante',
+    'Oficio',
+    'Ofício',
+    'Comunicacao',
+    'Comunicação',
+    'Formal de Partilha',
+    'Termo',
+    'Ata',
+    'Documento',
+];
+
+const EPROC_EVENT_CODE_LABELS: Record<string, string> = {
+    INIC1: 'Peticao inicial',
+    CONTEST: 'Contestacao',
+    CONTESTACAO: 'Contestacao',
+    IMPUGNA: 'Impugnacao',
+    RECURSO: 'Recurso',
+    SENT1: 'Sentenca',
+    DESPADEC: 'Despacho/Decisao',
+    DECISAO: 'Decisao',
+    MANIF: 'Manifestacao',
+    CERT: 'Certidao',
+};
 
 @Injectable()
 export class ProcessPdfService {
-
     async extractDataFromPdf(fileBuffer: Buffer): Promise<ExtractedProcessData> {
+        const analysis = await this.analyzeFullProcessPdf(fileBuffer);
+
+        return {
+            cnj: analysis.cnj,
+            title: analysis.title,
+            court: analysis.court,
+            courtSystem: analysis.courtSystem,
+            vars: analysis.vars,
+            district: analysis.district,
+            status: analysis.status,
+            area: analysis.area,
+            subject: analysis.subject,
+            class: analysis.class,
+            distributionDate: analysis.distributionDate,
+            judge: analysis.judge,
+            value: analysis.value,
+            description: analysis.description,
+            metadata: analysis.metadata,
+            parts: analysis.parts,
+            textLength: analysis.textLength,
+            pageCount: analysis.pageCount,
+        };
+    }
+
+    async analyzeFullProcessPdf(fileBuffer: Buffer): Promise<FullProcessPdfAnalysis> {
+        const parsed = await this.extractPdfText(fileBuffer);
+        const normalizedText = this.normalizeExtractedText(parsed.text);
+        const lines = normalizedText
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+        const cnj = this.extractCnj(normalizedText);
+        const courtSystem = this.detectCourtSystem(normalizedText);
+        const processClass = this.extractProcessClassPreferred(normalizedText);
+        const title = processClass && cnj ? `${processClass} - ${cnj}` : processClass || cnj || 'Processo importado via PDF';
+        const documents = this.extractDocuments(lines, normalizedText, courtSystem);
+        const metadata = this.buildMetadataSummary(normalizedText, parsed.pageCount, parsed.textLength, courtSystem, documents);
+        const deadlineCandidates = this.extractDeadlineCandidates(normalizedText, documents);
+        const proceduralActs = documents.filter((document) => this.isProceduralAct(document));
+        const parts = this.extractParties(normalizedText);
+        const description = this.buildDescription(normalizedText, documents);
+        const importSource = this.resolveImportSource(courtSystem);
+        const timelineReferenceType = courtSystem === 'Eproc' ? 'EVENT' : 'DOCUMENT_ID';
+
+        return {
+            cnj,
+            title,
+            court: this.extractCourtEnhanced(normalizedText),
+            courtSystem,
+            vars: this.extractCourtDivisionPreferred(normalizedText),
+            district: this.extractDistrictEnhanced(normalizedText),
+            status: this.extractStatus(normalizedText),
+            area: this.extractArea(processClass, normalizedText),
+            subject: this.extractSubjectPreferred(normalizedText),
+            class: processClass,
+            distributionDate: this.extractDistributionDateEnhanced(normalizedText),
+            judge: this.extractJudgePreferred(normalizedText),
+            value: this.extractValue(normalizedText),
+            description,
+            parts,
+            pageCount: parsed.pageCount,
+            textLength: parsed.textLength,
+            hasSelectableText: parsed.textLength > 0,
+            ocrStatus: parsed.textLength > 0 ? 'NOT_NEEDED' : 'REQUIRED_NOT_IMPLEMENTED',
+            rawTextExcerpt: normalizedText.slice(0, 4000),
+            documents,
+            proceduralActs,
+            deadlineCandidates,
+            importSource,
+            timelineReferenceType,
+            metadata,
+        };
+    }
+
+    private async extractPdfText(fileBuffer: Buffer): Promise<{ text: string; pageCount: number; textLength: number }> {
+        const { PDFParse } = require('pdf-parse');
+        const parser = new PDFParse({ data: new Uint8Array(fileBuffer) });
+
         try {
-            const data = await pdf(fileBuffer);
-            const text: string = data.text;
+            const textResult = await parser.getText();
+            const infoResult = await parser.getInfo({ parsePageInfo: true });
 
-            console.log('=== PDF EXTRACTION DEBUG ===');
-            console.log('Total chars:', text?.length);
-            console.log('First 300 chars:', text?.substring(0, 300));
+            const text = this.coercePdfText(textResult);
+            const pageCount = this.coercePageCount(infoResult);
 
-            if (!text || text.length < 20) {
-                throw new BadRequestException('O PDF parece estar vazio ou não contém texto selecionável (imagem escaneada). Tente um arquivo "nascido digital" (ex: exportado do PJe).');
-            }
-
-            // Normalização: converter quebras de linha/tabs em espaço, colapsar espaços múltiplos
-            const normalizedText = text.replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
-            // Versão em uppercase para buscas case-insensitive
-            const upperText = normalizedText.toUpperCase();
-
-            // 1. Extração de CNJ (Regex padrão BR)
-            // Formato: NNNNNNN-DD.AAAA.J.TR.OOOO
-            const cnjMatch = text.match(/\d{7}-\d{2}\.\d{4}\.\d{1,2}\.\d{2}\.\d{4}/);
-            const cnj = cnjMatch ? cnjMatch[0] : undefined;
-
-            // 2. Extração de Tribunal (ampla)
-            let court: string | undefined = undefined;
-            const tribunalPatterns: [RegExp, string][] = [
-                [/TRIBUNAL\s+DE\s+JUSTI[CÇ]A\s+DO\s+ESTADO\s+DE\s+MINAS\s+GERAIS/i, 'TJMG'],
-                [/TRIBUNAL\s+DE\s+JUSTI[CÇ]A\s+DO\s+ESTADO\s+DE\s+S[AÃ]O\s+PAULO/i, 'TJSP'],
-                [/TRIBUNAL\s+DE\s+JUSTI[CÇ]A\s+DO\s+ESTADO\s+DO\s+RIO\s+DE\s+JANEIRO/i, 'TJRJ'],
-                [/TRIBUNAL\s+DE\s+JUSTI[CÇ]A\s+DO\s+ESTADO\s+DO\s+PARAN[AÁ]/i, 'TJPR'],
-                [/TRIBUNAL\s+DE\s+JUSTI[CÇ]A\s+DO\s+DISTRITO\s+FEDERAL/i, 'TJDFT'],
-                [/TRIBUNAL\s+REGIONAL\s+FEDERAL\s+DA\s+1[ªa]\s+REGI[AÃ]O/i, 'TRF1'],
-                [/TRIBUNAL\s+REGIONAL\s+DO\s+TRABALHO\s+DA\s+3[ªa]\s+REGI[AÃ]O/i, 'TRT3'],
-                [/\bTJMG\b/, 'TJMG'], [/\bTJSP\b/, 'TJSP'], [/\bTJRJ\b/, 'TJRJ'],
-                [/\bTJPR\b/, 'TJPR'], [/\bTJDFT\b/, 'TJDFT'],
-                [/\bTRF1\b/, 'TRF1'], [/\bTRF2\b/, 'TRF2'], [/\bTRF3\b/, 'TRF3'],
-                [/\bTRT3\b/, 'TRT3'], [/\bTRT2\b/, 'TRT2'], [/\bTRT15\b/, 'TRT15'],
-                [/\bSTJ\b/, 'STJ'], [/\bSTF\b/, 'STF'],
-                [/PODER\s+JUDICI[AÁ]RIO/i, 'PODER JUDICIÁRIO'],
-            ];
-            for (const [pattern, name] of tribunalPatterns) {
-                if (pattern.test(normalizedText)) {
-                    court = name;
-                    break;
-                }
-            }
-
-            // 3. Extração de Valor da Causa (múltiplos padrões)
-            let value: number | undefined = undefined;
-            const valuePatterns = [
-                /(?:valor\s+da\s+causa|v(?:alor)?\.?\s*(?:da)?\s*causa)[:\s]*R?\$?\s*([\d.,]+)/i,
-                /(?:d[aá](?:-se)?)\s+[àa]\s+causa\s+(?:o\s+)?valor\s+de\s+R?\$?\s*([\d.,]+)/i,
-                /R\$\s*([\d.]+,\d{2})/i,
-                /(?:atribu[ií](?:do|mos?)?\s+(?:[àa]\s+causa\s+)?(?:o\s+)?valor\s+de)\s+R?\$?\s*([\d.,]+)/i,
-                /(?:valor)\s*(?:[:=])\s*R?\$?\s*([\d.,]+)/i,
-            ];
-            for (const pattern of valuePatterns) {
-                const match = normalizedText.match(pattern);
-                if (match && match[1]) {
-                    const raw = match[1].trim();
-                    // Detectar formato BR (1.234,56) vs EN (1,234.56)
-                    const hasBRFormat = /\d+\.\d{3}/.test(raw) || raw.includes(',');
-                    let parsed: number;
-                    if (hasBRFormat) {
-                        parsed = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-                    } else {
-                        parsed = parseFloat(raw);
-                    }
-                    if (!isNaN(parsed) && parsed > 0) {
-                        value = parsed;
-                        break;
-                    }
-                }
-            }
-
-            // 4. Extração de Partes (Heurísticas AMPLAS)
-            const parts: Array<{ name: string; type: string; document?: string }> = [];
-
-            // Helper: extrair nome limpo (até encontrar pontuação, quebra, ou padrão inválido)
-            const cleanName = (raw: string): string => {
-                return raw
-                    .replace(/[\r\n\t]/g, ' ')
-                    .replace(/\s{2,}/g, ' ')
-                    .replace(/^\s*[:\-–—]\s*/, '') // Remove : ou - inicial
-                    .replace(/\s*(?:,|\.|\bCPF\b|\bCNPJ\b|\bINSCRI[CÇ][AÃ]O\b|\bRG\b|\bBRASILEIR[OA]\b|\bNACIONALIDADE\b|\bRESIDENTE\b|\bPORTADOR\b|\bPROFISS[AÃ]O\b).*$/i, '')
-                    .trim();
+            return {
+                text,
+                pageCount,
+                textLength: text.length,
             };
-
-            // Autor / Polo Ativo
-            const authorPatterns = [
-                /(?:AUTOR(?:A)?|REQUERENTE|EXEQUENTE|IMPETRANTE|RECLAMANTE|APELANTE|AGRAVANTE|PROMOVENTE|EMBARGANTE)\s*[:\-–—]?\s*([^\n\r]{3,80})/i,
-                /(?:POLO\s+ATIVO)\s*[:\-–—]?\s*([^\n\r]{3,80})/i,
-            ];
-            for (const pattern of authorPatterns) {
-                const match = text.match(pattern);
-                if (match && match[1]) {
-                    const name = cleanName(match[1]);
-                    if (name.length >= 3 && name.length <= 80) {
-                        // Extrair CPF/CNPJ se existir perto
-                        const docMatch = text.substring(text.indexOf(match[0]), text.indexOf(match[0]) + 200)
-                            .match(/(?:CPF|CNPJ)[:\s]*(\d[\d.\-\/]+)/i);
-                        parts.push({
-                            name,
-                            type: 'AUTOR',
-                            document: docMatch ? docMatch[1].replace(/[.\-\/]/g, '') : undefined,
-                        });
-                        break;
+        } finally {
+            if (typeof parser.destroy === 'function') {
+                try {
+                    const destroyResult = parser.destroy();
+                    if (destroyResult && typeof destroyResult.then === 'function') {
+                        await destroyResult;
                     }
+                } catch (_error) {
+                    // Best-effort cleanup for the parser instance.
                 }
             }
-
-            // Réu / Polo Passivo
-            const defendantPatterns = [
-                /(?:R[EÉ](?:U|A)|REQUERIDO(?:A)?|EXECUTADO(?:A)?|IMPETRADO(?:A)?|RECLAMADO(?:A)?|APELADO(?:A)?|AGRAVADO(?:A)?|PROMOVIDO(?:A)?|EMBARGADO(?:A)?)\s*[:\-–—]?\s*([^\n\r]{3,80})/i,
-                /(?:POLO\s+PASSIVO)\s*[:\-–—]?\s*([^\n\r]{3,80})/i,
-            ];
-            for (const pattern of defendantPatterns) {
-                const match = text.match(pattern);
-                if (match && match[1]) {
-                    const name = cleanName(match[1]);
-                    if (name.length >= 3 && name.length <= 80) {
-                        const docMatch = text.substring(text.indexOf(match[0]), text.indexOf(match[0]) + 200)
-                            .match(/(?:CPF|CNPJ)[:\s]*(\d[\d.\-\/]+)/i);
-                        parts.push({
-                            name,
-                            type: 'RÉU',
-                            document: docMatch ? docMatch[1].replace(/[.\-\/]/g, '') : undefined,
-                        });
-                        break;
-                    }
-                }
-            }
-
-            // 5. Vara / Órgão Julgador
-            let vars: string | undefined = undefined;
-            const varaMatch = normalizedText.match(/(\d+[ªºa]?\s*Vara\s+(?:C[ií]vel|Criminal|(?:do\s+)?Trabalho|Federal|da\s+Faz[.\s]*P[uú]b(?:lica)?|de\s+Fam[ií]lia)[^\n,;]*)/i);
-            if (varaMatch) vars = varaMatch[1].trim();
-
-            // 6. Comarca
-            let district: string | undefined = undefined;
-            const comarcaMatch = normalizedText.match(/(?:Comarca|Foro)\s+(?:de|do|da)\s+([A-ZÀ-Úa-zà-ú\s]+?)(?:\s*[-–—]|\s*$|\s+(?:Estado|UF|\d|Processo|Autos))/i);
-            if (comarcaMatch) district = comarcaMatch[1].trim();
-
-            // 7. Juiz
-            let judge: string | undefined = undefined;
-            const judgeMatch = normalizedText.match(/(?:Ju[ií]z(?:a)?|Magistrad[oa]|Dr[.\s]*(?:a)?)[:\s]*([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+){1,5})/i);
-            if (judgeMatch) judge = judgeMatch[1].trim();
-
-            // 8. Área
-            let area: string | undefined = undefined;
-            if (/\b(?:c[ií]vel|obriga[cç][aã]o|cobran[cç]a|indeniza[cç][aã]o|consumidor|dano\s+moral|despejo)\b/i.test(normalizedText)) area = 'Cível';
-            else if (/\b(?:trabalhi?sta|reclama[cç][aã]o|CLT|empregad|FGTS|rescis[aã]o)\b/i.test(normalizedText)) area = 'Trabalhista';
-            else if (/\b(?:criminal|penal|den[uú]ncia|crime|furto|roubo|homic[ií]dio)\b/i.test(normalizedText)) area = 'Criminal';
-            else if (/\b(?:fam[ií]lia|div[oó]rcio|alimentos|guarda|pens[aã]o)\b/i.test(normalizedText)) area = 'Família';
-            else if (/\b(?:tribut[aá]ri|fiscal|imposto|ICMS|ISS|IPTU)\b/i.test(normalizedText)) area = 'Tributário';
-            else if (/\b(?:previdenci[aá]ri|INSS|aposentadoria|benef[ií]cio)\b/i.test(normalizedText)) area = 'Previdenciário';
-
-            // 9. Data de Distribuição
-            let distributionDate: Date | undefined = undefined;
-            const dateMatch = normalizedText.match(/(?:distribu[ií](?:do|da|[cç][aã]o))\s*(?:em)?\s*[:\s]*(\d{2}[\/\.\-]\d{2}[\/\.\-]\d{4})/i);
-            if (dateMatch) {
-                const [d, m, y] = dateMatch[1].split(/[\/\.\-]/);
-                distributionDate = new Date(`${y}-${m}-${d}`);
-            }
-
-            // 10. Status
-            const status = 'ATIVO';
-
-            // 11. Título inteligente
-            let title = 'Novo Processo (PDF Importado)';
-            if (cnj && parts.length > 0) {
-                title = `${parts[0].name} - ${cnj}`;
-            } else if (cnj) {
-                title = `Processo ${cnj}`;
-            } else if (parts.length >= 2) {
-                title = `${parts[0].name} vs ${parts[1].name}`;
-            } else if (parts.length === 1) {
-                title = `Processo - ${parts[0].name}`;
-            }
-
-            const result: ExtractedProcessData = {
-                cnj,
-                description: text.substring(0, 800).replace(/\s{2,}/g, ' ').trim() + (text.length > 800 ? '...' : ''),
-                parts,
-                value,
-                distributionDate,
-                court,
-                vars,
-                district,
-                area,
-                judge,
-                title,
-                status
-            };
-
-            console.log('=== PDF EXTRACTION RESULT ===');
-            console.log('CNJ:', cnj);
-            console.log('Court:', court);
-            console.log('Value:', value);
-            console.log('Parts:', JSON.stringify(parts));
-            console.log('Vars:', vars);
-            console.log('District:', district);
-            console.log('Area:', area);
-            console.log('Judge:', judge);
-            console.log('Title:', title);
-
-            return result;
-
-        } catch (error) {
-            if (error instanceof BadRequestException) throw error;
-            console.error('Erro ao ler PDF:', error);
-            throw new BadRequestException('Erro ao processar o arquivo PDF: ' + error.message);
         }
+    }
+
+    private coercePdfText(result: any) {
+        if (typeof result === 'string') {
+            return result;
+        }
+
+        if (result && typeof result.text === 'string') {
+            return result.text;
+        }
+
+        if (Array.isArray(result?.pages)) {
+            return result.pages
+                .map((page: any) => {
+                    if (typeof page === 'string') return page;
+                    if (typeof page?.text === 'string') return page.text;
+                    return '';
+                })
+                .join('\n');
+        }
+
+        return '';
+    }
+
+    private coercePageCount(infoResult: any) {
+        const direct =
+            Number(infoResult?.total ?? infoResult?.totalPages ?? infoResult?.numpages ?? 0) ||
+            Number(infoResult?.info?.Pages ?? 0);
+        if (direct > 0) {
+            return direct;
+        }
+
+        if (Array.isArray(infoResult?.pages)) {
+            return infoResult.pages.length;
+        }
+
+        return 0;
+    }
+
+    private normalizeExtractedText(text: string) {
+        return String(text || '')
+            .replace(/\r/g, '')
+            .replace(/[ \t]+\n/g, '\n')
+            .replace(/\u00a0/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    private normalizeLooseText(value?: string | null) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\w\s/-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toUpperCase();
+    }
+
+    private toIsoFromBrazilianDate(value?: string | null) {
+        const match = String(value || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+        if (!match) return null;
+
+        const [, day, month, year, hour = '00', minute = '00'] = match;
+        return `${year}-${month}-${day}T${hour}:${minute}:00`;
+    }
+
+    private extractCnj(text: string) {
+        const match =
+            text.match(/\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})\b/) ||
+            text.match(/\b(\d{20})\b/);
+        if (!match) return undefined;
+        return match[1].replace(/\D/g, '');
+    }
+
+    private detectCourtSystem(text: string) {
+        const normalized = this.normalizeLooseText(text);
+        if (
+            normalized.includes('CAPA PROCESSO') ||
+            normalized.includes('PAGINA DE SEPARACAO') ||
+            normalized.includes('SEQUENCIA EVENTO') ||
+            normalized.includes('EVENTO 1')
+        ) {
+            return 'Eproc';
+        }
+        if (normalized.includes('PJE')) return 'PJe';
+        if (normalized.includes('EPROC')) return 'Eproc';
+        if (normalized.includes('PROJUDI')) return 'Projudi';
+        return 'PDF Import';
+    }
+
+    private resolveImportSource(courtSystem?: string | null) {
+        const normalized = this.normalizeLooseText(courtSystem);
+        if (normalized.includes('EPROC')) return 'EPROC_PROCESS_PDF';
+        if (normalized.includes('PJE')) return 'PJE_PROCESS_PDF';
+        return 'TRIBUNAL_PROCESS_PDF';
+    }
+
+    private extractCourt(text: string) {
+        const upper = this.normalizeLooseText(text);
+        if (upper.includes('TRIBUNAL DE JUSTICA DO ESTADO DE MINAS GERAIS')) return 'TJMG';
+        if (upper.includes('TRIBUNAL DE JUSTICA DO ESTADO DE SAO PAULO')) return 'TJSP';
+        if (upper.includes('TRIBUNAL REGIONAL FEDERAL')) {
+            const match = upper.match(/TRIBUNAL REGIONAL FEDERAL DA (\d+) REGIAO/);
+            return match ? `TRF${match[1]}` : 'TRF';
+        }
+
+        const match = text.match(/PODER JUDICI[AÁ]RIO DO ESTADO DE ([^\n]+)/i);
+        if (match) return match[1].trim();
+        return undefined;
+    }
+
+    private extractCourtDivision(text: string) {
+        const match =
+            text.match(/Comarca de ([^\n/]+)\s*\/\s*([^\n]+)/i) ||
+            text.match(/Vara:\s*([^\n]+)/i);
+        if (!match) return undefined;
+
+        if (match.length >= 3) {
+            return `${match[1].trim()} / ${match[2].trim()}`;
+        }
+
+        return match[1].trim();
+    }
+
+    private extractDistrict(text: string) {
+        const match = text.match(/Comarca de ([^\n/]+)/i);
+        return match ? match[1].trim() : undefined;
+    }
+
+    private extractProcessClass(text: string) {
+        const match =
+            text.match(/CLASSE:\s*\[?([^\]\n]+)\]?\s*([^\n]*)/i) ||
+            text.match(/Classe Processual\s*:\s*([^\n]+)/i);
+        if (!match) return undefined;
+
+        return [match[1], match[2]]
+            .filter(Boolean)
+            .join(' ')
+            .replace(/\(\d+\)/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    private extractSubject(text: string) {
+        const match = text.match(/ASSUNTO:\s*([^\n]+)/i);
+        return match ? match[1].trim() : undefined;
+    }
+
+    private extractStatus(text: string) {
+        const normalized = this.normalizeLooseText(text);
+        if (normalized.includes('ARQUIVADO')) return 'ARQUIVADO';
+        if (normalized.includes('SUSPENSO')) return 'SUSPENSO';
+        return 'ATIVO';
+    }
+
+    private extractArea(processClass?: string, text?: string) {
+        const normalized = this.normalizeLooseText(`${processClass || ''} ${text || ''}`);
+        if (normalized.includes('FAMILIA') || normalized.includes('SUCESS')) return 'Familia';
+        if (normalized.includes('TRABALH')) return 'Trabalhista';
+        if (normalized.includes('CRIM')) return 'Criminal';
+        if (normalized.includes('TRIBUT')) return 'Tributario';
+        if (normalized.includes('PREVID')) return 'Previdenciario';
+        if (normalized.includes('ADMINISTRAT')) return 'Administrativo';
+        return 'Civel';
+    }
+
+    private extractDistributionDate(text: string) {
+        const match =
+            text.match(/ajuizado em\s+(\d{2}\/\d{2}\/\d{4})/i) ||
+            text.match(/distribu[ií]do em\s+(\d{2}\/\d{2}\/\d{4})/i);
+
+        return match?.[1];
+    }
+
+    private extractJudge(text: string) {
+        const match =
+            text.match(/Magistrado(?:\(a\))?:\s*([^\n]+)/i) ||
+            text.match(/Ju[ií]z(?:a)?(?: de Direito)?:\s*([^\n]+)/i) ||
+            text.match(/\n([A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{8,})\n(?:Ju[ií]z|Ju[ií]za|Assinado eletronicamente)/i);
+
+        return match?.[1]?.trim();
+    }
+
+    private extractValue(text: string) {
+        const match =
+            text.match(/valor da causa[:\s]*R\$\s*([\d\.\,]+)/i) ||
+            text.match(/R\$\s*([\d\.\,]{4,})/i);
+        if (!match) return undefined;
+
+        const normalized = match[1].replace(/\./g, '').replace(',', '.');
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : undefined;
+    }
+
+    private extractParties(text: string): LegacyImportedParty[] {
+        const lines = text.split(/\r?\n/);
+        const parties = new Map<string, LegacyImportedParty>();
+
+        const pushParty = (name: string, type: string, document?: string) => {
+            const cleanName = String(name || '').replace(/\s+/g, ' ').trim();
+            if (!cleanName || cleanName.length < 3) return;
+
+            const key = `${this.normalizeLooseText(cleanName)}::${type}`;
+            if (!parties.has(key)) {
+                parties.set(key, {
+                    name: cleanName,
+                    type,
+                    document,
+                });
+            }
+        };
+
+        for (const line of lines) {
+            const partyMatch = line.match(/^(AUTOR(?:A)?|REQUERENTE|INVENTARIANTE|REQUERIDO(?:A)?|R[EÉ]U|EXECUTADO(?:A)?|EXEQUENTE|APELANTE|APELADO)\s*[:\-]\s*(.+)$/i);
+            if (partyMatch) {
+                const type = this.normalizePartyType(partyMatch[1]);
+                const content = partyMatch[2].trim();
+                const documentMatch = content.match(/\b(CPF|CNPJ)\s*[:\-]?\s*([\d\.\-\/]+)/i);
+                const name = content.replace(/\b(CPF|CNPJ)\s*[:\-]?\s*[\d\.\-\/]+/gi, '').trim();
+                pushParty(name, type, documentMatch?.[2]);
+                continue;
+            }
+
+            const inlineMatch = line.match(/^([A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{6,})\s+CPF[:\s]+([\d\.\-]+)/i);
+            if (inlineMatch) {
+                pushParty(inlineMatch[1], 'PARTE', inlineMatch[2]);
+            }
+        }
+
+        const eprocBlock = text.match(/Partes e Representantes([\s\S]*?)Informa[cç][oõ]es Adicionais/i)?.[1];
+        if (eprocBlock) {
+            const eprocLines = eprocBlock
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter(Boolean);
+
+            let pendingRoles: string[] = [];
+            let roleIndex = 0;
+
+            for (const line of eprocLines) {
+                if (/^Procurador\(es\):$/i.test(line)) {
+                    pendingRoles = [];
+                    roleIndex = 0;
+                    continue;
+                }
+
+                const roleTokens = Array.from(
+                    line.matchAll(/\b(AUTOR(?:A)?|R[EÉ]U|REQUERENTE|REQUERIDO(?:A)?|EXECUTADO(?:A)?|EXEQUENTE|PERITO|TERCEIRO)\b/gi),
+                ).map((match) => this.normalizePartyType(match[1]));
+                if (roleTokens.length > 0 && !line.match(/\(/)) {
+                    pendingRoles = roleTokens;
+                    roleIndex = 0;
+                    continue;
+                }
+
+                if (!/\((?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\)/.test(line)) {
+                    continue;
+                }
+
+                const documentMatch = line.match(/\(([\d\.\-\/]+)\)/);
+                const name = line.replace(/\([\d\.\-\/]+\)\s*-\s*Pessoa\s+[^\n]+/i, '').trim();
+                const role = pendingRoles[roleIndex] || 'PARTE';
+                pushParty(name, role, documentMatch?.[1]);
+                if (pendingRoles.length > 1 && roleIndex < pendingRoles.length - 1) {
+                    roleIndex += 1;
+                }
+            }
+        }
+
+        return Array.from(parties.values())
+            .filter((party) => {
+                const normalizedName = this.normalizeLooseText(party.name);
+                if (!normalizedName) return false;
+                if (normalizedName.endsWith(' E')) return false;
+                if (normalizedName.includes('POR SEU')) return false;
+                return true;
+            })
+            .slice(0, 30);
+    }
+
+    private normalizePartyType(type: string) {
+        const normalized = this.normalizeLooseText(type);
+        if (normalized.includes('AUTOR')) return 'AUTOR';
+        if (normalized.includes('REQUERENTE')) return 'REQUERENTE';
+        if (normalized.includes('INVENTARIANTE')) return 'INVENTARIANTE';
+        if (normalized.includes('EXEQUENTE')) return 'EXEQUENTE';
+        if (normalized.includes('REU')) return 'REU';
+        if (normalized.includes('REQUERIDO')) return 'REQUERIDO';
+        if (normalized.includes('EXECUTADO')) return 'EXECUTADO';
+        if (normalized.includes('APELANTE')) return 'APELANTE';
+        if (normalized.includes('APELADO')) return 'APELADO';
+        return 'PARTE';
+    }
+
+    private extractDocuments(lines: string[], fullText: string, courtSystem?: string | null): PdfProcessDocument[] {
+        if (courtSystem === 'Eproc') {
+            return this.extractEprocDocuments(fullText);
+        }
+
+        const documents = new Map<string, PdfProcessDocument>();
+
+        for (const line of lines) {
+            const match = line.match(/^(\d{10,11})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\s+(.+)$/);
+            if (!match) continue;
+
+            const [, documentId, signedAtRaw, rawLabel] = match;
+            const parsedLabel = this.parseDocumentLabel(rawLabel);
+            const signedAt = this.toIsoFromBrazilianDate(signedAtRaw);
+
+            if (!documents.has(documentId)) {
+                documents.set(documentId, {
+                    documentId,
+                    referenceType: 'DOCUMENT_ID',
+                    signedAt,
+                    label: parsedLabel.label,
+                    documentType: parsedLabel.documentType,
+                    contentText: null,
+                    contentPreview: null,
+                    deadlineCandidates: [],
+                });
+            }
+        }
+
+        const contentByDocument = this.extractDocumentContents(fullText);
+        for (const [documentId, contentInfo] of contentByDocument.entries()) {
+            const existing = documents.get(documentId) || {
+                documentId,
+                referenceType: 'DOCUMENT_ID',
+                label: contentInfo.inferredLabel || `Documento ${documentId}`,
+                documentType: contentInfo.inferredType || null,
+                signedAt: null,
+                deadlineCandidates: [],
+            };
+
+            const contentText = contentInfo.contentText || null;
+            const deadlineCandidates = this.extractDeadlineCandidates(contentText || '', [
+                {
+                    ...existing,
+                    contentText,
+                    contentPreview: contentText ? contentText.slice(0, 320) : null,
+                    deadlineCandidates: [],
+                },
+            ]).filter((item) => item.sourceDocumentId === documentId);
+
+            documents.set(documentId, {
+                ...existing,
+                pageHint: contentInfo.pageHint,
+                contentText,
+                contentPreview: contentText ? contentText.slice(0, 320) : null,
+                deadlineCandidates,
+            });
+        }
+
+        return Array.from(documents.values())
+            .sort((left, right) => {
+                const leftTime = left.signedAt ? new Date(left.signedAt).getTime() : 0;
+                const rightTime = right.signedAt ? new Date(right.signedAt).getTime() : 0;
+                return leftTime - rightTime;
+            })
+            .slice(0, 500);
+    }
+
+    private extractEprocDocuments(fullText: string): PdfProcessDocument[] {
+        const pages = this.extractPages(fullText);
+        const separatorMetadata = new Map<string, { label?: string | null; signedAt?: string | null; actorName?: string | null; eventSequence?: string | null }>();
+        const documents = new Map<string, PdfProcessDocument>();
+
+        for (const page of pages) {
+            if (/P[ÁA]GINA DE SEPARA[CÇ][AÃ]O/i.test(page.content)) {
+                const metadata = this.extractEprocSeparatorMetadata(page.content);
+                if (metadata?.eventNumber) {
+                    separatorMetadata.set(metadata.eventNumber, {
+                        label: metadata.label,
+                        signedAt: metadata.signedAt,
+                        actorName: metadata.actorName,
+                        eventSequence: metadata.eventSequence,
+                    });
+                }
+                continue;
+            }
+
+            const footer = this.extractEprocFooter(page.content);
+            if (!footer?.eventNumber) {
+                continue;
+            }
+
+            const separator = separatorMetadata.get(footer.eventNumber);
+            const baseDocument = documents.get(footer.eventNumber) || {
+                documentId: footer.eventNumber,
+                referenceType: 'EVENT' as const,
+                referenceCode: footer.referenceCode || null,
+                eventSequence: separator?.eventSequence || null,
+                actorName: separator?.actorName || null,
+                signedAt: separator?.signedAt || null,
+                label: this.buildEprocEventLabel(footer.eventNumber, footer.referenceCode, separator?.label),
+                documentType: this.inferEprocDocumentType(footer.referenceCode, separator?.label),
+                pageHint: page.pageNumber,
+                contentText: null,
+                contentPreview: null,
+                deadlineCandidates: [],
+            };
+
+            const cleanContent = this.cleanEprocPageContent(page.content);
+            const mergedContent = baseDocument.contentText
+                ? `${baseDocument.contentText}\n\n${cleanContent}`.trim()
+                : cleanContent;
+
+            documents.set(footer.eventNumber, {
+                ...baseDocument,
+                pageHint: Math.min(baseDocument.pageHint || page.pageNumber, page.pageNumber),
+                referenceCode: baseDocument.referenceCode || footer.referenceCode || null,
+                label:
+                    baseDocument.label ||
+                    this.buildEprocEventLabel(footer.eventNumber, footer.referenceCode, separator?.label),
+                documentType:
+                    baseDocument.documentType ||
+                    this.inferDocumentTypeFromContent(cleanContent) ||
+                    this.inferEprocDocumentType(footer.referenceCode, separator?.label),
+                contentText: mergedContent || null,
+                contentPreview: mergedContent ? mergedContent.slice(0, 320) : null,
+            });
+        }
+
+        for (const [eventNumber, document] of documents.entries()) {
+            const deadlineCandidates = this.extractDeadlineCandidates(document.contentText || '', [
+                {
+                    ...document,
+                    deadlineCandidates: [],
+                },
+            ]).filter((item) => item.sourceDocumentId === eventNumber);
+
+            documents.set(eventNumber, {
+                ...document,
+                deadlineCandidates,
+            });
+        }
+
+        return Array.from(documents.values())
+            .sort((left, right) => {
+                const leftEvent = Number(left.documentId || 0) || 0;
+                const rightEvent = Number(right.documentId || 0) || 0;
+                return leftEvent - rightEvent;
+            })
+            .slice(0, 500);
+    }
+
+    private extractPages(fullText: string) {
+        const matches = Array.from(fullText.matchAll(/--\s*(\d+)\s+of\s+(\d+)\s*--/gi));
+        const pages: Array<{ pageNumber: number; content: string }> = [];
+
+        for (let index = 0; index < matches.length; index += 1) {
+            const current = matches[index];
+            const next = matches[index + 1];
+            const pageNumber = Number(current[1] || 0) || index + 1;
+            const start = (current.index ?? 0) + current[0].length;
+            const end = next?.index ?? fullText.length;
+            const content = fullText.slice(start, end).trim();
+
+            if (content) {
+                pages.push({ pageNumber, content });
+            }
+        }
+
+        return pages;
+    }
+
+    private extractEprocSeparatorMetadata(pageContent: string) {
+        const lines = pageContent
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        const eventNumber = lines.find((line) => /^Evento\s+\d+$/i.test(line))?.match(/\d+/)?.[0];
+        const lastLabelIndex = lines.reduce((acc, line, index) => {
+            if (/^(Evento:|Data:|Usu[áa]rio:|Processo:|Sequ[êe]ncia Evento:)$/i.test(line)) {
+                return index;
+            }
+            return acc;
+        }, -1);
+
+        const values = lastLabelIndex >= 0 ? lines.slice(lastLabelIndex + 1) : [];
+        return {
+            eventNumber,
+            label: values[0] || null,
+            signedAt: this.toIsoFromBrazilianDate(values[1] || null),
+            actorName: values[2] || null,
+            eventSequence: values[4] || null,
+        };
+    }
+
+    private extractEprocFooter(pageContent: string) {
+        const matches = Array.from(
+            pageContent.matchAll(
+                /Processo\s+\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\/[A-Z]{2},\s*Evento\s+(\d+),\s*([A-Z0-9_]+),\s*P[aá]gina\s+(\d+)/gi,
+            ),
+        );
+        const match = matches[matches.length - 1];
+        if (!match) return null;
+
+        return {
+            eventNumber: String(match[1] || '').trim(),
+            referenceCode: String(match[2] || '').trim() || null,
+            pageNumber: Number(match[3] || 0) || null,
+        };
+    }
+
+    private buildEprocEventLabel(eventNumber: string, referenceCode?: string | null, separatorLabel?: string | null) {
+        const referenceLabel = this.expandEprocReferenceCode(referenceCode);
+        const rawReferenceCode = String(referenceCode || '').trim();
+        const cleanSeparatorLabel = String(separatorLabel || '')
+            .replace(/_+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (referenceLabel && cleanSeparatorLabel) {
+            return `Evento ${eventNumber} - ${referenceLabel} (${cleanSeparatorLabel})`;
+        }
+        if (referenceLabel) {
+            return `Evento ${eventNumber} - ${referenceLabel}`;
+        }
+        if (rawReferenceCode && cleanSeparatorLabel) {
+            return `Evento ${eventNumber} - ${cleanSeparatorLabel} (${rawReferenceCode})`;
+        }
+        if (rawReferenceCode) {
+            return `Evento ${eventNumber} - ${rawReferenceCode}`;
+        }
+        if (cleanSeparatorLabel) {
+            return `Evento ${eventNumber} - ${cleanSeparatorLabel}`;
+        }
+        return `Evento ${eventNumber}`;
+    }
+
+    private expandEprocReferenceCode(referenceCode?: string | null) {
+        const normalized = this.normalizeLooseText(referenceCode);
+        if (!normalized) return null;
+        return EPROC_EVENT_CODE_LABELS[normalized] || null;
+    }
+
+    private inferEprocDocumentType(referenceCode?: string | null, separatorLabel?: string | null) {
+        const fromCode = this.expandEprocReferenceCode(referenceCode);
+        if (fromCode) return fromCode;
+
+        const normalized = this.normalizeLooseText(separatorLabel);
+        if (normalized.includes('CERTIDAO')) return 'Certidao';
+        if (normalized.includes('DISTRIBUID')) return 'Distribuicao';
+        if (normalized.includes('CITACAO')) return 'Citacao';
+        if (normalized.includes('INTIM')) return 'Intimacao';
+        if (normalized.includes('DECISAO')) return 'Decisao';
+        if (normalized.includes('DESPACH')) return 'Despacho';
+        if (normalized.includes('CONCLUSAO')) return 'Conclusao';
+        if (normalized.includes('JUNTADA')) return 'Juntada';
+        return null;
+    }
+
+    private cleanEprocPageContent(pageContent: string) {
+        return String(pageContent || '')
+            .replace(/Processo\s+\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\/[A-Z]{2},\s*Evento\s+\d+,\s*[A-Z0-9_]+,\s*P[aá]gina\s+\d+/gi, '')
+            .replace(/\b\d{2}\/\d{2}\/\d{4},\s*\d{2}:\d{2}\s+[^\n]*Editor de Rich Text[^\n]*/gi, '')
+            .replace(/https?:\/\/\S+/gi, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    private parseDocumentLabel(rawLabel: string) {
+        const cleanLabel = String(rawLabel || '').replace(/\s+/g, ' ').trim();
+        const normalized = this.normalizeLooseText(cleanLabel);
+        const documentType =
+            DOCUMENT_TYPE_HINTS.find((hint) => normalized.endsWith(this.normalizeLooseText(hint))) ||
+            DOCUMENT_TYPE_HINTS.find((hint) => normalized.includes(this.normalizeLooseText(hint))) ||
+            null;
+
+        return {
+            label: cleanLabel,
+            documentType,
+        };
+    }
+
+    private extractDocumentContents(fullText: string) {
+        const matches = Array.from(fullText.matchAll(/Num\.\s*(\d{10,11})\s*-\s*P[aá]g\.\s*(\d+)/gi));
+        const contentByDocument = new Map<string, { pageHint?: number | null; contentText: string; inferredLabel?: string | null; inferredType?: string | null }>();
+
+        for (let index = 0; index < matches.length; index += 1) {
+            const current = matches[index];
+            const next = matches[index + 1];
+            const documentId = current[1];
+            const pageHint = Number(current[2] || 0) || null;
+            const start = current.index ?? 0;
+            const end = next?.index ?? fullText.length;
+            const block = fullText.slice(start, end);
+            const contentText = this.cleanDocumentBlock(block, documentId);
+
+            if (!contentText) continue;
+
+            const existing = contentByDocument.get(documentId);
+            const mergedContent = existing?.contentText
+                ? `${existing.contentText}\n\n${contentText}`.trim()
+                : contentText;
+
+            contentByDocument.set(documentId, {
+                pageHint: existing?.pageHint || pageHint,
+                contentText: mergedContent,
+                inferredLabel: existing?.inferredLabel || this.inferDocumentLabelFromContent(contentText),
+                inferredType: existing?.inferredType || this.inferDocumentTypeFromContent(contentText),
+            });
+        }
+
+        return contentByDocument;
+    }
+
+    private cleanDocumentBlock(block: string, documentId: string) {
+        return String(block || '')
+            .replace(new RegExp(`Num\\.\\s*${documentId}\\s*-\\s*P[aá]g\\.\\s*\\d+`, 'gi'), '')
+            .replace(/Assinado eletronicamente por:[\s\S]*?(?=\n{2,}|https?:\/\/|$)/gi, '')
+            .replace(/https?:\/\/\S+/gi, '')
+            .replace(/Poder Judici[aá]rio do Estado de [^\n]+/gi, '')
+            .replace(/Justi[cç]a de [^\n]+/gi, '')
+            .replace(/Comarca de [^\n]+/gi, '')
+            .replace(/Rua:[^\n]+/gi, '')
+            .replace(/PROCESSO N[oº].*?(?=\n)/gi, '')
+            .replace(/CLASSE:.*?(?=\n)/gi, '')
+            .replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    private inferDocumentLabelFromContent(contentText: string) {
+        const firstLine = String(contentText || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find(Boolean);
+        return firstLine ? firstLine.slice(0, 140) : null;
+    }
+
+    private inferDocumentTypeFromContent(contentText: string) {
+        const normalized = this.normalizeLooseText(contentText);
+        if (normalized.includes('INTIMA')) return 'Intimacao';
+        if (normalized.includes('DESPACH')) return 'Despacho';
+        if (normalized.includes('DECISAO')) return 'Decisao';
+        if (normalized.includes('CERTIDAO')) return 'Certidao';
+        if (normalized.includes('MANDADO')) return 'Mandado';
+        if (normalized.includes('FORMAL DE PARTILHA')) return 'Formal de Partilha';
+        if (normalized.includes('CONTESTA')) return 'Contestacao';
+        if (normalized.includes('PETICAO INICIAL') || normalized.includes('PROPOR A PRESENTE')) return 'Peticao inicial';
+        if (normalized.includes('MANIFESTA')) return 'Manifestacao';
+        return null;
+    }
+
+    private extractDeadlineCandidates(text: string, documents: PdfProcessDocument[]) {
+        const candidates: PdfDeadlineCandidate[] = [];
+        const normalizedText = String(text || '');
+
+        const collectCandidates = (sourceText: string, sourceDocumentId?: string | null, documentType?: string | null) => {
+            const daysRegex = /prazo(?:\s+de)?\s+(\d{1,3})\s*\(([^)]*)\)?\s*dias?/gi;
+            for (const match of sourceText.matchAll(daysRegex)) {
+                candidates.push({
+                    sourceDocumentId: sourceDocumentId || null,
+                    documentType: documentType || null,
+                    excerpt: this.safeExcerpt(sourceText, match.index ?? 0),
+                    deadlineDays: Number(match[1]),
+                    fatalDate: this.extractExplicitFatalDateNear(sourceText, match.index ?? 0),
+                    confidence: this.extractExplicitFatalDateNear(sourceText, match.index ?? 0) ? 'HIGH' : 'MEDIUM',
+                });
+            }
+
+            const explicitRegex = /(prazo|ate|até)[\s\S]{0,80}?(\d{2}\/\d{2}\/\d{4})(?:\s*(?:as|às)?\s*(\d{2}:\d{2}))?/gi;
+            for (const match of sourceText.matchAll(explicitRegex)) {
+                const fatalDate = this.toIsoFromBrazilianDate(
+                    `${match[2]}${match[3] ? ` ${match[3]}` : ''}`,
+                );
+                if (!fatalDate) continue;
+
+                candidates.push({
+                    sourceDocumentId: sourceDocumentId || null,
+                    documentType: documentType || null,
+                    excerpt: this.safeExcerpt(sourceText, match.index ?? 0),
+                    deadlineDays: null,
+                    fatalDate,
+                    confidence: 'HIGH',
+                });
+            }
+        };
+
+        collectCandidates(normalizedText, null, null);
+        for (const document of documents) {
+            if (!document.contentText) continue;
+            collectCandidates(document.contentText, document.documentId, document.documentType || null);
+        }
+
+        return candidates.slice(0, 200);
+    }
+
+    private extractExplicitFatalDateNear(text: string, startIndex: number) {
+        const window = text.slice(startIndex, startIndex + 200);
+        const match = window.match(/(\d{2}\/\d{2}\/\d{4})(?:\s*(?:as|às)?\s*(\d{2}:\d{2}))?/i);
+        if (!match) return null;
+        return this.toIsoFromBrazilianDate(`${match[1]}${match[2] ? ` ${match[2]}` : ''}`);
+    }
+
+    private safeExcerpt(text: string, index: number) {
+        const start = Math.max(index - 40, 0);
+        const end = Math.min(index + 180, text.length);
+        return text.slice(start, end).replace(/\s+/g, ' ').trim();
+    }
+
+    private isProceduralAct(document: PdfProcessDocument) {
+        const normalized = this.normalizeLooseText(`${document.documentType || ''} ${document.label}`);
+        return ['INTIM', 'DESPACH', 'DECISAO', 'SENTENCA', 'CERTIDAO', 'MANDADO', 'FORMAL DE PARTILHA', 'COMUNICACAO'].some((token) =>
+            normalized.includes(token),
+        );
+    }
+
+    private buildDescription(text: string, documents: PdfProcessDocument[]) {
+        if (documents.length > 0) {
+            const firstWithContent = documents.find((document) => document.contentText);
+            if (firstWithContent?.contentText) {
+                return firstWithContent.contentText.slice(0, 1200);
+            }
+        }
+
+        return text.slice(0, 1200);
+    }
+
+    private extractCourtEnhanced(text: string) {
+        return this.extractCourt(text) || (/\b\d{7}-\d{2}\.\d{4}\.8\.13\.\d{4}\b/.test(text) ? 'TJMG' : undefined);
+    }
+
+    private extractCourtDivisionEnhanced(text: string) {
+        return (
+            this.extractCourtDivision(text) ||
+            text.match(/Orgao Julgador:\s*([^\n]+)/i)?.[1]?.trim() ||
+            text.match(/Orgao Julgador:\s*\n\s*([^\n]+)/i)?.[1]?.trim() ||
+            text.match(/Ju[ií]zo da ([^\n]+)/i)?.[1]?.trim()
+        );
+    }
+
+    private extractDistrictEnhanced(text: string) {
+        return this.extractDistrict(text) || text.match(/Ju[ií]zo da [^\n]+ da Comarca de ([^\n]+)/i)?.[1]?.trim();
+    }
+
+    private extractProcessClassEnhanced(text: string) {
+        return this.extractProcessClass(text) || text.match(/Classe da a[cç][aã]o:\s*([^\n]+)/i)?.[1]?.trim();
+    }
+
+    private extractSubjectEnhanced(text: string) {
+        return (
+            this.extractSubject(text) ||
+            text.match(/Assuntos[\s\S]{0,160}?\n\d+\s+([^\n\t]+)\t/i)?.[1]?.trim()
+        );
+    }
+
+    private extractDistributionDateEnhanced(text: string) {
+        return (
+            this.extractDistributionDate(text) ||
+            text.match(/Data de autua[cç][aã]o:\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1]
+        );
+    }
+
+    private extractJudgeEnhanced(text: string) {
+        return this.extractJudge(text) || text.match(/Juiz\(a\):\s*([^\n]+)/i)?.[1]?.trim();
+    }
+
+    private extractCourtDivisionPreferred(text: string) {
+        return (
+            text.match(/Orgao Julgador:\s*([^\n]+)/i)?.[1]?.trim() ||
+            text.match(/Orgao Julgador:\s*\n\s*([^\n]+)/i)?.[1]?.trim() ||
+            this.extractCourtDivisionEnhanced(text)
+        );
+    }
+
+    private extractProcessClassPreferred(text: string) {
+        return text.match(/Classe da a[cç][aã]o:\s*([^\n]+)/i)?.[1]?.trim() || this.extractProcessClassEnhanced(text);
+    }
+
+    private extractSubjectPreferred(text: string) {
+        return (
+            text.match(/Assuntos[\s\S]{0,160}?\n\d+\s+([^\n\t]+)\t/i)?.[1]?.trim() ||
+            this.extractSubjectEnhanced(text)
+        );
+    }
+
+    private extractJudgePreferred(text: string) {
+        return text.match(/Juiz\(a\):\s*([^\n]+)/i)?.[1]?.trim() || this.extractJudgeEnhanced(text);
+    }
+
+    private buildMetadataSummary(
+        text: string,
+        pageCount: number,
+        textLength: number,
+        courtSystem?: string | null,
+        documents: PdfProcessDocument[] = [],
+    ) {
+        const documentIds =
+            documents.length > 0
+                ? documents.map((item) => item.documentId).filter(Boolean).slice(0, 200)
+                : Array.from(new Set((text.match(/\b\d{10,11}\b/g) || []).filter((item) => item.length >= 10))).slice(0, 200);
+        return {
+            importSource: this.resolveImportSource(courtSystem),
+            courtSystem: courtSystem || null,
+            timelineReferenceType: courtSystem === 'Eproc' ? 'EVENT' : 'DOCUMENT_ID',
+            pageCount,
+            textLength,
+            documentIds,
+            containsSelectableText: textLength > 0,
+        };
     }
 }

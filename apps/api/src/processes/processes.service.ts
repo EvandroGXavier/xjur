@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
+import { ProcessIntegrationsService } from './process-integrations.service';
+import { ProcessPdfService } from './process-pdf.service';
+import type { FullProcessPdfAnalysis, PdfProcessDocument } from './process-pdf.service';
+import { DrxClawService } from '../drx-claw/drx-claw.service';
 
 interface CreateProcessDto {
     tenantId?: string;
@@ -47,11 +51,71 @@ interface ImportedPartySyncRef {
     representedNames: string[];
 }
 
+type TimelineImportReasonCode =
+    | 'READY'
+    | 'PROCESS_NOT_FOUND'
+    | 'PROCESS_NOT_JUDICIAL'
+    | 'CNJ_MISSING'
+    | 'CNJ_INVALID'
+    | 'DATAJUD_DISABLED'
+    | 'API_KEY_MISSING'
+    | 'PROCESS_UNDER_SEAL'
+    | 'PROCESS_NOT_FOUND_AT_CNJ'
+    | 'CNJ_UNAVAILABLE';
+
+type TimelineImportStatus = {
+    canImport: boolean;
+    reasonCode: TimelineImportReasonCode;
+    message: string;
+    actionLabel: string;
+    checkedAt: string;
+    cnj: string | null;
+    totalAvailableCount: number;
+    importedTimelineCount: number;
+    newMovementCount: number;
+    lastSourceUpdateAt: string | null;
+    sourceSystem: string | null;
+    sourceCourt: string | null;
+    isProcessSaved: boolean;
+};
+
+type PdfDossierImportResult = {
+    success: boolean;
+    processId: string;
+    originalFileName: string | null;
+    importedCount: number;
+    skippedCount: number;
+    totalCandidateCount: number;
+    deadlineCount: number;
+    explicitFatalDateCount: number;
+    cnjMovementCount: number;
+    cnjImportStatus: TimelineImportStatus | null;
+    drxSummary: {
+        mode: string | null;
+        provider: string | null;
+        model: string | null;
+        answer: string | null;
+        error: string | null;
+    };
+    analysis: {
+        cnj: string | undefined;
+        pageCount: number;
+        textLength: number;
+        ocrStatus: string;
+        documentCount: number;
+        proceduralActCount: number;
+    };
+    message: string;
+};
+
 @Injectable()
 export class ProcessesService {
     constructor(
         private prisma: PrismaService,
         private readonly microsoftGraphService: MicrosoftGraphService,
+        private readonly integrationsService: ProcessIntegrationsService,
+        private readonly pdfService: ProcessPdfService,
+        private readonly drxClawService: DrxClawService,
     ) {}
 
     private async syncMicrosoftFolder(tenantId: string, processId: string) {
@@ -204,7 +268,7 @@ export class ProcessesService {
 
     private buildProcessInclude() {
         return {
-            timeline: { orderBy: { date: 'desc' as const }, take: 50 },
+            timeline: { orderBy: { date: 'desc' as const }, take: 200 },
             appointments: { orderBy: { startAt: 'asc' as const }, take: 20 },
             contact: true,
             tags: {
@@ -243,6 +307,967 @@ export class ProcessesService {
             },
             processPartyRepresentations: true,
         };
+    }
+
+    private mapTimelineImportReason(code: TimelineImportReasonCode) {
+        const messages: Record<TimelineImportReasonCode, string> = {
+            READY: 'Consulta CNJ liberada para importar os andamentos do processo.',
+            PROCESS_NOT_FOUND: 'Processo nao encontrado para esta empresa.',
+            PROCESS_NOT_JUDICIAL: 'A importacao do CNJ esta disponivel apenas para processos judiciais.',
+            CNJ_MISSING: 'Informe e salve o numero CNJ antes de buscar os andamentos oficiais.',
+            CNJ_INVALID: 'O numero CNJ salvo neste processo parece invalido.',
+            DATAJUD_DISABLED: 'A integracao DataJud/CNJ nao esta configurada ou foi desativada.',
+            API_KEY_MISSING: 'Cadastre a chave publica do CNJ/DataJud para liberar a busca oficial.',
+            PROCESS_UNDER_SEAL: 'O processo possui sigilo e os movimentos nao podem ser importados por esta consulta publica.',
+            PROCESS_NOT_FOUND_AT_CNJ: 'O CNJ nao localizou este processo na consulta publica do tribunal configurado.',
+            CNJ_UNAVAILABLE: 'Nao foi possivel comunicar com o CNJ/DataJud neste momento.',
+        };
+
+        return messages[code];
+    }
+
+    private buildImportedTimelineKey(processCnj: string, movement: any) {
+        const normalizedCnj = this.normalizeCnj(processCnj) || 'SEM_CNJ';
+        const movementDate = String(movement?.dataHora || '').trim();
+        const movementCode = String(movement?.codigo ?? '').trim();
+        const movementName = this.normalizeText(movement?.nome);
+        const orgaoCode = String(
+            movement?.orgaoJulgador?.codigo ??
+                movement?.orgaoJulgador?.id ??
+                '',
+        ).trim();
+        const complementSignature = Array.isArray(movement?.complementosTabelados)
+            ? movement.complementosTabelados
+                  .map((item: any) =>
+                      [
+                          String(item?.codigo ?? '').trim(),
+                          String(item?.valor ?? '').trim(),
+                          this.normalizeText(item?.nome),
+                          this.normalizeText(item?.descricao),
+                      ].join(':'),
+                  )
+                  .sort()
+                  .join('|')
+            : '';
+
+        return [
+            normalizedCnj,
+            movementDate,
+            movementCode,
+            movementName,
+            orgaoCode,
+            complementSignature,
+        ].join('::');
+    }
+
+    private getExistingTimelineKey(processCnj: string, timeline: any) {
+        const metadata = timeline?.metadata && typeof timeline.metadata === 'object'
+            ? timeline.metadata
+            : {};
+
+        if (metadata?.externalKey) {
+            return String(metadata.externalKey);
+        }
+
+        return this.buildImportedTimelineKey(processCnj, {
+            dataHora: timeline?.date,
+            codigo: metadata?.movementCode || timeline?.displayId || '',
+            nome: metadata?.movementName || timeline?.title || '',
+            orgaoJulgador: metadata?.orgaoJulgador || null,
+            complementosTabelados: metadata?.complementosTabelados || [],
+        });
+    }
+
+    private buildMovementTimelineDescription(movement: any) {
+        const details: string[] = [];
+        const orgaoNome = String(movement?.orgaoJulgador?.nome || '').trim();
+
+        if (orgaoNome) {
+            details.push(`Orgao julgador: ${orgaoNome}`);
+        }
+
+        if (Array.isArray(movement?.complementosTabelados) && movement.complementosTabelados.length > 0) {
+            const complements = movement.complementosTabelados
+                .map((item: any) => {
+                    const name = String(item?.nome || '').trim();
+                    const description = String(item?.descricao || '').trim();
+                    const value = item?.valor === undefined || item?.valor === null
+                        ? ''
+                        : String(item.valor).trim();
+
+                    if (name && description && value) return `${name} (${description}: ${value})`;
+                    if (name && description) return `${name} (${description})`;
+                    if (name && value) return `${name}: ${value}`;
+                    return name || description || value;
+                })
+                .filter(Boolean);
+
+            if (complements.length > 0) {
+                details.push(`Complementos: ${complements.join(' | ')}`);
+            }
+        }
+
+        const movementCode = String(movement?.codigo ?? '').trim();
+        if (movementCode) {
+            details.push(`Codigo CNJ do movimento: ${movementCode}`);
+        }
+
+        return details.join('\n');
+    }
+
+    private inferTimelineOrigin(systemName?: string | null) {
+        const normalized = this.normalizeText(systemName);
+        if (normalized.includes('EPROC')) return 'TRIBUNAL_EPROC';
+        return 'TRIBUNAL_PJE';
+    }
+
+    private resolvePdfImportSource(analysis?: Partial<FullProcessPdfAnalysis> | null) {
+        const importSource = String(analysis?.importSource || '').trim();
+        if (importSource) return importSource;
+
+        const courtSystem = this.normalizeText(analysis?.courtSystem);
+        if (courtSystem.includes('EPROC')) return 'EPROC_PROCESS_PDF';
+        if (courtSystem.includes('PJE')) return 'PJE_PROCESS_PDF';
+        return 'TRIBUNAL_PROCESS_PDF';
+    }
+
+    private buildPdfImportedTimelineKey(processCnj: string | null, document: PdfProcessDocument, analysis?: Partial<FullProcessPdfAnalysis> | null) {
+        const normalizedCnj = this.normalizeCnj(processCnj) || 'SEM_CNJ';
+        const importSource = this.resolvePdfImportSource(analysis);
+        const referenceType = String(document?.referenceType || '').trim().toUpperCase();
+        const baseId = String(document?.documentId || '').trim();
+        const referenceCode = String(document?.referenceCode || '').trim();
+        const eventSequence = String(document?.eventSequence || '').trim();
+
+        if (baseId) {
+            if (referenceType === 'EVENT') {
+                return `${importSource}::${normalizedCnj}::EVENT::${baseId}::${eventSequence || referenceCode}`;
+            }
+            return `${importSource}::${normalizedCnj}::${baseId}`;
+        }
+
+        const signedAt = String(document?.signedAt || '').trim();
+        const label = this.normalizeText(document?.label);
+        const docType = this.normalizeText(document?.documentType);
+        return `${importSource}::${normalizedCnj}::${signedAt}::${docType}::${label}`;
+    }
+
+    private buildPdfTimelineTitle(document: PdfProcessDocument) {
+        const type = String(document?.documentType || '').trim();
+        if (type) return type;
+
+        const label = String(document?.label || '').trim();
+        if (!label) return 'Documento processual';
+
+        return label.length > 120 ? `${label.slice(0, 117)}...` : label;
+    }
+
+    private buildPdfTimelineDescription(document: PdfProcessDocument) {
+        const sections: string[] = [];
+        const content = String(document?.contentText || '').trim();
+        const label = String(document?.label || '').trim();
+        const signedAt = String(document?.signedAt || '').trim();
+        const eventNumber = String(document?.documentId || '').trim();
+        const referenceType = String(document?.referenceType || '').trim().toUpperCase();
+
+        if (referenceType === 'EVENT' && eventNumber) {
+            sections.push(`Evento: ${eventNumber}`);
+        }
+
+        if (document?.referenceCode) {
+            sections.push(`Referencia do tribunal: ${document.referenceCode}`);
+        }
+
+        if (document?.eventSequence) {
+            sections.push(`Sequencia do evento: ${document.eventSequence}`);
+        }
+
+        if (document?.actorName) {
+            sections.push(`Lancado por: ${document.actorName}`);
+        }
+
+        if (label && (!content || !content.startsWith(label))) {
+            sections.push(`${referenceType === 'EVENT' ? 'Descricao do evento' : 'Documento'}: ${label}`);
+        }
+
+        if (signedAt) {
+            sections.push(`Assinado em: ${new Date(signedAt).toLocaleString('pt-BR')}`);
+        }
+
+        if (content) {
+            sections.push(content);
+        }
+
+        if (document?.deadlineCandidates?.length) {
+            const deadlineSummary = document.deadlineCandidates
+                .slice(0, 3)
+                .map((candidate) => {
+                    if (candidate.fatalDate) {
+                        return `Prazo identificado: ${new Date(candidate.fatalDate).toLocaleString('pt-BR')}`;
+                    }
+                    if (candidate.deadlineDays) {
+                        return `Prazo identificado: ${candidate.deadlineDays} dia(s)`;
+                    }
+                    return candidate.excerpt;
+                })
+                .join(' | ');
+
+            if (deadlineSummary) {
+                sections.push(deadlineSummary);
+            }
+        }
+
+        return sections.filter(Boolean).join('\n\n').trim();
+    }
+
+    private pickPdfFatalDate(document: PdfProcessDocument) {
+        const explicit = (document?.deadlineCandidates || []).find((candidate) => candidate.fatalDate);
+        return explicit?.fatalDate || null;
+    }
+
+    private resolvePdfTimelineCandidates(analysis: FullProcessPdfAnalysis) {
+        const preferred = analysis.proceduralActs.filter((document) => document.contentText || document.documentType);
+        if (preferred.length > 0) {
+            return preferred;
+        }
+
+        return analysis.documents.filter((document) => document.contentText || document.label);
+    }
+
+    private shouldUsePdfOnlyAnalysis(analysis?: Partial<FullProcessPdfAnalysis> | null) {
+        const courtSystem = this.normalizeText(analysis?.courtSystem);
+        return courtSystem.includes('EPROC');
+    }
+
+    private buildPdfReferenceLabel(document: PdfProcessDocument) {
+        const referenceType = document?.referenceType === 'EVENT' ? 'Evento' : 'ID';
+        const referenceValue = String(document?.documentId || '').trim();
+        if (!referenceValue) return null;
+        return `${referenceType} ${referenceValue}${document?.referenceCode ? ` (${document.referenceCode})` : ''}`;
+    }
+
+    private async getOptionalCnjTimelineStatus(id: string, tenantId: string) {
+        try {
+            return await this.getCnjTimelineImportStatus(id, tenantId);
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    private async buildPdfDrxSummary(tenantId: string, process: { title?: string | null; cnj?: string | null }, analysis: FullProcessPdfAnalysis, cnjStatus: TimelineImportStatus | null) {
+        try {
+            const openItems = this.resolvePdfTimelineCandidates(analysis)
+                .filter((document) => document.deadlineCandidates?.length || document.documentType || document.contentText)
+                .slice(0, 8);
+            const pdfOnlyAnalysis = this.shouldUsePdfOnlyAnalysis(analysis);
+            const promptLines = [
+                `Processo: ${String(process?.title || process?.cnj || 'Processo judicial').trim()}`,
+                process?.cnj ? `CNJ: ${process.cnj}` : '',
+                analysis.courtSystem ? `Sistema processual detectado: ${analysis.courtSystem}` : '',
+                analysis.class ? `Classe: ${analysis.class}` : '',
+                analysis.vars ? `Orgao/Vara: ${analysis.vars}` : '',
+                analysis.documents.length ? `Documentos identificados no PDF: ${analysis.documents.length}` : '',
+                analysis.proceduralActs.length ? `Atos processuais relevantes: ${analysis.proceduralActs.length}` : '',
+                analysis.deadlineCandidates.length ? `Candidatos de prazo: ${analysis.deadlineCandidates.length}` : '',
+                !pdfOnlyAnalysis && cnjStatus?.totalAvailableCount ? `Movimentos oficiais no DataJud: ${cnjStatus.totalAvailableCount}` : '',
+                pdfOnlyAnalysis ? 'A leitura deste processo deve ser feita exclusivamente pelo PDF disponibilizado, sem depender de consulta externa ao CNJ/DataJud.' : '',
+                'Atos de destaque:',
+                ...openItems.map((document) => {
+                    const line = [
+                        document.signedAt ? new Date(document.signedAt).toLocaleDateString('pt-BR') : '',
+                        this.buildPdfTimelineTitle(document),
+                        this.buildPdfReferenceLabel(document),
+                    ]
+                        .filter(Boolean)
+                        .join(' - ');
+                    return `- ${line}`;
+                }),
+                'Responda em portugues e em tom operacional.',
+                'Entregue, nesta ordem:',
+                '1. Resumo geral do processo.',
+                '2. Fase atual e leitura estrategica.',
+                '3. Andamentos ou eventos em aberto que exigem atencao imediata.',
+                '4. Acao recomendada pelo escritorio no curto prazo.',
+                '5. Peca adequada, se houver, com justificativa objetiva.',
+                '6. Riscos de prazo, prova ou estrategia.',
+                'Se nao houver peca cabivel neste momento, diga expressamente que nao ha peca imediata recomendada.',
+                pdfOnlyAnalysis ? 'Nao presuma existencia de andamento externo alem do que esta efetivamente no PDF.' : '',
+            ].filter(Boolean);
+
+            const result = await this.drxClawService.runPlayground(tenantId, {
+                scenario: 'Integracao PDF completo do processo + DataJud',
+                prompt: promptLines.join('\n'),
+            });
+
+            return {
+                mode: String(result?.mode || '').trim() || null,
+                provider: String(result?.provider || '').trim() || null,
+                model: String(result?.model || '').trim() || null,
+                answer: String(result?.answer || '').trim() || null,
+                error: String(result?.error || '').trim() || null,
+            };
+        } catch (error: any) {
+            return {
+                mode: null,
+                provider: null,
+                model: null,
+                answer: null,
+                error: String(error?.message || 'Falha ao gerar parecer do DrX-Claw.'),
+            };
+        }
+    }
+
+    private buildTimelineImportActionLabel(status: {
+        canImport: boolean;
+        newMovementCount: number;
+        totalAvailableCount: number;
+    }) {
+        if (!status.canImport) {
+            return 'Busca CNJ indisponivel';
+        }
+
+        if (status.newMovementCount > 0) {
+            return `Importar ${status.newMovementCount} andamento(s) novo(s)`;
+        }
+
+        if (status.totalAvailableCount > 0) {
+            return 'Verificar novos andamentos no CNJ';
+        }
+
+        return 'Buscar andamentos no CNJ';
+    }
+
+    private buildBlockedTimelineImportStatus(
+        cnj: string | null,
+        importedTimelineCount: number,
+        code: TimelineImportReasonCode,
+    ): TimelineImportStatus {
+        return {
+            canImport: false,
+            reasonCode: code,
+            message: this.mapTimelineImportReason(code),
+            actionLabel: 'Busca CNJ indisponivel',
+            checkedAt: new Date().toISOString(),
+            cnj,
+            totalAvailableCount: 0,
+            importedTimelineCount,
+            newMovementCount: 0,
+            lastSourceUpdateAt: null,
+            sourceSystem: null,
+            sourceCourt: null,
+            isProcessSaved: true,
+        };
+    }
+
+    private async getTimelineImportProcessContext(id: string, tenantId: string) {
+        const process = await this.prisma.process.findFirst({
+            where: { id, tenantId },
+            select: {
+                id: true,
+                tenantId: true,
+                cnj: true,
+                title: true,
+                category: true,
+                court: true,
+                courtSystem: true,
+                metadata: true,
+                responsibleLawyer: true,
+            },
+        });
+
+        if (!process) {
+            throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
+        }
+
+        const existingTimelines = await this.prisma.processTimeline.findMany({
+            where: { processId: id },
+            select: {
+                id: true,
+                title: true,
+                date: true,
+                displayId: true,
+                metadata: true,
+            },
+        });
+
+        return { process, existingTimelines };
+    }
+
+    async getCnjTimelineImportStatus(id: string, tenantId: string): Promise<TimelineImportStatus> {
+        const { process, existingTimelines } = await this.getTimelineImportProcessContext(id, tenantId);
+        const normalizedCnj = this.normalizeCnj(process.cnj);
+        const importedTimelineCount = existingTimelines.filter((item) => {
+            const metadata =
+                item?.metadata &&
+                typeof item.metadata === 'object' &&
+                !Array.isArray(item.metadata)
+                    ? (item.metadata as Record<string, any>)
+                    : {};
+
+            return metadata.importSource === 'DATAJUD';
+        }).length;
+
+        if (process.category !== 'JUDICIAL') {
+            return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'PROCESS_NOT_JUDICIAL');
+        }
+
+        if (!normalizedCnj) {
+            return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'CNJ_MISSING');
+        }
+
+        if (normalizedCnj.length !== 20) {
+            return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'CNJ_INVALID');
+        }
+
+        const config = await this.integrationsService.getEffectiveConfig(tenantId);
+        if (!config?.enabled || config?.provider !== 'DATAJUD' || !config?.datajud?.enabled) {
+            return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'DATAJUD_DISABLED');
+        }
+
+        if (!String(config?.datajud?.apiKey || '').trim()) {
+            return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'API_KEY_MISSING');
+        }
+
+        try {
+            const imported = await this.integrationsService.importByCnj(tenantId, normalizedCnj);
+            const raw = imported?.metadata?.raw && typeof imported.metadata.raw === 'object'
+                ? imported.metadata.raw
+                : {};
+            const rawMovements = Array.isArray(raw?.movimentos) ? raw.movimentos : [];
+            const nivelSigilo = Number(imported?.metadata?.nivelSigilo ?? raw?.nivelSigilo ?? 0);
+
+            if (nivelSigilo > 0) {
+                return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'PROCESS_UNDER_SEAL');
+            }
+
+            const existingKeys = new Set(
+                existingTimelines.map((item) => this.getExistingTimelineKey(normalizedCnj, item)),
+            );
+            const newMovementCount = rawMovements.filter(
+                (movement: any) => !existingKeys.has(this.buildImportedTimelineKey(normalizedCnj, movement)),
+            ).length;
+
+            const status: TimelineImportStatus = {
+                canImport: true,
+                reasonCode: 'READY',
+                message:
+                    newMovementCount > 0
+                        ? `O CNJ retornou ${rawMovements.length} andamento(s); ${newMovementCount} ainda nao estao na linha do tempo do processo.`
+                        : `Os ${rawMovements.length} andamento(s) oficiais ja foram verificados. A busca segue disponivel para capturar novidades.`,
+                actionLabel: this.buildTimelineImportActionLabel({
+                    canImport: true,
+                    newMovementCount,
+                    totalAvailableCount: rawMovements.length,
+                }),
+                checkedAt: new Date().toISOString(),
+                cnj: normalizedCnj,
+                totalAvailableCount: rawMovements.length,
+                importedTimelineCount,
+                newMovementCount,
+                lastSourceUpdateAt: String(imported?.metadata?.dataHoraUltimaAtualizacao || raw?.dataHoraUltimaAtualizacao || '') || null,
+                sourceSystem: String(raw?.sistema?.nome || imported?.courtSystem || process.courtSystem || '').trim() || null,
+                sourceCourt: String(raw?.tribunal || process.court || '').trim() || null,
+                isProcessSaved: true,
+            };
+
+            return status;
+        } catch (error: any) {
+            if (error instanceof NotFoundException) {
+                return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'PROCESS_NOT_FOUND_AT_CNJ');
+            }
+
+            return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'CNJ_UNAVAILABLE');
+        }
+    }
+
+    async importCnjTimelines(id: string, tenantId: string) {
+        const { process, existingTimelines } = await this.getTimelineImportProcessContext(id, tenantId);
+        const normalizedCnj = this.normalizeCnj(process.cnj);
+
+        if (!normalizedCnj || normalizedCnj.length !== 20) {
+            throw new BadRequestException('Salve um numero CNJ valido antes de importar os andamentos oficiais.');
+        }
+
+        const status = await this.getCnjTimelineImportStatus(id, tenantId);
+        if (!status.canImport) {
+            throw new BadRequestException(status.message);
+        }
+
+        const imported = await this.integrationsService.importByCnj(tenantId, normalizedCnj);
+        const raw = imported?.metadata?.raw && typeof imported.metadata.raw === 'object'
+            ? imported.metadata.raw
+            : {};
+        const rawMovements = Array.isArray(raw?.movimentos) ? raw.movimentos : [];
+        const existingKeys = new Set(
+            existingTimelines.map((item) => this.getExistingTimelineKey(normalizedCnj, item)),
+        );
+        const timelineOrigin = this.inferTimelineOrigin(
+            String(raw?.sistema?.nome || imported?.courtSystem || process.courtSystem || ''),
+        );
+        const nowIso = new Date().toISOString();
+
+        const newTimelineEntries = rawMovements
+            .slice()
+            .sort((a: any, b: any) => {
+                const left = new Date(String(a?.dataHora || '')).getTime();
+                const right = new Date(String(b?.dataHora || '')).getTime();
+                return left - right;
+            })
+            .filter((movement: any) => {
+                const key = this.buildImportedTimelineKey(normalizedCnj, movement);
+                if (existingKeys.has(key)) {
+                    return false;
+                }
+                existingKeys.add(key);
+                return true;
+            })
+            .map((movement: any) => {
+                const externalKey = this.buildImportedTimelineKey(normalizedCnj, movement);
+                const eventDate = this.parseDate(movement?.dataHora) || new Date();
+
+                return {
+                    processId: id,
+                    title: String(movement?.nome || 'Movimento CNJ').trim() || 'Movimento CNJ',
+                    description: this.buildMovementTimelineDescription(movement),
+                    date: eventDate,
+                    type: 'MOVEMENT',
+                    source: 'CNJ_DATAJUD',
+                    origin: timelineOrigin,
+                    displayId: String(movement?.codigo ?? '').trim() || null,
+                    category: 'REGISTRO',
+                    status: 'PENDENTE',
+                    priority: 'MEDIA',
+                    requesterName: 'CNJ / DataJud',
+                    responsibleName: process.responsibleLawyer || null,
+                    metadata: {
+                        importSource: 'DATAJUD',
+                        externalKey,
+                        movementCode: movement?.codigo ?? null,
+                        movementName: String(movement?.nome || '').trim() || null,
+                        orgaoJulgador: movement?.orgaoJulgador || null,
+                        complementosTabelados: Array.isArray(movement?.complementosTabelados)
+                            ? movement.complementosTabelados
+                            : [],
+                        importedAt: nowIso,
+                        raw: movement,
+                    },
+                };
+            });
+
+        if (newTimelineEntries.length > 0) {
+            await this.prisma.processTimeline.createMany({
+                data: newTimelineEntries,
+            });
+        }
+
+        const currentMetadata =
+            process.metadata && typeof process.metadata === 'object' && !Array.isArray(process.metadata)
+                ? { ...process.metadata }
+                : {};
+
+        await this.prisma.process.update({
+            where: { id },
+            data: {
+                lastCrawledAt: new Date(),
+                metadata: {
+                    ...currentMetadata,
+                    raw,
+                    cnjTimelineImport: {
+                        source: 'DATAJUD',
+                        importedAt: nowIso,
+                        importedCount: newTimelineEntries.length,
+                        totalAvailableCount: rawMovements.length,
+                        skippedCount: rawMovements.length - newTimelineEntries.length,
+                        lastSourceUpdateAt:
+                            String(imported?.metadata?.dataHoraUltimaAtualizacao || raw?.dataHoraUltimaAtualizacao || '') || null,
+                        sourceSystem:
+                            String(raw?.sistema?.nome || imported?.courtSystem || process.courtSystem || '').trim() || null,
+                    },
+                },
+            },
+        });
+
+        return {
+            success: true,
+            processId: id,
+            cnj: normalizedCnj,
+            importedCount: newTimelineEntries.length,
+            skippedCount: rawMovements.length - newTimelineEntries.length,
+            totalAvailableCount: rawMovements.length,
+            message:
+                newTimelineEntries.length > 0
+                    ? `${newTimelineEntries.length} andamento(s) oficial(is) foram adicionados sem alterar o historico ja existente.`
+                    : 'Nenhum novo andamento foi encontrado para importar. O historico atual foi preservado.',
+        };
+    }
+
+    private async upsertProcessFromPdfAnalysis(
+        tenantId: string,
+        analysis: FullProcessPdfAnalysis,
+        originalFileName?: string | null,
+    ) {
+        const normalizedCnj = this.normalizeCnj(analysis.cnj);
+        if (!normalizedCnj) {
+            throw new BadRequestException('Nao foi possivel localizar um numero CNJ no PDF para cadastrar ou atualizar o processo automaticamente.');
+        }
+
+        const existing = await this.prisma.process.findFirst({
+            where: { tenantId, cnj: normalizedCnj },
+            select: {
+                id: true,
+                contactId: true,
+                title: true,
+                code: true,
+                description: true,
+                folder: true,
+                court: true,
+                courtSystem: true,
+                vars: true,
+                district: true,
+                status: true,
+                area: true,
+                subject: true,
+                class: true,
+                distributionDate: true,
+                judge: true,
+                value: true,
+                parties: true,
+                metadata: true,
+            },
+        });
+
+        const normalizedStatus = this.normalizeLifecycleStatus(analysis.status, existing?.status || 'ATIVO');
+        const mergedMetadata = this.buildProcessMetadata(
+            {
+                ...(existing?.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)
+                    ? existing.metadata
+                    : {}),
+                pdfCoverImport: {
+                    source: this.resolvePdfImportSource(analysis),
+                    importedAt: new Date().toISOString(),
+                    originalFileName: originalFileName || null,
+                    pageCount: analysis.pageCount,
+                    textLength: analysis.textLength,
+                    timelineReferenceType: analysis.timelineReferenceType,
+                },
+            },
+            analysis.status,
+            normalizedStatus,
+        );
+
+        const code = existing?.code || (await this.buildProcessCode(tenantId, { category: 'JUDICIAL', cnj: normalizedCnj } as CreateProcessDto));
+        const processData = {
+            tenantId,
+            contactId: existing?.contactId || undefined,
+            cnj: normalizedCnj,
+            category: 'JUDICIAL',
+            title: analysis.title || existing?.title || `Processo ${normalizedCnj}`,
+            code,
+            description: analysis.description || existing?.description || undefined,
+            folder: existing?.folder || undefined,
+            court: analysis.court || existing?.court || undefined,
+            courtSystem: analysis.courtSystem || existing?.courtSystem || undefined,
+            npu: normalizedCnj,
+            vars: analysis.vars || existing?.vars || undefined,
+            district: analysis.district || existing?.district || undefined,
+            status: normalizedStatus,
+            area: analysis.area || existing?.area || undefined,
+            subject: analysis.subject || existing?.subject || undefined,
+            class: analysis.class || existing?.class || undefined,
+            distributionDate: this.parseDate(analysis.distributionDate) || existing?.distributionDate || undefined,
+            judge: analysis.judge || existing?.judge || undefined,
+            value: this.parseMoneyValue(analysis.value) ?? existing?.value ?? undefined,
+            parties: analysis.parts?.length ? analysis.parts : (existing?.parties as any[] | undefined) || [],
+            metadata: mergedMetadata,
+        };
+
+        const process = await this.prisma.process.upsert({
+            where: {
+                tenantId_cnj: {
+                    tenantId,
+                    cnj: normalizedCnj,
+                },
+            },
+            update: processData,
+            create: processData,
+        });
+
+        if ((Array.isArray(processData.parties) && processData.parties.length > 0) || this.isInformativeJudgeName(processData.judge)) {
+            await this.syncImportedProcessParties(process.id, tenantId, processData.parties as any[], processData.judge);
+        }
+
+        await this.syncMicrosoftFolder(tenantId, process.id);
+        return {
+            processId: process.id,
+            processAction: existing ? 'UPDATED' : 'CREATED',
+        };
+    }
+
+    private async upsertPdfDrxGuidanceTimeline(
+        processId: string,
+        process: { responsibleLawyer?: string | null },
+        analysis: FullProcessPdfAnalysis,
+        drxSummary: { answer: string | null },
+    ) {
+        const answer = String(drxSummary?.answer || '').trim();
+        if (!answer) return null;
+
+        const externalKey = `DRX_PDF_GUIDANCE::${this.resolvePdfImportSource(analysis)}`;
+        const existingEntries = await this.prisma.processTimeline.findMany({
+            where: {
+                processId,
+                source: 'DRX_CLAW',
+            },
+            select: {
+                id: true,
+                metadata: true,
+                status: true,
+            },
+        });
+
+        const existing = existingEntries.find((item) => {
+            const metadata =
+                item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+                    ? (item.metadata as Record<string, any>)
+                    : {};
+            return metadata.externalKey === externalKey;
+        });
+
+        const fatalDate = analysis.deadlineCandidates.find((candidate) => candidate.fatalDate)?.fatalDate || null;
+        const data = {
+            title: 'DrX-Claw: resumo e proximo passo',
+            description: answer,
+            date: new Date(),
+            type: 'MOVEMENT',
+            source: 'DRX_CLAW',
+            origin: 'IA',
+            category: 'ACAO',
+            status: existing?.status || 'PENDENTE',
+            priority: fatalDate ? 'ALTA' : 'MEDIA',
+            fatalDate: fatalDate ? new Date(fatalDate) : null,
+            requesterName: 'DrX-Claw',
+            responsibleName: process.responsibleLawyer || null,
+            metadata: {
+                externalKey,
+                importSource: this.resolvePdfImportSource(analysis),
+                analysisSource: 'PROCESS_PDF',
+                updatedAt: new Date().toISOString(),
+            },
+        };
+
+        if (existing) {
+            return this.prisma.processTimeline.update({
+                where: { id: existing.id },
+                data,
+            });
+        }
+
+        return this.prisma.processTimeline.create({
+            data: {
+                processId,
+                ...data,
+            },
+        });
+    }
+
+    private async importProcessPdfDossierFromAnalysis(
+        id: string,
+        tenantId: string,
+        analysis: FullProcessPdfAnalysis,
+        originalFileName?: string | null,
+    ): Promise<PdfDossierImportResult> {
+        const { process, existingTimelines } = await this.getTimelineImportProcessContext(id, tenantId);
+        const normalizedCnj = this.normalizeCnj(process.cnj || analysis.cnj);
+        const timelineOrigin = this.inferTimelineOrigin(analysis.courtSystem || process.courtSystem || process.court);
+        const pdfOnlyAnalysis = this.shouldUsePdfOnlyAnalysis(analysis);
+        const cnjStatus = pdfOnlyAnalysis ? null : await this.getOptionalCnjTimelineStatus(id, tenantId);
+        const importCandidates = this.resolvePdfTimelineCandidates(analysis);
+        const existingKeys = new Set(
+            existingTimelines.map((item) => this.getExistingTimelineKey(normalizedCnj || '', item)),
+        );
+        const nowIso = new Date().toISOString();
+        const importSource = this.resolvePdfImportSource(analysis);
+        const requesterLabel = analysis.courtSystem === 'Eproc' ? 'Eproc / PDF integral' : analysis.courtSystem === 'PJe' ? 'PJe / PDF integral' : 'Tribunal / PDF integral';
+
+        const newTimelineEntries = importCandidates
+            .filter((document) => {
+                const externalKey = this.buildPdfImportedTimelineKey(normalizedCnj || analysis.cnj || null, document, analysis);
+                if (existingKeys.has(externalKey)) {
+                    return false;
+                }
+                existingKeys.add(externalKey);
+                return true;
+            })
+            .map((document) => {
+                const externalKey = this.buildPdfImportedTimelineKey(normalizedCnj || analysis.cnj || null, document, analysis);
+                const eventDate =
+                    this.parseDate(document.signedAt) ||
+                    this.parseDate(analysis.distributionDate) ||
+                    new Date();
+                const fatalDate = this.pickPdfFatalDate(document);
+
+                return {
+                    processId: id,
+                    title: this.buildPdfTimelineTitle(document),
+                    description: this.buildPdfTimelineDescription(document),
+                    date: eventDate,
+                    type: 'FILE',
+                    source: importSource,
+                    origin: timelineOrigin,
+                    displayId: String(document.documentId || '').trim() || null,
+                    category: 'REGISTRO',
+                    status: 'PENDENTE',
+                    priority: fatalDate ? 'ALTA' : 'MEDIA',
+                    fatalDate: fatalDate ? new Date(fatalDate) : null,
+                    requesterName: requesterLabel,
+                    responsibleName: process.responsibleLawyer || null,
+                    metadata: {
+                        importSource,
+                        externalKey,
+                        externalDocumentId: document.referenceType === 'EVENT' ? null : String(document.documentId || '').trim() || null,
+                        externalEventNumber: document.referenceType === 'EVENT' ? String(document.documentId || '').trim() || null : null,
+                        referenceType: document.referenceType || null,
+                        referenceCode: document.referenceCode || null,
+                        eventSequence: document.eventSequence || null,
+                        actorName: document.actorName || null,
+                        documentType: document.documentType || null,
+                        signedAt: document.signedAt || null,
+                        pageHint: document.pageHint || null,
+                        deadlineCandidates: document.deadlineCandidates || [],
+                        importedAt: nowIso,
+                        originalFileName: originalFileName || null,
+                        raw: {
+                            documentId: document.documentId,
+                            label: document.label,
+                            documentType: document.documentType || null,
+                            signedAt: document.signedAt || null,
+                            pageHint: document.pageHint || null,
+                            referenceType: document.referenceType || null,
+                            referenceCode: document.referenceCode || null,
+                            eventSequence: document.eventSequence || null,
+                            actorName: document.actorName || null,
+                        },
+                    },
+                };
+            });
+
+        if (newTimelineEntries.length > 0) {
+            await this.prisma.processTimeline.createMany({
+                data: newTimelineEntries,
+            });
+        }
+
+        const drxSummary = await this.buildPdfDrxSummary(tenantId, process, analysis, cnjStatus);
+        const currentMetadata =
+            process.metadata && typeof process.metadata === 'object' && !Array.isArray(process.metadata)
+                ? { ...process.metadata }
+                : {};
+        const explicitFatalDateCount = analysis.deadlineCandidates.filter((candidate) => candidate.fatalDate).length;
+
+        await this.prisma.process.update({
+            where: { id },
+            data: {
+                court: analysis.court || undefined,
+                courtSystem: analysis.courtSystem || undefined,
+                vars: analysis.vars || undefined,
+                district: analysis.district || undefined,
+                subject: analysis.subject || undefined,
+                class: analysis.class || undefined,
+                distributionDate: this.parseDate(analysis.distributionDate),
+                judge: analysis.judge || undefined,
+                value: this.parseMoneyValue(analysis.value),
+                parties: analysis.parts?.length ? analysis.parts : undefined,
+                lastCrawledAt: new Date(),
+                metadata: {
+                    ...currentMetadata,
+                    pdfDossierImport: {
+                        source: importSource,
+                        sourceSystem: analysis.courtSystem || null,
+                        importedAt: nowIso,
+                        originalFileName: originalFileName || null,
+                        importedCount: newTimelineEntries.length,
+                        skippedCount: importCandidates.length - newTimelineEntries.length,
+                        totalCandidateCount: importCandidates.length,
+                        pageCount: analysis.pageCount,
+                        textLength: analysis.textLength,
+                        ocrStatus: analysis.ocrStatus,
+                        documentCount: analysis.documents.length,
+                        proceduralActCount: analysis.proceduralActs.length,
+                        deadlineCount: analysis.deadlineCandidates.length,
+                        explicitFatalDateCount,
+                        cnjMovementCount: cnjStatus?.totalAvailableCount || 0,
+                        pdfOnlyAnalysis,
+                        detectedCnj: analysis.cnj || null,
+                        timelineReferenceType: analysis.timelineReferenceType,
+                        drxSummary,
+                        lastAnalysisExcerpt: analysis.rawTextExcerpt.slice(0, 1200),
+                    },
+                },
+            },
+        });
+
+        if ((analysis.parts?.length || 0) > 0 || this.isInformativeJudgeName(analysis.judge)) {
+            await this.syncImportedProcessParties(id, tenantId, analysis.parts as any[], analysis.judge);
+        }
+
+        await this.upsertPdfDrxGuidanceTimeline(id, process, analysis, drxSummary);
+
+        return {
+            success: true,
+            processId: id,
+            originalFileName: originalFileName || null,
+            importedCount: newTimelineEntries.length,
+            skippedCount: importCandidates.length - newTimelineEntries.length,
+            totalCandidateCount: importCandidates.length,
+            deadlineCount: analysis.deadlineCandidates.length,
+            explicitFatalDateCount,
+            cnjMovementCount: cnjStatus?.totalAvailableCount || 0,
+            cnjImportStatus: cnjStatus,
+            drxSummary,
+            analysis: {
+                cnj: analysis.cnj,
+                pageCount: analysis.pageCount,
+                textLength: analysis.textLength,
+                ocrStatus: analysis.ocrStatus,
+                documentCount: analysis.documents.length,
+                proceduralActCount: analysis.proceduralActs.length,
+            },
+            message:
+                newTimelineEntries.length > 0
+                    ? `${newTimelineEntries.length} andamento(s) enriquecido(s) a partir do PDF do processo (${analysis.courtSystem || 'tribunal'}), sem sobrescrever o historico existente.${pdfOnlyAnalysis ? ' Analise realizada somente pelo PDF.' : ''}`
+                    : `Nenhum novo documento processual foi identificado para importar. Os registros ja existentes foram preservados.${pdfOnlyAnalysis ? ' Analise realizada somente pelo PDF.' : ''}`,
+        };
+    }
+
+    async importProcessPdfAndUpsertProcess(
+        tenantId: string,
+        fileBuffer: Buffer,
+        originalFileName?: string | null,
+    ) {
+        const analysis = await this.pdfService.analyzeFullProcessPdf(fileBuffer);
+        const upsertResult = await this.upsertProcessFromPdfAnalysis(tenantId, analysis, originalFileName);
+        const importResult = await this.importProcessPdfDossierFromAnalysis(upsertResult.processId, tenantId, analysis, originalFileName);
+        const process = await this.findOne(upsertResult.processId, tenantId);
+
+        return {
+            ...importResult,
+            processAction: upsertResult.processAction,
+            process,
+            message:
+                upsertResult.processAction === 'CREATED'
+                    ? `Processo cadastrado a partir do PDF e sincronizado com partes, andamentos e leitura do DrX-Claw. ${importResult.message}`
+                    : `Processo atualizado a partir do PDF e sincronizado com partes, andamentos e leitura do DrX-Claw. ${importResult.message}`,
+        };
+    }
+
+    async importProcessPdfDossier(
+        id: string,
+        tenantId: string,
+        fileBuffer: Buffer,
+        originalFileName?: string | null,
+    ): Promise<PdfDossierImportResult> {
+        const analysis = await this.pdfService.analyzeFullProcessPdf(fileBuffer);
+        return this.importProcessPdfDossierFromAnalysis(id, tenantId, analysis, originalFileName);
     }
 
     private parseDate(value: any) {

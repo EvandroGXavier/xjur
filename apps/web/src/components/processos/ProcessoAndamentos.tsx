@@ -514,6 +514,12 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                 <span className="font-bold text-[#0056b3] text-sm hover:underline cursor-pointer" onClick={() => openEdit(item)}>
                                                     {item.title}
                                                 </span>
+                                                {item.displayId && (
+                                                    <div className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-violet-700">
+                                                        <span className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5">ID PJe</span>
+                                                        <span className="font-mono">{item.displayId}</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 italic">
                                                     <span className="font-bold">Resp:</span>
                                                     <span className="text-slate-800 font-medium truncate max-w-[150px]">{item.responsibleName || 'Não definido'}</span>
@@ -600,6 +606,15 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         </td>
                                         <td className="px-2 py-1.5 border-r border-slate-200 text-slate-600 text-[10px] align-top">
                                             <div className="flex flex-col gap-1.5">
+                                                {item.displayId && (
+                                                    <div className="flex flex-col gap-0.5 rounded border border-violet-100 bg-violet-50/70 p-1" title="Identificador do documento/expediente no tribunal">
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="font-bold text-violet-500 w-3">D:</span>
+                                                            <span className="text-violet-700 font-bold uppercase text-[9px]">Documento:</span>
+                                                        </div>
+                                                        <span className="pl-4 font-mono font-semibold text-violet-900">{item.displayId}</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex flex-col gap-0.5" title={`Criado em: ${formatDateDisplay(item.createdAt)}`}>
                                                     <div className="flex items-center gap-1">
                                                         <span className="font-bold text-slate-400 w-3">C:</span>
