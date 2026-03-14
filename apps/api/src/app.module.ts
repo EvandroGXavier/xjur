@@ -29,6 +29,7 @@ import { AgentModule } from "./agent/agent.module";
 import { DrxClawModule } from "./drx-claw/drx-claw.module";
 import { BackupModule } from "./backup/backup.module";
 import { TelegramModule } from "./telegram/telegram.module";
+import { InboxModule } from "./inbox/inbox.module";
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { TelegramModule } from "./telegram/telegram.module";
     DrxClawModule,
     BackupModule,
     TelegramModule,
+    InboxModule,
   ],
   controllers: [AppController],
   providers: [

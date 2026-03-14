@@ -45,13 +45,24 @@ const EMPTY_FORM = {
     category: 'EXTRAJUDICIAL',
     area: '',
     subject: '',
+    class: '',
+    distributionDate: '',
     judge: '',
     value: 0,
     description: '',
     folder: '',
+    metadata: null as any,
 };
 
-type ImportedParty = { name: string; type: string; document?: string };
+type ImportedParty = {
+    name: string;
+    type: string;
+    document?: string;
+    phone?: string;
+    email?: string;
+    oab?: string;
+    representedNames?: string[];
+};
 
 export function ProcessForm() {
     const { id } = useParams();
@@ -84,10 +95,15 @@ export function ProcessForm() {
         category: payload.cnj ? 'JUDICIAL' : form.category,
         area: payload.area || form.area,
         subject: payload.subject || form.subject,
+        class: payload.class || form.class,
+        distributionDate: payload.distributionDate
+            ? String(payload.distributionDate).slice(0, 10)
+            : form.distributionDate,
         judge: payload.judge || form.judge,
         value: typeof payload.value === 'number' && payload.value > 0 ? payload.value : form.value,
         description: payload.description || form.description,
         folder: payload.folder || form.folder,
+        metadata: payload.metadata || form.metadata,
     });
 
     const fetchProcess = async () => {
@@ -97,7 +113,7 @@ export function ProcessForm() {
             const data = res.data;
             setForm({
                 title: data.title || '',
-                cnj: data.cnj || '',
+                cnj: data.cnj ? masks.cnj(data.cnj) : '',
                 court: data.court || '',
                 courtSystem: data.courtSystem || '',
                 vars: data.vars || '',
@@ -106,14 +122,19 @@ export function ProcessForm() {
                 category: data.category || 'JUDICIAL',
                 area: data.area || '',
                 subject: data.subject || '',
+                class: data.class || '',
+                distributionDate: data.distributionDate ? String(data.distributionDate).slice(0, 10) : '',
                 judge: data.judge || '',
                 value: data.value ? parseFloat(data.value) : 0,
                 description: data.description || '',
                 folder: data.folder || data.msFolderUrl || '',
+                metadata: data.metadata || null,
             });
             setImportedParties(Array.isArray(data.parties) ? data.parties : []);
             setLastConsultSummary(
-                Array.isArray(data.parties) && data.parties.length > 0
+                Array.isArray(data.processParties) && data.processParties.length > 0
+                    ? `${data.processParties.length} parte(s) sincronizadas no cadastro do processo${Array.isArray(data.processPartyRepresentations) && data.processPartyRepresentations.length > 0 ? ` e ${data.processPartyRepresentations.length} vinculo(s) de representacao` : ''}`
+                    : Array.isArray(data.parties) && data.parties.length > 0
                     ? `${data.parties.length} parte(s) prontas para sincronizacao`
                     : '',
             );
@@ -167,7 +188,8 @@ export function ProcessForm() {
             setForm(mergedForm);
             setImportedParties(parties);
 
-            const summary = `Capa atualizada e ${parties.length} parte(s) preparadas para sincronizacao.`;
+            const lawyerCount = parties.filter(party => String(party.type || '').toUpperCase().includes('ADVOG')).length;
+            const summary = `Capa atualizada e ${parties.length} parte(s) preparadas para sincronizacao${lawyerCount > 0 ? `, incluindo ${lawyerCount} advogado(s)` : ''}.`;
             setLastConsultSummary(summary);
 
             if (persistAfterFetch && isEditing) {
@@ -198,10 +220,10 @@ export function ProcessForm() {
             return;
         }
 
-        const payload = {
-            ...form,
-            parties: importedParties.length > 0 ? importedParties : undefined,
-        };
+            const payload = {
+                ...form,
+                parties: importedParties.length > 0 ? importedParties : undefined,
+            };
 
         setLoading(true);
         try {
@@ -371,8 +393,10 @@ export function ProcessForm() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                 <div className="space-y-1.5"><label className={labelClass}>Tribunal</label><input value={form.court} onChange={e => setForm({ ...form, court: e.target.value })} className={inputClass} placeholder="TJMG, TRF1, TRT3..." /></div>
                                 <div className="space-y-1.5"><label className={labelClass}>Sistema</label><input value={form.courtSystem} onChange={e => setForm({ ...form, courtSystem: e.target.value })} className={inputClass} placeholder="PJe, Eproc, Projudi..." /></div>
+                                <div className="space-y-1.5"><label className={labelClass}>Classe Processual</label><input value={form.class} onChange={e => setForm({ ...form, class: e.target.value })} className={inputClass} placeholder="Procedimento Comum, Execucao..." /></div>
                                 <div className="space-y-1.5"><label className={labelClass}>Vara / Orgao</label><input value={form.vars} onChange={e => setForm({ ...form, vars: e.target.value })} className={inputClass} placeholder="2a Vara Civel" /></div>
                                 <div className="space-y-1.5"><label className={labelClass}>Comarca</label><input value={form.district} onChange={e => setForm({ ...form, district: e.target.value })} className={inputClass} placeholder="Belo Horizonte" /></div>
+                                <div className="space-y-1.5"><label className={labelClass}>Distribuicao</label><input type="date" value={form.distributionDate} onChange={e => setForm({ ...form, distributionDate: e.target.value })} className={inputClass} /></div>
                                 <div className="space-y-1.5"><label className={labelClass}>Magistrado</label><input value={form.judge} onChange={e => setForm({ ...form, judge: e.target.value })} className={inputClass} placeholder="Dr. Joao da Silva" /></div>
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Valor da Causa</label>

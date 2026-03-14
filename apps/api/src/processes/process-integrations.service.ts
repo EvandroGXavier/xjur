@@ -422,10 +422,13 @@ export class ProcessIntegrationsService {
       item?.nome ||
         item?.nomeParte ||
         item?.nomePessoa ||
+        item?.nomeParticipante ||
         item?.parte ||
         item?.participantName ||
         item?.pessoa?.nome ||
         item?.pessoa?.nomeCompleto ||
+        item?.advogado?.nome ||
+        item?.representante?.nome ||
         "",
     ).trim();
   }
@@ -436,12 +439,51 @@ export class ProcessIntegrationsService {
         item?.numeroDocumento ||
         item?.cpfCnpj ||
         item?.document ||
+        item?.cpf ||
+        item?.cnpj ||
         item?.pessoa?.numeroDocumento ||
         item?.pessoa?.cpfCnpj ||
+        item?.advogado?.numeroDocumento ||
+        item?.representante?.numeroDocumento ||
         "",
     ).trim();
 
     return raw ? raw.replace(/\D/g, "") : undefined;
+  }
+
+  private extractPartyEmail(item: any) {
+    return String(
+      item?.email ||
+        item?.contato?.email ||
+        item?.pessoa?.email ||
+        item?.advogado?.email ||
+        item?.representante?.email ||
+        "",
+    ).trim() || undefined;
+  }
+
+  private extractPartyPhone(item: any) {
+    return String(
+      item?.telefone ||
+        item?.phone ||
+        item?.celular ||
+        item?.contato?.telefone ||
+        item?.pessoa?.telefone ||
+        item?.advogado?.telefone ||
+        item?.representante?.telefone ||
+        "",
+    ).trim() || undefined;
+  }
+
+  private extractPartyOab(item: any) {
+    return String(
+      item?.oab ||
+        item?.numeroOab ||
+        item?.inscricaoOab ||
+        item?.advogado?.oab ||
+        item?.representante?.oab ||
+        "",
+    ).trim() || undefined;
   }
 
   private extractPartyType(item: any, fallbackType: string) {
@@ -492,23 +534,140 @@ export class ProcessIntegrationsService {
     return fallbackType;
   }
 
-  private appendParties(target: Array<{ name: string; type: string; document?: string }>, items: any, fallbackType: string) {
+  private extractNamesFromCandidate(candidate: any): string[] {
+    if (!candidate) return [];
+
+    if (Array.isArray(candidate)) {
+      return candidate.flatMap(item => this.extractNamesFromCandidate(item));
+    }
+
+    if (typeof candidate === "string") {
+      const name = candidate.trim();
+      return name ? [name] : [];
+    }
+
+    const directName = this.extractPartyName(candidate);
+    return directName ? [directName] : [];
+  }
+
+  private extractRepresentedNames(item: any, parentName?: string) {
+    const collected = [
+      ...this.extractNamesFromCandidate(item?.parteRepresentada),
+      ...this.extractNamesFromCandidate(item?.partesRepresentadas),
+      ...this.extractNamesFromCandidate(item?.representado),
+      ...this.extractNamesFromCandidate(item?.representados),
+      ...this.extractNamesFromCandidate(item?.constituinte),
+      ...this.extractNamesFromCandidate(item?.constituintes),
+      ...this.extractNamesFromCandidate(item?.cliente),
+      ...this.extractNamesFromCandidate(item?.clientes),
+      ...this.extractNamesFromCandidate(item?.partePrincipal),
+      ...this.extractNamesFromCandidate(item?.partesPrincipais),
+      ...this.extractNamesFromCandidate(item?.pessoaRepresentada),
+      ...this.extractNamesFromCandidate(item?.nomeRepresentado),
+      ...this.extractNamesFromCandidate(item?.nomeRepresentada),
+      ...(parentName ? [parentName] : []),
+    ];
+
+    const unique = new Map<string, string>();
+    for (const name of collected) {
+      const normalized = this.normalizeText(name);
+      if (normalized && !unique.has(normalized)) {
+        unique.set(normalized, name.trim());
+      }
+    }
+    return Array.from(unique.values());
+  }
+
+  private appendPartySnapshot(
+    target: Array<{
+      name: string;
+      type: string;
+      document?: string;
+      email?: string;
+      phone?: string;
+      oab?: string;
+      representedNames?: string[];
+    }>,
+    item: any,
+    fallbackType: string,
+    parentName?: string,
+  ) {
+    const name = this.extractPartyName(item);
+    if (!name) return;
+
+    target.push({
+      name,
+      type: this.extractPartyType(item, fallbackType),
+      document: this.extractPartyDocument(item),
+      email: this.extractPartyEmail(item),
+      phone: this.extractPartyPhone(item),
+      oab: this.extractPartyOab(item),
+      representedNames: this.extractRepresentedNames(item, parentName),
+    });
+  }
+
+  private appendNestedRepresentatives(
+    target: Array<{
+      name: string;
+      type: string;
+      document?: string;
+      email?: string;
+      phone?: string;
+      oab?: string;
+      representedNames?: string[];
+    }>,
+    item: any,
+    parentName?: string,
+  ) {
+    const nestedCollections = [
+      item?.advogados,
+      item?.representantes,
+      item?.procuradores,
+      item?.defensores,
+      item?.representantesProcessuais,
+    ];
+
+    for (const collection of nestedCollections) {
+      if (!Array.isArray(collection)) continue;
+      for (const nestedItem of collection) {
+        this.appendPartySnapshot(target, nestedItem, "ADVOGADO", parentName);
+      }
+    }
+  }
+
+  private appendParties(
+    target: Array<{
+      name: string;
+      type: string;
+      document?: string;
+      email?: string;
+      phone?: string;
+      oab?: string;
+      representedNames?: string[];
+    }>,
+    items: any,
+    fallbackType: string,
+    parentName?: string,
+  ) {
     if (!Array.isArray(items)) return;
 
     for (const item of items) {
-      const name = this.extractPartyName(item);
-      if (!name) continue;
-
-      target.push({
-        name,
-        type: this.extractPartyType(item, fallbackType),
-        document: this.extractPartyDocument(item),
-      });
+      const currentName = this.extractPartyName(item);
+      this.appendPartySnapshot(target, item, fallbackType, parentName);
+      this.appendNestedRepresentatives(target, item, currentName || parentName);
     }
   }
 
   private extractPartiesFromSource(source: any) {
-    const collected: Array<{ name: string; type: string; document?: string }> = [];
+    const collected: Array<{
+      name: string;
+      type: string;
+      document?: string;
+      email?: string;
+      phone?: string;
+      oab?: string;
+      representedNames?: string[];
+    }> = [];
 
     this.appendParties(collected, source?.poloAtivo, "AUTOR");
     this.appendParties(collected, source?.poloPassivo, "REU");
@@ -518,7 +677,18 @@ export class ProcessIntegrationsService {
     this.appendParties(collected, source?.advogados, "ADVOGADO");
     this.appendParties(collected, source?.representantes, "ADVOGADO");
 
-    const uniqueMap = new Map<string, { name: string; type: string; document?: string }>();
+    const uniqueMap = new Map<
+      string,
+      {
+        name: string;
+        type: string;
+        document?: string;
+        email?: string;
+        phone?: string;
+        oab?: string;
+        representedNames?: string[];
+      }
+    >();
 
     for (const party of collected) {
       const normalizedName = this.normalizeText(party.name);
@@ -530,11 +700,50 @@ export class ProcessIntegrationsService {
           name: party.name,
           type: party.type,
           document: party.document,
+          email: party.email,
+          phone: party.phone,
+          oab: party.oab,
+          representedNames: party.representedNames || [],
+        });
+      } else {
+        const existing = uniqueMap.get(key)!;
+        const representedNames = new Map<string, string>();
+        for (const name of [...(existing.representedNames || []), ...(party.representedNames || [])]) {
+          const normalizedTarget = this.normalizeText(name);
+          if (normalizedTarget && !representedNames.has(normalizedTarget)) {
+            representedNames.set(normalizedTarget, name);
+          }
+        }
+        uniqueMap.set(key, {
+          ...existing,
+          document: existing.document || party.document,
+          email: existing.email || party.email,
+          phone: existing.phone || party.phone,
+          oab: existing.oab || party.oab,
+          representedNames: Array.from(representedNames.values()),
         });
       }
     }
 
     return Array.from(uniqueMap.values());
+  }
+
+  private extractJudgeName(source: any) {
+    const candidates = [
+      source?.orgaoJulgador?.juiz,
+      source?.orgaoJulgador?.magistrado,
+      source?.juiz,
+      source?.magistrado,
+      source?.relator?.nome,
+      source?.julgador?.nome,
+    ];
+
+    for (const candidate of candidates) {
+      const value = String(candidate || "").trim();
+      if (value) return value;
+    }
+
+    return "Nao informado via DataJud";
   }
 
   private mapDataJudHit(hit: any, config: ProcessIntegrationConfig) {
@@ -568,13 +777,15 @@ export class ProcessIntegrationsService {
       .find((item) => Number.isFinite(item) && item > 0);
 
     const systemName = String(source?.sistema?.nome || "").trim();
+    const parties = this.extractPartiesFromSource(source);
+    const normalizedCnj = String(source?.numeroProcesso || "").trim();
 
     return {
-      cnj: String(source?.numeroProcesso || "").trim(),
-      npu: String(source?.numeroProcesso || "").trim(),
+      cnj: normalizedCnj,
+      npu: normalizedCnj,
       title:
         String(source?.classe?.nome || "").trim() ||
-        `Processo ${String(source?.numeroProcesso || "").trim()}`,
+        `Processo ${normalizedCnj}`,
       court: String(source?.tribunal || config.datajud.tribunalCode).trim(),
       courtSystem:
         !systemName || systemName.toLowerCase() === "inválido"
@@ -587,15 +798,21 @@ export class ProcessIntegrationsService {
       subject: assuntos.join(" | "),
       class: String(source?.classe?.nome || "").trim(),
       distributionDate: this.parseCompactDate(source?.dataAjuizamento),
-      judge: "Nao informado via DataJud",
+      judge: this.extractJudgeName(source),
       value: numericValue || 0,
-      parties: this.extractPartiesFromSource(source),
+      parties,
       movements,
       metadata: {
         source: "DATAJUD",
         tribunalAlias: config.datajud.tribunalAlias,
         hitId: hit?._id || source?.id || null,
         nivelSigilo: source?.nivelSigilo ?? null,
+        dataHoraUltimaAtualizacao: source?.dataHoraUltimaAtualizacao || null,
+        grau: source?.grau || null,
+        sistema: source?.sistema || null,
+        orgaoJulgador: source?.orgaoJulgador || null,
+        assuntos,
+        partiesCount: parties.length,
         importedAt: new Date().toISOString(),
         raw: source,
       },

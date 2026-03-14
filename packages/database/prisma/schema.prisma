@@ -51,29 +51,32 @@ model Tenant {
   msStorageActive Boolean @default(false)
 
   // New Modules Relationships
-  tags                Tag[]
-  appointments        Appointment[]
-  proposals           Proposal[]
-  invoices            Invoice[]
-  fiscalConfig        FiscalConfig?
-  products            Product[]
-  suppliers           Supplier[]
-  inventoryMovements  InventoryMovement[]
-  tickets             Ticket[]
-  waInstances         WaInstance[]
-  connections         Connection[]
-  inventoryConfig     InventoryConfig?
-  partyRoles          PartyRole[]
-  partyQualifications PartyQualification[]
-  processParties      ProcessParty[]
+  tags                        Tag[]
+  appointments                Appointment[]
+  proposals                   Proposal[]
+  invoices                    Invoice[]
+  fiscalConfig                FiscalConfig?
+  products                    Product[]
+  suppliers                   Supplier[]
+  inventoryMovements          InventoryMovement[]
+  tickets                     Ticket[]
+  waInstances                 WaInstance[]
+  connections                 Connection[]
+  inventoryConfig             InventoryConfig?
+  partyRoles                  PartyRole[]
+  partyQualifications         PartyQualification[]
+  processParties              ProcessParty[]
   processPartyRepresentations ProcessPartyRepresentation[]
-  purchaseOrders      PurchaseOrder[]
-  paymentConditions   PaymentCondition[]
-  securitySecrets     SecuritySecret[]
-  securitySettings    SecuritySetting[]
-  agentConversations  AgentConversation[]
-  agentMessages       AgentMessage[]
-  agentRuns           AgentRun[]
+  purchaseOrders              PurchaseOrder[]
+  paymentConditions           PaymentCondition[]
+  securitySecrets             SecuritySecret[]
+  securitySettings            SecuritySetting[]
+  agentConversations          AgentConversation[]
+  agentMessages               AgentMessage[]
+  agentRuns                   AgentRun[]
+  agentParticipants           AgentParticipant[]
+  agentMessageEvents          AgentMessageEvent[]
+  agentMessageLinks           AgentMessageLink[]
 
   // Preferences
   contactRequireOneInfo Boolean @default(true) // Se false, celular/telefone/email ficam não-obrigatórios
@@ -94,19 +97,22 @@ model Plan {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  email       String   @unique
-  password    String
-  role        String // OWNER, ADMIN, MEMBER
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  email        String   @unique
+  password     String
+  role         String // OWNER, ADMIN, MEMBER
   permissions  Json?
   theme        String   @default("SYSTEM") // SYSTEM, LIGHT, DARK
   soundEnabled Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant                     Tenant              @relation(fields: [tenantId], references: [id])
+  assignedAgentConversations AgentConversation[] @relation("AssignedAgentConversations")
+  agentParticipants          AgentParticipant[]  @relation("AgentParticipantUser")
+  agentMessageLinks          AgentMessageLink[]  @relation("AgentMessageLinkedBy")
 
   @@map("users")
 }
@@ -157,8 +163,9 @@ model Contact {
   financialParties          FinancialParty[]
   products                  Product[]
   purchaseOrders            PurchaseOrder[] // Como fornecedor
-  purchasesAsBuyer          PurchaseOrder[] @relation("PurchaseOrderBuyer") // Como comprador
+  purchasesAsBuyer          PurchaseOrder[]          @relation("PurchaseOrderBuyer") // Como comprador
   agentConversations        AgentConversation[]
+  agentParticipants         AgentParticipant[]       @relation("AgentParticipantContact")
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -309,12 +316,12 @@ model Address {
 }
 
 model AdditionalContact {
-  id        String  @id @default(uuid())
-  contactId String
-  type      String // EMAIL, PHONE, ETC
-  value     String
+  id                   String  @id @default(uuid())
+  contactId            String
+  type                 String // EMAIL, PHONE, ETC
+  value                String
   nomeContatoAdicional String?
-  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact              Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@map("additional_contacts")
 }
@@ -367,13 +374,15 @@ model Process {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
-  contact        Contact?          @relation(fields: [contactId], references: [id])
-  timeline       ProcessTimeline[]
-  financials     FinancialRecord[]
-  appointments   Appointment[]
-  processParties ProcessParty[]
+  contact                     Contact?                     @relation(fields: [contactId], references: [id])
+  timeline                    ProcessTimeline[]
+  financials                  FinancialRecord[]
+  appointments                Appointment[]
+  processParties              ProcessParty[]
   processPartyRepresentations ProcessPartyRepresentation[]
-  tags           ProcessTag[]
+  tags                        ProcessTag[]
+  agentConversations          AgentConversation[]
+  agentMessageLinks           AgentMessageLink[]
 
   @@unique([tenantId, code])
   @@map("processes")
@@ -424,12 +433,12 @@ model ProcessParty {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  process       Process             @relation(fields: [processId], references: [id], onDelete: Cascade)
-  contact       Contact             @relation(fields: [contactId], references: [id])
-  role          PartyRole           @relation(fields: [roleId], references: [id])
-  qualification PartyQualification? @relation(fields: [qualificationId], references: [id])
-  tenant        Tenant              @relation(fields: [tenantId], references: [id])
-  representativeLinks ProcessPartyRepresentation[] @relation("ProcessPartyPrincipal")
+  process               Process                      @relation(fields: [processId], references: [id], onDelete: Cascade)
+  contact               Contact                      @relation(fields: [contactId], references: [id])
+  role                  PartyRole                    @relation(fields: [roleId], references: [id])
+  qualification         PartyQualification?          @relation(fields: [qualificationId], references: [id])
+  tenant                Tenant                       @relation(fields: [tenantId], references: [id])
+  representativeLinks   ProcessPartyRepresentation[] @relation("ProcessPartyPrincipal")
   representedPartyLinks ProcessPartyRepresentation[] @relation("ProcessPartyRepresentative")
 
   @@unique([processId, contactId, roleId]) // Evita duplicata exata
@@ -444,8 +453,8 @@ model ProcessPartyRepresentation {
   representativePartyId String
   createdAt             DateTime @default(now())
 
-  tenant              Tenant      @relation(fields: [tenantId], references: [id])
-  process             Process     @relation(fields: [processId], references: [id], onDelete: Cascade)
+  tenant              Tenant       @relation(fields: [tenantId], references: [id])
+  process             Process      @relation(fields: [processId], references: [id], onDelete: Cascade)
   party               ProcessParty @relation("ProcessPartyPrincipal", fields: [partyId], references: [id], onDelete: Cascade)
   representativeParty ProcessParty @relation("ProcessPartyRepresentative", fields: [representativePartyId], references: [id], onDelete: Cascade)
 
@@ -477,41 +486,42 @@ model ProcessTimeline {
   clientMessage       String? // Texto formatado para envio via WhatsApp
 
   // --- MOTOR DE WORKFLOW ---
-  category         String? @default("REGISTRO") // REGISTRO, ACAO, AGENDA
-  status           String? @default("PENDENTE") // PENDENTE, EM_TRATAMENTO, CONCLUIDO
-  priority         String? @default("MEDIA") // BAIXA, MEDIA, ALTA, URGENTE
-  requesterName    String? // Quem solicitou o andamento
-  responsibleName  String? // Quem deve tratar a ação
-  completedAt      DateTime? // Data de conclusão
-  responsibleHistory Json?    // Histórico de responsáveis [{name, date}]
-  templateCode     String? // Identificador do Template que gerou este andamento
-  parentTimelineId String? // FK para o andamento "Pai"
+  category           String?   @default("REGISTRO") // REGISTRO, ACAO, AGENDA
+  status             String?   @default("PENDENTE") // PENDENTE, EM_TRATAMENTO, CONCLUIDO
+  priority           String?   @default("MEDIA") // BAIXA, MEDIA, ALTA, URGENTE
+  requesterName      String? // Quem solicitou o andamento
+  responsibleName    String? // Quem deve tratar a ação
+  completedAt        DateTime? // Data de conclusão
+  responsibleHistory Json? // Histórico de responsáveis [{name, date}]
+  templateCode       String? // Identificador do Template que gerou este andamento
+  parentTimelineId   String? // FK para o andamento "Pai"
 
   parentTimeline ProcessTimeline?  @relation("WorkflowSequence", fields: [parentTimelineId], references: [id])
   childTimelines ProcessTimeline[] @relation("WorkflowSequence")
 
-  process Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+  process           Process            @relation(fields: [processId], references: [id], onDelete: Cascade)
+  agentMessageLinks AgentMessageLink[]
 
   @@map("process_timelines")
 }
 
 model FinancialRecord {
-  id            String    @id @default(uuid())
-  tenantId      String
-  processId     String?
+  id              String    @id @default(uuid())
+  tenantId        String
+  processId       String?
   purchaseOrderId String?
-  proposalId    String?
-  bankAccountId String?
-  categoryId    String? // FK para FinancialCategory
-  description   String
-  amount        Decimal   @db.Decimal(15, 2)
-  dueDate       DateTime
-  paymentDate   DateTime?
-  status        String // PENDING, PAID, CANCELLED, OVERDUE, PARTIAL
-  type          String // INCOME (Receita), EXPENSE (Despesa)
-  category      String? // Legado: texto livre (Honorários, Custas, etc)
-  paymentMethod String? // PIX, BOLETO, TED, DINHEIRO, CARTAO
-  notes         String?   @db.Text
+  proposalId      String?
+  bankAccountId   String?
+  categoryId      String? // FK para FinancialCategory
+  description     String
+  amount          Decimal   @db.Decimal(15, 2)
+  dueDate         DateTime
+  paymentDate     DateTime?
+  status          String // PENDING, PAID, CANCELLED, OVERDUE, PARTIAL
+  type            String // INCOME (Receita), EXPENSE (Despesa)
+  category        String? // Legado: texto livre (Honorários, Custas, etc)
+  paymentMethod   String? // PIX, BOLETO, TED, DINHEIRO, CARTAO
+  notes           String?   @db.Text
 
   // === ENCARGOS & DESCONTOS ===
   fine               Decimal? @db.Decimal(15, 2) // Multa
@@ -556,7 +566,7 @@ model FinancialRecord {
   children FinancialRecord[] @relation("Installments")
 
   // Tags
-  tags              FinancialRecordTag[]
+  tags FinancialRecordTag[]
 
   @@index([parentId])
   @@index([tenantId, status])
@@ -755,9 +765,9 @@ model Tag {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  tenant    Tenant       @relation(fields: [tenantId], references: [id])
-  contacts  ContactTag[]
-  processes ProcessTag[]
+  tenant           Tenant               @relation(fields: [tenantId], references: [id])
+  contacts         ContactTag[]
+  processes        ProcessTag[]
   financialRecords FinancialRecordTag[]
 
   @@map("tags")
@@ -859,24 +869,24 @@ model Product {
   isActive     Boolean  @default(true)
 
   // E-commerce & Logistics
-  images       String[] // URLs das imagens do produto
-  weight       Decimal? @db.Decimal(10, 3) // Peso em Kg
-  width        Decimal? @db.Decimal(10, 2) // Largura em cm
-  height       Decimal? @db.Decimal(10, 2) // Altura em cm
-  length       Decimal? @db.Decimal(10, 2) // Comprimento em cm
-  category     String?  // Categoria para e-commerce/marketplace
-  brand        String?  // Marca do produto
-  isEcommerce  Boolean  @default(false) // Se o produto está visível no ecommerce
+  images      String[] // URLs das imagens do produto
+  weight      Decimal? @db.Decimal(10, 3) // Peso em Kg
+  width       Decimal? @db.Decimal(10, 2) // Largura em cm
+  height      Decimal? @db.Decimal(10, 2) // Altura em cm
+  length      Decimal? @db.Decimal(10, 2) // Comprimento em cm
+  category    String? // Categoria para e-commerce/marketplace
+  brand       String? // Marca do produto
+  isEcommerce Boolean  @default(false) // Se o produto está visível no ecommerce
 
   supplierId String?
   supplier   Contact? @relation(fields: [supplierId], references: [id])
 
-  movements     InventoryMovement[]
-  proposalItems ProposalItem[]
+  movements          InventoryMovement[]
+  proposalItems      ProposalItem[]
   purchaseOrderItems PurchaseOrderItem[]
-  tenant        Tenant              @relation(fields: [tenantId], references: [id])
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@map("products")
 }
@@ -974,49 +984,72 @@ model AgentConversation {
   ticketId              String?
   contactId             String?
   connectionId          String?
+  processId             String?
+  assignedUserId        String?
   channel               String
-  status                String    @default("ACTIVE")
+  kind                  String    @default("DIRECT")
+  status                String    @default("OPEN")
+  priority              String    @default("MEDIUM")
+  queue                 String?
+  source                String?
+  isInternal            Boolean   @default(false)
   title                 String?
   externalThreadId      String?
   externalParticipantId String?
+  waitingReply          Boolean   @default(false)
+  unreadCount           Int       @default(0)
+  lastMessagePreview    String?
+  startedAt             DateTime  @default(now())
+  closedAt              DateTime?
   lastMessageAt         DateTime? @default(now())
   metadata              Json?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id])
-  ticket     Ticket?     @relation(fields: [ticketId], references: [id], onDelete: SetNull)
-  contact    Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
-  messages   AgentMessage[]
-  runs       AgentRun[]
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  ticket       Ticket?            @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  contact      Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  connection   Connection?        @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  process      Process?           @relation(fields: [processId], references: [id], onDelete: SetNull)
+  assignee     User?              @relation("AssignedAgentConversations", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  participants AgentParticipant[]
+  messages     AgentMessage[]
+  runs         AgentRun[]
 
-  @@index([tenantId, channel, status])
+  @@index([tenantId, channel, status, lastMessageAt])
   @@index([ticketId])
   @@index([contactId])
   @@index([connectionId])
+  @@index([processId])
+  @@index([assignedUserId])
   @@index([tenantId, externalThreadId])
   @@map("agent_conversations")
 }
 
 model AgentMessage {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   conversationId    String
   tenantId          String
   ticketMessageId   String?
+  participantId     String?
   direction         String
   role              String
-  content           String   @db.Text
-  contentType       String   @default("TEXT")
+  content           String    @db.Text
+  contentType       String    @default("TEXT")
+  status            String    @default("RECEIVED")
   externalMessageId String?
   senderName        String?
   senderAddress     String?
   mediaUrl          String?
   metadata          Json?
-  createdAt         DateTime @default(now())
+  editedAt          DateTime?
+  createdAt         DateTime  @default(now())
 
-  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  conversation AgentConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant       Tenant              @relation(fields: [tenantId], references: [id])
+  participant  AgentParticipant?   @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  events       AgentMessageEvent[]
+  links        AgentMessageLink[]
 
   @@index([conversationId, createdAt])
   @@index([ticketMessageId])
@@ -1024,16 +1057,81 @@ model AgentMessage {
   @@map("agent_messages")
 }
 
-model AgentRun {
+model AgentParticipant {
+  id              String    @id @default(uuid())
+  tenantId        String
+  conversationId  String
+  userId          String?
+  contactId       String?
+  role            String    @default("MEMBER")
+  label           String?
+  externalAddress String?
+  isPrimary       Boolean   @default(false)
+  joinedAt        DateTime  @default(now())
+  leftAt          DateTime?
+  metadata        Json?
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User?             @relation("AgentParticipantUser", fields: [userId], references: [id], onDelete: SetNull)
+  contact      Contact?          @relation("AgentParticipantContact", fields: [contactId], references: [id], onDelete: SetNull)
+  messages     AgentMessage[]
+
+  @@index([conversationId, role])
+  @@index([tenantId, userId])
+  @@index([tenantId, contactId])
+  @@map("agent_participants")
+}
+
+model AgentMessageEvent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  messageId String
+  type      String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id])
+  message AgentMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, createdAt])
+  @@index([tenantId, type, createdAt])
+  @@map("agent_message_events")
+}
+
+model AgentMessageLink {
   id             String   @id @default(uuid())
+  tenantId       String
+  messageId      String
+  processId      String?
+  timelineId     String?
+  linkedByUserId String?
+  kind           String   @default("PROCESS_TIMELINE")
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id])
+  message  AgentMessage     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  process  Process?         @relation(fields: [processId], references: [id], onDelete: SetNull)
+  timeline ProcessTimeline? @relation(fields: [timelineId], references: [id], onDelete: SetNull)
+  linkedBy User?            @relation("AgentMessageLinkedBy", fields: [linkedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([messageId, createdAt])
+  @@index([tenantId, processId])
+  @@index([timelineId])
+  @@map("agent_message_links")
+}
+
+model AgentRun {
+  id             String    @id @default(uuid())
   conversationId String
   tenantId       String
   trigger        String
   channel        String
-  status         String   @default("PENDING")
+  status         String    @default("PENDING")
   summary        String?
   metadata       Json?
-  startedAt      DateTime @default(now())
+  startedAt      DateTime  @default(now())
   completedAt    DateTime?
 
   conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -1079,31 +1177,31 @@ model Connection {
 
 // 9. CICLO DE VENDA: ORÇAMENTOS E FISCAL
 model Proposal {
-  id               String         @id @default(uuid())
-  tenantId         String
-  contactId        String
-  code             Int            @default(autoincrement())
-  status           String // DRAFT, SENT, APPROVED, REJECTED, INVOICED
-  totalAmount      Decimal        @db.Decimal(15, 2)
-  notes            String?        @db.Text
-  
+  id          String  @id @default(uuid())
+  tenantId    String
+  contactId   String
+  code        Int     @default(autoincrement())
+  status      String // DRAFT, SENT, APPROVED, REJECTED, INVOICED
+  totalAmount Decimal @db.Decimal(15, 2)
+  notes       String? @db.Text
+
   // Custom fields for Legacy Layout match
-  validUntil       DateTime?
-  deliveryDate     DateTime?
-  salesperson      String?
-  special          Boolean        @default(false)
-  paymentCondition String?        // Legado (texto)
-  paymentConditionId String?      // FK para a Condição de Pagamento (nova estrutura)
-  
+  validUntil         DateTime?
+  deliveryDate       DateTime?
+  salesperson        String?
+  special            Boolean   @default(false)
+  paymentCondition   String? // Legado (texto)
+  paymentConditionId String? // FK para a Condição de Pagamento (nova estrutura)
+
   paymentConditionRel PaymentCondition? @relation(fields: [paymentConditionId], references: [id])
 
   items            ProposalItem[]
   invoice          Invoice?
   financialRecords FinancialRecord[]
-  contact          Contact        @relation(fields: [contactId], references: [id])
-  tenant           Tenant         @relation(fields: [tenantId], references: [id])
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  contact          Contact           @relation(fields: [contactId], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@map("proposals")
 }
@@ -1156,104 +1254,105 @@ model FiscalConfig {
 }
 
 model PurchaseOrder {
-  id               String              @id @default(uuid())
-  tenantId         String
-  contactId        String // Fornecedor
-  buyerId          String? // Comprador
-  code             Int                 @default(autoincrement())
-  status           String // DRAFT, QUOTATION, APPROVED, RECEIVED, CANCELLED
-  totalAmount      Decimal             @db.Decimal(15, 2)
-  notes            String?             @db.Text
-  
-  expectedDate     DateTime?
-  deliveryDate     DateTime?
-  paymentCondition String?          // Legado (texto)
-  paymentConditionId String?        // FK para a Condição de Pagamento (nova estrutura)
-  
+  id          String  @id @default(uuid())
+  tenantId    String
+  contactId   String // Fornecedor
+  buyerId     String? // Comprador
+  code        Int     @default(autoincrement())
+  status      String // DRAFT, QUOTATION, APPROVED, RECEIVED, CANCELLED
+  totalAmount Decimal @db.Decimal(15, 2)
+  notes       String? @db.Text
+
+  expectedDate       DateTime?
+  deliveryDate       DateTime?
+  paymentCondition   String? // Legado (texto)
+  paymentConditionId String? // FK para a Condição de Pagamento (nova estrutura)
+
   paymentConditionRel PaymentCondition? @relation(fields: [paymentConditionId], references: [id])
 
   items            PurchaseOrderItem[]
   invoice          Invoice?
   financialRecords FinancialRecord[]
-  
-  contact          Contact             @relation(fields: [contactId], references: [id])
-  buyer            Contact?            @relation("PurchaseOrderBuyer", fields: [buyerId], references: [id])
-  tenant           Tenant              @relation(fields: [tenantId], references: [id])
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+
+  contact   Contact  @relation(fields: [contactId], references: [id])
+  buyer     Contact? @relation("PurchaseOrderBuyer", fields: [buyerId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("purchase_orders")
 }
 
 model PurchaseOrderItem {
-  id              String        @id @default(uuid())
+  id              String   @id @default(uuid())
   purchaseOrderId String
   productId       String
   quantity        Int
-  unitCost        Decimal       @db.Decimal(10, 2)
-  discount        Decimal?      @db.Decimal(10, 2)
-  total           Decimal       @db.Decimal(10, 2)
-  
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  product         Product       @relation(fields: [productId], references: [id])
+  unitCost        Decimal  @db.Decimal(10, 2)
+  discount        Decimal? @db.Decimal(10, 2)
+  total           Decimal  @db.Decimal(10, 2)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
 
   @@map("purchase_order_items")
 }
 
 // 10. FORMAS / CONDIÇÕES DE PAGAMENTO
 model PaymentCondition {
-  id          String   @id @default(uuid())
-  tenantId    String
-  code        Int      @default(autoincrement()) // Para listar no UI
-  name        String   // Ex: 5 parcelas
-  surcharge   Decimal  @default(0) @db.Decimal(5, 2) // Acréscimo (%)
-  discount    Decimal  @default(0) @db.Decimal(5, 2) // Desconto (%)
-  active      Boolean  @default(true)
-  
+  id        String  @id @default(uuid())
+  tenantId  String
+  code      Int     @default(autoincrement()) // Para listar no UI
+  name      String // Ex: 5 parcelas
+  surcharge Decimal @default(0) @db.Decimal(5, 2) // Acréscimo (%)
+  discount  Decimal @default(0) @db.Decimal(5, 2) // Desconto (%)
+  active    Boolean @default(true)
+
   installments     PaymentConditionInstallment[]
   proposals        Proposal[]
   purchaseOrders   PurchaseOrder[]
   financialRecords FinancialRecord[]
-  
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tenantId, name])
   @@map("payment_conditions")
 }
 
 model PaymentConditionInstallment {
-  id                 String   @id @default(uuid())
+  id                 String  @id @default(uuid())
   paymentConditionId String
-  installment        Int      // 1, 2, 3...
-  days               Int      // Prazo em dias: 0 (a vista), 30, 60...
-  percentage         Decimal  @db.Decimal(5, 2) // Percentual do total (%)
+  installment        Int // 1, 2, 3...
+  days               Int // Prazo em dias: 0 (a vista), 30, 60...
+  percentage         Decimal @db.Decimal(5, 2) // Percentual do total (%)
 
-  paymentCondition   PaymentCondition @relation(fields: [paymentConditionId], references: [id], onDelete: Cascade)
+  paymentCondition PaymentCondition @relation(fields: [paymentConditionId], references: [id], onDelete: Cascade)
 
   @@map("payment_condition_installments")
 }
 
 model InventoryConfig {
-  id              String   @id @default(uuid())
-  tenantId        String   @unique
-  profitMargin    Decimal  @default(30) @db.Decimal(5, 2)
-  
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String  @id @default(uuid())
+  tenantId     String  @unique
+  profitMargin Decimal @default(30) @db.Decimal(5, 2)
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("inventory_configs")
 }
+
 model SecuritySecret {
   id          String   @id @default(uuid())
   tenantId    String
-  entityType  String   // BANK_ACCOUNT, CONTACT, PROCESS, etc.
+  entityType  String // BANK_ACCOUNT, CONTACT, PROCESS, etc.
   entityId    String
   description String
   username    String?
-  password    String?  // Encrypted / Hash
+  password    String? // Encrypted / Hash
   link        String?
   privateKey  String?  @db.Text
   publicKey   String?  @db.Text
@@ -1268,12 +1367,12 @@ model SecuritySecret {
 }
 
 model SecuritySetting {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   tenantId    String
   entityType  String
   entityId    String
-  observation String?  @db.Text
-  
+  observation String? @db.Text
+
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, entityType, entityId])

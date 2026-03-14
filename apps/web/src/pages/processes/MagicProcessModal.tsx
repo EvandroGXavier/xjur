@@ -59,6 +59,27 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
 
     if (!isOpen) return null;
 
+    const buildJudicialImportPayload = () => ({
+        cnj: previewData?.cnj || '',
+        title: previewData?.title || `Processo ${previewData?.cnj || ''}`,
+        category: 'JUDICIAL',
+        court: previewData?.court || '',
+        courtSystem: previewData?.courtSystem || '',
+        vars: previewData?.vars || '',
+        district: previewData?.district || '',
+        status: previewData?.status || 'ATIVO',
+        area: previewData?.area || '',
+        subject: previewData?.subject || '',
+        class: previewData?.class || '',
+        distributionDate: previewData?.distributionDate || undefined,
+        judge: previewData?.judge || '',
+        value: previewData?.value || 0,
+        description: previewData?.description || '',
+        folder: previewData?.folder || '',
+        metadata: previewData?.metadata || null,
+        parties: Array.isArray(previewData?.parties) ? previewData.parties : [],
+    });
+
     const processFile = async (file: File) => {
         if (!file || file.type !== 'application/pdf') {
             toast.error('Por favor envie apenas arquivos PDF.');
@@ -161,17 +182,16 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
     const handleSaveProcess = async () => {
         setLoading(true);
         try {
-            await api.post('/processes', {
-                ...previewData,
-                category: 'JUDICIAL',
-                parties: Array.isArray(previewData?.parties) ? previewData.parties : [],
-            });
+            const payload = buildJudicialImportPayload();
+            await api.post('/processes', payload);
             toast.success('Processo importado com sucesso! Capa e partes foram sincronizadas.');
             onSuccess();
             onClose();
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            toast.error('Erro ao salvar processo');
+            toast.error('Erro ao salvar processo', {
+                description: err?.response?.data?.message || err?.message || 'A API recusou a importacao do processo.',
+            });
         } finally {
             setLoading(false);
         }

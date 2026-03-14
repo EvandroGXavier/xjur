@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap, Settings, Users, Shield, Instagram, Send, HelpCircle } from 'lucide-react';
+import { Smartphone, RefreshCw, Power, Plus, Mail, MessageCircle, Trash2, CheckCircle, Loader2, Edit3, X, Wifi, WifiOff, Zap, Settings, Users, Shield, Instagram, Send, HelpCircle, AlertTriangle, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
@@ -31,6 +31,32 @@ const defaultTelegramConfig = {
     webhookBaseUrl: '',
 };
 
+const fieldClass = 'w-full rounded-xl border border-slate-700 bg-slate-950/90 px-4 py-3 text-sm text-slate-50 placeholder:text-slate-500 shadow-inner shadow-black/20 transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20';
+const selectClass = `${fieldClass} appearance-none pr-11`;
+const sectionClass = 'rounded-2xl border border-white/10 bg-slate-950/70 p-5 shadow-inner shadow-black/20';
+const helpTextClass = 'mt-2 text-xs leading-relaxed text-slate-400';
+
+const getRequestErrorMessage = (error: any, fallback: string) => {
+    const responseMessage = error?.response?.data?.message;
+    if (Array.isArray(responseMessage) && responseMessage.length > 0) {
+        return responseMessage.join(' ');
+    }
+    if (typeof responseMessage === 'string' && responseMessage.trim()) {
+        return responseMessage;
+    }
+    if (typeof error?.response?.data?.error === 'string' && error.response.data.error.trim()) {
+        return error.response.data.error;
+    }
+    if (!error?.response) {
+        const apiBase = String(api.defaults.baseURL || '').replace(/\/$/, '');
+        return `Nao foi possivel falar com a API (${apiBase || 'backend local'}). Verifique se o servidor esta rodando.`;
+    }
+    if (typeof error?.message === 'string' && error.message.trim()) {
+        return error.message;
+    }
+    return fallback;
+};
+
 interface ConnectionsProps {
     onOpenHelp?: () => void;
 }
@@ -38,7 +64,9 @@ interface ConnectionsProps {
 export function Connections({ onOpenHelp }: ConnectionsProps) {
     const [connections, setConnections] = useState<Connection[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
     const [settingsConnection, setSettingsConnection] = useState<Connection | null>(null);
     const [connectingId, setConnectingId] = useState<string | null>(null);
@@ -53,13 +81,16 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
     const [emailConfig, setEmailConfig] = useState({ email: '', password: '' });
     const [waConfig, setWaConfig] = useState(defaultWaConfig);
     const [telegramConfig, setTelegramConfig] = useState(defaultTelegramConfig);
+    const [formError, setFormError] = useState<string | null>(null);
 
     const fetchConnections = useCallback(async () => {
         try {
             const response = await api.get<Connection[]>('/connections');
             setConnections(response.data);
+            setLoadError(null);
         } catch (error) {
             console.error('Failed to fetch connections', error);
+            setLoadError(getRequestErrorMessage(error, 'Nao foi possivel carregar as conexoes.'));
         } finally {
             setLoading(false);
         }
@@ -163,7 +194,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
     }, [fetchConnections]);
 
     // CRUD: Create
-    const handleCreate = async () => {
+    const handleCreateLegacy = async () => {
         if (!formName) return toast.error('Nome é obrigatório');
         
         try {
@@ -195,7 +226,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
     };
 
     // CRUD: Update
-    const handleUpdate = async () => {
+    const handleUpdateLegacy = async () => {
         if (!editingConnection) return;
         if (!formName) return toast.error('Nome é obrigatório');
         
@@ -230,6 +261,108 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             toast.error('Erro ao atualizar conexão');
         }
     };
+    const handleCreate = async () => {
+        const trimmedName = formName.trim();
+        if (!trimmedName) {
+            const message = 'Nome e obrigatorio.';
+            setFormError(message);
+            return toast.error(message);
+        }
+        if (formType === 'TELEGRAM' && !telegramConfig.botToken.trim()) {
+            const message = 'Bot Token e obrigatorio para criar conexoes do Telegram.';
+            setFormError(message);
+            return toast.error(message);
+        }
+
+        try {
+            setIsSubmitting(true);
+            setFormError(null);
+
+            const payload: any = { name: trimmedName, type: formType };
+            if (formType === 'WHATSAPP') {
+                payload.config = {
+                    blockGroups: true,
+                    groupWhitelist: [],
+                    ...(waConfig.evolutionApiKey.trim() ? { evolutionApiKey: waConfig.evolutionApiKey.trim() } : {}),
+                    ...(waConfig.evolutionUrl.trim() ? { evolutionUrl: waConfig.evolutionUrl.trim() } : {}),
+                    ...(waConfig.evolutionVersion.trim() ? { evolutionVersion: waConfig.evolutionVersion.trim() } : {}),
+                };
+            }
+            if (formType === 'EMAIL') {
+                payload.config = {
+                    email: emailConfig.email.trim(),
+                    password: emailConfig.password,
+                };
+            }
+            if (formType === 'TELEGRAM') {
+                payload.config = {
+                    botToken: telegramConfig.botToken.trim(),
+                    webhookBaseUrl: telegramConfig.webhookBaseUrl.trim(),
+                };
+            }
+
+            const response = await api.post('/connections', payload);
+            toast.success(`Conexao "${response.data?.name || trimmedName}" criada com sucesso.`);
+            resetForm();
+            await fetchConnections();
+        } catch (error) {
+            const message = getRequestErrorMessage(error, 'Erro ao criar conexao.');
+            setFormError(message);
+            toast.error(message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleUpdate = async () => {
+        if (!editingConnection) return;
+
+        const trimmedName = formName.trim();
+        if (!trimmedName) {
+            const message = 'Nome e obrigatorio.';
+            setFormError(message);
+            return toast.error(message);
+        }
+
+        try {
+            setIsSubmitting(true);
+            setFormError(null);
+
+            const payload: any = { name: trimmedName, type: formType };
+            if (formType === 'WHATSAPP') {
+                const { evolutionToken, evolutionNumber, evolutionChannel, ...currentConfig } = editingConnection.config || {};
+                payload.config = {
+                    ...currentConfig,
+                    ...waConfig,
+                    blockGroups: editingConnection.config?.blockGroups ?? true,
+                    groupWhitelist: editingConnection.config?.groupWhitelist ?? []
+                };
+            }
+            if (formType === 'EMAIL') {
+                payload.config = emailConfig;
+            }
+            if (formType === 'TELEGRAM') {
+                const currentConfig = editingConnection.config || {};
+                payload.config = {
+                    ...currentConfig,
+                    botToken: telegramConfig.botToken.trim(),
+                    webhookBaseUrl: telegramConfig.webhookBaseUrl.trim(),
+                };
+            }
+
+            await api.patch(`/connections/${editingConnection.id}`, payload);
+            toast.success('Conexao atualizada com sucesso.');
+            resetForm();
+            await fetchConnections();
+        } catch (error) {
+            const message = getRequestErrorMessage(error, 'Erro ao atualizar conexao.');
+            setFormError(message);
+            toast.error(message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     // CRUD: Delete
     const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -253,7 +386,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             // Don't clear connectingId here � wait for WebSocket status
             fetchConnections();
         } catch (error) {
-            toast.error('Falha ao conectar');
+            toast.error(getRequestErrorMessage(error, 'Falha ao conectar.'));
             setConnectingId(null);
         }
     };
@@ -271,7 +404,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             });
             fetchConnections();
         } catch (error) {
-            toast.error('Falha ao desconectar');
+            toast.error(getRequestErrorMessage(error, 'Falha ao desconectar.'));
         }
     };
 
@@ -286,6 +419,9 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                 pendingUpdateCount: statusData.pendingUpdateCount ?? connection.config?.pendingUpdateCount,
                 lastErrorMessage: statusData.lastErrorMessage ?? null,
                 lastErrorDate: statusData.lastErrorDate ?? null,
+                contactsCount: statusData.contactsCount ?? connection.config?.contactsCount ?? 0,
+                chatsCount: statusData.chatsCount ?? connection.config?.chatsCount ?? 0,
+                messagesCount: statusData.messagesCount ?? connection.config?.messagesCount ?? 0,
             };
 
             setConnections(prev => prev.map(item =>
@@ -294,13 +430,23 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                     : item
             ));
 
-            if (settingsConnection?.id === connection.id) {
-                setSettingsConnection(prev => prev ? {
-                    ...prev,
-                    status: statusData.status ?? prev.status,
-                    config: mergedConfig,
-                } : prev);
-            }
+            setSettingsConnection(prev => {
+                if (prev?.id && prev.id !== connection.id) {
+                    return prev;
+                }
+
+                return prev
+                    ? {
+                        ...prev,
+                        status: statusData.status ?? prev.status,
+                        config: mergedConfig,
+                    }
+                    : {
+                        ...connection,
+                        status: statusData.status ?? connection.status,
+                        config: mergedConfig,
+                    };
+            });
 
             if (connection.type === 'TELEGRAM') {
                 if (statusData.lastErrorMessage) {
@@ -335,6 +481,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             botToken: conn.config?.botToken ?? '',
             webhookBaseUrl: conn.config?.webhookBaseUrl ?? '',
         });
+        setFormError(null);
         setIsCreating(false);
     };
 
@@ -346,6 +493,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
         setEmailConfig({ email: '', password: '' });
         setWaConfig(defaultWaConfig);
         setTelegramConfig(defaultTelegramConfig);
+        setFormError(null);
     };
 
     const renderQrCode = (qrData: string | undefined | null) => {
@@ -422,7 +570,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
 
     return (
         <>
-            <div className="flex-1 flex flex-col bg-slate-950 p-6 md:p-8 animate-in fade-in zoom-in-95 duration-300 h-full overflow-hidden">
+            <div className="flex-1 flex h-full flex-col overflow-hidden bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 p-6 md:p-8 animate-in fade-in zoom-in-95 duration-300">
                 {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
@@ -451,9 +599,20 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                 </div>
             </div>
 
+            {loadError && (
+                <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-4 text-sm text-amber-100 shadow-lg shadow-black/10">
+                    <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-300" />
+                    <div className="space-y-1">
+                        <p className="font-semibold text-amber-50">Nao foi possivel sincronizar o modulo de conexoes.</p>
+                        <p className="text-amber-100/80">{loadError}</p>
+                        <p className="text-xs text-amber-100/70">Se a API estiver parada, a tela pode parecer vazia e a criacao vai falhar mesmo com o formulario preenchido.</p>
+                    </div>
+                </div>
+            )}
+
             {/* Create/Edit Form */}
             {isFormOpen && (
-                <div className="mb-8 bg-slate-900 border border-indigo-500/50 p-6 rounded-xl animate-in slide-in-from-top-4">
+                <div className="mx-auto mb-8 w-full max-w-5xl rounded-[28px] border border-white/10 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-6 shadow-2xl shadow-black/30 ring-1 ring-indigo-500/15 animate-in slide-in-from-top-4">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-bold text-white">
                             {editingConnection ? 'Editar Conexão' : 'Adicionar Canal'}
@@ -462,64 +621,98 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                             <X size={18} />
                         </button>
                     </div>
+                    <div className="mb-4 flex items-start gap-3 rounded-2xl border border-indigo-500/15 bg-indigo-500/10 px-4 py-4 text-sm text-slate-200">
+                        <MessageCircle size={18} className="mt-0.5 shrink-0 text-emerald-300" />
+                        <div className="space-y-1">
+                            <p className="font-semibold text-white">Fluxo recomendado</p>
+                            <p className="text-slate-300">Crie a instancia primeiro, depois clique em conectar para gerar o QR Code. Se a API estiver offline, o motivo real aparece abaixo.</p>
+                        </div>
+                    </div>
+                    {formError && (
+                        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-4 text-sm text-red-100">
+                            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-300" />
+                            <div>
+                                <p className="font-semibold text-red-50">Nao foi possivel salvar a conexao.</p>
+                                <p className="mt-1 text-red-100/80">{formError}</p>
+                            </div>
+                        </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1">Tipo de Canal <span className="text-red-500">*</span></label>
-                            <select 
-                                value={formType}
-                                onChange={(e: any) => setFormType(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition"
-                                disabled={!!editingConnection}
-                            >
-                                <option value="WHATSAPP">WhatsApp</option>
-                                <option value="EMAIL">Email</option>
-                                <option value="INSTAGRAM">Instagram</option>
-                                <option value="TELEGRAM">Telegram</option>
-                            </select>
+                            <div className="relative">
+                                <select 
+                                    value={formType}
+                                    onChange={(e: any) => {
+                                        setFormType(e.target.value);
+                                        setFormError(null);
+                                    }}
+                                    className={selectClass}
+                                    disabled={!!editingConnection}
+                                >
+                                    <option value="WHATSAPP">WhatsApp</option>
+                                    <option value="EMAIL">Email</option>
+                                    <option value="INSTAGRAM">Instagram</option>
+                                    <option value="TELEGRAM">Telegram</option>
+                                </select>
+                                <ChevronDown size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                            </div>
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1">Nome da Conexão <span className="text-red-500">*</span></label>
                             <input 
                                 value={formName}
-                                onChange={e => setFormName(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition"
+                                onChange={e => {
+                                    setFormName(e.target.value);
+                                    setFormError(null);
+                                }}
+                                className={fieldClass}
                                 placeholder="Ex: Financeiro WA"
                             />
                         </div>
                     </div>
 
                     {formType === 'WHATSAPP' && (
-                        <div className="mb-4">
+                        <div className={`mb-4 ${sectionClass}`}>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium text-slate-400 mb-1">API Key da Evolution</label>
                                     <input 
                                         type="text"
                                         value={waConfig.evolutionApiKey}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionApiKey: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
+                                        onChange={e => {
+                                            setWaConfig({ ...waConfig, evolutionApiKey: e.target.value });
+                                            setFormError(null);
+                                        }}
+                                        className={fieldClass}
                                         placeholder="Ex: A1291CA0CCD6..."
                                     />
-                                    <p className="text-[11px] text-slate-500 mt-1">Se ficar em branco, a conexao usa a API key padrao do servidor.</p>
+                                    <p className={helpTextClass}>Se ficar em branco, a conexao usa a API key padrao do servidor.</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-slate-400 mb-1">URL da Evolution</label>
                                     <input 
                                         type="text"
                                         value={waConfig.evolutionUrl}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionUrl: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
+                                        onChange={e => {
+                                            setWaConfig({ ...waConfig, evolutionUrl: e.target.value });
+                                            setFormError(null);
+                                        }}
+                                        className={fieldClass}
                                         placeholder="Ex: http://localhost:8080"
                                     />
-                                    <p className="text-[11px] text-slate-500 mt-1">Opcional. Preencha apenas se esta conexao usar uma Evolution diferente da configurada no backend.</p>
+                                    <p className={helpTextClass}>Opcional. Preencha apenas se esta conexao usar uma Evolution diferente da configurada no backend.</p>
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-xs font-medium text-slate-400 mb-1">Versao do WhatsApp</label>
                                     <input 
                                         type="text"
                                         value={waConfig.evolutionVersion}
-                                        onChange={e => setWaConfig({ ...waConfig, evolutionVersion: e.target.value })}
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"
+                                        onChange={e => {
+                                            setWaConfig({ ...waConfig, evolutionVersion: e.target.value });
+                                            setFormError(null);
+                                        }}
+                                        className={fieldClass}
                                         placeholder="Ex: 2.3000.x"
                                     />
                                 </div>
@@ -527,49 +720,50 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                         </div>
                     )}
                     {formType === 'EMAIL' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-slate-950 rounded-lg border border-slate-800">
+                        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 ${sectionClass}`}>
                             <div>
                                 <label className="block text-xs font-medium text-slate-400 mb-1">Email</label>
-                                <input value={emailConfig.email} onChange={e => setEmailConfig({...emailConfig, email: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-white text-sm" type="email" />
+                                <input value={emailConfig.email} onChange={e => { setEmailConfig({...emailConfig, email: e.target.value}); setFormError(null); }} className={fieldClass} type="email" />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-slate-400 mb-1">Senha (App Password)</label>
-                                <input value={emailConfig.password} onChange={e => setEmailConfig({...emailConfig, password: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-white text-sm" type="password" />
+                                <input value={emailConfig.password} onChange={e => { setEmailConfig({...emailConfig, password: e.target.value}); setFormError(null); }} className={fieldClass} type="password" />
                             </div>
                         </div>
                     )}
                     {formType === 'TELEGRAM' && (
-                        <div className="grid grid-cols-1 gap-4 mb-4 p-4 bg-slate-950 rounded-lg border border-sky-500/20">
+                        <div className={`grid grid-cols-1 gap-4 mb-4 ${sectionClass} border-sky-500/20`}>
                             <div>
                                 <label className="block text-xs font-medium text-slate-400 mb-1">Bot Token <span className="text-red-500">*</span></label>
                                 <input
                                     type="password"
                                     value={telegramConfig.botToken}
-                                    onChange={e => setTelegramConfig({ ...telegramConfig, botToken: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition"
+                                    onChange={e => { setTelegramConfig({ ...telegramConfig, botToken: e.target.value }); setFormError(null); }}
+                                    className={fieldClass}
                                     placeholder="Ex: 123456789:AA..."
                                 />
-                                <p className="text-[11px] text-slate-500 mt-1">Use o token gerado pelo BotFather para registrar o webhook.</p>
+                                <p className={helpTextClass}>Use o token gerado pelo BotFather para registrar o webhook.</p>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-slate-400 mb-1">Webhook Base URL</label>
                                 <input
                                     type="text"
                                     value={telegramConfig.webhookBaseUrl}
-                                    onChange={e => setTelegramConfig({ ...telegramConfig, webhookBaseUrl: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition"
+                                    onChange={e => { setTelegramConfig({ ...telegramConfig, webhookBaseUrl: e.target.value }); setFormError(null); }}
+                                    className={fieldClass}
                                     placeholder="Ex: https://seu-dominio.com"
                                 />
-                                <p className="text-[11px] text-slate-500 mt-1">Opcional. Se ficar vazio, o backend usa TELEGRAM_WEBHOOK_BASE_URL ou APP_URL.</p>
+                                <p className={helpTextClass}>Opcional. Se ficar vazio, o backend usa TELEGRAM_WEBHOOK_BASE_URL ou APP_URL.</p>
                             </div>
                         </div>
                     )}
 
-                    <div className="flex justify-end gap-2">
-                        <button onClick={resetForm} className="text-slate-400 hover:text-white px-4 py-2 text-sm transition">Cancelar</button>
+                    <div className="flex justify-end gap-2 border-t border-white/10 pt-4">
+                        <button onClick={resetForm} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white">Cancelar</button>
                         <button 
                             onClick={editingConnection ? handleUpdate : handleCreate} 
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition"
+                            disabled={isSubmitting}
+                            className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-wait disabled:opacity-60"
                         >
                             {editingConnection ? 'Salvar Alterações' : 'Criar'}
                         </button>
@@ -669,7 +863,11 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                             </button>
 
                                             <button 
-                                                onClick={() => setSettingsConnection(conn)}
+                                                onClick={() => {
+                                                    setSettingsConnection(conn);
+                                                    setActiveTab('dashboard');
+                                                    handleRefreshStatus(conn);
+                                                }}
                                                 className="mt-2 text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/20 transition flex items-center gap-1 font-bold"
                                             >
                                                 <Settings size={10} /> Ajustes da Instância
@@ -771,8 +969,8 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                 
                 {connections.length === 0 && !loading && (
                     <div className="col-span-1 md:col-span-3 py-12 flex flex-col items-center justify-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl bg-slate-900/50">
-                        <Smartphone size={48} className="mb-4 opacity-50" />
-                        <p className="font-medium">Nenhum canal conectado</p>
+                        {loadError ? <AlertTriangle size={48} className="mb-4 text-amber-300/80" /> : <Smartphone size={48} className="mb-4 opacity-50" />}
+                        <p className="font-medium">{loadError ? 'Nao foi possivel carregar os canais' : 'Nenhum canal conectado'}</p>
                         <p className="text-sm mt-1">Adicione WhatsApp, Instagram ou Email para começar.</p>
                     </div>
                 )}
@@ -893,17 +1091,17 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                     <div className="grid grid-cols-3 gap-6">
                                         <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl flex flex-col items-center justify-center text-center">
                                             <Users size={32} className="text-slate-600 mb-3" />
-                                            <span className="text-3xl font-black text-white">0</span>
+                                            <span className="text-3xl font-black text-white">{Number(settingsConnection.config?.contactsCount ?? 0)}</span>
                                             <span className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-wider">Contatos</span>
                                         </div>
                                         <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl flex flex-col items-center justify-center text-center">
                                             <MessageCircle size={32} className="text-slate-600 mb-3" />
-                                            <span className="text-3xl font-black text-white">0</span>
+                                            <span className="text-3xl font-black text-white">{Number(settingsConnection.config?.chatsCount ?? 0)}</span>
                                             <span className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-wider">Chats</span>
                                         </div>
                                         <div className="bg-slate-950 border border-slate-800 p-6 rounded-xl flex flex-col items-center justify-center text-center">
                                             <Shield size={32} className="text-slate-600 mb-3" />
-                                            <span className="text-3xl font-black text-white">0</span>
+                                            <span className="text-3xl font-black text-white">{Number(settingsConnection.config?.messagesCount ?? 0)}</span>
                                             <span className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-wider">Mensagens</span>
                                         </div>
                                     </div>

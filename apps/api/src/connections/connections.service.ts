@@ -158,6 +158,48 @@ export class ConnectionsService implements OnModuleInit {
               ...status,
           };
       }
+
+      if (connection.type === ConnectionType.WHATSAPP) {
+          const [contactRefs, chatsCount, messagesCount] = await Promise.all([
+              this.prisma.agentConversation.findMany({
+                  where: {
+                      tenantId,
+                      connectionId: id,
+                      channel: 'WHATSAPP',
+                      contactId: { not: null },
+                  },
+                  select: { contactId: true },
+                  distinct: ['contactId'],
+              }),
+              this.prisma.agentConversation.count({
+                  where: {
+                      tenantId,
+                      connectionId: id,
+                      channel: 'WHATSAPP',
+                  },
+              }),
+              this.prisma.agentMessage.count({
+                  where: {
+                      tenantId,
+                      conversation: {
+                          connectionId: id,
+                          channel: 'WHATSAPP',
+                      },
+                  },
+              }),
+          ]);
+
+          return {
+              id: connection.id,
+              status: connection.status,
+              qrCode: connection.qrCode,
+              updatedAt: connection.updatedAt,
+              contactsCount: contactRefs.length,
+              chatsCount,
+              messagesCount,
+          };
+      }
+
       return { 
           id: connection.id, 
           status: connection.status, 

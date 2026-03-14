@@ -6,7 +6,7 @@ import { TicketsGateway } from '../tickets/tickets.gateway';
 import { WhatsappGateway } from './whatsapp.gateway';
 import { EvolutionService, EvolutionConfig } from '../evolution/evolution.service';
 import { FileLogger } from '../common/file-logger';
-import { AgentService } from '../agent/agent.service';
+import { InboxService } from '../inbox/inbox.service';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -28,7 +28,8 @@ export class WhatsappService implements OnModuleInit {
     @Inject(forwardRef(() => TicketsGateway))
     private readonly ticketsGateway: TicketsGateway,
     private readonly whatsappGateway: WhatsappGateway,
-    private readonly agentService: AgentService,
+    @Inject(forwardRef(() => InboxService))
+    private readonly inboxService: InboxService,
   ) {}
 
   async onModuleInit() {
@@ -176,6 +177,172 @@ export class WhatsappService implements OnModuleInit {
         return 'pdf';
       default:
         return 'bin';
+    }
+  }
+
+  private normalizeWhatsappJid(value?: string | null): string | null {
+    if (typeof value !== 'string') return null;
+
+    const normalized = value.trim().replace(/:[0-9]+(?=@)/, '');
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private extractWhatsappDigits(value?: string | null): string {
+    const normalized = this.normalizeWhatsappJid(value);
+    if (!normalized) return '';
+
+    return normalized
+      .replace('@s.whatsapp.net', '')
+      .replace('@g.us', '')
+      .replace('@lid', '')
+      .replace(/\D/g, '');
+  }
+
+  private isPlausibleWhatsappNumber(value?: string | null): boolean {
+    return typeof value === 'string' && /^\d{10,15}$/.test(value);
+  }
+
+  private extractPossibleWhatsappNumbers(candidate: any): string[] {
+    const values = [
+      candidate?.remoteJid,
+      candidate?.jid,
+      candidate?.id,
+      candidate?.remoteJidAlt,
+      candidate?.participant,
+      candidate?.owner,
+      candidate?.user,
+      candidate?.number,
+      candidate?.phone,
+      candidate?.mobile,
+      candidate?.contact?.phone,
+      candidate?.contact?.number,
+      candidate?.contact?.jid,
+      candidate?.contact?.remoteJid,
+    ].filter(Boolean);
+
+    const numbers = values
+      .map((value) => this.extractWhatsappDigits(String(value)))
+      .filter((value) => this.isPlausibleWhatsappNumber(value));
+
+    return Array.from(new Set(numbers));
+  }
+
+  private async resolveWhatsappPhoneByLid(connectionId: string, lidJid?: string | null) {
+    const normalizedLid = this.normalizeWhatsappJid(lidJid);
+    if (!normalizedLid || !normalizedLid.includes('@lid')) {
+      return null;
+    }
+
+    try {
+      const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const contactsData = await this.evolutionService.findContacts(connectionId, evolutionConfig);
+      const contactsList = Array.isArray(contactsData)
+        ? contactsData
+        : Array.isArray(contactsData?.contacts)
+          ? contactsData.contacts
+          : Array.isArray(contactsData?.data)
+            ? contactsData.data
+            : [];
+
+      const match = contactsList.find((candidate: any) => {
+        const candidateIds = [
+          candidate?.remoteJid,
+          candidate?.jid,
+          candidate?.id,
+          candidate?.remoteJidAlt,
+          candidate?.participant,
+        ]
+          .map((value) => this.normalizeWhatsappJid(value))
+          .filter(Boolean);
+
+        return candidateIds.includes(normalizedLid);
+      });
+
+      if (!match) {
+        return null;
+      }
+
+      return this.extractPossibleWhatsappNumbers(match)[0] || null;
+    } catch (error) {
+      this.logger.debug(`Failed to resolve WhatsApp phone for ${normalizedLid}: ${error.message}`);
+      return null;
+    }
+  }
+
+  private async resolveWhatsappDisplayName(
+    connectionId: string,
+    currentName?: string | null,
+    phoneDigits?: string | null,
+  ) {
+    const trimmed = typeof currentName === 'string' ? currentName.trim() : '';
+    if (trimmed && trimmed !== 'WhatsApp Contact') {
+      return trimmed;
+    }
+
+    if (!this.isPlausibleWhatsappNumber(phoneDigits)) {
+      return trimmed || null;
+    }
+
+    try {
+      const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const contactsData = await this.evolutionService.findContacts(connectionId, evolutionConfig);
+      const contactsList = Array.isArray(contactsData)
+        ? contactsData
+        : Array.isArray(contactsData?.contacts)
+          ? contactsData.contacts
+          : Array.isArray(contactsData?.data)
+            ? contactsData.data
+            : [];
+
+      const phoneTail = phoneDigits!.slice(-8);
+      const match = contactsList.find((candidate: any) => {
+        const remoteJid = this.normalizeWhatsappJid(candidate?.remoteJid || candidate?.jid || candidate?.id);
+        const candidateDigits = this.extractWhatsappDigits(remoteJid);
+        return candidateDigits.endsWith(phoneTail);
+      });
+
+      const resolved = match?.name || match?.pushName || match?.verifiedName || null;
+      return typeof resolved === 'string' && resolved.trim() ? resolved.trim() : trimmed || null;
+    } catch (error) {
+      this.logger.debug(`Failed to resolve WhatsApp display name for ${phoneDigits}: ${error.message}`);
+      return trimmed || null;
+    }
+  }
+
+  private async registerLidAlias(
+    externalMessageId: string,
+    candidateJid?: string | null,
+  ) {
+    const lidJid = this.normalizeWhatsappJid(candidateJid);
+    if (!lidJid || !lidJid.includes('@lid')) {
+      return;
+    }
+
+    const message = await this.prisma.agentMessage.findFirst({
+      where: {
+        externalMessageId,
+      },
+      include: {
+        conversation: {
+          include: {
+            contact: true,
+          },
+        },
+      },
+    });
+
+    const contact = message?.conversation?.contact;
+    if (!contact) {
+      return;
+    }
+
+    if (!(contact.notes || '').includes(lidJid)) {
+      await this.prisma.contact.update({
+        where: { id: contact.id },
+        data: {
+          notes: `${contact.notes ? `${contact.notes}\n` : ''}LID original: ${lidJid}`,
+        },
+      });
     }
   }
 
@@ -581,24 +748,84 @@ export class WhatsappService implements OnModuleInit {
 
     try {
       const tenantId = connection.tenantId;
-      const fullJid = remoteJid.replace(/:[0-9]+/, '');
-      const phoneRaw = fullJid.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '');
+      const senderCandidates = [
+        message?.sender,
+        message?.key?.participantPn,
+        message?.key?.senderPn,
+        message?.key?.participant,
+        message?.key?.remoteJidAlt,
+        eventPayload?.data?.key?.participantPn,
+        eventPayload?.data?.key?.senderPn,
+        eventPayload?.data?.key?.participant,
+        eventPayload?.data?.key?.remoteJidAlt,
+      ]
+        .map((candidate) => this.normalizeWhatsappJid(candidate))
+        .filter(Boolean) as string[];
 
-      if (/[a-zA-Z]/.test(phoneRaw) && !isGroup) {
-        this.fileLogger.warn(`Skipping message processing for ${phoneRaw}: Invalid WhatsApp ID (contains letters)`);
+      const phoneJid =
+        senderCandidates.find((candidate) => candidate.endsWith('@s.whatsapp.net')) ||
+        (!remoteJid.includes('@lid') ? remoteJid : null);
+      const lidJid = [remoteJid, ...senderCandidates].find((candidate) => candidate.includes('@lid')) || null;
+      let fullJid = phoneJid || remoteJid;
+      const phoneRaw =
+        [fullJid, remoteJid, ...senderCandidates]
+          .filter((candidate) => !candidate.includes('@lid'))
+          .map((candidate) => this.extractWhatsappDigits(candidate))
+          .find((candidate) => this.isPlausibleWhatsappNumber(candidate)) || '';
+
+      const resolvedPhoneFromLid =
+        !phoneRaw && lidJid ? await this.resolveWhatsappPhoneByLid(connectionId, lidJid) : null;
+
+      if (!phoneRaw && !resolvedPhoneFromLid && !isGroup && !lidJid) {
+        this.fileLogger.warn(`Skipping message processing for ${remoteJid}: no valid WhatsApp number resolved`);
         return;
       }
 
-      let phoneClean = phoneRaw.replace(/\D/g, '');
+      const phoneClean = (resolvedPhoneFromLid || phoneRaw).replace(/\D/g, '');
       const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
-
-      if (isGroup || fullJid.includes('@lid')) {
-        phoneClean = fullJid;
-      }
+      const displayName =
+        (await this.resolveWhatsappDisplayName(connectionId, pushName, phoneClean)) ||
+        pushName ||
+        phoneClean ||
+        lidJid ||
+        'WhatsApp Contact';
 
       let contact: any = null;
 
-      if (phoneTail && !isGroup && !fullJid.includes('@lid')) {
+      if (lidJid) {
+        contact = await this.prisma.contact.findFirst({
+          where: {
+            tenantId,
+            whatsapp: { equals: lidJid },
+          },
+        });
+      }
+
+      if (!contact && lidJid) {
+        contact = await this.prisma.contact.findFirst({
+          where: {
+            tenantId,
+            notes: {
+              contains: lidJid,
+            },
+          },
+        });
+      }
+
+      if (!contact) {
+        contact = await this.prisma.contact.findFirst({
+          where: {
+            tenantId,
+            OR: [
+              { whatsapp: { equals: fullJid } },
+              { whatsapp: { equals: phoneClean } },
+              { phone: { equals: phoneClean } },
+            ]
+          }
+        });
+      }
+
+      if (!contact && phoneTail && !isGroup) {
         const phoneTail4 = phoneClean.length >= 4 ? phoneClean.slice(-4) : phoneClean;
 
         const candidateContacts = await this.prisma.contact.findMany({
@@ -618,36 +845,51 @@ export class WhatsappService implements OnModuleInit {
         });
       }
 
-      if (!contact) {
-        contact = await this.prisma.contact.findFirst({
-          where: {
-            tenantId,
-            OR: [
-              { whatsapp: { equals: fullJid } },
-              { whatsapp: { equals: phoneRaw } }
-            ]
-          }
-        });
+      if (contact) {
+        const updateData: any = {};
+
+        if (phoneClean && (!contact.whatsapp || contact.whatsapp.includes('@lid'))) {
+          updateData.whatsapp = phoneClean;
+        }
+
+        if (
+          displayName &&
+          (
+            !contact.name ||
+            contact.name === 'WhatsApp Contact' ||
+            contact.name === 'Sem Nome' ||
+            contact.name === contact.whatsapp ||
+            contact.whatsapp?.includes('@lid')
+          )
+        ) {
+          updateData.name = displayName;
+        }
+
+        if (lidJid && !(contact.notes || '').includes(lidJid)) {
+          updateData.notes = `${contact.notes ? `${contact.notes}\n` : ''}LID original: ${lidJid}`;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          contact = await this.prisma.contact.update({
+            where: { id: contact.id },
+            data: updateData
+          });
+        }
       }
 
-      if (contact && fullJid.includes('@lid') && !contact.whatsapp?.includes('@lid')) {
-        this.logger.log(`Fixing legacy LID contact WhatsApp number: ${contact.whatsapp} -> ${fullJid}`);
-        contact = await this.prisma.contact.update({
-          where: { id: contact.id },
-          data: { whatsapp: fullJid }
-        });
+      if (contact?.whatsapp && this.isPlausibleWhatsappNumber(contact.whatsapp)) {
+        fullJid = `${contact.whatsapp}@s.whatsapp.net`;
       }
 
       if (!contact) {
         contact = await this.prisma.contact.create({
           data: {
             tenantId,
-            name: pushName || phoneClean || 'Sem Nome',
-            whatsapp: phoneClean || '99 99999999',
+            name: displayName,
+            whatsapp: phoneClean || undefined,
             category: isGroup ? 'Grupo' : 'Lead',
-            email: 'nt@nt.com.br',
             document: null,
-            notes: `Adicionado automaticamente via WhatsApp. ${fullJid}`
+            notes: `Adicionado automaticamente via WhatsApp. ${lidJid || fullJid}`
           }
         });
       }
@@ -677,94 +919,67 @@ export class WhatsappService implements OnModuleInit {
         }
       }
 
-      let ticket = await this.prisma.ticket.findFirst({
-        where: { tenantId, contactId: contact.id, status: { not: 'CLOSED' } }
-      });
-
-      let isNewTicket = false;
-      if (!ticket) {
-        ticket = await this.prisma.ticket.create({
-          data: {
-            tenantId,
-            contactId: contact.id,
-            status: 'WAITING',
-            priority: 'MEDIUM',
-            channel: 'WHATSAPP',
-            title: isGroup ? pushName : `Chat from ${pushName}`
-          }
-        });
-        isNewTicket = true;
-      }
-
       const isFromMe = message.key.fromMe;
       const metadata: Record<string, any> = {
         connectionId,
         remoteJid: fullJid,
+        lidJid,
+        resolvedPhone: phoneClean || null,
         source: 'evolution-webhook'
       };
       if (mimeType) metadata.mimeType = mimeType;
       if (fileName) metadata.fileName = fileName;
 
-      const dbMessage = await this.prisma.ticketMessage.create({
-        data: {
-          ticketId: ticket.id,
-          senderType: isFromMe ? 'USER' : 'CONTACT',
-          senderId: isFromMe ? null : contact.id,
-          content: isGroup && message.pushName && !isFromMe ? `__${message.pushName}__: ${text}` : text,
-          contentType: type === 'VIDEO' || type === 'DOCUMENT' ? 'FILE' : type === 'STICKER' ? 'IMAGE' : type,
-          mediaUrl: mediaPath,
-          externalId: message.key.id,
-          status: isFromMe ? 'SENT' : 'DELIVERED',
-          quotedId,
-          metadata
-        }
-      });
-
-      await this.agentService.captureMessage({
+      const capture = await this.inboxService.captureExternalMessage({
         tenantId,
         channel: 'WHATSAPP',
-        ticketId: ticket.id,
-        ticketMessageId: dbMessage.id,
         contactId: contact.id,
         connectionId,
         externalThreadId: fullJid,
         externalMessageId: message.key.id,
         externalParticipantId: phoneClean || fullJid,
-        title: ticket.title,
         direction: isFromMe ? 'OUTBOUND' : 'INBOUND',
         role: isFromMe ? 'operator' : 'contact',
-        content: dbMessage.content,
-        contentType: dbMessage.contentType,
-        senderName: !isFromMe ? (message.pushName || contact.name || null) : null,
-        senderAddress: fullJid,
+        content: isGroup && displayName && !isFromMe ? `__${displayName}__: ${text}` : text,
+        contentType: type === 'VIDEO' || type === 'DOCUMENT' ? 'FILE' : type === 'STICKER' ? 'IMAGE' : type,
         mediaUrl: mediaPath,
-        metadata,
-        createdAt: dbMessage.createdAt,
+        status: isFromMe ? 'SENT' : 'DELIVERED',
+        title: isGroup ? displayName : `Chat from ${displayName}`,
+        senderName: !isFromMe ? (displayName || contact.name || null) : null,
+        senderAddress: fullJid,
+        metadata: {
+          ...metadata,
+          quotedId,
+        },
+        createdAt: new Date(
+          message.messageTimestamp ? Number(message.messageTimestamp) * 1000 : Date.now(),
+        ),
       });
 
-      let updateData: any = {
-        updatedAt: new Date(),
-        lastMessageAt: new Date(),
-        waitingReply: !isFromMe
-      };
+      const refreshedConversation = await this.prisma.agentConversation.findUnique({
+        where: { id: capture.conversation.id },
+      });
 
-      if (!isFromMe && ticket.status === 'RESOLVED') {
-        updateData.status = 'WAITING';
+      if (refreshedConversation?.ticketId) {
+        const legacyMessage = await this.prisma.ticketMessage.findFirst({
+          where: {
+            ticketId: refreshedConversation.ticketId,
+            externalId: message.key.id,
+          },
+        });
+
+        const fullTicket = await this.prisma.ticket.findUnique({
+          where: { id: refreshedConversation.ticketId },
+          include: { contact: true, _count: { select: { messages: true } } },
+        });
+
+        if (fullTicket) {
+          this.ticketsGateway.emitTicketUpdated(tenantId, fullTicket);
+          if (legacyMessage) {
+            this.ticketsGateway.emitNewMessage(tenantId, fullTicket.id, legacyMessage);
+          }
+        }
       }
-
-      await this.prisma.ticket.update({
-        where: { id: ticket.id },
-        data: updateData
-      });
-
-      const fullTicket = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
-        include: { contact: true, _count: { select: { messages: true } } }
-      });
-
-      if (isNewTicket) this.ticketsGateway.emitTicketCreated(tenantId, fullTicket);
-      else this.ticketsGateway.emitTicketUpdated(tenantId, fullTicket);
-      this.ticketsGateway.emitNewMessage(tenantId, ticket.id, dbMessage);
     } catch (error) {
       this.logger.error(`Error processing Evolution message: ${error.message}`);
     }
@@ -773,17 +988,39 @@ export class WhatsappService implements OnModuleInit {
    * Processa atualizações de status de mensagem (sent, delivered, read).
    */
   async handleEvolutionMessageUpdate(connectionId: string, data: any) {
-    const externalId = data.key?.id;
+    const externalId = data.key?.id || data.keyId || data.messageId;
     if (!externalId) return;
 
     const statusKey = data.status;
     let newStatus = 'SENT';
-    if (statusKey === 4 || statusKey === 5) newStatus = 'READ';
-    else if (statusKey === 3) newStatus = 'DELIVERED';
-    else if (statusKey === 2) newStatus = 'SENT';
-    else return;
+    if (statusKey === 4 || statusKey === 5 || statusKey === 'READ' || statusKey === 'read') {
+      newStatus = 'READ';
+    } else if (
+      statusKey === 3 ||
+      statusKey === 'DELIVERY_ACK' ||
+      statusKey === 'delivered' ||
+      statusKey === 'DELIVERED'
+    ) {
+      newStatus = 'DELIVERED';
+    } else if (
+      statusKey === 2 ||
+      statusKey === 'PENDING' ||
+      statusKey === 'pending' ||
+      statusKey === 'SENT' ||
+      statusKey === 'sent'
+    ) {
+      newStatus = 'SENT';
+    } else {
+      return;
+    }
 
     try {
+      this.logger.log(
+        `Processing message status update connection=${connectionId} externalId=${externalId} providerStatus=${statusKey} remoteJid=${
+          data.remoteJid || data.key?.remoteJid || 'unknown'
+        }`,
+      );
+
       const msg = await this.prisma.ticketMessage.findUnique({ where: { externalId } });
       if (msg) {
         await this.prisma.ticketMessage.update({
@@ -795,6 +1032,16 @@ export class WhatsappService implements OnModuleInit {
           this.ticketsGateway.emitMessageStatus(conn.tenantId, msg.ticketId, msg.id, newStatus);
         }
       }
+
+      await this.inboxService.handleExternalMessageStatus(externalId, newStatus, {
+        connectionId,
+        rawStatus: statusKey,
+      });
+
+      await this.registerLidAlias(
+        externalId,
+        data.remoteJid || data.key?.remoteJid || data.participant || null,
+      );
     } catch (e) {
       this.logger.error(`Error updating message status: ${e.message}`);
     }

@@ -4,12 +4,14 @@ import { PrismaService } from '../prisma.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { IncomingCommunicationDto } from './dto/incoming-communication.dto';
 import { CreateTicketDto } from '../tickets/dto/create-ticket.dto';
+import { InboxService } from '../inbox/inbox.service';
 
 @Injectable()
 export class CommunicationsService {
   constructor(
     private prisma: PrismaService,
     private ticketsService: TicketsService,
+    private inboxService: InboxService,
   ) {}
 
   async processIncoming(dto: IncomingCommunicationDto) {
@@ -63,63 +65,37 @@ export class CommunicationsService {
       });
     }
 
-    // 2. Determine Logic: Add to existing ticket or Create new?
-    // Find latest OPEN ticket for this contact
-    let ticket = await this.prisma.ticket.findFirst({
-      where: {
-        tenantId: dto.tenantId,
-        contactId: contact.id,
-        status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING'] }
+    const capture = await this.inboxService.captureExternalMessage({
+      tenantId: dto.tenantId,
+      channel: dto.channel,
+      contactId: contact.id,
+      connectionId: dto.connectionId || null,
+      externalThreadId: dto.externalThreadId || dto.from,
+      externalMessageId: dto.externalMessageId || null,
+      externalParticipantId: dto.from,
+      direction: 'INBOUND',
+      role: 'contact',
+      content: dto.content,
+      contentType: dto.contentType || 'TEXT',
+      mediaUrl: dto.mediaUrl || null,
+      title: `Atendimento ${dto.channel} - ${contact.name}`,
+      senderName: dto.name || contact.name,
+      senderAddress: dto.from,
+      metadata: {
+        ...(dto.metadata || {}),
+        connectionId: dto.connectionId,
+        externalThreadId: dto.externalThreadId || dto.from,
+        senderAddress: dto.from,
+        subject: dto.subject,
+        channel: dto.channel,
       },
-      orderBy: { updatedAt: 'desc' }
     });
 
-    if (ticket) {
-      console.log(`[Communications] Linking to existing Ticket #${ticket.code}`);
-      const msg = await this.ticketsService.simulateIncomingMessage(ticket.id, dto.content, dto.tenantId, {
-        contentType: dto.contentType || 'TEXT',
-        mediaUrl: dto.mediaUrl,
-        externalId: dto.externalMessageId,
-        metadata: {
-          ...(dto.metadata || {}),
-          connectionId: dto.connectionId,
-          externalThreadId: dto.externalThreadId || dto.from,
-          senderAddress: dto.from,
-          subject: dto.subject,
-          channel: dto.channel,
-        },
-      });
-      return { action: 'MESSAGE_ADDED', ticketId: ticket.id, messageId: msg.id };
-    } else {
-      console.log(`[Communications] Creating NEW Ticket`);
-      // Find a default user (Agent) or System User
-      const defaultUser = await this.prisma.user.findFirst({ where: { tenantId: dto.tenantId } });
-      const userId = defaultUser ? defaultUser.id : 'SYSTEM';
-
-      const createDto: CreateTicketDto = {
-        title: `Atendimento ${dto.channel} - ${contact.name}`,
-        priority: 'MEDIUM',
-        channel: dto.channel,
-        contactId: contact.id,
-        queue: 'GERAL',
-        // status is handled by service
-      } as any; // Cast to avoid strict type issues if DTO differs slightly
-
-      const newTicket = await this.ticketsService.create(createDto, dto.tenantId, userId);
-      const msg = await this.ticketsService.simulateIncomingMessage(newTicket.id, dto.content, dto.tenantId, {
-        contentType: dto.contentType || 'TEXT',
-        mediaUrl: dto.mediaUrl,
-        externalId: dto.externalMessageId,
-        metadata: {
-          ...(dto.metadata || {}),
-          connectionId: dto.connectionId,
-          externalThreadId: dto.externalThreadId || dto.from,
-          senderAddress: dto.from,
-          subject: dto.subject,
-          channel: dto.channel,
-        },
-      });
-      return { action: 'TICKET_CREATED', ticketId: newTicket.id, code: newTicket.code, messageId: msg.id };
-    }
+    return {
+      action: capture.created ? 'CONVERSATION_CAPTURED' : 'CONVERSATION_UPDATED',
+      conversationId: capture.conversation.id,
+      messageId: capture.message.id,
+      ticketId: capture.conversation.ticketId,
+    };
   }
 }

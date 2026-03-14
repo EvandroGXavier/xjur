@@ -28,6 +28,25 @@ interface CreateProcessDto {
     metadata?: any;
 }
 
+interface ImportedProcessPartyInput {
+    name: string;
+    type?: string;
+    document?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    oab?: string | null;
+    representedNames?: string[] | null;
+}
+
+interface ImportedPartySyncRef {
+    id: string;
+    contactId: string;
+    roleName: string;
+    normalizedName: string;
+    normalizedDocument?: string | null;
+    representedNames: string[];
+}
+
 @Injectable()
 export class ProcessesService {
     constructor(
@@ -111,6 +130,76 @@ export class ProcessesService {
     private normalizeDocument(value?: string | null) {
         const digits = String(value || '').replace(/\D/g, '');
         return digits || null;
+    }
+
+    private normalizeCnj(value?: string | null) {
+        const digits = String(value || '').replace(/\D/g, '');
+        return digits || null;
+    }
+
+    private isLawyerRole(roleName?: string | null) {
+        const normalized = this.normalizeText(roleName);
+        return ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'].some(term => normalized.includes(term));
+    }
+
+    private inferImportedPole(roleName?: string | null): 'ACTIVE' | 'PASSIVE' | null {
+        const normalized = this.normalizeText(roleName);
+        if (['AUTOR', 'AUTORA', 'REQUERENTE', 'EXEQUENTE', 'IMPETRANTE', 'RECLAMANTE', 'APELANTE', 'AGRAVANTE', 'EMBARGANTE'].some(term => normalized.includes(term))) {
+            return 'ACTIVE';
+        }
+        if (['REU', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'IMPETRADO', 'RECLAMADO', 'RECLAMADA', 'APELADO', 'AGRAVADO', 'EMBARGADO'].some(term => normalized.includes(term))) {
+            return 'PASSIVE';
+        }
+        if (normalized.includes('CONTRARIO')) {
+            return 'PASSIVE';
+        }
+        if (this.isLawyerRole(normalized)) {
+            return 'ACTIVE';
+        }
+        return null;
+    }
+
+    private buildProcessInclude() {
+        return {
+            timeline: { orderBy: { date: 'desc' as const }, take: 50 },
+            appointments: { orderBy: { startAt: 'asc' as const }, take: 20 },
+            contact: true,
+            tags: {
+                include: {
+                    tag: true,
+                },
+            },
+            processParties: {
+                orderBy: { createdAt: 'asc' as const },
+                include: {
+                    contact: {
+                        include: {
+                            additionalContacts: true,
+                        },
+                    },
+                    role: true,
+                    qualification: true,
+                    representativeLinks: {
+                        orderBy: { createdAt: 'asc' as const },
+                        include: {
+                            representativeParty: {
+                                include: {
+                                    contact: {
+                                        include: {
+                                            additionalContacts: true,
+                                        },
+                                    },
+                                    role: true,
+                                    qualification: true,
+                                },
+                            },
+                        },
+                    },
+                    representedPartyLinks: true,
+                },
+            },
+            processPartyRepresentations: true,
+        };
     }
 
     private parseDate(value: any) {
@@ -334,11 +423,84 @@ export class ProcessesService {
         });
     }
 
+    private async ensureImportedAdditionalContact(contactId: string, type: string, value?: string | null) {
+        const trimmedValue = String(value || '').trim();
+        if (!trimmedValue) return;
+
+        const existing = await this.prisma.additionalContact.findFirst({
+            where: {
+                contactId,
+                type,
+                value: trimmedValue,
+            },
+            select: { id: true },
+        });
+
+        if (!existing) {
+            await this.prisma.additionalContact.create({
+                data: {
+                    contactId,
+                    type,
+                    value: trimmedValue,
+                },
+            });
+        }
+    }
+
+    private async updateExistingImportedContact(
+        contactId: string,
+        roleName: string,
+        document?: string | null,
+        phone?: string | null,
+        email?: string | null,
+    ) {
+        const cleanDoc = this.normalizeDocument(document);
+        const category = roleName === 'MAGISTRADO' ? 'MAGISTRADO' : roleName;
+        const current = await this.prisma.contact.findUnique({
+            where: { id: contactId },
+            include: {
+                pfDetails: true,
+                pjDetails: true,
+            },
+        });
+
+        if (!current) return;
+
+        await this.prisma.contact.update({
+            where: { id: contactId },
+            data: {
+                document: current.document || cleanDoc || undefined,
+                phone: current.phone || String(phone || '').trim() || undefined,
+                email: current.email || String(email || '').trim() || undefined,
+                category: current.category || category,
+                notes: current.notes || 'Importado automaticamente via processo',
+                pfDetails: cleanDoc && cleanDoc.length <= 11 && !current.pfDetails
+                    ? {
+                        create: { cpf: cleanDoc },
+                    }
+                    : undefined,
+                pjDetails: cleanDoc && cleanDoc.length > 11 && !current.pjDetails
+                    ? {
+                        create: {
+                            cnpj: cleanDoc,
+                            companyName: current.name,
+                        },
+                    }
+                    : undefined,
+            },
+        });
+
+        await this.ensureImportedAdditionalContact(contactId, 'PHONE', phone);
+        await this.ensureImportedAdditionalContact(contactId, 'EMAIL', email);
+    }
+
     private async findOrCreateImportedContact(
         tenantId: string,
         name: string,
         roleName: string,
         document?: string | null,
+        phone?: string | null,
+        email?: string | null,
     ) {
         const trimmedName = String(name || '').trim().slice(0, 100);
         if (!trimmedName) return null;
@@ -346,6 +508,7 @@ export class ProcessesService {
         const cleanDoc = this.normalizeDocument(document);
         const existing = await this.findExistingImportedContact(tenantId, trimmedName, cleanDoc);
         if (existing) {
+            await this.updateExistingImportedContact(existing.id, roleName, cleanDoc, phone, email);
             return existing.id;
         }
 
@@ -358,6 +521,8 @@ export class ProcessesService {
                 name: trimmedName,
                 personType,
                 document: cleanDoc || undefined,
+                phone: String(phone || '').trim() || undefined,
+                email: String(email || '').trim() || undefined,
                 category,
                 notes: 'Importado automaticamente via processo',
                 pfDetails: personType === 'PF' && cleanDoc
@@ -376,6 +541,9 @@ export class ProcessesService {
             },
             select: { id: true },
         });
+
+        await this.ensureImportedAdditionalContact(created.id, 'PHONE', phone);
+        await this.ensureImportedAdditionalContact(created.id, 'EMAIL', email);
 
         return created.id;
     }
@@ -422,13 +590,102 @@ export class ProcessesService {
         });
     }
 
+    private matchImportedPartyRef(
+        refs: ImportedPartySyncRef[],
+        name?: string | null,
+        document?: string | null,
+    ) {
+        const normalizedDocument = this.normalizeDocument(document);
+        if (normalizedDocument) {
+            const byDocument = refs.find(ref => ref.normalizedDocument === normalizedDocument);
+            if (byDocument) return byDocument;
+        }
+
+        const normalizedName = this.normalizeText(name);
+        if (!normalizedName) return null;
+        return refs.find(ref => ref.normalizedName === normalizedName) || null;
+    }
+
+    private async linkImportedRepresentations(
+        tenantId: string,
+        processId: string,
+        refs: ImportedPartySyncRef[],
+    ) {
+        const principalRefs = refs.filter(ref => !this.isLawyerRole(ref.roleName) && this.inferImportedPole(ref.roleName));
+        const lawyerRefs = refs.filter(ref => this.isLawyerRole(ref.roleName));
+
+        for (const lawyer of lawyerRefs) {
+            const explicitTargets = lawyer.representedNames
+                .map(name => this.matchImportedPartyRef(principalRefs, name))
+                .filter(Boolean) as ImportedPartySyncRef[];
+
+            let targets = explicitTargets;
+
+            if (targets.length === 0) {
+                const inferredPole = this.inferImportedPole(lawyer.roleName);
+                if (inferredPole) {
+                    targets = principalRefs.filter(ref => this.inferImportedPole(ref.roleName) === inferredPole);
+                }
+            }
+
+            const uniqueTargets = new Map<string, ImportedPartySyncRef>();
+            for (const target of targets) {
+                if (target.id !== lawyer.id) {
+                    uniqueTargets.set(target.id, target);
+                }
+            }
+
+            for (const target of uniqueTargets.values()) {
+                await this.prisma.processPartyRepresentation.upsert({
+                    where: {
+                        partyId_representativePartyId: {
+                            partyId: target.id,
+                            representativePartyId: lawyer.id,
+                        },
+                    },
+                    update: {},
+                    create: {
+                        tenantId,
+                        processId,
+                        partyId: target.id,
+                        representativePartyId: lawyer.id,
+                    },
+                });
+            }
+        }
+    }
+
+    private async assignPrimaryProcessContactIfMissing(
+        processId: string,
+        refs: ImportedPartySyncRef[],
+    ) {
+        const current = await this.prisma.process.findUnique({
+            where: { id: processId },
+            select: { contactId: true },
+        });
+
+        if (current?.contactId) return;
+
+        const preferred =
+            refs.find(ref => this.inferImportedPole(ref.roleName) === 'ACTIVE' && !this.isLawyerRole(ref.roleName)) ||
+            refs.find(ref => !this.isLawyerRole(ref.roleName));
+
+        if (preferred) {
+            await this.prisma.process.update({
+                where: { id: processId },
+                data: { contactId: preferred.contactId },
+            });
+        }
+    }
+
     private async syncImportedProcessParties(
         processId: string,
         tenantId: string,
         parties: any[] = [],
         judgeName?: string,
     ) {
-        const safeParties = Array.isArray(parties) ? parties : [];
+        const safeParties = (Array.isArray(parties) ? parties : []) as ImportedProcessPartyInput[];
+        const syncedRefs: ImportedPartySyncRef[] = [];
 
         for (const party of safeParties) {
             const name = String(party?.name || '').trim();
@@ -440,17 +697,28 @@ export class ProcessesService {
                 name,
                 roleName,
                 party?.document,
+                party?.phone,
+                party?.email,
             );
 
             if (!contactId) continue;
 
-            await this.upsertImportedProcessParty(
+            const processParty = await this.upsertImportedProcessParty(
                 tenantId,
                 processId,
                 contactId,
                 roleName,
                 'Importado automaticamente via consulta/processo',
             );
+
+            syncedRefs.push({
+                id: processParty.id,
+                contactId,
+                roleName,
+                normalizedName: this.normalizeText(name),
+                normalizedDocument: this.normalizeDocument(party?.document),
+                representedNames: Array.isArray(party?.representedNames) ? party.representedNames : [],
+            });
         }
 
         if (this.isInformativeJudgeName(judgeName)) {
@@ -461,15 +729,27 @@ export class ProcessesService {
             );
 
             if (judgeContactId) {
-                await this.upsertImportedProcessParty(
+                const judgeParty = await this.upsertImportedProcessParty(
                     tenantId,
                     processId,
                     judgeContactId,
                     'MAGISTRADO',
                     'Magistrado importado automaticamente via consulta/processo',
                 );
+
+                syncedRefs.push({
+                    id: judgeParty.id,
+                    contactId: judgeContactId,
+                    roleName: 'MAGISTRADO',
+                    normalizedName: this.normalizeText(String(judgeName).trim()),
+                    normalizedDocument: null,
+                    representedNames: [],
+                });
             }
         }
+
+        await this.linkImportedRepresentations(tenantId, processId, syncedRefs);
+        await this.assignPrimaryProcessContactIfMissing(processId, syncedRefs);
     }
 
     private async resolveTenantId(inputTenantId?: string) {
@@ -494,7 +774,7 @@ export class ProcessesService {
 
     private async buildProcessCode(tenantId: string, data: CreateProcessDto) {
         if (data.category !== 'EXTRAJUDICIAL') {
-            return data.code || data.cnj;
+            return data.code || this.normalizeCnj(data.cnj) || data.cnj;
         }
 
         const year = new Date().getFullYear();
@@ -537,14 +817,15 @@ export class ProcessesService {
         const processData = {
             tenantId,
             contactId: data.contactId,
-            cnj: data.cnj?.trim() ? data.cnj : null,
+            cnj: this.normalizeCnj(data.cnj),
             category: data.category,
-            title: data.title || `Processo ${data.cnj}`,
+            title: data.title || `Processo ${this.normalizeCnj(data.cnj) || data.cnj}`,
             code,
             description: data.description,
             folder: data.folder,
             court: data.court,
             courtSystem: data.courtSystem,
+            npu: this.normalizeCnj(data.cnj),
             vars: data.vars,
             district: data.district,
             status: data.status || 'ATIVO',
@@ -564,7 +845,7 @@ export class ProcessesService {
             const process =
                 data.category === 'JUDICIAL' && data.cnj
                     ? await this.prisma.process.upsert({
-                        where: { cnj: data.cnj },
+                        where: { cnj: processData.cnj! },
                         update: {
                             contactId: processData.contactId,
                             cnj: processData.cnj,
@@ -600,16 +881,16 @@ export class ProcessesService {
                 (Array.isArray(processData.parties) && processData.parties.length > 0) ||
                 this.isInformativeJudgeName(processData.judge)
             ) {
-                this.syncImportedProcessParties(
+                await this.syncImportedProcessParties(
                     process.id,
                     tenantId,
                     processData.parties as any[],
                     processData.judge,
-                ).catch(err => console.error('Error syncing imported process parties:', err));
+                );
             }
 
             await this.syncMicrosoftFolder(tenantId, process.id);
-            return this.prisma.process.findUnique({ where: { id: process.id } });
+            return this.findOne(process.id, tenantId);
         } catch (error: any) {
             this.logAudit('ERROR_SAVING', { error: error.message, stack: error.stack });
             console.error('Error creating/upserting process:', error);
@@ -697,16 +978,7 @@ export class ProcessesService {
     async findOne(id: string, tenantId: string) {
         const process = await this.prisma.process.findFirst({
             where: { id, tenantId },
-            include: {
-                timeline: { orderBy: { date: 'desc' }, take: 50 },
-                appointments: { orderBy: { startAt: 'asc' }, take: 20 },
-                contact: true,
-                tags: {
-                    include: {
-                        tag: true,
-                    },
-                },
-            },
+            include: this.buildProcessInclude(),
         });
 
         if (!process) {
@@ -727,7 +999,10 @@ export class ProcessesService {
         const updateData: any = {};
 
         if (data.title !== undefined) updateData.title = data.title;
-        if (data.cnj !== undefined) updateData.cnj = data.cnj?.trim() ? data.cnj : null;
+        if (data.cnj !== undefined) {
+            updateData.cnj = this.normalizeCnj(data.cnj);
+            updateData.npu = this.normalizeCnj(data.cnj);
+        }
         if (data.category !== undefined) updateData.category = data.category;
         if (data.description !== undefined) updateData.description = data.description;
         if (data.folder !== undefined) updateData.folder = data.folder;
@@ -774,7 +1049,7 @@ export class ProcessesService {
             }
 
             await this.syncMicrosoftFolder(tenantId, updated.id);
-            return this.prisma.process.findUnique({ where: { id: updated.id } });
+            return this.findOne(updated.id, tenantId);
         } catch (error: any) {
             this.logAudit('UPDATE_ERROR', { id, error: error.message });
             console.error('Error updating process:', error);

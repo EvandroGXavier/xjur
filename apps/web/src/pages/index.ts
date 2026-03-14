@@ -13,7 +13,7 @@ export { Agenda } from './Agenda';
 export { ProductsList } from './products/ProductsList';
 export * from './ForgotPassword';
 export * from './ResetPassword';
-export * from './atendimento/atendimento';
+export { AtendimentoPage } from './atendimento/atendimento-v2';
 export { Kanban } from './Kanban';
 export { ProcessConfig } from './processes/ProcessConfig';
 export { ProposalsPage } from './inventory/ProposalsPage';
