@@ -423,6 +423,7 @@ export class ProcessIntegrationsService {
         item?.nomeParte ||
         item?.nomePessoa ||
         item?.nomeParticipante ||
+        item?.nomeCompleto ||
         item?.parte ||
         item?.participantName ||
         item?.pessoa?.nome ||
@@ -653,8 +654,19 @@ export class ProcessIntegrationsService {
 
     for (const item of items) {
       const currentName = this.extractPartyName(item);
-      this.appendPartySnapshot(target, item, fallbackType, parentName);
+      
+      // Append the item itself if it has a name
+      if (currentName) {
+        this.appendPartySnapshot(target, item, fallbackType, parentName);
+      }
+
       this.appendNestedRepresentatives(target, item, currentName || parentName);
+      
+      // Handle nested participants (common in DataJud where a 'polo' item is a wrapper)
+      const nestedParticipantes = item?.participantes || item?.partes || item?.pessoas;
+      if (Array.isArray(nestedParticipantes)) {
+        this.appendParties(target, nestedParticipantes, fallbackType, currentName || parentName);
+      }
     }
   }
 

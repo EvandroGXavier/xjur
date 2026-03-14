@@ -54,6 +54,33 @@ const EMPTY_FORM = {
     metadata: null as any,
 };
 
+const normalizeLifecycleStatus = (value?: string | null, fallback = 'ATIVO') => {
+    const normalized = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, '_');
+
+    const statusMap: Record<string, string> = {
+        ATIVO: 'ATIVO',
+        ATIVA: 'ATIVO',
+        INATIVO: 'INATIVO',
+        INATIVA: 'INATIVO',
+        EM_ANDAMENTO: 'EM_ANDAMENTO',
+        EM_ACOMPANHAMENTO: 'EM_ANDAMENTO',
+        OPORTUNIDADE: 'OPORTUNIDADE',
+        SUSPENSO: 'SUSPENSO',
+        SUSPENSA: 'SUSPENSO',
+        ARQUIVADO: 'ARQUIVADO',
+        ARQUIVADA: 'ARQUIVADO',
+        ENCERRADO: 'ENCERRADO',
+        ENCERRADA: 'ENCERRADO',
+    };
+
+    return statusMap[normalized] || fallback;
+};
+
 type ImportedParty = {
     name: string;
     type: string;
@@ -74,6 +101,7 @@ export function ProcessForm() {
     const [syncingMicrosoftFolder, setSyncingMicrosoftFolder] = useState(false);
     const [consultingCnj, setConsultingCnj] = useState(false);
     const [importedParties, setImportedParties] = useState<ImportedParty[]>([]);
+    const [importedMovements, setImportedMovements] = useState<any[]>([]);
     const [lastConsultSummary, setLastConsultSummary] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
 
@@ -91,7 +119,7 @@ export function ProcessForm() {
         courtSystem: payload.courtSystem || form.courtSystem,
         vars: payload.vars || form.vars,
         district: payload.district || form.district,
-        status: payload.status || form.status,
+        status: normalizeLifecycleStatus(payload.status, form.status || 'ATIVO'),
         category: payload.cnj ? 'JUDICIAL' : form.category,
         area: payload.area || form.area,
         subject: payload.subject || form.subject,
@@ -103,7 +131,11 @@ export function ProcessForm() {
         value: typeof payload.value === 'number' && payload.value > 0 ? payload.value : form.value,
         description: payload.description || form.description,
         folder: payload.folder || form.folder,
-        metadata: payload.metadata || form.metadata,
+        metadata: {
+            ...(form.metadata && typeof form.metadata === 'object' ? form.metadata : {}),
+            ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+            proceduralStatus: payload.status || payload.metadata?.proceduralStatus || form.metadata?.proceduralStatus || undefined,
+        },
     });
 
     const fetchProcess = async () => {
@@ -118,7 +150,7 @@ export function ProcessForm() {
                 courtSystem: data.courtSystem || '',
                 vars: data.vars || '',
                 district: data.district || '',
-                status: data.status || 'ATIVO',
+                status: normalizeLifecycleStatus(data.status, 'ATIVO'),
                 category: data.category || 'JUDICIAL',
                 area: data.area || '',
                 subject: data.subject || '',
@@ -131,6 +163,7 @@ export function ProcessForm() {
                 metadata: data.metadata || null,
             });
             setImportedParties(Array.isArray(data.parties) ? data.parties : []);
+            setImportedMovements(Array.isArray(data.movements) ? data.movements : []);
             setLastConsultSummary(
                 Array.isArray(data.processParties) && data.processParties.length > 0
                     ? `${data.processParties.length} parte(s) sincronizadas no cadastro do processo${Array.isArray(data.processPartyRepresentations) && data.processPartyRepresentations.length > 0 ? ` e ${data.processPartyRepresentations.length} vinculo(s) de representacao` : ''}`
@@ -185,11 +218,13 @@ export function ProcessForm() {
 
             const mergedForm = mergeImportedDataIntoForm(imported);
             const parties = Array.isArray(imported.parties) ? imported.parties : [];
+            const movements = Array.isArray(imported.movements) ? imported.movements : [];
             setForm(mergedForm);
             setImportedParties(parties);
+            setImportedMovements(movements);
 
             const lawyerCount = parties.filter(party => String(party.type || '').toUpperCase().includes('ADVOG')).length;
-            const summary = `Capa atualizada e ${parties.length} parte(s) preparadas para sincronizacao${lawyerCount > 0 ? `, incluindo ${lawyerCount} advogado(s)` : ''}.`;
+            const summary = `Capa atualizada${parties.length > 0 ? `, ${parties.length} parte(s) preparadas` : ''}${movements.length > 0 ? ` e ${movements.length} andamentos extraidos` : ''}. Revise nas abas acima.`;
             setLastConsultSummary(summary);
 
             if (persistAfterFetch && isEditing) {
@@ -327,12 +362,12 @@ export function ProcessForm() {
                 </div>
             </div>
 
-            {isEditing && (
+            {(isEditing || importedParties.length > 0 || importedMovements.length > 0) && (
                 <div className="flex border-b border-slate-800 mb-6">
                     <TabButton tabId="MAIN" label="PRINCIPAL" icon={FileText} />
-                    <TabButton tabId="PARTIES" label="PARTES" icon={Users} />
-                    <TabButton tabId="TIMELINE" label="ANDAMENTOS" icon={Activity} />
-                    <TabButton tabId="AGENDA" label="AGENDA" icon={Calendar} />
+                    {(isEditing || importedParties.length > 0) && <TabButton tabId="PARTIES" label="PARTES" icon={Users} />}
+                    {(isEditing || importedMovements.length > 0) && <TabButton tabId="TIMELINE" label="ANDAMENTOS" icon={Activity} />}
+                    {isEditing && <TabButton tabId="AGENDA" label="AGENDA" icon={Calendar} />}
                 </div>
             )}
 
@@ -466,8 +501,71 @@ export function ProcessForm() {
                     </form>
                 </div>
 
-                {isEditing && activeTab === 'PARTIES' && <div className="animate-in fade-in"><ProcessParties processId={id!} /></div>}
-                {isEditing && activeTab === 'TIMELINE' && <div className="animate-in fade-in"><ProcessoAndamentos processId={id!} /></div>}
+                {activeTab === 'PARTIES' && (
+                    <div className="animate-in fade-in">
+                        {isEditing ? (
+                            <ProcessParties processId={id!} />
+                        ) : (
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                                <div className="p-4 border-b border-slate-800 bg-slate-800/50">
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Visualizacao Previa: Partes Importadas</h3>
+                                    <p className="text-xs text-slate-400 mt-1">Estas partes serao salvas e vinculadas ao processo assim que voce clicar em Salvar.</p>
+                                </div>
+                                <div className="divide-y divide-slate-800">
+                                    {importedParties.map((party, idx) => (
+                                        <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700">
+                                                    <Users size={20} />
+                                                </div>
+                                                <div>
+                                                    <div className="font-medium text-white">{party.name}</div>
+                                                    <div className="text-xs text-slate-500">{party.type} {party.document && `| ${party.document}`}</div>
+                                                </div>
+                                            </div>
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                                String(party.type || '').includes('ADVOG') ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 
+                                                String(party.type || '').includes('AUTOR') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                                'bg-slate-700/50 text-slate-400 border border-slate-600'
+                                            }`}>
+                                                {party.type}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'TIMELINE' && (
+                    <div className="animate-in fade-in">
+                        {isEditing ? (
+                            <ProcessoAndamentos processId={id!} />
+                        ) : (
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                                <div className="p-4 border-b border-slate-800 bg-slate-800/50">
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Visualizacao Previa: Ultimos Andamentos</h3>
+                                    <p className="text-xs text-slate-400 mt-1">Os ultimos andamentos serao importados para a linha do tempo do processo.</p>
+                                </div>
+                                <div className="divide-y divide-slate-800">
+                                    {importedMovements.map((mov, idx) => (
+                                        <div key={idx} className="p-4 flex gap-4 hover:bg-slate-800/30 transition">
+                                            <div className="min-w-[100px] text-xs text-slate-500 pt-1 font-mono">
+                                                {mov.date ? new Date(mov.date).toLocaleDateString('pt-BR') : '-'}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-medium text-slate-200">{mov.description}</div>
+                                                {mov.type && <div className="text-[10px] text-slate-600 uppercase mt-1">{mov.type}</div>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
                 {isEditing && activeTab === 'AGENDA' && <div className="animate-in fade-in"><ProcessAgenda processId={id!} /></div>}
             </div>
         </div>

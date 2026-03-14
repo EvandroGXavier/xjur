@@ -12,6 +12,33 @@ interface MagicProcessModalProps {
     onSuccess: () => void;
 }
 
+const normalizeLifecycleStatus = (value?: string | null, fallback = 'ATIVO') => {
+    const normalized = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, '_');
+
+    const statusMap: Record<string, string> = {
+        ATIVO: 'ATIVO',
+        ATIVA: 'ATIVO',
+        INATIVO: 'INATIVO',
+        INATIVA: 'INATIVO',
+        EM_ANDAMENTO: 'EM_ANDAMENTO',
+        EM_ACOMPANHAMENTO: 'EM_ANDAMENTO',
+        OPORTUNIDADE: 'OPORTUNIDADE',
+        SUSPENSO: 'SUSPENSO',
+        SUSPENSA: 'SUSPENSO',
+        ARQUIVADO: 'ARQUIVADO',
+        ARQUIVADA: 'ARQUIVADO',
+        ENCERRADO: 'ENCERRADO',
+        ENCERRADA: 'ENCERRADO',
+    };
+
+    return statusMap[normalized] || fallback;
+};
+
 export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessModalProps) {
     const [mode, setMode] = useState<'JUDICIAL' | 'EXTRAJUDICIAL'>('EXTRAJUDICIAL');
     const [cnj, setCnj] = useState('');
@@ -67,7 +94,7 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
         courtSystem: previewData?.courtSystem || '',
         vars: previewData?.vars || '',
         district: previewData?.district || '',
-        status: previewData?.status || 'ATIVO',
+        status: normalizeLifecycleStatus(previewData?.status, 'ATIVO'),
         area: previewData?.area || '',
         subject: previewData?.subject || '',
         class: previewData?.class || '',
@@ -76,7 +103,10 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
         value: previewData?.value || 0,
         description: previewData?.description || '',
         folder: previewData?.folder || '',
-        metadata: previewData?.metadata || null,
+        metadata: {
+            ...(previewData?.metadata && typeof previewData.metadata === 'object' ? previewData.metadata : {}),
+            proceduralStatus: previewData?.status || previewData?.metadata?.proceduralStatus || undefined,
+        },
         parties: Array.isArray(previewData?.parties) ? previewData.parties : [],
     });
 

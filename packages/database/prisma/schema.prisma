@@ -331,7 +331,7 @@ model Process {
   id        String  @id @default(uuid())
   tenantId  String
   contactId String? // Pode ser nulo inicialmente se criado via automação
-  cnj       String? @unique // Opcional para Casos/Consultivo
+  cnj       String? // Opcional para Casos/Consultivo
 
   // Identificação Interna
   category    String  @default("JUDICIAL") // JUDICIAL | EXTRAJUDICIAL
@@ -385,6 +385,7 @@ model Process {
   agentMessageLinks           AgentMessageLink[]
 
   @@unique([tenantId, code])
+  @@unique([tenantId, cnj])
   @@map("processes")
 }
 

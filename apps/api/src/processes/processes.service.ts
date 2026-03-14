@@ -137,6 +137,49 @@ export class ProcessesService {
         return digits || null;
     }
 
+    private normalizeLifecycleStatus(value?: string | null, fallback = 'ATIVO') {
+        const normalized = this.normalizeText(value).replace(/[\s-]+/g, '_');
+        const statusMap: Record<string, string> = {
+            ATIVO: 'ATIVO',
+            ATIVA: 'ATIVO',
+            INATIVO: 'INATIVO',
+            INATIVA: 'INATIVO',
+            EM_ANDAMENTO: 'EM_ANDAMENTO',
+            EM_ACOMPANHAMENTO: 'EM_ANDAMENTO',
+            OPORTUNIDADE: 'OPORTUNIDADE',
+            SUSPENSO: 'SUSPENSO',
+            SUSPENSA: 'SUSPENSO',
+            ARQUIVADO: 'ARQUIVADO',
+            ARQUIVADA: 'ARQUIVADO',
+            ENCERRADO: 'ENCERRADO',
+            ENCERRADA: 'ENCERRADO',
+        };
+
+        return statusMap[normalized] || fallback;
+    }
+
+    private buildProcessMetadata(inputMetadata: any, rawStatus?: string | null, normalizedStatus?: string) {
+        const metadata =
+            inputMetadata && typeof inputMetadata === 'object' && !Array.isArray(inputMetadata)
+                ? { ...inputMetadata }
+                : {};
+
+        const existingProceduralStatus = String(metadata.proceduralStatus || '').trim();
+        const incomingRawStatus = String(rawStatus || '').trim();
+        const rawLifecycleStatus = this.normalizeLifecycleStatus(incomingRawStatus, '');
+
+        if (existingProceduralStatus) {
+            metadata.proceduralStatus = existingProceduralStatus;
+            return metadata;
+        }
+
+        if (incomingRawStatus && (!rawLifecycleStatus || rawLifecycleStatus !== normalizedStatus)) {
+            metadata.proceduralStatus = incomingRawStatus;
+        }
+
+        return metadata;
+    }
+
     private isLawyerRole(roleName?: string | null) {
         const normalized = this.normalizeText(roleName);
         return ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'].some(term => normalized.includes(term));
@@ -264,7 +307,8 @@ export class ProcessesService {
         const normalized = this.normalizeText(rawType);
         if (!normalized) return 'TERCEIRO';
 
-        if (['AUTOR', 'AUTORA', 'REQUERENTE', 'EXEQUENTE', 'IMPETRANTE', 'RECLAMANTE', 'APELANTE', 'AGRAVANTE', 'EMBARGANTE'].some(term => normalized.includes(term))) {
+        const aktivTerms = ['AUTOR', 'AUTORA', 'REQUERENTE', 'EXEQUENTE', 'IMPETRANTE', 'RECLAMANTE', 'APELANTE', 'AGRAVANTE', 'EMBARGANTE', 'POLO ATIVO'];
+        if (aktivTerms.some(term => normalized.includes(term))) {
             if (normalized.includes('AUTORA')) return 'AUTORA';
             if (normalized.includes('REQUERENTE')) return 'REQUERENTE';
             if (normalized.includes('EXEQUENTE')) return 'EXEQUENTE';
@@ -272,7 +316,8 @@ export class ProcessesService {
             return 'AUTOR';
         }
 
-        if (['REU', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'IMPETRADO', 'RECLAMADO', 'RECLAMADA', 'APELADO', 'AGRAVADO', 'EMBARGADO'].some(term => normalized.includes(term))) {
+        const passivTerms = ['REU', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'IMPETRADO', 'RECLAMADO', 'RECLAMADA', 'APELADO', 'AGRAVADO', 'EMBARGADO', 'POLO PASSIVO'];
+        if (passivTerms.some(term => normalized.includes(term))) {
             if (normalized.includes('REQUERIDA')) return 'REQUERIDA';
             if (normalized.includes('REQUERIDO')) return 'REQUERIDO';
             if (normalized.includes('EXECUTADA')) return 'EXECUTADA';
@@ -555,6 +600,7 @@ export class ProcessesService {
         roleName: string,
         notes?: string,
     ) {
+        console.log(`Upserting Imported Process Party: ContactId=${contactId}, Role=${roleName}`);
         const role = await this.ensureRole(tenantId, roleName);
         const qualificationName = this.getQualificationNameForRole(role.name);
         const qualification = qualificationName
@@ -685,13 +731,19 @@ export class ProcessesService {
         judgeName?: string,
     ) {
         const safeParties = (Array.isArray(parties) ? parties : []) as ImportedProcessPartyInput[];
+        console.log(`Syncing ${safeParties.length} imported parties for process ${processId}`);
         const syncedRefs: ImportedPartySyncRef[] = [];
 
         for (const party of safeParties) {
             const name = String(party?.name || '').trim();
-            if (!name) continue;
+            if (!name) {
+                console.log(`Skipping party with no name: ${JSON.stringify(party)}`);
+                continue;
+            }
 
             const roleName = this.normalizeImportedRole(party?.type);
+            console.log(`Processing imported party: name=${name}, role=${roleName}, type=${party?.type}`);
+
             const contactId = await this.findOrCreateImportedContact(
                 tenantId,
                 name,
@@ -701,7 +753,10 @@ export class ProcessesService {
                 party?.email,
             );
 
-            if (!contactId) continue;
+            if (!contactId) {
+                console.warn(`Could not create/find contact for party ${name}`);
+                continue;
+            }
 
             const processParty = await this.upsertImportedProcessParty(
                 tenantId,
@@ -710,6 +765,8 @@ export class ProcessesService {
                 roleName,
                 'Importado automaticamente via consulta/processo',
             );
+
+            console.log(`Linked party ${name} (Contact: ${contactId}) to process as ${roleName}`);
 
             syncedRefs.push({
                 id: processParty.id,
@@ -813,6 +870,8 @@ export class ProcessesService {
 
         const tenantId = await this.resolveTenantId(data.tenantId);
         const code = await this.buildProcessCode(tenantId, data);
+        const normalizedStatus = this.normalizeLifecycleStatus(data.status, 'ATIVO');
+        const processMetadata = this.buildProcessMetadata(data.metadata, data.status, normalizedStatus);
 
         const processData = {
             tenantId,
@@ -828,7 +887,7 @@ export class ProcessesService {
             npu: this.normalizeCnj(data.cnj),
             vars: data.vars,
             district: data.district,
-            status: data.status || 'ATIVO',
+            status: normalizedStatus,
             area: data.area,
             subject: data.subject,
             class: data.class,
@@ -836,7 +895,7 @@ export class ProcessesService {
             judge: data.judge,
             value: this.parseMoneyValue(data.value),
             parties: Array.isArray(data.parties) ? data.parties : [],
-            metadata: data.metadata || {},
+            metadata: processMetadata,
         };
 
         this.logAudit('2_MAPPED_DATA', processData);
@@ -845,7 +904,12 @@ export class ProcessesService {
             const process =
                 data.category === 'JUDICIAL' && data.cnj
                     ? await this.prisma.process.upsert({
-                        where: { cnj: processData.cnj! },
+                        where: { 
+                            tenantId_cnj: {
+                                tenantId,
+                                cnj: processData.cnj!
+                            }
+                        },
                         update: {
                             contactId: processData.contactId,
                             cnj: processData.cnj,
@@ -923,7 +987,19 @@ export class ProcessesService {
         }
 
         if (status && status !== 'ALL') {
-            where.status = status;
+            if (status === 'ATIVO') {
+                where.NOT = {
+                    status: {
+                        in: ['INATIVO', 'SUSPENSO', 'ARQUIVADO', 'ENCERRADO'],
+                    },
+                };
+            } else if (status === 'INATIVO') {
+                where.status = {
+                    in: ['INATIVO', 'SUSPENSO', 'ARQUIVADO', 'ENCERRADO'],
+                };
+            } else {
+                where.status = this.normalizeLifecycleStatus(status, status);
+            }
         }
 
         if (includedTags || excludedTags) {
@@ -1010,13 +1086,25 @@ export class ProcessesService {
         if (data.courtSystem !== undefined) updateData.courtSystem = data.courtSystem;
         if (data.vars !== undefined) updateData.vars = data.vars;
         if (data.district !== undefined) updateData.district = data.district;
-        if (data.status !== undefined) updateData.status = data.status;
+        if (data.status !== undefined) {
+            updateData.status = this.normalizeLifecycleStatus(data.status, existing.status || 'ATIVO');
+        }
         if (data.area !== undefined) updateData.area = data.area;
         if (data.subject !== undefined) updateData.subject = data.subject;
         if (data.class !== undefined) updateData.class = data.class;
         if (data.judge !== undefined) updateData.judge = data.judge;
         if (data.parties !== undefined) updateData.parties = data.parties;
-        if (data.metadata !== undefined) updateData.metadata = data.metadata;
+        if (data.metadata !== undefined || data.status !== undefined) {
+            const nextStatus =
+                updateData.status ||
+                this.normalizeLifecycleStatus(existing.status, 'ATIVO');
+            const baseMetadata = data.metadata !== undefined ? data.metadata : existing.metadata;
+            updateData.metadata = this.buildProcessMetadata(
+                baseMetadata,
+                data.status,
+                nextStatus,
+            );
+        }
         if (data.contactId !== undefined) updateData.contactId = data.contactId;
 
         if (data.distributionDate !== undefined) {
