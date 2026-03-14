@@ -1,0 +1,4 @@
+{
+  "id": "b3f3b4e2-b95d-4bd9-bfc6-6c44c2f1b36c",
+  "error": "\nInvalid `this.prisma.process.update()` invocation in\nC:\\.Sistemas\\Xjur\\apps\\api\\src\\processes\\processes.service.ts:1119:55\n\n  1116 }\n  1117 \n  1118 try {\n→ 1119     const updated = await this.prisma.process.update(\nUnique constraint failed on the fields: (`tenantId`,`cnj`)"
+}
