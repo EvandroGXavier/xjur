@@ -12,6 +12,7 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { CreateInboxMessageDto } from './dto/create-inbox-message.dto';
 import { LinkMessageProcessDto } from './dto/link-message-process.dto';
+import { TelegramService } from '../telegram/telegram.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 type CaptureExternalMessageInput = {
@@ -45,6 +46,8 @@ export class InboxService {
     private readonly inboxGateway: InboxGateway,
     @Inject(forwardRef(() => WhatsappService))
     private readonly whatsappService: WhatsappService,
+    @Inject(forwardRef(() => TelegramService))
+    private readonly telegramService: TelegramService,
   ) {}
 
   private summaryInclude() {
@@ -356,6 +359,53 @@ export class InboxService {
     return connections[0];
   }
 
+  private async resolveConnectedTelegramConnection(
+    tenantId: string,
+    conversation: { connectionId?: string | null },
+    preferredConnectionId?: string | null,
+  ) {
+    const connectionId = preferredConnectionId?.trim() || conversation.connectionId?.trim();
+    if (connectionId) {
+      const selected = await this.prisma.connection.findFirst({
+        where: {
+          id: connectionId,
+          tenantId,
+          type: 'TELEGRAM',
+          status: 'CONNECTED',
+        },
+      });
+
+      if (!selected) {
+        throw new BadRequestException('A conexao Telegram selecionada nao esta conectada.');
+      }
+
+      return selected;
+    }
+
+    const connections = await this.prisma.connection.findMany({
+      where: {
+        tenantId,
+        type: 'TELEGRAM',
+        status: 'CONNECTED',
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    if (connections.length === 0) {
+      throw new BadRequestException('Nenhuma conexao Telegram ativa no momento.');
+    }
+
+    if (connections.length > 1) {
+      throw new BadRequestException(
+        'Ha mais de uma conexao Telegram ativa. Escolha qual bot deve enviar.',
+      );
+    }
+
+    return connections[0];
+  }
+
   private resolveExternalAddress(channel: string, contact?: any, conversation?: any) {
     const normalizedChannel = this.normalizeChannel(channel);
 
@@ -530,12 +580,17 @@ export class InboxService {
 
   private async findExistingConversation(input: CaptureExternalMessageInput) {
     const channel = this.normalizeChannel(input.channel);
+    const connectionFilter = input.connectionId?.trim()
+      ? { connectionId: input.connectionId.trim() }
+      : {};
+
     if (input.externalThreadId?.trim()) {
       const byThread = await this.prisma.agentConversation.findFirst({
         where: {
           tenantId: input.tenantId,
           channel,
           externalThreadId: input.externalThreadId.trim(),
+          ...connectionFilter,
         },
         orderBy: { updatedAt: 'desc' },
       });
@@ -549,6 +604,7 @@ export class InboxService {
           tenantId: input.tenantId,
           channel,
           contactId: input.contactId,
+          ...connectionFilter,
           status: {
             notIn: ['CLOSED', 'ARCHIVED'],
           },
@@ -1007,6 +1063,88 @@ export class InboxService {
           conversationId,
           message: error.message,
           code: 'WHATSAPP_SEND_ERROR',
+        });
+      }
+    } else if (!conversation.isInternal && conversation.channel === 'TELEGRAM') {
+      const connection = await this.resolveConnectedTelegramConnection(
+        tenantId,
+        conversation,
+        dto.connectionId || null,
+      );
+      const destination = this.resolveExternalAddress(conversation.channel, conversation.contact, conversation);
+
+      if (!destination) {
+        throw new BadRequestException('A conversa Telegram nao possui chat valido para envio.');
+      }
+
+      try {
+        this.logger.log(
+          `Sending Telegram message conversation=${conversationId} connection=${connection.id} destination=${destination} contentType=${contentType} contentLength=${content.length} hasMedia=${Boolean(
+            mediaUrl,
+          )}`,
+        );
+        const sent = await this.telegramService.sendOutboundMessage({
+          connectionId: connection.id,
+          chatId: String(destination),
+          text: content,
+          contentType,
+          mediaPath: mediaUrl || undefined,
+          mimeType: file?.mimetype || undefined,
+          fileName: file?.originalname || undefined,
+        });
+
+        finalMessage = await this.prisma.agentMessage.update({
+          where: { id: message.id },
+          data: {
+            externalMessageId: sent.externalMessageId || null,
+            senderAddress: String(destination),
+            status: 'SENT',
+            metadata: {
+              ...this.asObject(message.metadata as Record<string, any>),
+              connectionId: connection.id,
+              destination: String(destination),
+              telegramMessageIds: sent.messageIds || [],
+            },
+          },
+        });
+
+        updatedConversation = await this.prisma.agentConversation.update({
+          where: { id: conversationId },
+          data: {
+            connectionId: connection.id,
+            externalThreadId: conversation.externalThreadId || String(destination),
+            externalParticipantId: conversation.externalParticipantId || String(destination),
+          },
+        });
+
+        await this.appendMessageEvent(tenantId, message.id, 'PROVIDER_ACK', {
+          channel: 'TELEGRAM',
+          connectionId: connection.id,
+          externalMessageId: sent.externalMessageId || null,
+          destination: String(destination),
+          messageIds: sent.messageIds || [],
+        });
+      } catch (error: any) {
+        finalMessage = await this.prisma.agentMessage.update({
+          where: { id: message.id },
+          data: {
+            status: 'FAILED',
+            metadata: {
+              ...this.asObject(message.metadata as Record<string, any>),
+              errorMessage: error?.message || 'Falha ao enviar mensagem Telegram.',
+            },
+          },
+        });
+
+        await this.appendMessageEvent(tenantId, message.id, 'PROVIDER_ERROR', {
+          channel: 'TELEGRAM',
+          message: error?.message || 'Falha ao enviar mensagem Telegram.',
+        });
+
+        this.inboxGateway.emitConversationError(tenantId, {
+          conversationId,
+          message: error?.message || 'Falha ao enviar mensagem Telegram.',
+          code: 'TELEGRAM_SEND_ERROR',
         });
       }
     } else {

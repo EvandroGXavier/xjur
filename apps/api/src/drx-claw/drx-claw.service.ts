@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, forwardRef, Inject } from "@nestjs/common";
 import axios from "axios";
 import { CommunicationsService } from "../communications/communications.service";
 import { PrismaService } from "../prisma.service";
@@ -7,25 +7,17 @@ import {
   DEFAULT_SKILLS,
   DrxSkill,
   mergeDrxSkills,
+  PROCESS_PDF_SKILL_ID,
 } from "./drx-skill.constants";
-
-type ProviderId =
-  | "LOCAL"
-  | "OLLAMA"
-  | "LMSTUDIO"
-  | "OPENAI"
-  | "GEMINI"
-  | "CLAUDE"
-  | "GROQ"
-  | "DEEPSEEK"
-  | "OPENAI_COMPATIBLE";
-
-type ProviderModelOption = {
-  id: string;
-  label: string;
-  source: "live" | "fallback" | "custom" | "selected";
-  status: "stable" | "preview" | "alias" | "custom";
-};
+import {
+  DrxClawConfig,
+  ProviderId,
+  ProviderModelOption,
+} from "./drx-claw.types";
+import * as fs from 'fs';
+import { WhisperTranscription } from '../telegram/utils/whisper.util';
+import { PdfExtractor } from '../telegram/utils/pdf.util';
+import { TelegramService } from '../telegram/telegram.service';
 
 type ProviderCatalogEntry = {
   provider: ProviderId;
@@ -43,54 +35,6 @@ type ProviderCatalogEntry = {
   fetchedLiveModels: boolean;
   liveLookupError: string | null;
 };
-
-type DrxClawConfig = {
-  enabled: boolean;
-  assistantName: string;
-  companyLabel: string;
-  provider: string;
-  maxIterations: number;
-  systemPrompt: string;
-  telegramWhitelist: string[];
-  local: {
-    baseUrl: string;
-    model: string;
-    apiKey: string;
-  };
-  openaiCompatible: {
-    baseUrl: string;
-    model: string;
-    apiKey: string;
-  };
-  apiKeys: {
-    openai: string;
-    gemini: string;
-    deepseek: string;
-    claude: string;
-    groq: string;
-  };
-  customModels: Record<string, string[]>;
-  playground: {
-    temperature: number;
-    maxTokens: number;
-    lastPrompt: string;
-    lastResponse: string;
-    lastRunAt: string | null;
-  };
-  skills: DrxSkill[];
-};
-
-/* Skill defaults moved to drx-skill.constants.ts.
-  {
-    id: "agenda-followup",
-    name: "Agenda e Follow-up",
-    description: "Propõe retornos, follow-ups e organização de compromissos.",
-    instructions:
-      "Sugira agenda, retorno, prazo e resumo executivo do atendimento.",
-    triggerKeywords: ["agenda", "retorno", "follow-up", "lembrete", "prazo"],
-    enabled: true,
-  },
-*/
 
 const PROVIDER_ORDER: ProviderId[] = [
   "OPENAI",
@@ -211,10 +155,14 @@ const DEFAULT_CONFIG: DrxClawConfig = {
 
 @Injectable()
 export class DrxClawService {
+  private readonly logger = new Logger(DrxClawService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly communicationsService: CommunicationsService,
     private readonly ticketsService: TicketsService,
+    @Inject(forwardRef(() => TelegramService))
+    private readonly telegramService: TelegramService,
   ) {}
 
   private normalizeProvider(providerInput?: string): ProviderId {
@@ -1376,7 +1324,7 @@ export class DrxClawService {
       where: { id: connectionId, type: 'TELEGRAM' },
     });
 
-    if (!connection) {
+    if (!connection || connection.status === 'DISCONNECTED') {
       return { ignored: true };
     }
 
@@ -1387,7 +1335,38 @@ export class DrxClawService {
 
     const chatId = String(message?.chat?.id || '').trim();
     const userId = String(message?.from?.id || '').trim();
-    const prompt = this.sanitizeTelegramText(message?.text || message?.caption);
+    let prompt = this.sanitizeTelegramText(message?.text || message?.caption);
+    const forcedSkillIds: string[] = [];
+
+    // PDF / Audio Handling
+    if (message?.voice || message?.audio || message?.document) {
+      try {
+        if (message.voice || message.audio) {
+          await this.telegramService.sendChatAction(connectionId, chatId, 'record_voice');
+          const fileId = (message.voice || message.audio).file_id;
+          const localPath = await this.telegramService.downloadTelegramFile(connectionId, fileId);
+          const { config: latestConfig } = await this.ensureConfigRecord(connection.tenantId);
+          const transcript = await WhisperTranscription.transcribe(localPath, latestConfig);
+          if (transcript) {
+            prompt = prompt ? `${prompt}\n\n[Transcrição do áudio]: ${transcript}` : transcript;
+          }
+          if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+        } else if (message.document && (message.document.mime_type === 'application/pdf' || message.document.file_name?.endsWith('.pdf'))) {
+          await this.telegramService.sendChatAction(connectionId, chatId, 'upload_document');
+          const fileId = message.document.file_id;
+          const localPath = await this.telegramService.downloadTelegramFile(connectionId, fileId);
+          const pdfText = await PdfExtractor.extract(localPath);
+          if (pdfText) {
+            prompt = prompt ? `${prompt}\n\n[Conteúdo do PDF]: ${pdfText}` : `[Arquivo: ${message.document.file_name}]\n\n${pdfText}`;
+            forcedSkillIds.push(PROCESS_PDF_SKILL_ID);
+          }
+          if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+        }
+      } catch (err: any) {
+        this.logger.error(`Error processing media in telegram: ${err.message}`);
+      }
+    }
+
     if (!chatId) {
       return { ignored: true };
     }
@@ -1427,12 +1406,8 @@ export class DrxClawService {
 
     if (!prompt) {
       return {
-        tenantId: connection.tenantId,
-        ticketId: null,
-        chatId,
-        reply:
-          'Recebi sua mensagem, mas no momento consigo responder apenas textos e legendas.',
-        replyToMessageId: Number(message?.message_id) || undefined,
+        ignored: true,
+        reason: 'NO_TEXT_CONTENT',
       };
     }
 
@@ -1455,6 +1430,16 @@ export class DrxClawService {
         telegramMessageDate: message?.date || null,
       },
     } as any);
+
+    if (inbound?.created === false) {
+      return {
+        ignored: true,
+        reason: 'DUPLICATE_UPDATE',
+        tenantId: connection.tenantId,
+        ticketId: inbound?.ticketId || null,
+        chatId,
+      };
+    }
 
     const ticketId = String(inbound?.ticketId || '').trim();
     if (!ticketId) {

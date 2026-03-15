@@ -60,6 +60,36 @@ jobs:
             echo "📊 STATUS FINAL:"
             echo "========================================="
             docker compose -f docker-compose.prod.yml ps
+            
+            echo "1️⃣0️⃣ Sincronizando Webhooks do Telegram..."
+            # Executamos o script de dentro do container da API para usar o ambiente correto
+            docker compose -f docker-compose.prod.yml exec -T api node -e "
+              const { NestFactory } = require('@nestjs/core');
+              const { AppModule } = require('./apps/api/dist/app.module');
+              const { TelegramService } = require('./apps/api/dist/telegram/telegram.service');
+              const { PrismaClient } = require('@prisma/client');
+
+              async function sync() {
+                try {
+                  const app = await NestFactory.createApplicationContext(AppModule);
+                  const telegramService = app.get(TelegramService);
+                  const prisma = new PrismaClient();
+                  const connections = await prisma.connection.findMany({ where: { type: 'TELEGRAM', status: 'CONNECTED' } });
+                  for (const conn of connections) {
+                    try {
+                      await telegramService.connect(conn.id);
+                    } catch (err) {
+                      console.error(`[Telegram Sync] ❌ Erro ao sincronizar ${conn.name}:`, err.message);
+                    }
+                  }
+                  await prisma.$disconnect();
+                  await app.close();
+                } catch (error) {
+                  console.error('[Telegram Sync] ❌ Erro fatal:', error.message);
+                }
+              }
+              sync();
+            " || echo "⚠️ Aviso: Falha na sincronização do Telegram (Pode ser normal no primeiro deploy)"
 
             echo ""
             echo "🩺 HEALTH CHECK:"

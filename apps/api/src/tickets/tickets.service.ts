@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { CreateMessageDto } from './dto/create-message.dto';
+import { TelegramService } from '../telegram/telegram.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { TicketsGateway } from './tickets.gateway';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -66,6 +67,16 @@ export class TicketsService {
       return ticket.contact?.email || 'ticket:' + ticket.id;
     }
 
+    if (ticket.channel === 'TELEGRAM') {
+      return (
+        metadata.telegramChatId
+        || metadata.senderAddress
+        || metadata.telegramUserId
+        || ticket.contact?.metadata?.telegramChatId
+        || 'ticket:' + ticket.id
+      );
+    }
+
     return 'ticket:' + ticket.id;
   }
 
@@ -79,6 +90,7 @@ export class TicketsService {
     const senderAddress =
       metadata.remoteJid
       || metadata.senderAddress
+      || (ticket.channel === 'TELEGRAM' ? ticket.contact?.metadata?.telegramChatId : null)
       || (ticket.channel === 'EMAIL' ? ticket.contact?.email : null)
       || ticket.contact?.whatsapp
       || ticket.contact?.phone
@@ -171,9 +183,82 @@ export class TicketsService {
     throw new BadRequestException('Ha multiplas conexoes WhatsApp ativas e este atendimento ainda nao esta vinculado a uma instancia.');
   }
 
+  private async resolveTelegramConnection(
+    tenantId: string,
+    ticket: { id: string },
+    preferredConnectionId?: string | null,
+  ) {
+    const normalizedConnectionId = preferredConnectionId?.trim();
+
+    if (normalizedConnectionId) {
+      const connection = await this.prisma.connection.findFirst({
+        where: {
+          id: normalizedConnectionId,
+          tenantId,
+          type: 'TELEGRAM',
+          status: 'CONNECTED',
+        },
+      });
+
+      if (!connection) {
+        throw new BadRequestException('A conexao Telegram selecionada nao esta conectada.');
+      }
+
+      return connection;
+    }
+
+    const recentMessages = await this.prisma.ticketMessage.findMany({
+      where: { ticketId: ticket.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { metadata: true },
+    });
+
+    const storedConnectionId = recentMessages
+      .map((ticketMessage) => this.asMetadataObject(ticketMessage.metadata).connectionId)
+      .find((value) => typeof value === 'string' && value.trim().length > 0);
+
+    if (storedConnectionId) {
+      const connection = await this.prisma.connection.findFirst({
+        where: {
+          id: storedConnectionId,
+          tenantId,
+          type: 'TELEGRAM',
+          status: 'CONNECTED',
+        },
+      });
+
+      if (!connection) {
+        throw new BadRequestException('Este atendimento esta vinculado a uma conexao Telegram que nao esta conectada.');
+      }
+
+      return connection;
+    }
+
+    const connectedConnections = await this.prisma.connection.findMany({
+      where: { tenantId, type: 'TELEGRAM', status: 'CONNECTED' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (connectedConnections.length === 0) {
+      return null;
+    }
+
+    if (connectedConnections.length === 1) {
+      return connectedConnections[0];
+    }
+
+    throw new BadRequestException(
+      'Ha multiplas conexoes Telegram ativas e este atendimento ainda nao esta vinculado a um bot.',
+    );
+  }
+
   constructor(
     private prisma: PrismaService,
+    @Inject(forwardRef(() => WhatsappService))
     private whatsappService: WhatsappService,
+    @Inject(forwardRef(() => TelegramService))
+    private telegramService: TelegramService,
     private ticketsGateway: TicketsGateway,
     private agentService: AgentService,
   ) {}
@@ -320,8 +405,14 @@ export class TicketsService {
       } as any,
     });
 
-    if (ticket.channel === 'WHATSAPP' && !isScheduled) {
-      await this.sendToWhatsApp(tenantId, ticket, message, file, createMessageDto.connectionId);
+    if (!isScheduled) {
+      if (ticket.channel === 'WHATSAPP') {
+        await this.sendToWhatsApp(tenantId, ticket, message, file, createMessageDto.connectionId);
+      }
+
+      if (ticket.channel === 'TELEGRAM') {
+        await this.sendToTelegram(tenantId, ticket, message, file, createMessageDto.connectionId);
+      }
     }
 
     this.ticketsGateway.emitNewMessage(tenantId, ticket.id, message);
@@ -633,6 +724,88 @@ export class TicketsService {
     }
   }
 
+  private async sendToTelegram(
+    tenantId: string,
+    ticket: any,
+    message: any,
+    file?: Express.Multer.File,
+    preferredConnectionId?: string | null,
+  ) {
+    const currentMetadata = this.asMetadataObject(message.metadata);
+    const chatId =
+      currentMetadata.externalThreadId
+      || currentMetadata.senderAddress
+      || currentMetadata.telegramChatId
+      || ticket.contact?.metadata?.telegramChatId
+      || null;
+
+    if (!chatId) {
+      this.ticketsGateway.emitTicketError(tenantId, {
+        ticketId: ticket.id,
+        message: 'Contato sem chat do Telegram cadastrado.',
+        code: 'NO_TELEGRAM_CHAT',
+      });
+      return;
+    }
+
+    try {
+      const connection = await this.resolveTelegramConnection(tenantId, ticket, preferredConnectionId);
+
+      if (!connection) {
+        this.logger.warn(`No active Telegram connection for tenant ${tenantId}`);
+        this.ticketsGateway.emitTicketError(tenantId, {
+          ticketId: ticket.id,
+          message: 'Nenhuma conexao Telegram ativa no momento.',
+          code: 'NO_CONNECTION',
+        });
+        return;
+      }
+
+      const sent = await this.telegramService.sendOutboundMessage({
+        connectionId: connection.id,
+        chatId: String(chatId),
+        text: message.content || '',
+        contentType: message.contentType || 'TEXT',
+        mediaPath: message.mediaUrl || undefined,
+        mimeType: file?.mimetype || currentMetadata.mimeType || undefined,
+        fileName: file?.originalname || currentMetadata.fileName || undefined,
+      });
+
+      const nextMetadata = this.buildMessageMetadata(connection.id, file, {
+        ...currentMetadata,
+        externalThreadId: String(chatId),
+        senderAddress: String(chatId),
+        telegramChatId: String(chatId),
+        telegramMessageIds: sent.messageIds || [],
+      });
+
+      await this.prisma.ticketMessage.update({
+        where: { id: message.id },
+        data: {
+          externalId: sent.externalMessageId || null,
+          status: 'SENT',
+          metadata: nextMetadata,
+        },
+      });
+      this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
+    } catch (error: any) {
+      this.logger.error(`Telegram Send Error: ${error?.message || error}`);
+
+      await this.prisma.ticketMessage
+        .update({
+          where: { id: message.id },
+          data: { status: 'FAILED' },
+        })
+        .catch((updateError) => this.logger.error(`Failed to mark Telegram message as FAILED: ${updateError.message}`));
+
+      this.ticketsGateway.emitTicketError(tenantId, {
+        ticketId: ticket.id,
+        message: `Falha no envio Telegram: ${error?.message || 'erro desconhecido'}`,
+        code: 'SEND_ERROR',
+      });
+    }
+  }
+
   @Cron(CronExpression.EVERY_MINUTE)
   async handleScheduledMessages() {
     const now = new Date();
@@ -654,13 +827,25 @@ export class TicketsService {
       this.logger.log(`Processing ${scheduledMessages.length} scheduled messages...`);
       for (const scheduledMessage of scheduledMessages as any[]) {
         const preferredConnectionId = this.asMetadataObject(scheduledMessage.metadata).connectionId;
-        await this.sendToWhatsApp(
-          scheduledMessage.ticket.tenantId,
-          scheduledMessage.ticket,
-          scheduledMessage,
-          undefined,
-          preferredConnectionId,
-        );
+        if (scheduledMessage.ticket.channel === 'WHATSAPP') {
+          await this.sendToWhatsApp(
+            scheduledMessage.ticket.tenantId,
+            scheduledMessage.ticket,
+            scheduledMessage,
+            undefined,
+            preferredConnectionId,
+          );
+        }
+
+        if (scheduledMessage.ticket.channel === 'TELEGRAM') {
+          await this.sendToTelegram(
+            scheduledMessage.ticket.tenantId,
+            scheduledMessage.ticket,
+            scheduledMessage,
+            undefined,
+            preferredConnectionId,
+          );
+        }
       }
     }
   }

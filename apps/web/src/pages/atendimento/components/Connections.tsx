@@ -57,6 +57,28 @@ const getRequestErrorMessage = (error: any, fallback: string) => {
     return fallback;
 };
 
+const getConnectionTypeLabel = (type: Connection['type']) => {
+    switch (type) {
+        case 'WHATSAPP':
+            return 'WhatsApp';
+        case 'TELEGRAM':
+            return 'Telegram';
+        case 'EMAIL':
+            return 'Email';
+        case 'INSTAGRAM':
+            return 'Instagram';
+        default:
+            return type;
+    }
+};
+
+const maskToken = (value?: string | null) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return '--';
+    if (normalized.length <= 10) return normalized;
+    return `${normalized.slice(0, 6)}...${normalized.slice(-4)}`;
+};
+
 interface ConnectionsProps {
     onOpenHelp?: () => void;
 }
@@ -94,7 +116,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [connections]);
 
     // Connect WebSocket for real-time updates
     useEffect(() => {
@@ -124,7 +146,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
             
             // Also update connection status locally
             setConnections(prev => prev.map(c => 
-                c.id === data.connectionId 
+                c.id === data.connectionId && c.type === 'WHATSAPP'
                     ? { ...c, status: 'PAIRING' as const }
                     : c
             ));
@@ -133,13 +155,15 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
         socket.on('connection:status', (data: { connectionId: string; status: string }) => {
             console.log(`�x� Status: ${data.connectionId} �  ${data.status}`);
             
+            const connection = connections.find((item) => item.id === data.connectionId);
+
             setConnections(prev => prev.map(c => 
                 c.id === data.connectionId 
                     ? { ...c, status: data.status as Connection['status'], qrCode: data.status === 'CONNECTED' ? undefined : c.qrCode }
                     : c
             ));
 
-            if (data.status === 'CONNECTED') {
+            if (data.status === 'CONNECTED' && connection?.type === 'WHATSAPP') {
                 // Clear QR for this connection
                 delete qrRawCache[data.connectionId];
                 setQrMap(prev => {
@@ -382,6 +406,26 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
         try {
             setConnectingId(connection.id);
             const response = await api.post(`/connections/${connection.id}/connect`);
+            const nextStatus = response.data?.status as Connection['status'] | undefined;
+            const mergedConfig = {
+                ...(connection.config || {}),
+                webhookUrl: response.data?.webhookUrl ?? connection.config?.webhookUrl,
+                botUsername: response.data?.botUsername ?? connection.config?.botUsername,
+                botId: response.data?.botId ?? connection.config?.botId,
+            };
+
+            setConnections(prev => prev.map(item =>
+                item.id === connection.id
+                    ? { ...item, status: nextStatus ?? item.status, config: mergedConfig }
+                    : item
+            ));
+
+            if (connection.type === 'TELEGRAM') {
+                setConnectingId(null);
+                toast.success(response.data?.message || 'Telegram conectado com sucesso.');
+            } else {
+                toast.info(response.data.message || 'Iniciando conexÃ£o...');
+            }
             toast.info(response.data.message || 'Iniciando conexão...');
             // Don't clear connectingId here � wait for WebSocket status
             fetchConnections();
@@ -394,7 +438,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
     const handleDisconnect = async (connection: Connection) => {
         try {
             await api.post(`/connections/${connection.id}/disconnect`);
-            toast.success('Desconectado');
+            toast.success(`${getConnectionTypeLabel(connection.type)} desconectado com sucesso.`);
             setConnectingId(null);
             delete qrRawCache[connection.id];
             setQrMap(prev => {
@@ -452,7 +496,11 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                 if (statusData.lastErrorMessage) {
                     toast.warning(`Telegram: ${statusData.lastErrorMessage}`);
                 } else {
-                    toast.success(`Telegram ativo. Pendentes: ${statusData.pendingUpdateCount ?? 0}`);
+                    toast.success(
+                        statusData.status === 'CONNECTED'
+                            ? `Telegram ativo. Pendentes: ${statusData.pendingUpdateCount ?? 0}`
+                            : `Telegram em ${String(statusData.status || connection.status).toLowerCase()}.`,
+                    );
                 }
                 return;
             }
@@ -523,12 +571,20 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
         if (!settingsConnection) return;
         const versionInput = document.getElementById('configVersionInput') as HTMLInputElement;
         const newVersion = versionInput ? versionInput.value : '';
+        const telegramBotTokenInput = document.getElementById('telegramBotTokenInput') as HTMLInputElement | null;
+        const telegramWebhookInput = document.getElementById('telegramWebhookBaseUrlInput') as HTMLInputElement | null;
         
         try {
-            const updatedConfig = {
-                ...(settingsConnection.config || {}),
-                evolutionVersion: newVersion
-            };
+            const updatedConfig = settingsConnection.type === 'TELEGRAM'
+                ? {
+                    ...(settingsConnection.config || {}),
+                    botToken: telegramBotTokenInput?.value?.trim() || settingsConnection.config?.botToken || '',
+                    webhookBaseUrl: telegramWebhookInput?.value?.trim() || '',
+                }
+                : {
+                    ...(settingsConnection.config || {}),
+                    evolutionVersion: newVersion
+                };
             await api.patch(`/connections/${settingsConnection.id}`, { config: updatedConfig });
             
             setConnections(prev => prev.map(c => 
@@ -851,7 +907,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                                 {isTelegram ? 'Webhook sincronizado' : 'Sincronizado'}
                                             </span>
 
-                                            <button 
+                                            {isWhatsapp && <button 
                                                 onClick={() => {
                                                     api.post(`/whatsapp/${conn.id}/sync-contacts`)
                                                         .then(() => toast.success('Sincronização iniciada.'))
@@ -860,7 +916,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                                 className="mt-4 text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-full border border-slate-700 transition flex items-center gap-1"
                                             >
                                                 <RefreshCw size={10} /> Sincronizar Contatos
-                                            </button>
+                                            </button>}
 
                                             <button 
                                                 onClick={() => {
@@ -896,14 +952,14 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                     ) : isThisConnecting ? (
                                         <div className="flex flex-col items-center text-indigo-400 animate-in fade-in">
                                             <Loader2 size={40} className="mb-3 animate-spin" />
-                                            <span className="text-sm font-medium">Gerando QR Code...</span>
+                                            <span className="text-sm font-medium">{isWhatsapp ? 'Gerando QR Code...' : 'Validando bot e webhook...'}</span>
                                             <span className="text-[11px] text-slate-500 mt-1">Aguarde alguns segundos</span>
                                         </div>
                                     ) : isPairing ? (
                                         <div className="flex flex-col items-center text-amber-500 animate-in fade-in">
                                             <Loader2 size={40} className="mb-3 animate-spin" />
-                                            <span className="text-sm font-medium">Aguardando QR Code...</span>
-                                            <span className="text-[11px] text-slate-500 mt-1">Sincronizando com WhatsApp</span>
+                                            <span className="text-sm font-medium">{isWhatsapp ? 'Aguardando QR Code...' : 'Conectando canal...'}</span>
+                                            <span className="text-[11px] text-slate-500 mt-1">{isWhatsapp ? 'Sincronizando com WhatsApp' : 'Validando token e sincronizando webhook'}</span>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center text-slate-500">
@@ -911,7 +967,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                                 <WifiOff size={28} className="opacity-40" />
                                             </div>
                                             <span className="text-sm font-medium">Desconectado</span>
-                                            <span className="text-[11px] text-slate-600 mt-1">Clique em "Conectar" para gerar QR Code</span>
+                                            <span className="text-[11px] text-slate-600 mt-1">{isWhatsapp ? 'Clique em "Conectar" para gerar QR Code' : 'Clique em "Conectar" para validar o bot e registrar o webhook'}</span>
                                         </div>
                                     )}
                                 </div>
@@ -933,9 +989,9 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                         <button 
                                             onClick={() => handleConnect(conn)}
                                             className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 transition"
-                                            title="Gerar novo QR Code"
+                                            title={isWhatsapp ? 'Gerar novo QR Code' : 'Tentar novamente'}
                                         >
-                                            <RefreshCw size={12} /> Novo QR
+                                            <RefreshCw size={12} /> {isWhatsapp ? 'Novo QR' : 'Tentar novamente'}
                                         </button>
                                         <button 
                                             onClick={() => handleDisconnect(conn)}
@@ -971,7 +1027,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                     <div className="col-span-1 md:col-span-3 py-12 flex flex-col items-center justify-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl bg-slate-900/50">
                         {loadError ? <AlertTriangle size={48} className="mb-4 text-amber-300/80" /> : <Smartphone size={48} className="mb-4 opacity-50" />}
                         <p className="font-medium">{loadError ? 'Nao foi possivel carregar os canais' : 'Nenhum canal conectado'}</p>
-                        <p className="text-sm mt-1">Adicione WhatsApp, Instagram ou Email para começar.</p>
+                        <p className="text-sm mt-1">Adicione WhatsApp, Telegram, Instagram ou Email para começar.</p>
                     </div>
                 )}
 
@@ -1000,7 +1056,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                     {settingsConnection.name}
                                 </h3>
                                 <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
-                                    <span>Client: DR.X_Exchange</span>
+                                    <span>Canal: {getConnectionTypeLabel(settingsConnection.type)}</span>
                                 </div>
                             </div>
                         </div>
@@ -1027,13 +1083,13 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                 onClick={() => setActiveTab('configurations')} 
                                 className={clsx("flex items-center gap-3 w-full p-3 rounded-lg text-sm font-medium transition-all mb-1", activeTab === 'configurations' ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-300")}
                             >
-                                <Settings size={18} /> Configurations
+                                <Settings size={18} /> Configuracoes
                             </button>
                             <button 
                                 onClick={() => setActiveTab('test')} 
                                 className={clsx("flex items-center gap-3 w-full p-3 rounded-lg text-sm font-medium transition-all mb-1", activeTab === 'test' ? "bg-emerald-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-300")}
                             >
-                                <MessageCircle size={18} /> Aba de Teste
+                                <MessageCircle size={18} /> {settingsConnection.type === 'TELEGRAM' ? 'Diagnostico' : 'Aba de Teste'}
                             </button>
                             <button 
                                 onClick={() => setActiveTab('events')} 
@@ -1110,10 +1166,45 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
 
                             {activeTab === 'configurations' && (
                                 <div className="space-y-6 animate-in fade-in max-w-2xl">
-                                    <h2 className="text-xl font-bold text-white mb-6">Device Configurations</h2>
+                                    <h2 className="text-xl font-bold text-white mb-6">
+                                        {settingsConnection.type === 'TELEGRAM' ? 'Configuracoes do Telegram' : 'Device Configurations'}
+                                    </h2>
                                     
                                     <div className="space-y-4">
-                                        <div>
+                                        {settingsConnection.type === 'TELEGRAM' && (
+                                            <>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-400 mb-2">Bot Token</label>
+                                                    <input 
+                                                        id="telegramBotTokenInput"
+                                                        type="password"
+                                                        defaultValue={settingsConnection.config?.botToken || ''}
+                                                        placeholder="123456789:AA..."
+                                                        className="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-indigo-500 outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-400 mb-2">Webhook Base URL</label>
+                                                    <input 
+                                                        id="telegramWebhookBaseUrlInput"
+                                                        type="text"
+                                                        defaultValue={settingsConnection.config?.webhookBaseUrl || ''}
+                                                        placeholder="https://seu-dominio.com"
+                                                        className="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg text-sm text-white focus:border-indigo-500 outline-none"
+                                                    />
+                                                    <p className="text-[10px] text-slate-500 mt-1">
+                                                        Use uma URL publica em HTTPS. URLs locais ou privadas falham no Telegram.
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-400 mb-2">Webhook registrado</label>
+                                                    <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-sm text-slate-300 font-mono break-all">
+                                                        {settingsConnection.config?.webhookUrl || 'Ainda nao sincronizado'}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                        {settingsConnection.type !== 'TELEGRAM' && <div>
                                             <label className="block text-xs font-bold text-slate-400 mb-2">Versão do WhatsApp (whatsappVersion)</label>
                                             <input 
                                                 id="configVersionInput"
@@ -1125,14 +1216,14 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                             <p className="text-[10px] text-slate-500 mt-1">
                                                 A configuração exata da Evolution dita que preencher este campo pode evitar loops ou falhas no QR no caso do Baileys exigir versão específica de Device.
                                             </p>
-                                        </div>
+                                        </div>}
                                         
-                                        <div>
+                                        {settingsConnection.type !== 'TELEGRAM' && <div>
                                             <label className="block text-xs font-bold text-slate-400 mb-2">Webhook URL Global</label>
                                             <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg text-sm text-slate-300 font-mono">
                                                 {window.location.origin.replace('5173', '3000')}/api/evolution/webhook
                                             </div>
-                                        </div>
+                                        </div>}
                                         
                                         <div className="pt-4 border-t border-slate-800">
                                             <button 
@@ -1157,7 +1248,9 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                         )}
                                     </div>
                                     <p className="text-sm text-slate-400 bg-emerald-500/10 text-emerald-300 p-3 border border-emerald-500/20 rounded-lg shrink-0">
-                                        Utilize esta ferramenta para forçar o envio a partir da instância DR.X e receber instantaneamente (à direita) os webhooks gerados de qualquer mensagem recebida no seu celular.
+                                        {settingsConnection.type === 'TELEGRAM'
+                                            ? 'Use este painel para acompanhar eventos do webhook do Telegram. Para testar o canal, envie uma mensagem diretamente ao bot.'
+                                            : 'Utilize esta ferramenta para forcar o envio a partir da instancia DR.X e receber instantaneamente os webhooks gerados de qualquer mensagem recebida no seu celular.'}
                                     </p>
                                     
                                     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
@@ -1165,6 +1258,16 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                         {/* Painel de Envio */}
                                         <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 flex flex-col h-full">
                                             <h3 className="text-sm font-bold text-slate-300 mb-4 uppercase tracking-wider">�x� Enviar Mensagem</h3>
+                                            {settingsConnection.type === 'TELEGRAM' ? (
+                                                <div className="space-y-4 text-sm text-slate-300">
+                                                    <p>O Telegram nao usa disparo de teste local nem QR Code.</p>
+                                                    <p>Para validar o canal, envie uma mensagem diretamente ao bot e acompanhe os eventos recebidos ao lado.</p>
+                                                    <div className="rounded-lg border border-sky-500/20 bg-sky-500/10 p-4 text-xs text-sky-100">
+                                                        <div>Bot: @{settingsConnection.config?.botUsername || 'nao identificado'}</div>
+                                                        <div className="mt-1 break-all">Webhook: {settingsConnection.config?.webhookUrl || 'nao sincronizado'}</div>
+                                                    </div>
+                                                </div>
+                                            ) : (
                                             <div className="space-y-4 flex-1">
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-400 mb-2">Número Alvo</label>
@@ -1199,6 +1302,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                                     <Zap size={16} /> Disparar Teste
                                                 </button>
                                             </div>
+                                            )}
                                         </div>
 
                                         {/* Painel de Recepção (Log) */}

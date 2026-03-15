@@ -14,8 +14,16 @@ export class ConnectionsService implements OnModuleInit {
     private readonly telegramService: TelegramService,
   ) {}
 
-  onModuleInit() {
-    // Reset PAIRING status to DISCONNECTED on startup to ensure clean state
+  async onModuleInit() {
+    await this.prisma.connection.updateMany({
+      where: {
+        type: 'TELEGRAM',
+        status: 'PAIRING',
+      },
+      data: {
+        status: 'DISCONNECTED',
+      },
+    });
   }
 
   async findAll(tenantId: string) {
@@ -118,10 +126,6 @@ export class ConnectionsService implements OnModuleInit {
     }
 
     if (connection.type === ConnectionType.TELEGRAM) {
-        await this.prisma.connection.update({
-            where: { id },
-            data: { status: 'PAIRING' }
-        });
         return this.telegramService.connect(id);
     }
 
@@ -136,6 +140,7 @@ export class ConnectionsService implements OnModuleInit {
     }
     if (connection.type === ConnectionType.TELEGRAM) {
         await this.telegramService.disconnect(id);
+        return this.prisma.connection.findUnique({ where: { id: connection.id } });
     }
     
     return this.prisma.connection.update({
@@ -151,10 +156,42 @@ export class ConnectionsService implements OnModuleInit {
       const connection = await this.findOne(id, tenantId);
       if (connection.type === ConnectionType.TELEGRAM) {
           const status = await this.telegramService.getStatus(id);
+          const [contactRefs, chatsCount, messagesCount] = await Promise.all([
+              this.prisma.agentConversation.findMany({
+                  where: {
+                      tenantId,
+                      connectionId: id,
+                      channel: 'TELEGRAM',
+                      contactId: { not: null },
+                  },
+                  select: { contactId: true },
+                  distinct: ['contactId'],
+              }),
+              this.prisma.agentConversation.count({
+                  where: {
+                      tenantId,
+                      connectionId: id,
+                      channel: 'TELEGRAM',
+                  },
+              }),
+              this.prisma.agentMessage.count({
+                  where: {
+                      tenantId,
+                      conversation: {
+                          connectionId: id,
+                          channel: 'TELEGRAM',
+                      },
+                  },
+              }),
+          ]);
+
           return {
               id: connection.id,
               status: status.status,
               updatedAt: connection.updatedAt,
+              contactsCount: contactRefs.length,
+              chatsCount,
+              messagesCount,
               ...status,
           };
       }

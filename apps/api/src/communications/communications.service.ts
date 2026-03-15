@@ -1,5 +1,4 @@
-
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { TicketsService } from '../tickets/tickets.service';
 import { IncomingCommunicationDto } from './dto/incoming-communication.dto';
@@ -8,6 +7,8 @@ import { InboxService } from '../inbox/inbox.service';
 
 @Injectable()
 export class CommunicationsService {
+  private readonly logger = new Logger(CommunicationsService.name);
+
   constructor(
     private prisma: PrismaService,
     private ticketsService: TicketsService,
@@ -15,7 +16,7 @@ export class CommunicationsService {
   ) {}
 
   async processIncoming(dto: IncomingCommunicationDto) {
-    console.log(`[Communications] Received from ${dto.from} via ${dto.channel}`);
+    this.logger.log(`Inbound channel=${dto.channel} from=${dto.from}`);
 
     // 0. Log Raw Communication
     await this.prisma.communicationLog.create({
@@ -45,7 +46,7 @@ export class CommunicationsService {
     });
 
     if (!contact) {
-      console.log(`[Communications] Contact not found. Creating LEAD for ${dto.from}`);
+      this.logger.log(`Creating inbound lead for ${dto.channel}:${dto.from}`);
       contact = await this.prisma.contact.create({
         data: {
           tenantId: dto.tenantId,
@@ -63,6 +64,32 @@ export class CommunicationsService {
             : undefined,
         }
       });
+    } else if (dto.channel === 'TELEGRAM') {
+      const currentMetadata =
+        contact.metadata && typeof contact.metadata === 'object' && !Array.isArray(contact.metadata)
+          ? contact.metadata
+          : {};
+
+      const nextMetadata = {
+        ...currentMetadata,
+        telegramUserId: dto.from,
+        telegramChatId: dto.externalThreadId || currentMetadata.telegramChatId || null,
+        telegramUsername: dto.metadata?.telegramUsername || currentMetadata.telegramUsername || null,
+      };
+
+      const nextName = dto.name?.trim() || contact.name;
+      if (
+        JSON.stringify(currentMetadata) !== JSON.stringify(nextMetadata) ||
+        nextName !== contact.name
+      ) {
+        contact = await this.prisma.contact.update({
+          where: { id: contact.id },
+          data: {
+            name: nextName,
+            metadata: nextMetadata,
+          },
+        });
+      }
     }
 
     const capture = await this.inboxService.captureExternalMessage({
@@ -93,6 +120,7 @@ export class CommunicationsService {
 
     return {
       action: capture.created ? 'CONVERSATION_CAPTURED' : 'CONVERSATION_UPDATED',
+      created: capture.created,
       conversationId: capture.conversation.id,
       messageId: capture.message.id,
       ticketId: capture.conversation.ticketId,
