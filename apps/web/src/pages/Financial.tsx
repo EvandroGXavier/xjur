@@ -328,6 +328,12 @@ const isOpenRecord = (record: FinancialRecord, referenceDate = new Date()) => {
   );
 };
 
+const hasPartiesToSettle = (record: FinancialRecord) => {
+  const hasCreditor = record.parties?.some((p) => p.role === "CREDITOR");
+  const hasDebtor = record.parties?.some((p) => p.role === "DEBTOR");
+  return !!(hasCreditor && hasDebtor);
+};
+
 const matchesDateRange = (
   value: string | undefined,
   from?: string,
@@ -953,13 +959,15 @@ export function Financial() {
   };
 
   const isSettleFormValid = useMemo(() => {
+    const hasParties = settlingRecord ? hasPartiesToSettle(settlingRecord) : false;
     return (
       settleData.paymentDate !== "" &&
       settleData.paymentMethod !== "" &&
       settleData.bankAccountId !== "" &&
-      calcSettleFinalAmount > 0
+      calcSettleFinalAmount > 0 &&
+      hasParties
     );
-  }, [settleData, calcSettleFinalAmount]);
+  }, [settleData, calcSettleFinalAmount, settlingRecord]);
 
   const handleOpenSettleModal = async (record: FinancialRecord) => {
     await fetchContacts();
@@ -1693,38 +1701,6 @@ export function Financial() {
 
     return matches;
   });
-
-  const legacySortedRecords = useMemo(() => {
-    let sortableItems = [...legacyFilteredRecords];
-    if (sortConfig.key && sortConfig.direction) {
-      sortableItems.sort((a, b) => {
-        const key = sortConfig.key as keyof FinancialRecord;
-        let aValue: any = a[key] ?? "";
-        let bValue: any = b[key] ?? "";
-
-        if (key === "amount" || key === "amountFinal") {
-          aValue = Number(aValue);
-          bValue = Number(bValue);
-        }
-
-        if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [legacyFilteredRecords, sortConfig]);
-
-  const legacyHandleSort = (key: string) => {
-    let direction: "asc" | "desc" = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
-  };
-  void legacyFilteredRecords;
-  void legacySortedRecords;
-  void legacyHandleSort;
 
   const paymentMethods = useMemo(
     () =>
@@ -2674,238 +2650,6 @@ export function Financial() {
             )}
           </div>
 
-          {false && (
-            <>
-              {/* Filters */}
-              <div className="flex gap-4">
-                <div className="relative flex-1">
-                  <Search
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"
-                    size={20}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Buscar transações..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <select
-                  value={filters.type}
-                  onChange={(e) =>
-                    setFilters({ ...filters, type: e.target.value })
-                  }
-                  className="px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Todos os tipos</option>
-                  <option value="INCOME">Receitas</option>
-                  <option value="EXPENSE">Despesas</option>
-                </select>
-                <select
-                  value={filters.status}
-                  onChange={(e) =>
-                    setFilters({ ...filters, status: e.target.value })
-                  }
-                  className="px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Todos os status</option>
-                  <option value="PENDING">Pendente</option>
-                  <option value="PAID">Pago</option>
-                  <option value="PARTIAL">Parcial</option>
-                  <option value="CANCELLED">Cancelado</option>
-                  <option value="OVERDUE">Vencido</option>
-                </select>
-              </div>
-
-              {/* New Card Filters */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <button
-                  onClick={() => {
-                    setActiveCardFilter("INCOME_ALL");
-                    setFilters({ ...filters, type: "INCOME", status: "" });
-                  }}
-                  className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
-                    activeCardFilter === "INCOME_ALL"
-                      ? "bg-green-500/10 border-green-500/50 shadow-lg"
-                      : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="p-2 rounded-lg bg-green-500/20 text-green-400">
-                      <TrendingUp size={20} />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      {dashboard?.summary.totalIncome
-                        ? formatCurrency(dashboard?.summary.totalIncome ?? 0)
-                        : "R$ 0,00"}
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Receitas (Tudo)
-                  </span>
-                  {activeCardFilter === "INCOME_ALL" && (
-                    <div className="absolute bottom-0 left-0 h-1 bg-green-500 w-full" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveCardFilter("INCOME_PENDING");
-                    setFilters({
-                      ...filters,
-                      type: "INCOME",
-                      status: "PENDING",
-                    });
-                  }}
-                  className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
-                    activeCardFilter === "INCOME_PENDING"
-                      ? "bg-blue-500/10 border-blue-500/50 shadow-lg"
-                      : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
-                      <Clock size={20} />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      {dashboard?.summary.pendingIncome
-                        ? formatCurrency(dashboard?.summary.pendingIncome ?? 0)
-                        : "R$ 0,00"}
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Receitas Abertas
-                  </span>
-                  {activeCardFilter === "INCOME_PENDING" && (
-                    <div className="absolute bottom-0 left-0 h-1 bg-blue-500 w-full" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveCardFilter("INCOME_OVERDUE");
-                    setFilters({
-                      ...filters,
-                      type: "INCOME",
-                      status: "OVERDUE",
-                    });
-                  }}
-                  className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
-                    activeCardFilter === "INCOME_OVERDUE"
-                      ? "bg-orange-500/10 border-orange-500/50 shadow-lg"
-                      : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="p-2 rounded-lg bg-orange-500/20 text-orange-400">
-                      <AlertTriangle size={20} />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      {/* Simplificação: dashboard.summary não separa atraso por tipo, mas vamos estimar ou usar o count */}
-                      {dashboard?.summary.overdueCount || 0} items
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Receitas em Atraso
-                  </span>
-                  {activeCardFilter === "INCOME_OVERDUE" && (
-                    <div className="absolute bottom-0 left-0 h-1 bg-orange-500 w-full" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveCardFilter("EXPENSE_ALL");
-                    setFilters({ ...filters, type: "EXPENSE", status: "" });
-                  }}
-                  className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
-                    activeCardFilter === "EXPENSE_ALL"
-                      ? "bg-red-500/10 border-red-500/50 shadow-lg"
-                      : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="p-2 rounded-lg bg-red-500/20 text-red-400">
-                      <TrendingDown size={20} />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      {dashboard?.summary.totalExpense
-                        ? formatCurrency(dashboard?.summary.totalExpense ?? 0)
-                        : "R$ 0,00"}
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Despesas (Tudo)
-                  </span>
-                  {activeCardFilter === "EXPENSE_ALL" && (
-                    <div className="absolute bottom-0 left-0 h-1 bg-red-500 w-full" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveCardFilter("EXPENSE_PENDING");
-                    setFilters({
-                      ...filters,
-                      type: "EXPENSE",
-                      status: "PENDING",
-                    });
-                  }}
-                  className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
-                    activeCardFilter === "EXPENSE_PENDING"
-                      ? "bg-purple-500/10 border-purple-500/50 shadow-lg"
-                      : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
-                      <Clock size={20} />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      {dashboard?.summary.pendingExpense
-                        ? formatCurrency(dashboard?.summary.pendingExpense ?? 0)
-                        : "R$ 0,00"}
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Despesas Abertas
-                  </span>
-                  {activeCardFilter === "EXPENSE_PENDING" && (
-                    <div className="absolute bottom-0 left-0 h-1 bg-purple-500 w-full" />
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveCardFilter("ALL");
-                    setFilters({ type: "", status: "", category: "" });
-                  }}
-                  className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
-                    activeCardFilter === "ALL"
-                      ? "bg-indigo-500/10 border-indigo-500/50 shadow-lg"
-                      : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
-                      <DollarSign size={20} />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      {records.length}
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Todas Transações
-                  </span>
-                  {activeCardFilter === "ALL" && (
-                    <div className="absolute bottom-0 left-0 h-1 bg-indigo-500 w-full" />
-                  )}
-                </button>
-              </div>
-            </>
-          )}
-
           <AdvancedTagFilter
             scope="FINANCE"
             onFilterChange={(inc, exc) =>
@@ -3559,8 +3303,17 @@ export function Financial() {
                           {isOpenRecord(record) && (
                             <button
                               onClick={() => handleOpenSettleModal(record)}
-                              className="p-2 text-green-400 hover:bg-green-500/10 rounded transition-colors"
-                              title="Liquidar"
+                              disabled={!hasPartiesToSettle(record)}
+                              className={`p-2 rounded transition-colors ${
+                                hasPartiesToSettle(record)
+                                  ? "text-green-400 hover:bg-green-500/10"
+                                  : "text-slate-600 cursor-not-allowed opacity-50"
+                              }`}
+                              title={
+                                hasPartiesToSettle(record)
+                                  ? "Liquidar"
+                                  : "Defina Credor e Devedor para liquidar"
+                              }
                             >
                               <Calculator size={16} />
                             </button>
@@ -3647,8 +3400,17 @@ export function Financial() {
                                     child as FinancialRecord,
                                   )
                                 }
-                                className="p-1.5 text-green-400 hover:bg-green-500/10 rounded transition-colors"
-                                title="Liquidar parcela"
+                                disabled={!hasPartiesToSettle(child as FinancialRecord)}
+                                className={`p-1.5 rounded transition-colors ${
+                                  hasPartiesToSettle(child as FinancialRecord)
+                                    ? "text-green-400 hover:bg-green-500/10"
+                                    : "text-slate-600 cursor-not-allowed opacity-50"
+                                }`}
+                                title={
+                                  hasPartiesToSettle(child as FinancialRecord)
+                                    ? "Liquidar parcela"
+                                    : "Defina Credor e Devedor para liquidar"
+                                }
                               >
                                 <Calculator size={14} />
                               </button>
@@ -5522,7 +5284,9 @@ export function Financial() {
                   }`}
                   title={
                     !isSettleFormValid
-                      ? "Preencha todos os campos obrigatórios"
+                      ? (!hasPartiesToSettle(settlingRecord!) 
+                          ? "Defina Credor e Devedor na transação para liquidar" 
+                          : "Preencha todos os campos obrigatórios")
                       : ""
                   }
                 >
