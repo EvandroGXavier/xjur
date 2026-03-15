@@ -59,7 +59,7 @@ interface Ticket {
   title: string;
   status: 'OPEN' | 'IN_PROGRESS' | 'WAITING' | 'RESOLVED' | 'CLOSED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  channel: 'WHATSAPP' | 'EMAIL' | 'PHONE' | 'WEBCHAT';
+  channel: 'WHATSAPP' | 'EMAIL' | 'PHONE' | 'WEBCHAT' | 'TELEGRAM';
   contactId?: string;
   contact?: {
     id: string;
@@ -69,13 +69,13 @@ interface Ticket {
     whatsapp?: string;
     category?: string;
     profilePicUrl?: string;
+    metadata?: any;
   };
   assigneeId?: string;
   queue?: string;
   messages?: TicketMessage[];
   _count?: { messages: number };
   waitingReply?: boolean;
-  lastMessageAt?: string;
   lastMessageAt?: string;
   scheduledTo?: string;
   updatedAt: string;
@@ -553,7 +553,11 @@ export function AtendimentoPage() {
                         </h3>
                         <div className="flex items-center gap-2">
                            <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded uppercase font-bold">{getStatusLabel(selectedTicket.status)}</span>
-                           <span className="text-xs text-slate-600 font-mono">{selectedTicket.contact?.whatsapp}</span>
+                           <span className="text-xs text-slate-500 font-mono">
+                             {selectedTicket.channel === 'TELEGRAM' 
+                               ? `TG: ${selectedTicket.contact?.metadata?.telegramUsername || selectedTicket.contact?.metadata?.telegramChatId || 'ID Telegram'}`
+                               : selectedTicket.contact?.whatsapp || selectedTicket.contact?.phone}
+                           </span>
                         </div>
                       </div>
                     </div>

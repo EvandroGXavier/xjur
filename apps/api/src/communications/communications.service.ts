@@ -123,7 +123,7 @@ export class CommunicationsService {
       created: capture.created,
       conversationId: capture.conversation.id,
       messageId: capture.message.id,
-      ticketId: capture.conversation.ticketId,
+      ticketId: capture.conversation.ticketId || capture.ticket?.id,
     };
   }
 }

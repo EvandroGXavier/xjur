@@ -1248,7 +1248,7 @@ export class InboxService {
       externalThreadId: input.externalThreadId || null,
     });
 
-    await this.syncLegacyTicketProjection(conversation);
+    const ticket = await this.syncLegacyTicketProjection(conversation);
     await this.mirrorMessageToLegacyTicket(conversation.id, message.id);
 
     const payload = await this.loadConversationSummary(conversation.id);
@@ -1258,6 +1258,7 @@ export class InboxService {
     return {
       conversation,
       message,
+      ticket,
       created: true,
     };
   }

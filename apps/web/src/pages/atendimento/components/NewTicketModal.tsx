@@ -187,6 +187,7 @@ export function NewTicketModal({ open, onClose, onSuccess }: NewTicketModalProps
                                 onChange={e => setTicketDetails({...ticketDetails, channel: e.target.value as any})}
                             >
                                 <option value="WHATSAPP">WhatsApp</option>
+                                <option value="TELEGRAM">Telegram</option>
                                 <option value="EMAIL">E-mail</option>
                                 <option value="PHONE">Telefone</option>
                                 <option value="INSTAGRAM">Instagram</option>

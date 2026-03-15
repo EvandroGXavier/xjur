@@ -331,8 +331,11 @@ export class TelegramService {
       lastWebhookCheckAt: new Date().toISOString(),
     });
 
+    this.logger.log(`Configuring Telegram webhook for connection=${connection.id}. URL: ${webhookUrl}`);
+
     try {
       const me = await this.apiRequest(botToken, 'getMe');
+      this.logger.log(`Telegram Bot Me: ${JSON.stringify(me)}`);
 
       await this.apiRequest(botToken, 'setWebhook', {
         url: webhookUrl,
