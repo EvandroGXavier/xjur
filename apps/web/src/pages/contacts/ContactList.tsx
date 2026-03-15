@@ -12,7 +12,14 @@ import {
     Trash2,
     CheckCircle2,
     MoreHorizontal,
-    Edit
+    Edit,
+    ChevronDown,
+    ChevronUp,
+    ShieldCheck,
+    Briefcase,
+    Globe,
+    MapPin,
+    FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -49,6 +56,34 @@ export function ContactList() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'true' | 'false'>('ALL');
   const [includedTags, setIncludedTags] = useState<string[]>([]);
   const [excludedTags, setExcludedTags] = useState<string[]>([]);
+  const [birthDateStart, setBirthDateStart] = useState('');
+  const [birthDateEnd, setBirthDateEnd] = useState('');
+  const [pfFilters, setPfFilters] = useState({
+    cpf: '',
+    rg: '',
+    motherName: '',
+    fatherName: '',
+    profession: '',
+    nationality: '',
+    naturality: '',
+    gender: '',
+    civilStatus: '',
+    cnh: '',
+    cnhCategory: '',
+    nis: '',
+    pis: '',
+    ctps: '',
+  });
+  const [pjFilters, setPjFilters] = useState({
+    cnpj: '',
+    companyName: '',
+    stateRegistration: '',
+  });
+  const [addressFilters, setAddressFilters] = useState({ city: '', state: '', district: '', zipCode: '', street: '' });
+  const [contractFilters, setContractFilters] = useState({ description: '', counterparty: '' });
+  const [birthMonth, setBirthMonth] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<string[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,7 +102,7 @@ export function ContactList() {
 
   useEffect(() => {
      fetchContacts();
-  }, [includedTags, excludedTags, statusFilter, searchTerm]); // Added searchTerm to dependencies
+  }, [includedTags, excludedTags, statusFilter, searchTerm, birthDateStart, birthDateEnd, pfFilters, pjFilters, addressFilters, contractFilters, birthMonth]); // Added all filter dependencies
 
   const fetchContacts = async () => {
     try {
@@ -76,6 +111,30 @@ export function ContactList() {
         if (includedTags.length > 0) params.includedTags = includedTags.join(',');
         if (excludedTags.length > 0) params.excludedTags = excludedTags.join(',');
         if (statusFilter !== 'ALL') params.active = statusFilter;
+        if (birthDateStart) params.birthDateStart = birthDateStart;
+        if (birthDateEnd) params.birthDateEnd = birthDateEnd;
+
+        // PF Filters
+        Object.entries(pfFilters).forEach(([key, value]) => {
+            if (value) params[key] = value;
+        });
+
+        // PJ Filters
+        Object.entries(pjFilters).forEach(([key, value]) => {
+            if (value) params[key] = value;
+        });
+
+        // Address Filters
+        Object.entries(addressFilters).forEach(([key, value]) => {
+            if (value) params[key] = value;
+        });
+
+        // Contract Filters
+        if (contractFilters.description) params.contractDescription = contractFilters.description;
+        if (contractFilters.counterparty) params.contractCounterparty = contractFilters.counterparty;
+
+        // Birth Month
+        if (birthMonth) params.birthMonth = birthMonth;
 
         const response = await api.get('/contacts', { params });
         setContacts(Array.isArray(response.data) ? response.data : []);
@@ -290,7 +349,15 @@ export function ContactList() {
                         <option value="false">Somente Inativos</option>
                     </select>
                     
-                    <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-bold shadow-lg"><Filter size={16} /> Filtros</button>
+                    <button 
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={clsx(
+                            "px-4 py-2 rounded-lg flex items-center gap-2 transition text-sm font-bold shadow-lg border",
+                            showFilters ? "bg-indigo-600 text-white border-indigo-500" : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
+                        )}
+                    >
+                        <Filter size={16} /> Filtros
+                    </button>
                     
                     <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
                         <button 
@@ -308,6 +375,220 @@ export function ContactList() {
                     </div>
                 </div>
             </div>
+
+            {showFilters && (
+                <div className="pt-4 border-t border-slate-800/50 flex flex-col gap-4 animate-in slide-in-from-top-4 duration-300">
+                    <div className="flex flex-wrap gap-4">
+                        <div className="flex flex-col gap-1.5 ">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Nascimento (Início)</label>
+                            <input 
+                                type="date" 
+                                value={birthDateStart}
+                                onChange={e => setBirthDateStart(e.target.value)}
+                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition-all font-medium h-9"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Nascimento (Fim)</label>
+                            <input 
+                                type="date" 
+                                value={birthDateEnd}
+                                onChange={e => setBirthDateEnd(e.target.value)}
+                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition-all font-medium h-9"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Mês de Aniv.</label>
+                            <select 
+                                value={birthMonth}
+                                onChange={e => setBirthMonth(e.target.value)}
+                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition-all font-medium h-9"
+                            >
+                                <option value="">Todos</option>
+                                <option value="1">Janeiro</option>
+                                <option value="2">Fevereiro</option>
+                                <option value="3">Março</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Maio</option>
+                                <option value="6">Junho</option>
+                                <option value="7">Julho</option>
+                                <option value="8">Agosto</option>
+                                <option value="9">Setembro</option>
+                                <option value="10">Outubro</option>
+                                <option value="11">Novembro</option>
+                                <option value="12">Dezembro</option>
+                            </select>
+                         </div>
+                        {(birthDateStart || birthDateEnd || birthMonth || Object.values(pfFilters).some(v => v) || Object.values(pjFilters).some(v => v) || Object.values(addressFilters).some(v => v) || Object.values(contractFilters).some(v => v)) && (
+                            <button 
+                                onClick={() => { 
+                                    setBirthDateStart(''); 
+                                    setBirthDateEnd(''); 
+                                    setBirthMonth('');
+                                    setPfFilters({
+                                        cpf: '', rg: '', motherName: '', fatherName: '', profession: '', nationality: '', naturality: '', gender: '', civilStatus: '', cnh: '', cnhCategory: '', nis: '', pis: '', ctps: '',
+                                    });
+                                    setPjFilters({ cnpj: '', companyName: '', stateRegistration: '' });
+                                    setAddressFilters({ city: '', state: '', district: '', zipCode: '', street: '' });
+                                    setContractFilters({ description: '', counterparty: '' });
+                                }}
+                                className="self-end px-3 py-1.5 text-xs font-bold text-red-400 hover:text-red-300 transition h-9 flex items-center"
+                            >
+                                <Trash2 size={12} className="mr-1" /> Limpar Filtros
+                            </button>
+                        )}
+                    </div>
+
+                    {/* PF SECTION */}
+                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                        <button 
+                            onClick={() => setExpandedSections(prev => prev.includes('PF') ? prev.filter(s => s !== 'PF') : [...prev, 'PF'])}
+                            className="w-full flex items-center justify-between p-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                        >
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                <User size={14} className="text-amber-500" /> Pessoa Física (PF)
+                            </div>
+                            {expandedSections.includes('PF') ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        {expandedSections.includes('PF') && (
+                            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-slate-900/40 border-t border-slate-800">
+                                {[
+                                    { label: 'CPF', key: 'cpf' },
+                                    { label: 'RG', key: 'rg' },
+                                    { label: 'Nome da Mãe', key: 'motherName' },
+                                    { label: 'Nome do Pai', key: 'fatherName' },
+                                    { label: 'Profissão', key: 'profession' },
+                                    { label: 'Nacionalidade', key: 'nationality' },
+                                    { label: 'Naturalidade', key: 'naturality' },
+                                    { label: 'Sexo', key: 'gender' },
+                                    { label: 'Estado Civil', key: 'civilStatus' },
+                                    { label: 'CNH', key: 'cnh' },
+                                    { label: 'Cat. CNH', key: 'cnhCategory' },
+                                    { label: 'NIS', key: 'nis' },
+                                    { label: 'PIS', key: 'pis' },
+                                    { label: 'CTPS', key: 'ctps' },
+                                ].map(f => (
+                                    <div key={f.key} className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter ml-0.5">{f.label}</label>
+                                        <input 
+                                            type="text" 
+                                            value={(pfFilters as any)[f.key]}
+                                            onChange={e => setPfFilters(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                            placeholder={`Filtrar por ${f.label.toLowerCase()}...`}
+                                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* PJ SECTION */}
+                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                        <button 
+                            onClick={() => setExpandedSections(prev => prev.includes('PJ') ? prev.filter(s => s !== 'PJ') : [...prev, 'PJ'])}
+                            className="w-full flex items-center justify-between p-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                        >
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                <Building2 size={14} className="text-blue-500" /> Pessoa Jurídica (PJ)
+                            </div>
+                            {expandedSections.includes('PJ') ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        {expandedSections.includes('PJ') && (
+                            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 bg-slate-900/40 border-t border-slate-800">
+                                {[
+                                    { label: 'CNPJ', key: 'cnpj' },
+                                    { label: 'Razão Social', key: 'companyName' },
+                                    { label: 'Insc. Estadual', key: 'stateRegistration' },
+                                ].map(f => (
+                                    <div key={f.key} className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter ml-0.5">{f.label}</label>
+                                        <input 
+                                            type="text" 
+                                            value={(pjFilters as any)[f.key]}
+                                            onChange={e => setPjFilters(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                            placeholder={`Filtrar por ${f.label.toLowerCase()}...`}
+                                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ADDRESS SECTION */}
+                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                        <button 
+                            onClick={() => setExpandedSections(prev => prev.includes('ADDR') ? prev.filter(s => s !== 'ADDR') : [...prev, 'ADDR'])}
+                            className="w-full flex items-center justify-between p-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                        >
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                <MapPin size={14} className="text-emerald-500" /> Endereços
+                            </div>
+                            {expandedSections.includes('ADDR') ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        {expandedSections.includes('ADDR') && (
+                            <div className="p-4 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 bg-slate-900/40 border-t border-slate-800">
+                                {[
+                                    { label: 'Logradouro', key: 'street' },
+                                    { label: 'Bairro', key: 'district' },
+                                    { label: 'Cidade', key: 'city' },
+                                    { label: 'Estado', key: 'state' },
+                                    { label: 'CEP', key: 'zipCode' },
+                                ].map(f => (
+                                    <div key={f.key} className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter ml-0.5">{f.label}</label>
+                                        <input 
+                                            type="text" 
+                                            value={(addressFilters as any)[f.key]}
+                                            onChange={e => setAddressFilters(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                            placeholder={`Filtrar por ${f.label.toLowerCase()}...`}
+                                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* CONTRACTS SECTION */}
+                    <div className="border border-slate-800 rounded-lg overflow-hidden">
+                        <button 
+                            onClick={() => setExpandedSections(prev => prev.includes('CTRT') ? prev.filter(s => s !== 'CTRT') : [...prev, 'CTRT'])}
+                            className="w-full flex items-center justify-between p-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                        >
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                <FileText size={14} className="text-blue-500" /> Contratos
+                            </div>
+                            {expandedSections.includes('CTRT') ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        {expandedSections.includes('CTRT') && (
+                            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-900/40 border-t border-slate-800">
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter ml-0.5">Descrição do Contrato</label>
+                                    <input 
+                                        type="text" 
+                                        value={contractFilters.description}
+                                        onChange={e => setContractFilters(prev => ({ ...prev, description: e.target.value }))}
+                                        placeholder="Filtrar por descrição..."
+                                        className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter ml-0.5">Outra Parte (Contratante/Contratado)</label>
+                                    <input 
+                                        type="text" 
+                                        value={contractFilters.counterparty}
+                                        onChange={e => setContractFilters(prev => ({ ...prev, counterparty: e.target.value }))}
+                                        placeholder="Filtrar por nome da outra parte..."
+                                        className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="pt-2 border-t border-slate-800/50">
                 <AdvancedTagFilter 

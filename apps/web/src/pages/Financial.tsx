@@ -2347,7 +2347,7 @@ export function Financial() {
                 />
                 <input
                   type="text"
-                  placeholder="Buscar por descriÃ§Ã£o, contato, conta, categoria ou etiqueta..."
+                  placeholder="Buscar por descrição, contato, conta, categoria ou etiqueta..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -2390,7 +2390,7 @@ export function Financial() {
                   className="px-4 py-3 bg-slate-900 border border-indigo-500/40 text-indigo-200 rounded-lg font-medium flex items-center gap-2 hover:bg-slate-800 transition-colors"
                 >
                   <Filter size={18} />
-                  Filtro AvanÃ§ado
+                  Filtros Avançados
                   {activeAdvancedFilterCount > 0 && (
                     <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">
                       {activeAdvancedFilterCount}
@@ -2418,7 +2418,7 @@ export function Financial() {
                     {filteredRecords.length}
                   </span>
                   <span className="text-sm text-slate-400">
-                    registros apÃ³s filtros
+                    registros encontrados
                   </span>
                 </div>
               </div>
@@ -2616,7 +2616,7 @@ export function Financial() {
                   </div>
                 </div>
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Todas TransaÃ§Ãµes
+                  Todas Transações
                 </span>
                 {activeCardFilter === "ALL" && (
                   <div className="absolute bottom-0 left-0 h-1 bg-indigo-500 w-full" />
@@ -2636,7 +2636,7 @@ export function Financial() {
                 )}
                 {advancedFilters.createdFrom && advancedFilters.createdTo && (
                   <span className="px-2 py-1 rounded-full bg-slate-900 border border-slate-700">
-                    LanÃ§amento: {formatDate(advancedFilters.createdFrom)} a{" "}
+                    Lançamento: {formatDate(advancedFilters.createdFrom)} a{" "}
                     {formatDate(advancedFilters.createdTo)}
                   </span>
                 )}
@@ -2665,10 +2665,10 @@ export function Financial() {
                     <div>
                       <h3 className="text-xl font-semibold text-white flex items-center gap-2">
                         <Filter size={18} className="text-indigo-300" />
-                        Filtro AvanÃ§ado
+                        Filtros Avançados
                       </h3>
                       <p className="text-sm text-slate-400 mt-1">
-                        Combine perÃ­odos, status efetivo, valores, contato,
+                        Combine períodos, status efetivo, valores, contato,
                         conta, origem e forma de pagamento sem perder o clique
                         dos cards.
                       </p>
@@ -2694,13 +2694,13 @@ export function Financial() {
                       onClick={() => applyAdvancedPreset("CREATED_THIS_WEEK")}
                       className="px-3 py-2 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-200 text-sm hover:bg-sky-500/15 transition-colors"
                     >
-                      LanÃ§ados esta semana
+                      Lançados esta semana
                     </button>
                     <button
                       onClick={() => applyAdvancedPreset("DUE_THIS_MONTH")}
                       className="px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 text-sm hover:bg-indigo-500/15 transition-colors"
                     >
-                      Vencimento neste mÃªs
+                      Vencimento neste mês
                     </button>
                     <button
                       onClick={() => applyAdvancedPreset("CLEAR_DATES")}
@@ -2736,7 +2736,7 @@ export function Financial() {
 
                     <label className="space-y-2">
                       <span className="text-xs uppercase tracking-wider text-slate-400">
-                        Conta bancÃ¡ria
+                        Conta bancária
                       </span>
                       <select
                         value={advancedFilters.bankAccountId}
@@ -2828,7 +2828,7 @@ export function Financial() {
 
                     <label className="space-y-2">
                       <span className="text-xs uppercase tracking-wider text-slate-400">
-                        Valor mÃ­nimo
+                        Valor mínimo
                       </span>
                       <input
                         type="number"
@@ -2846,7 +2846,7 @@ export function Financial() {
 
                     <label className="space-y-2">
                       <span className="text-xs uppercase tracking-wider text-slate-400">
-                        Valor mÃ¡ximo
+                        Valor máximo
                       </span>
                       <input
                         type="number"
@@ -2864,7 +2864,7 @@ export function Financial() {
 
                     <div className="space-y-2">
                       <span className="text-xs uppercase tracking-wider text-slate-400">
-                        Marcadores extras
+                        Filtros Adicionais
                       </span>
                       <div className="grid grid-cols-1 gap-2">
                         <label className="flex items-center gap-2 px-3 py-3 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-200">
@@ -2903,10 +2903,10 @@ export function Financial() {
                     <div className="space-y-3 p-4 bg-slate-950/80 border border-slate-800 rounded-xl">
                       <div>
                         <h4 className="text-sm font-semibold text-white">
-                          PerÃ­odo de lanÃ§amento
+                          Período de lançamento
                         </h4>
                         <p className="text-xs text-slate-500">
-                          Ex.: tudo que foi lanÃ§ado entre X e Y.
+                          Ex.: tudo que foi lançado entre X e Y.
                         </p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -2928,7 +2928,7 @@ export function Financial() {
                         </label>
                         <label className="space-y-2">
                           <span className="text-xs uppercase tracking-wider text-slate-400">
-                            AtÃ©
+                            Até
                           </span>
                           <input
                             type="date"
@@ -2948,10 +2948,10 @@ export function Financial() {
                     <div className="space-y-3 p-4 bg-slate-950/80 border border-slate-800 rounded-xl">
                       <div>
                         <h4 className="text-sm font-semibold text-white">
-                          PerÃ­odo de vencimento
+                          Período de vencimento
                         </h4>
                         <p className="text-xs text-slate-500">
-                          Ideal para cobranÃ§as vencidas na semana ou mÃªs.
+                          Ideal para cobranças vencidas na semana ou mês.
                         </p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -2973,7 +2973,7 @@ export function Financial() {
                         </label>
                         <label className="space-y-2">
                           <span className="text-xs uppercase tracking-wider text-slate-400">
-                            AtÃ©
+                            Até
                           </span>
                           <input
                             type="date"
@@ -2993,10 +2993,10 @@ export function Financial() {
                     <div className="space-y-3 p-4 bg-slate-950/80 border border-slate-800 rounded-xl">
                       <div>
                         <h4 className="text-sm font-semibold text-white">
-                          PerÃ­odo de pagamento
+                          Período de pagamento
                         </h4>
                         <p className="text-xs text-slate-500">
-                          Use para conciliaÃ§Ã£o e auditoria de liquidaÃ§Ãµes.
+                          Use para conciliação e auditoria de liquidações.
                         </p>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -3018,7 +3018,7 @@ export function Financial() {
                         </label>
                         <label className="space-y-2">
                           <span className="text-xs uppercase tracking-wider text-slate-400">
-                            AtÃ©
+                            Até
                           </span>
                           <input
                             type="date"

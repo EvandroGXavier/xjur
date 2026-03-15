@@ -288,13 +288,138 @@ export class ContactsService {
     search?: string, 
     includedTags?: string, 
     excludedTags?: string,
-    active?: string
+    active?: string,
+    birthDateStart?: string,
+    birthDateEnd?: string,
+    pfFilters?: {
+      cpf?: string;
+      rg?: string;
+      motherName?: string;
+      fatherName?: string;
+      profession?: string;
+      nationality?: string;
+      naturality?: string;
+      gender?: string;
+      civilStatus?: string;
+      cnh?: string;
+      cnhCategory?: string;
+      nis?: string;
+      pis?: string;
+      ctps?: string;
+    },
+    pjFilters?: {
+      cnpj?: string;
+      companyName?: string;
+      stateRegistration?: string;
+    },
+    extraFilters?: {
+      birthMonth?: number;
+      address?: { city?: string; state?: string; district?: string; zipCode?: string; street?: string };
+      additionalContact?: { value?: string; name?: string };
+      contract?: { description?: string; counterparty?: string };
+    }
   ) {
     const where: any = { tenantId };
 
     // Active/Inactive filter
     if (active === 'true') where.active = true;
     else if (active === 'false') where.active = false;
+
+
+    if (birthDateStart || birthDateEnd || pfFilters) {
+      where.pfDetails = where.pfDetails || {};
+      
+      if (birthDateStart || birthDateEnd) {
+        where.pfDetails.birthDate = {};
+        if (birthDateStart) {
+          where.pfDetails.birthDate.gte = new Date(birthDateStart);
+        }
+        if (birthDateEnd) {
+          where.pfDetails.birthDate.lte = new Date(birthDateEnd);
+        }
+      }
+
+      if (pfFilters) {
+        Object.entries(pfFilters).forEach(([key, value]) => {
+          if (value?.trim()) {
+            where.pfDetails[key] = { contains: value, mode: 'insensitive' };
+          }
+        });
+      }
+
+      // Cleanup if empty
+      if (Object.keys(where.pfDetails).length === 0) {
+        delete where.pfDetails;
+      }
+    }
+
+    if (pjFilters) {
+      where.pjDetails = where.pjDetails || {};
+      Object.entries(pjFilters).forEach(([key, value]) => {
+        if (value?.trim()) {
+          where.pjDetails[key] = { contains: value, mode: 'insensitive' };
+        }
+      });
+      if (Object.keys(where.pjDetails).length === 0) {
+        delete where.pjDetails;
+      }
+    }
+
+    // Address Filters
+    if (extraFilters?.address) {
+      const addr = extraFilters.address;
+      const addrConditions = Object.entries(addr)
+        .filter(([_, v]) => v?.trim())
+        .map(([k, v]) => ({ [k]: { contains: v, mode: 'insensitive' } }));
+      
+      if (addrConditions.length > 0) {
+        where.addresses = { some: { AND: addrConditions } };
+      }
+    }
+
+    // Additional Contact Filters
+    if (extraFilters?.additionalContact) {
+      const ac = extraFilters.additionalContact;
+      const acConditions: any[] = [];
+      if (ac.value?.trim()) acConditions.push({ value: { contains: ac.value, mode: 'insensitive' } });
+      if (ac.name?.trim()) acConditions.push({ nomeContatoAdicional: { contains: ac.name, mode: 'insensitive' } });
+      
+      if (acConditions.length > 0) {
+        where.additionalContacts = { some: { AND: acConditions } };
+      }
+    }
+    // Collective ID collection for complex filters
+    let requiredIds: string[] | null = null;
+
+    // Handle Month filter (Postgres specific extraction)
+    if (extraFilters?.birthMonth) {
+      const monthContacts = await this.prisma.$queryRawUnsafe<{ contactId: string }[]>(
+        `SELECT "contactId" FROM "person_details_pf" WHERE EXTRACT(MONTH FROM "birthDate") = $1`,
+        extraFilters.birthMonth
+      );
+      const monthIds = monthContacts.map(c => c.contactId);
+      requiredIds = requiredIds === null ? monthIds : requiredIds.filter(id => monthIds.includes(id));
+    }
+
+    // Contract Filters - searching inside JSON metadata
+    if (extraFilters?.contract?.description?.trim() || extraFilters?.contract?.counterparty?.trim()) {
+       const desc = extraFilters.contract.description?.trim() || '';
+       const counter = extraFilters.contract.counterparty?.trim() || '';
+       
+       // Search in the whole metadata text for simplicity and performance of a single query
+       // casting to text is fast for ILIKE
+       const contractContacts = await this.prisma.$queryRawUnsafe<{ id: string }[]>(
+         `SELECT id FROM contacts WHERE metadata::text ilike $1 AND metadata::text ilike $2`,
+         `%${desc}%`,
+         `%${counter}%`
+       );
+       const contractIds = contractContacts.map(c => c.id);
+       requiredIds = requiredIds === null ? contractIds : requiredIds.filter(id => contractIds.includes(id));
+    }
+
+    if (requiredIds !== null) {
+       where.id = { in: requiredIds };
+    }
 
     if (search) {
       where.OR = [

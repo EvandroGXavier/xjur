@@ -74,8 +74,75 @@ export class ContactsController {
       @Query('includedTags') includedTags?: string,
       @Query('excludedTags') excludedTags?: string,
       @Query('active') active?: string,
+      @Query('birthDateStart') birthDateStart?: string,
+      @Query('birthDateEnd') birthDateEnd?: string,
+      @Query('cpf') cpf?: string,
+      @Query('rg') rg?: string,
+      @Query('motherName') motherName?: string,
+      @Query('fatherName') fatherName?: string,
+      @Query('profession') profession?: string,
+      @Query('nationality') nationality?: string,
+      @Query('naturality') naturality?: string,
+      @Query('gender') gender?: string,
+      @Query('civilStatus') civilStatus?: string,
+      @Query('cnh') cnh?: string,
+      @Query('cnhCategory') cnhCategory?: string,
+      @Query('nis') nis?: string,
+      @Query('pis') pis?: string,
+      @Query('ctps') ctps?: string,
+      @Query('cnpj') cnpj?: string,
+      @Query('companyName') companyName?: string,
+      @Query('stateRegistration') stateRegistration?: string,
+      @Query('birthMonth') birthMonth?: string,
+      // Address Filters
+      @Query('city') city?: string,
+      @Query('state') state?: string,
+      @Query('district') district?: string,
+      @Query('zipCode') zipCode?: string,
+      @Query('street') street?: string,
+      // Additional Contact Filters
+      @Query('additionalValue') additionalValue?: string,
+      @Query('additionalName') additionalName?: string,
+      // Contract Filters
+      @Query('contractDescription') contractDescription?: string,
+      @Query('contractCounterparty') contractCounterparty?: string,
   ) {
-    return this.contactsService.findAll(this.getTenantId(user), search, includedTags, excludedTags, active);
+    return this.contactsService.findAll(
+      this.getTenantId(user), 
+      search, 
+      includedTags, 
+      excludedTags, 
+      active,
+      birthDateStart,
+      birthDateEnd,
+      {
+        cpf,
+        rg,
+        motherName,
+        fatherName,
+        profession,
+        nationality,
+        naturality,
+        gender,
+        civilStatus,
+        cnh,
+        cnhCategory,
+        nis,
+        pis,
+        ctps,
+      },
+      {
+        cnpj,
+        companyName,
+        stateRegistration,
+      },
+      {
+        birthMonth: birthMonth ? parseInt(birthMonth) : undefined,
+        address: { city, state, district, zipCode, street },
+        additionalContact: { value: additionalValue, name: additionalName },
+        contract: { description: contractDescription, counterparty: contractCounterparty }
+      }
+    );
   }
 
   @Get('lookup/exact')
