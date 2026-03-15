@@ -229,6 +229,11 @@ export function PurchasesPage() {
   };
 
   const handleApprove = async (id: string) => {
+    if (selectedPurchase?.status === "RECEIVED") {
+      toast.info("Este pedido jÃ¡ foi recebido.");
+      return;
+    }
+
     if (
       !confirm(
         "Dar entrada/receber este pedido? O estoque será atualizado e um contas-a-pagar será gerado.",
@@ -258,6 +263,11 @@ export function PurchasesPage() {
   };
 
   const handleSave = async (shouldClose = true) => {
+    if (selectedPurchase?.status === "RECEIVED") {
+      toast.error("Pedidos recebidos nÃ£o podem ser editados.");
+      return;
+    }
+
     try {
       const totalAmount = formData.items.reduce(
         (acc: number, item: any) => acc + Number(item.total),
@@ -898,7 +908,13 @@ export function PurchasesPage() {
                     key={p.id}
                     className={`cursor-pointer transition-colors ${selectedPurchase?.id === p.id ? "bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500" : "text-slate-300 hover:bg-slate-800/50 border-b border-slate-800"}`}
                     onClick={() => loadPurchaseDetails(p.id)}
-                    onDoubleClick={() => setIsEditing(true)}
+                    onDoubleClick={() => {
+                      if (p.status === "RECEIVED") {
+                        toast.info("Pedidos recebidos nÃ£o podem ser editados.");
+                        return;
+                      }
+                      setIsEditing(true);
+                    }}
                   >
                     <td className="px-3 py-2 w-24 border-r border-slate-800 font-mono">
                       {String(p.code).padStart(6, "0")}
@@ -976,10 +992,15 @@ export function PurchasesPage() {
                     Dar Entrada (Receber)
                   </button>
                   <button
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
                     onClick={() => {
+                      if (selectedPurchase.status === "RECEIVED") {
+                        toast.info("Pedidos recebidos nÃ£o podem ser editados.");
+                        return;
+                      }
                       setIsEditing(true);
                     }}
+                    disabled={selectedPurchase.status === "RECEIVED"}
                   >
                     Editar Pedido
                   </button>

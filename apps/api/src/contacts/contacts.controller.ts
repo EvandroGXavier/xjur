@@ -1,4 +1,20 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  UploadedFiles,
+  BadRequestException,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ContactsService } from './contacts.service';
 import { EnrichmentService } from './enrichment.service';
@@ -26,6 +42,14 @@ export class ContactsController {
     private readonly contactsImportService: ContactsImportService,
   ) {}
 
+  private getTenantId(user: CurrentUserData) {
+    if (!user?.tenantId) {
+      throw new UnauthorizedException('Contexto do usuario invalido');
+    }
+
+    return user.tenantId;
+  }
+
   @Post('import/upload')
   @UseInterceptors(FileInterceptor('file'))
   uploadFile(@UploadedFile() file: Express.Multer.File) {
@@ -35,31 +59,12 @@ export class ContactsController {
 
   @Post('import/execute')
   executeImport(@Body() dto: ImportContactsDto, @CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) {
-       throw new Error('User context invalid');
-    }
-    return this.contactsImportService.executeImport(user.tenantId, dto);
+    return this.contactsImportService.executeImport(this.getTenantId(user), dto);
   }
 
   @Post()
   async create(@Body() createContactDto: CreateContactDto, @CurrentUser() user: CurrentUserData) {
-    console.log('--- CREATE CONTACT PAYLOAD ---');
-    console.dir(createContactDto, { depth: null });
-    
-    if (!user || !user.tenantId) {
-       console.error('User or tenantId missing in controller!');
-       throw new Error('User context invalid');
-    }
-    
-    try {
-       const result = await this.contactsService.create(createContactDto, user.tenantId);
-       console.log('--- CREATE CONTACT SUCCESS ---');
-       return result;
-    } catch (err) {
-       console.error('--- CREATE CONTACT FAILED ---');
-       console.error(err);
-       throw err;
-    }
+    return this.contactsService.create(createContactDto, this.getTenantId(user));
   }
 
   @Get()
@@ -70,23 +75,17 @@ export class ContactsController {
       @Query('excludedTags') excludedTags?: string,
       @Query('active') active?: string,
   ) {
-    if (!user || !user.tenantId) {
-      console.error('User or tenantId missing in GET /contacts');
-      throw new Error('User context invalid');
-    }
-    return this.contactsService.findAll(user.tenantId, search, includedTags, excludedTags, active);
+    return this.contactsService.findAll(this.getTenantId(user), search, includedTags, excludedTags, active);
   }
 
   @Get('lookup/exact')
   async lookupExact(@CurrentUser() user: CurrentUserData, @Query() query: any) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
-    return this.contactsService.lookupContactExact(user.tenantId, query);
+    return this.contactsService.lookupContactExact(this.getTenantId(user), query);
   }
 
   @Post('cleanup')
   async cleanupContacts(@CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
-    return this.contactsService.cleanupContacts(user.tenantId);
+    return this.contactsService.cleanupContacts(this.getTenantId(user));
   }
 
   // Enrichment endpoints
@@ -102,74 +101,94 @@ export class ContactsController {
 
   @Post('bulk-action')
   async bulkAction(@Body() dto: any, @CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
-    return this.contactsService.bulkAction(user.tenantId, dto);
+    return this.contactsService.bulkAction(this.getTenantId(user), dto);
+  }
+
+  @Get(':id/insights')
+  getInsights(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.contactsService.getContactInsights(id, this.getTenantId(user));
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.contactsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.contactsService.findOne(id, this.getTenantId(user));
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() updateContactDto: UpdateContactDto) {
-    console.log('--- UPDATE CONTACT PAYLOAD ---', id);
-    console.dir(updateContactDto, { depth: null });
-    
-    try {
-       const result = await this.contactsService.update(id, updateContactDto);
-       console.log('--- UPDATE CONTACT SUCCESS ---');
-       return result;
-    } catch (err) {
-       console.error('--- UPDATE CONTACT FAILED ---');
-       console.error(err);
-       throw err;
-    }
+  async update(
+    @Param('id') id: string,
+    @Body() updateContactDto: UpdateContactDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.update(id, updateContactDto, this.getTenantId(user));
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.contactsService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.contactsService.remove(id, this.getTenantId(user));
   }
 
   // Address management endpoints
   @Post(':id/addresses')
-  addAddress(@Param('id') id: string, @Body() createAddressDto: CreateAddressDto) {
-    return this.contactsService.addAddress(id, createAddressDto);
+  addAddress(
+    @Param('id') id: string,
+    @Body() createAddressDto: CreateAddressDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.addAddress(id, createAddressDto, this.getTenantId(user));
   }
 
   @Patch(':id/addresses/:addressId')
   updateAddress(
     @Param('id') id: string,
     @Param('addressId') addressId: string,
-    @Body() updateAddressDto: UpdateAddressDto
+    @Body() updateAddressDto: UpdateAddressDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.contactsService.updateAddress(id, addressId, updateAddressDto);
+    return this.contactsService.updateAddress(id, addressId, updateAddressDto, this.getTenantId(user));
   }
 
   @Delete(':id/addresses/:addressId')
-  removeAddress(@Param('id') id: string, @Param('addressId') addressId: string) {
-    return this.contactsService.removeAddress(id, addressId);
+  removeAddress(
+    @Param('id') id: string,
+    @Param('addressId') addressId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.removeAddress(id, addressId, this.getTenantId(user));
   }
 
   // Additional Contact management endpoints
   @Post(':id/additional-contacts')
-  addAdditionalContact(@Param('id') id: string, @Body() createAdditionalContactDto: CreateAdditionalContactDto) {
-    return this.contactsService.addAdditionalContact(id, createAdditionalContactDto);
+  addAdditionalContact(
+    @Param('id') id: string,
+    @Body() createAdditionalContactDto: CreateAdditionalContactDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.addAdditionalContact(id, createAdditionalContactDto, this.getTenantId(user));
   }
 
   @Patch(':id/additional-contacts/:contactId')
   updateAdditionalContact(
     @Param('id') id: string,
     @Param('contactId') contactId: string,
-    @Body() updateAdditionalContactDto: UpdateAdditionalContactDto
+    @Body() updateAdditionalContactDto: UpdateAdditionalContactDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.contactsService.updateAdditionalContact(id, contactId, updateAdditionalContactDto);
+    return this.contactsService.updateAdditionalContact(
+      id,
+      contactId,
+      updateAdditionalContactDto,
+      this.getTenantId(user),
+    );
   }
 
   @Delete(':id/additional-contacts/:contactId')
-  removeAdditionalContact(@Param('id') id: string, @Param('contactId') contactId: string) {
-    return this.contactsService.removeAdditionalContact(id, contactId);
+  removeAdditionalContact(
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.contactsService.removeAdditionalContact(id, contactId, this.getTenantId(user));
   }
 
   @Get(':id/attachments/:filename')
@@ -226,17 +245,17 @@ export class ContactsController {
   // Relations Endpoints
   @Get('relations/types')
   getRelationTypes(@CurrentUser() user: CurrentUserData) {
-      return this.contactsService.getRelationTypes(user.tenantId);
+      return this.contactsService.getRelationTypes(this.getTenantId(user));
   }
 
   @Post('relations/types')
   createRelationType(@Body() dto: CreateRelationTypeDto, @CurrentUser() user: CurrentUserData) {
-      return this.contactsService.createRelationType(user.tenantId, dto);
+      return this.contactsService.createRelationType(this.getTenantId(user), dto);
   }
 
   @Get(':id/relations')
-  getContactRelations(@Param('id') id: string) {
-      return this.contactsService.getContactRelations(id);
+  getContactRelations(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+      return this.contactsService.getContactRelations(id, this.getTenantId(user));
   }
 
   @Post(':id/relations')
@@ -245,7 +264,7 @@ export class ContactsController {
       @Body() dto: CreateContactRelationDto,
       @CurrentUser() user: CurrentUserData
   ) {
-      return this.contactsService.createContactRelation(user.tenantId, id, dto);
+      return this.contactsService.createContactRelation(this.getTenantId(user), id, dto);
   }
 
   @Delete(':id/relations/:relationId')
@@ -253,23 +272,23 @@ export class ContactsController {
       @Param('relationId') relationId: string,
       @CurrentUser() user: CurrentUserData
   ) {
-      return this.contactsService.removeContactRelation(user.tenantId, relationId);
+      return this.contactsService.removeContactRelation(this.getTenantId(user), relationId);
   }
 
   // Assets Endpoints
   @Get('assets/types')
   getAssetTypes(@CurrentUser() user: CurrentUserData) {
-      return this.contactsService.getAssetTypes(user.tenantId);
+      return this.contactsService.getAssetTypes(this.getTenantId(user));
   }
 
   @Post('assets/types')
   createAssetType(@Body() dto: CreateAssetTypeDto, @CurrentUser() user: CurrentUserData) {
-      return this.contactsService.createAssetType(user.tenantId, dto);
+      return this.contactsService.createAssetType(this.getTenantId(user), dto);
   }
 
   @Get(':id/assets')
-  getContactAssets(@Param('id') id: string) {
-      return this.contactsService.getContactAssets(id);
+  getContactAssets(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+      return this.contactsService.getContactAssets(id, this.getTenantId(user));
   }
 
   @Post(':id/assets')
@@ -278,7 +297,7 @@ export class ContactsController {
       @Body() dto: CreateContactAssetDto,
       @CurrentUser() user: CurrentUserData
   ) {
-      return this.contactsService.createContactAsset(user.tenantId, id, dto);
+      return this.contactsService.createContactAsset(this.getTenantId(user), id, dto);
   }
 
   @Patch(':id/assets/:assetId')
@@ -287,7 +306,7 @@ export class ContactsController {
       @Body() dto: UpdateContactAssetDto,
       @CurrentUser() user: CurrentUserData
   ) {
-      return this.contactsService.updateContactAsset(user.tenantId, assetId, dto);
+      return this.contactsService.updateContactAsset(this.getTenantId(user), assetId, dto);
   }
 
   @Delete(':id/assets/:assetId')
@@ -295,13 +314,13 @@ export class ContactsController {
       @Param('assetId') assetId: string,
       @CurrentUser() user: CurrentUserData
   ) {
-      return this.contactsService.removeContactAsset(user.tenantId, assetId);
+      return this.contactsService.removeContactAsset(this.getTenantId(user), assetId);
   }
 
   // Contracts Endpoints
   @Get(':id/contracts')
   getContactContracts(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-    return this.contactsService.getContactContracts(id, user.tenantId);
+    return this.contactsService.getContactContracts(id, this.getTenantId(user));
   }
 
   @Post(':id/contracts')
@@ -310,7 +329,7 @@ export class ContactsController {
     @Body() dto: CreateContactContractDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.contactsService.createContactContract(user.tenantId, id, dto);
+    return this.contactsService.createContactContract(this.getTenantId(user), id, dto);
   }
 
   @Patch(':id/contracts/:contractId')
@@ -320,7 +339,7 @@ export class ContactsController {
     @Body() dto: UpdateContactContractDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.contactsService.updateContactContract(user.tenantId, id, contractId, dto);
+    return this.contactsService.updateContactContract(this.getTenantId(user), id, contractId, dto);
   }
 
   @Delete(':id/contracts/:contractId')
@@ -329,11 +348,11 @@ export class ContactsController {
     @Param('contractId') contractId: string,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.contactsService.removeContactContract(user.tenantId, id, contractId);
+    return this.contactsService.removeContactContract(this.getTenantId(user), id, contractId);
   }
 
   @Get(':id/financial-records')
   getContactFinancialRecords(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-    return this.contactsService.getContactFinancialRecords(id, user.tenantId);
+    return this.contactsService.getContactFinancialRecords(id, this.getTenantId(user));
   }
 }

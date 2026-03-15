@@ -193,6 +193,101 @@ interface ContactFinancialRecord {
   }>;
 }
 
+interface ContactInsightProcess {
+  id: string;
+  code?: string | null;
+  title?: string | null;
+  cnj?: string | null;
+  status: string;
+  area?: string | null;
+  class?: string | null;
+  court?: string | null;
+  district?: string | null;
+  updatedAt: string;
+  relation: {
+    type: 'owner' | 'party';
+    label: string;
+    roleCategory?: string | null;
+    isClient: boolean;
+    isOpposing: boolean;
+  };
+}
+
+interface ContactInsightAppointment {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  startAt: string;
+  endAt: string;
+  location?: string | null;
+  participantRole?: string | null;
+  confirmed: boolean;
+  process?: {
+    id: string;
+    title?: string | null;
+    code?: string | null;
+  } | null;
+}
+
+interface ContactInsightMessage {
+  id: string;
+  direction: string;
+  role: string;
+  content: string;
+  contentType: string;
+  status: string;
+  senderName?: string | null;
+  createdAt: string;
+}
+
+interface ContactInsightConversation {
+  id: string;
+  title?: string | null;
+  status: string;
+  priority: string;
+  queue?: string | null;
+  waitingReply: boolean;
+  unreadCount: number;
+  lastMessagePreview?: string | null;
+  lastMessageAt?: string | null;
+  connection?: {
+    id: string;
+    name: string;
+    channel: string;
+    status: string;
+  } | null;
+  ticket?: {
+    id: string;
+    code: number;
+    status: string;
+    priority: string;
+    queue?: string | null;
+  } | null;
+  messages: ContactInsightMessage[];
+}
+
+interface ContactInsightTicket {
+  id: string;
+  code: number;
+  title: string;
+  status: string;
+  priority: string;
+  queue?: string | null;
+  waitingReply: boolean;
+  lastMessageAt?: string | null;
+  updatedAt: string;
+}
+
+interface ContactInsights {
+  processes: ContactInsightProcess[];
+  appointments: ContactInsightAppointment[];
+  whatsapp: {
+    conversations: ContactInsightConversation[];
+    tickets: ContactInsightTicket[];
+  };
+}
+
 const CATEGORIES = [
   'Cliente',
   'Fornecedor',
@@ -227,6 +322,15 @@ const FINANCIAL_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Cancelado',
   OVERDUE: 'Vencido',
   PARTIAL: 'Parcial',
+};
+
+const APPOINTMENT_STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: 'Agendado',
+  CONFIRMED: 'Confirmado',
+  IN_PROGRESS: 'Em andamento',
+  DONE: 'Concluido',
+  CANCELED: 'Cancelado',
+  RESCHEDULED: 'Reagendado',
 };
 
 export function ContactForm() {
@@ -387,6 +491,15 @@ export function ContactForm() {
   const [financialSearch, setFinancialSearch] = useState('');
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [attachmentUploadProgress, setAttachmentUploadProgress] = useState(0);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [contactInsights, setContactInsights] = useState<ContactInsights>({
+    processes: [],
+    appointments: [],
+    whatsapp: {
+      conversations: [],
+      tickets: [],
+    },
+  });
 
   const fetchRelations = async () => {
       try {
@@ -421,6 +534,39 @@ export function ContactForm() {
           setFinancialRecords(response.data);
       } catch (err) {
           console.error("Failed to fetch financial records", err);
+      }
+  };
+
+  const fetchInsights = async () => {
+      if (!id || id === 'new') {
+        setContactInsights({
+          processes: [],
+          appointments: [],
+          whatsapp: {
+            conversations: [],
+            tickets: [],
+          },
+        });
+        return;
+      }
+
+      try {
+          setInsightsLoading(true);
+          const response = await api.get(`/contacts/${id}/insights`);
+          setContactInsights({
+            processes: Array.isArray(response.data?.processes) ? response.data.processes : [],
+            appointments: Array.isArray(response.data?.appointments) ? response.data.appointments : [],
+            whatsapp: {
+              conversations: Array.isArray(response.data?.whatsapp?.conversations)
+                ? response.data.whatsapp.conversations
+                : [],
+              tickets: Array.isArray(response.data?.whatsapp?.tickets) ? response.data.whatsapp.tickets : [],
+            },
+          });
+      } catch (err) {
+          console.error('Failed to fetch contact insights', err);
+      } finally {
+          setInsightsLoading(false);
       }
   };
 
@@ -785,6 +931,7 @@ export function ContactForm() {
       fetchAssets();
       fetchContracts();
       fetchFinancialRecords();
+      fetchInsights();
     }
     fetchRelationTypes();
     fetchAssetTypes();
@@ -859,6 +1006,36 @@ export function ContactForm() {
       style: 'currency',
       currency: 'BRL',
     }).format(Number(value || 0));
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return '-';
+    return new Date(value).toLocaleString('pt-BR');
+  };
+
+  const handleOpenPhone = () => {
+    const destination = (formData.phone || formData.whatsapp || '').replace(/\D/g, '');
+    if (!destination) {
+      toast.warning('Este contato ainda nao possui telefone cadastrado.');
+      return;
+    }
+
+    window.open(`tel:${destination}`, '_self');
+  };
+
+  const handleOpenWhatsapp = () => {
+    const rawDestination = (formData.whatsapp || formData.phone || '').replace(/\D/g, '');
+    if (!rawDestination) {
+      toast.warning('Este contato ainda nao possui WhatsApp cadastrado.');
+      return;
+    }
+
+    const destination =
+      rawDestination.length > 11 || rawDestination.startsWith('55')
+        ? rawDestination
+        : `55${rawDestination}`;
+
+    window.open(`https://wa.me/${destination}`, '_blank', 'noopener,noreferrer');
+  };
 
   const getEffectiveFinancialStatus = (record: ContactFinancialRecord) =>
     record.effectiveStatus || record.status;
@@ -1492,7 +1669,17 @@ export function ContactForm() {
       {/* Header and Actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/contacts')} className="flex items-center gap-1 text-slate-400 hover:text-white transition">
+            <button
+              onClick={() => {
+                if (returnTo) {
+                  navigate(decodeURIComponent(returnTo));
+                  return;
+                }
+
+                navigate('/contacts');
+              }}
+              className="flex items-center gap-1 text-slate-400 hover:text-white transition"
+            >
                 <ArrowLeft size={16} /> Voltar
             </button>
             <h1 className="text-2xl font-bold text-white">
@@ -1500,13 +1687,22 @@ export function ContactForm() {
             </h1>
         </div>
         <div className="flex gap-2">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700">
+            <button
+                onClick={handleOpenPhone}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700"
+            >
                 <Phone size={14} /> Ligar
             </button>
-             <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700">
+             <button
+                onClick={handleOpenWhatsapp}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700"
+             >
                 <MessageSquare size={14} /> WhatsApp
             </button>
-             <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700">
+             <button
+                onClick={() => setActiveTab('agenda')}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700"
+             >
                 <Calendar size={14} /> Agenda
             </button>
             <button 
@@ -2748,6 +2944,328 @@ export function ContactForm() {
                 </div>
             )}
 
+            {activeTab === 'whatsapp' && (
+                <div className="space-y-6 max-w-6xl">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <MessageSquare size={20} className="text-indigo-400" /> WhatsApp e Atendimento
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">
+                                Consulte o historico recente do canal e abra rapidamente o atendimento do contato.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                onClick={handleOpenWhatsapp}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
+                            >
+                                <MessageSquare size={16} />
+                                Abrir no WhatsApp
+                            </button>
+                            <button
+                                onClick={() => navigate('/chat')}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                            >
+                                <ExternalLink size={16} />
+                                Abrir Atendimento
+                            </button>
+                        </div>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato para consultar o historico do atendimento.</p>
+                        </div>
+                    ) : insightsLoading ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center text-slate-400">
+                            Carregando historico do WhatsApp...
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">WhatsApp principal</p>
+                                    <p className="text-lg font-semibold text-white mt-2">{formData.whatsapp || 'Nao informado'}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Conversas</p>
+                                    <p className="text-2xl font-semibold text-white mt-2">{contactInsights.whatsapp.conversations.length}</p>
+                                </div>
+                                <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-400">Tickets</p>
+                                    <p className="text-2xl font-semibold text-white mt-2">{contactInsights.whatsapp.tickets.length}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-6">
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-white font-semibold">Conversas recentes</h4>
+                                        <span className="text-xs text-slate-500">
+                                            {contactInsights.whatsapp.conversations.length} conversa(s)
+                                        </span>
+                                    </div>
+                                    {contactInsights.whatsapp.conversations.length === 0 ? (
+                                        <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-slate-500">
+                                            Nenhuma conversa de WhatsApp vinculada a este contato.
+                                        </div>
+                                    ) : (
+                                        contactInsights.whatsapp.conversations.map(conversation => (
+                                            <div key={conversation.id} className="rounded-xl border border-slate-700 bg-slate-800/40 p-4 space-y-3">
+                                                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <p className="font-semibold text-white">
+                                                                {conversation.title || `Conversa ${conversation.id.slice(0, 8)}`}
+                                                            </p>
+                                                            <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-300">
+                                                                {conversation.status}
+                                                            </span>
+                                                            {conversation.unreadCount > 0 && (
+                                                                <span className="text-[11px] px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                                                                    {conversation.unreadCount} nao lida(s)
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-sm text-slate-400 mt-1">
+                                                            {conversation.connection?.name || 'Sem conexao identificada'}
+                                                            {conversation.queue ? ` • Fila ${conversation.queue}` : ''}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-sm text-slate-500">
+                                                        {formatDateTime(conversation.lastMessageAt)}
+                                                    </div>
+                                                </div>
+
+                                                {conversation.lastMessagePreview && (
+                                                    <div className="rounded-lg bg-slate-950/70 border border-slate-700 px-3 py-2 text-sm text-slate-300">
+                                                        {conversation.lastMessagePreview}
+                                                    </div>
+                                                )}
+
+                                                <div className="space-y-2">
+                                                    {conversation.messages.length === 0 ? (
+                                                        <p className="text-sm text-slate-500">Sem mensagens recentes sincronizadas.</p>
+                                                    ) : (
+                                                        conversation.messages.map(message => (
+                                                            <div key={message.id} className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span className="text-xs uppercase tracking-wide text-slate-500">
+                                                                        {message.direction === 'OUTBOUND' ? 'Saida' : 'Entrada'}
+                                                                    </span>
+                                                                    <span className="text-xs text-slate-500">{formatDateTime(message.createdAt)}</span>
+                                                                </div>
+                                                                <p className="text-sm text-slate-200 mt-1 break-words">{message.content}</p>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-white font-semibold">Tickets do canal</h4>
+                                        <span className="text-xs text-slate-500">
+                                            {contactInsights.whatsapp.tickets.length} ticket(s)
+                                        </span>
+                                    </div>
+                                    {contactInsights.whatsapp.tickets.length === 0 ? (
+                                        <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-slate-500">
+                                            Nenhum ticket de WhatsApp encontrado.
+                                        </div>
+                                    ) : (
+                                        contactInsights.whatsapp.tickets.map(ticket => (
+                                            <div key={ticket.id} className="rounded-xl border border-slate-700 bg-slate-800/40 p-4 space-y-2">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <p className="font-semibold text-white">Ticket #{ticket.code}</p>
+                                                        <p className="text-sm text-slate-400">{ticket.title}</p>
+                                                    </div>
+                                                    <span className="text-xs px-2 py-1 rounded-full border border-slate-600 text-slate-300">
+                                                        {ticket.status}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-500">
+                                                    Prioridade {ticket.priority}
+                                                    {ticket.queue ? ` • Fila ${ticket.queue}` : ''}
+                                                    {ticket.waitingReply ? ' • aguardando resposta' : ''}
+                                                </p>
+                                                <p className="text-xs text-slate-500">Ultima atividade: {formatDateTime(ticket.lastMessageAt || ticket.updatedAt)}</p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'agenda' && (
+                <div className="space-y-6 max-w-5xl">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <Calendar size={20} className="text-indigo-400" /> Compromissos vinculados
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">
+                                Eventos em que este contato participa, com atalho direto para a agenda completa.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/agenda')}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                        >
+                            <ExternalLink size={16} />
+                            Abrir Agenda
+                        </button>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato para consultar os compromissos vinculados.</p>
+                        </div>
+                    ) : insightsLoading ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center text-slate-400">
+                            Carregando agenda do contato...
+                        </div>
+                    ) : contactInsights.appointments.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-slate-500">
+                            Nenhum compromisso vinculado a este contato.
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {contactInsights.appointments.map(appointment => (
+                                <div key={appointment.id} className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+                                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                                        <div>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <p className="font-semibold text-white">{appointment.title}</p>
+                                                <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-300">
+                                                    {APPOINTMENT_STATUS_LABELS[appointment.status] || appointment.status}
+                                                </span>
+                                                <span className="text-[11px] px-2 py-0.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">
+                                                    {appointment.type}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-slate-400 mt-1">
+                                                {formatDateTime(appointment.startAt)} ate {formatDateTime(appointment.endAt)}
+                                            </p>
+                                            <p className="text-sm text-slate-500 mt-1">
+                                                Papel: {appointment.participantRole || 'Participante'}
+                                                {appointment.confirmed ? ' • confirmado' : ' • pendente'}
+                                            </p>
+                                        </div>
+                                        {appointment.process?.id && (
+                                            <button
+                                                onClick={() => navigate(`/processes/${appointment.process?.id}`)}
+                                                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                                            >
+                                                <Briefcase size={15} />
+                                                Abrir Processo
+                                            </button>
+                                        )}
+                                    </div>
+                                    {(appointment.location || appointment.process?.title) && (
+                                        <div className="mt-3 text-sm text-slate-400 space-y-1">
+                                            {appointment.location && <p>Local: {appointment.location}</p>}
+                                            {appointment.process?.title && (
+                                                <p>Processo: {appointment.process.title}{appointment.process.code ? ` (${appointment.process.code})` : ''}</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'processes' && (
+                <div className="space-y-6 max-w-6xl">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <Briefcase size={20} className="text-indigo-400" /> Processos vinculados
+                            </h3>
+                            <p className="text-sm text-slate-400 mt-1">
+                                Casos em que este contato atua como contato principal ou parte processual.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/processes')}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                        >
+                            <ExternalLink size={16} />
+                            Abrir Processos
+                        </button>
+                    </div>
+
+                    {!id || id === 'new' ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
+                            <p className="text-slate-400">Salve o contato para visualizar os processos vinculados.</p>
+                        </div>
+                    ) : insightsLoading ? (
+                        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center text-slate-400">
+                            Carregando processos do contato...
+                        </div>
+                    ) : contactInsights.processes.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center text-slate-500">
+                            Nenhum processo vinculado a este contato.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {contactInsights.processes.map(process => (
+                                <button
+                                    key={process.id}
+                                    onClick={() => navigate(`/processes/${process.id}`)}
+                                    className="text-left rounded-xl border border-slate-700 bg-slate-800/40 p-5 hover:border-indigo-400/60 hover:bg-slate-800/70 transition"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <p className="font-semibold text-white">
+                                                    {process.title || process.cnj || process.code || 'Processo sem titulo'}
+                                                </p>
+                                                <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-300">
+                                                    {process.status}
+                                                </span>
+                                                <span className={clsx(
+                                                    'text-[11px] px-2 py-0.5 rounded-full border',
+                                                    process.relation.isClient
+                                                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                                                      : process.relation.isOpposing
+                                                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                                                        : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300',
+                                                )}>
+                                                    {process.relation.label}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-slate-400 mt-2">
+                                                {process.cnj || 'Sem CNJ'}
+                                                {process.class ? ` • ${process.class}` : ''}
+                                                {process.area ? ` • ${process.area}` : ''}
+                                            </p>
+                                        </div>
+                                        <ExternalLink size={18} className="text-slate-500" />
+                                    </div>
+                                    <div className="mt-4 text-sm text-slate-500 space-y-1">
+                                        {(process.court || process.district) && (
+                                            <p>{[process.court, process.district].filter(Boolean).join(' • ')}</p>
+                                        )}
+                                        <p>Ultima atualizacao: {formatDateTime(process.updatedAt)}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {activeTab === 'assets' && (
                 <div className="space-y-6 max-w-5xl">
                     <div className="flex items-center justify-between">
@@ -3484,4 +4002,5 @@ export function ContactForm() {
     </div>
   );
 }
+
 

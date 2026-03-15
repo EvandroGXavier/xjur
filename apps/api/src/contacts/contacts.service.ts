@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { PrismaService } from '@drx/database';
+import { PrismaService } from '../prisma.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -11,6 +11,97 @@ import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto'
 @Injectable()
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async getContactOrThrow(contactId: string, tenantId: string, include?: Record<string, any>) {
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: contactId, tenantId },
+      include,
+    });
+
+    if (!contact) {
+      throw new NotFoundException('Contato nao encontrado');
+    }
+
+    return contact;
+  }
+
+  private async isRequireOneInfoEnabled(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { contactRequireOneInfo: true },
+    });
+
+    return tenant?.contactRequireOneInfo !== false;
+  }
+
+  private hasCoreContactInfo(data: Record<string, any>) {
+    return Boolean(
+      data.whatsapp?.trim() ||
+      data.phone?.trim() ||
+      data.email?.trim() ||
+      data.document?.trim() ||
+      data.cpf?.trim() ||
+      data.cnpj?.trim(),
+    );
+  }
+
+  private async validateCoreContactInfo(
+    tenantId: string,
+    data: Record<string, any>,
+    existingContact?: Record<string, any> | null,
+  ) {
+    const shouldRequire = await this.isRequireOneInfoEnabled(tenantId);
+    if (!shouldRequire) return;
+
+    const merged = {
+      whatsapp: data.whatsapp ?? existingContact?.whatsapp ?? '',
+      phone: data.phone ?? existingContact?.phone ?? '',
+      email: data.email ?? existingContact?.email ?? '',
+      document: data.document ?? existingContact?.document ?? '',
+      cpf: data.cpf ?? existingContact?.pfDetails?.cpf ?? '',
+      cnpj: data.cnpj ?? existingContact?.pjDetails?.cnpj ?? '',
+    };
+
+    if (!this.hasCoreContactInfo(merged)) {
+      throw new BadRequestException(
+        'Voce deve fornecer pelo menos um dos seguintes dados: Celular, Telefone, E-mail ou Documento.',
+      );
+    }
+  }
+
+  private async ensureAddressBelongsToTenant(contactId: string, addressId: string, tenantId: string) {
+    const address = await this.prisma.address.findFirst({
+      where: {
+        id: addressId,
+        contactId,
+        contact: { tenantId },
+      },
+      select: { id: true },
+    });
+
+    if (!address) {
+      throw new NotFoundException('Endereco nao encontrado');
+    }
+  }
+
+  private async ensureAdditionalContactBelongsToTenant(
+    contactId: string,
+    additionalContactId: string,
+    tenantId: string,
+  ) {
+    const additionalContact = await this.prisma.additionalContact.findFirst({
+      where: {
+        id: additionalContactId,
+        contactId,
+        contact: { tenantId },
+      },
+      select: { id: true },
+    });
+
+    if (!additionalContact) {
+      throw new NotFoundException('Contato adicional nao encontrado');
+    }
+  }
 
   private normalizeDigits(value?: string | null) {
     return (value || '').replace(/\D/g, '');
@@ -64,93 +155,132 @@ export class ContactsService {
   }
 
   async create(createContactDto: CreateContactDto, tenantId: string) {
-    try {
-      // 1. Validar preenchimento mínimo (nome é obrigatório via DTO/Schema? assumimos que sim)
-      const data: any = createContactDto;
-      if (!data.name?.trim()) {
-        throw new BadRequestException('O nome do contato é obrigatório.');
-      }
-      if (!data.whatsapp?.trim() && !data.phone?.trim() && !data.email?.trim() && !data.document?.trim() && !data.cpf?.trim() && !data.cnpj?.trim()) {
-        throw new BadRequestException('Você deve fornecer pelo menos um dos seguintes: Celular, Telefone, E-mail ou Documento (CPF/CNPJ).');
-      }
-
-      // 2. Verificar duplicidade real
-      const duplicate = await this.findDuplicateContact(tenantId, data);
-      if (duplicate) {
-        throw new ConflictException({
-           message: 'Contato já cadastrado com os mesmos dados únicos.',
-           contactId: duplicate.id, 
-           duplicateField: duplicate.matchedField 
-        });
-      }
-
-      console.log('Creating contact:', { ...createContactDto, tenantId });
-      
-      const { 
-        // PF Fields
-        cpf, rg, birthDate,
-
-        nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, rgIssueDate,
-        fullName, cnh, cnhIssuer, cnhIssueDate, cnhExpirationDate, cnhCategory,
-        
-        // PJ Fields
-        cnpj, companyName, stateRegistration, openingDate, size, legalNature,
-        mainActivity, sideActivities, shareCapital, status, statusDate, statusReason,
-        specialStatus, specialStatusDate, pjQsa,
-        
-        // Address & Additional (handled separately usually but let's be safe)
-        addresses, additionalContacts,
-        
-        ...commonData 
-      } = createContactDto as any;
-
-      // Prepare nested writes
-      const pfCreate = commonData.personType === 'PF' ? {
-        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined,
-        nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, 
-        rgIssueDate: rgIssueDate ? new Date(rgIssueDate) : undefined,
-        fullName, cnh, cnhIssuer, cnhCategory,
-        cnhIssueDate: cnhIssueDate ? new Date(cnhIssueDate) : undefined,
-        cnhExpirationDate: cnhExpirationDate ? new Date(cnhExpirationDate) : undefined
-      } : undefined;
-
-      const pjCreate = commonData.personType === 'PJ' ? {
-        cnpj, companyName, stateRegistration, 
-        openingDate: openingDate ? new Date(openingDate) : undefined,
-        size, legalNature, mainActivity, sideActivities, shareCapital,
-        status, statusDate: statusDate ? new Date(statusDate) : undefined,
-        statusReason,
-        specialStatus, specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
-        pjQsa
-      } : undefined;
-
-      const contact = await this.prisma.contact.create({
-        data: {
-          ...commonData,
-          tenantId,
-          pfDetails: pfCreate ? { create: pfCreate } : undefined,
-          pjDetails: pjCreate ? { create: pjCreate } : undefined,
-          addresses: addresses && addresses.length > 0 ? {
-             create: addresses
-          } : undefined,
-          additionalContacts: additionalContacts && additionalContacts.length > 0 ? {
-             create: additionalContacts
-          } : undefined,
-        },
-        include: {
-           pfDetails: true,
-           pjDetails: true,
-           addresses: true,
-           additionalContacts: true,
-        }
-      });
-      
-      return this.flattenContact(contact);
-
-    } catch (error) {
-      console.error('Error creating contact:', error);
-      throw error;
+    const data: any = createContactDto;
+    if (!data.name?.trim()) {
+      throw new BadRequestException('O nome do contato e obrigatorio.');
     }
+
+    await this.validateCoreContactInfo(tenantId, data);
+
+    const duplicate = await this.findDuplicateContact(tenantId, data);
+    if (duplicate) {
+      throw new ConflictException({
+        message: 'Contato ja cadastrado com os mesmos dados unicos.',
+        contactId: duplicate.id,
+        duplicateField: duplicate.matchedField,
+      });
+    }
+
+    const {
+      cpf,
+      rg,
+      birthDate,
+      nis,
+      pis,
+      ctps,
+      motherName,
+      fatherName,
+      profession,
+      nationality,
+      naturality,
+      gender,
+      civilStatus,
+      rgIssuer,
+      rgIssueDate,
+      fullName,
+      cnh,
+      cnhIssuer,
+      cnhIssueDate,
+      cnhExpirationDate,
+      cnhCategory,
+      cnpj,
+      companyName,
+      stateRegistration,
+      openingDate,
+      size,
+      legalNature,
+      mainActivity,
+      sideActivities,
+      shareCapital,
+      status,
+      statusDate,
+      statusReason,
+      specialStatus,
+      specialStatusDate,
+      pjQsa,
+      addresses,
+      additionalContacts,
+      ...commonData
+    } = createContactDto as any;
+
+    const personType = commonData.personType || 'LEAD';
+    const pfCreate =
+      personType === 'PF'
+        ? {
+            cpf,
+            rg,
+            birthDate: birthDate ? new Date(birthDate) : undefined,
+            nis,
+            pis,
+            ctps,
+            motherName,
+            fatherName,
+            profession,
+            nationality,
+            naturality,
+            gender,
+            civilStatus,
+            rgIssuer,
+            rgIssueDate: rgIssueDate ? new Date(rgIssueDate) : undefined,
+            fullName,
+            cnh,
+            cnhIssuer,
+            cnhCategory,
+            cnhIssueDate: cnhIssueDate ? new Date(cnhIssueDate) : undefined,
+            cnhExpirationDate: cnhExpirationDate ? new Date(cnhExpirationDate) : undefined,
+          }
+        : undefined;
+
+    const pjCreate =
+      personType === 'PJ'
+        ? {
+            cnpj,
+            companyName,
+            stateRegistration,
+            openingDate: openingDate ? new Date(openingDate) : undefined,
+            size,
+            legalNature,
+            mainActivity,
+            sideActivities,
+            shareCapital,
+            status,
+            statusDate: statusDate ? new Date(statusDate) : undefined,
+            statusReason,
+            specialStatus,
+            specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
+            pjQsa,
+          }
+        : undefined;
+
+    const contact = await this.prisma.contact.create({
+      data: {
+        ...commonData,
+        personType,
+        tenantId,
+        pfDetails: pfCreate ? { create: pfCreate } : undefined,
+        pjDetails: pjCreate ? { create: pjCreate } : undefined,
+        addresses: addresses?.length ? { create: addresses } : undefined,
+        additionalContacts: additionalContacts?.length ? { create: additionalContacts } : undefined,
+      },
+      include: {
+        pfDetails: true,
+        pjDetails: true,
+        addresses: true,
+        additionalContacts: true,
+      },
+    });
+
+    return this.flattenContact(contact);
   }
 
   async findAll(
@@ -223,9 +353,9 @@ export class ContactsService {
     return contacts.map(c => this.flattenContact(c));
   }
 
-  async findOne(id: string) {
-    const contact = await this.prisma.contact.findUnique({
-      where: { id },
+  async findOne(id: string, tenantId: string) {
+    const contact = await this.prisma.contact.findFirst({
+      where: { id, tenantId },
       include: {
         addresses: true,
         additionalContacts: true,
@@ -234,66 +364,80 @@ export class ContactsService {
         assets: { include: { assetType: true } },
         relationsFrom: { include: { toContact: true, relationType: true } },
         relationsTo: { include: { fromContact: true, relationType: true } },
-        tags: { include: { tag: true } }
+        tags: { include: { tag: true } },
       },
     });
-    
-    if (!contact) return null;
+
+    if (!contact) {
+      throw new NotFoundException('Contato nao encontrado');
+    }
+
     return this.flattenContact(contact);
   }
-
-  async update(id: string, updateContactDto: UpdateContactDto) {
+  async update(id: string, updateContactDto: UpdateContactDto, tenantId: string) {
     const data: any = updateContactDto;
-    
-    // Buscar o contato original para saber o tenant
-    const existingContact = await this.prisma.contact.findUnique({ where: { id } });
-    if (!existingContact) throw new BadRequestException('Contato não encontrado');
+    const existingContact = await this.getContactOrThrow(id, tenantId, {
+      pfDetails: true,
+      pjDetails: true,
+    });
 
     if (data.name !== undefined && !data.name?.trim()) {
-      throw new BadRequestException('O nome do contato não pode ficar em branco.');
+      throw new BadRequestException('O nome do contato nao pode ficar em branco.');
     }
 
-    // Checking 4 fields (but we need to consider merged state if doing full validation. 
-    // Usually frontend sends all data on update, so we can check `data` directly)
-    if (data.whatsapp !== undefined || data.phone !== undefined || data.email !== undefined || data.document !== undefined) {
-      const w = data.whatsapp ?? existingContact.whatsapp;
-      const p = data.phone ?? existingContact.phone;
-      const e = data.email ?? existingContact.email;
-      const d = data.document ?? existingContact.document;
-      // Note: Not blocking if empty because tenant config could be off, but requirement says "backend deve rejeitar". 
-      // User says: "O backend deve rejeitar cadastros onde os quatro campos estejam nulos ou vazios simultaneamente."
-      if (!w?.trim() && !p?.trim() && !e?.trim() && !d?.trim()) {
-         throw new BadRequestException('Não é possível deixar todos estes campos vazios: Celular, Telefone, E-mail e Documento.');
-      }
-    }
+    await this.validateCoreContactInfo(tenantId, data, existingContact);
 
-    // Verificar Duplicidade excluindo o ID atual
-    const duplicate = await this.findDuplicateContact(existingContact.tenantId, data, id);
+    const duplicate = await this.findDuplicateContact(tenantId, data, id);
     if (duplicate) {
       throw new ConflictException({
-         message: 'Atualização causaria duplicidade com outro contato baseada nas chaves únicas.',
-         contactId: duplicate.id, 
-         duplicateField: duplicate.matchedField 
+        message: 'Atualizacao causaria duplicidade com outro contato baseada nas chaves unicas.',
+        contactId: duplicate.id,
+        duplicateField: duplicate.matchedField,
       });
     }
 
-    const { 
-      // PF Fields
-      cpf, rg, birthDate,
-      nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, rgIssueDate,
-      fullName, cnh, cnhIssuer, cnhIssueDate, cnhExpirationDate, cnhCategory,
-      
-      // PJ Fields
-      cnpj, companyName, stateRegistration, openingDate, size, legalNature,
-      mainActivity, sideActivities, shareCapital, status, statusDate, statusReason,
-      specialStatus, specialStatusDate, pjQsa,
-      
-      addresses, additionalContacts,
-      
-      ...commonData 
+    const {
+      cpf,
+      rg,
+      birthDate,
+      nis,
+      pis,
+      ctps,
+      motherName,
+      fatherName,
+      profession,
+      nationality,
+      naturality,
+      gender,
+      civilStatus,
+      rgIssuer,
+      rgIssueDate,
+      fullName,
+      cnh,
+      cnhIssuer,
+      cnhIssueDate,
+      cnhExpirationDate,
+      cnhCategory,
+      cnpj,
+      companyName,
+      stateRegistration,
+      openingDate,
+      size,
+      legalNature,
+      mainActivity,
+      sideActivities,
+      shareCapital,
+      status,
+      statusDate,
+      statusReason,
+      specialStatus,
+      specialStatusDate,
+      pjQsa,
+      addresses,
+      additionalContacts,
+      ...commonData
     } = data;
 
-    // FIX: Manual cleanup to ensure PF fields are NOT in commonData (destructuring edge cases)
     const pfFieldsToRemove = [
       'fullName', 'cnh', 'cnhIssuer', 'cnhIssueDate', 'cnhExpirationDate', 'cnhCategory',
       'cpf', 'rg', 'rgIssuer', 'rgIssueDate', 'birthDate',
@@ -302,7 +446,6 @@ export class ContactsService {
     ];
     pfFieldsToRemove.forEach(field => delete commonData[field]);
 
-    // Same for PJ fields
     const pjFieldsToRemove = [
       'cnpj', 'companyName', 'stateRegistration', 'openingDate', 'size', 'legalNature',
       'mainActivity', 'sideActivities', 'shareCapital', 'status', 'statusDate', 'statusReason',
@@ -310,48 +453,84 @@ export class ContactsService {
     ];
     pjFieldsToRemove.forEach(field => delete commonData[field]);
 
+    const personType = commonData.personType ?? existingContact.personType;
+
     const pfUpdate = {
-        cpf, rg, birthDate: birthDate ? new Date(birthDate) : undefined,
-        nis, pis, ctps, motherName, fatherName, profession, nationality, naturality, gender, civilStatus, rgIssuer, 
-        rgIssueDate: rgIssueDate ? new Date(rgIssueDate) : undefined,
-        fullName, cnh, cnhIssuer, cnhCategory,
-        cnhIssueDate: cnhIssueDate ? new Date(cnhIssueDate) : undefined,
-        cnhExpirationDate: cnhExpirationDate ? new Date(cnhExpirationDate) : undefined
+      cpf,
+      rg,
+      birthDate: birthDate ? new Date(birthDate) : undefined,
+      nis,
+      pis,
+      ctps,
+      motherName,
+      fatherName,
+      profession,
+      nationality,
+      naturality,
+      gender,
+      civilStatus,
+      rgIssuer,
+      rgIssueDate: rgIssueDate ? new Date(rgIssueDate) : undefined,
+      fullName,
+      cnh,
+      cnhIssuer,
+      cnhCategory,
+      cnhIssueDate: cnhIssueDate ? new Date(cnhIssueDate) : undefined,
+      cnhExpirationDate: cnhExpirationDate ? new Date(cnhExpirationDate) : undefined,
     };
 
     const pjUpdate = {
-        cnpj, companyName, stateRegistration, 
-        openingDate: openingDate ? new Date(openingDate) : undefined,
-        size, legalNature, mainActivity, sideActivities, shareCapital,
-        status, statusDate: statusDate ? new Date(statusDate) : undefined,
-        statusReason,
-        specialStatus, specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
-        pjQsa
+      cnpj,
+      companyName,
+      stateRegistration,
+      openingDate: openingDate ? new Date(openingDate) : undefined,
+      size,
+      legalNature,
+      mainActivity,
+      sideActivities,
+      shareCapital,
+      status,
+      statusDate: statusDate ? new Date(statusDate) : undefined,
+      statusReason,
+      specialStatus,
+      specialStatusDate: specialStatusDate ? new Date(specialStatusDate) : undefined,
+      pjQsa,
     };
 
     const contact = await this.prisma.contact.update({
       where: { id },
       data: {
         ...commonData,
-        pfDetails: commonData.personType === 'PF' ? {
-            upsert: {
-                create: pfUpdate,
-                update: pfUpdate
-            }
-        } : undefined,
-        pjDetails: commonData.personType === 'PJ' ? {
-            upsert: {
-                create: pjUpdate,
-                update: pjUpdate
-            }
-        } : undefined
+        personType,
+        pfDetails:
+          personType === 'PF'
+            ? {
+                upsert: {
+                  create: pfUpdate,
+                  update: pfUpdate,
+                },
+              }
+            : existingContact.pfDetails
+              ? { delete: true }
+              : undefined,
+        pjDetails:
+          personType === 'PJ'
+            ? {
+                upsert: {
+                  create: pjUpdate,
+                  update: pjUpdate,
+                },
+              }
+            : existingContact.pjDetails
+              ? { delete: true }
+              : undefined,
       },
       include: {
         pfDetails: true,
         pjDetails: true,
         addresses: true,
         additionalContacts: true,
-      }
+      },
     });
 
     return this.flattenContact(contact);
@@ -476,18 +655,20 @@ export class ContactsService {
   }
 
   async lookupContactExact(tenantId: string, searchParams: any) {
-      // Usado pelo frontend `onBlur` via ContactsController 
       return this.findDuplicateContact(tenantId, searchParams);
   }
 
-  remove(id: string) {
+  async remove(id: string, tenantId: string) {
+    await this.getContactOrThrow(id, tenantId);
+
     return this.prisma.contact.delete({
       where: { id },
     });
   }
-
   // Address management methods
-  addAddress(contactId: string, createAddressDto: CreateAddressDto) {
+  async addAddress(contactId: string, createAddressDto: CreateAddressDto, tenantId: string) {
+    await this.getContactOrThrow(contactId, tenantId);
+
     return this.prisma.address.create({
       data: {
         ...createAddressDto,
@@ -496,27 +677,44 @@ export class ContactsService {
     });
   }
 
-  updateAddress(contactId: string, addressId: string, updateAddressDto: UpdateAddressDto) {
+  async updateAddress(
+    contactId: string,
+    addressId: string,
+    updateAddressDto: UpdateAddressDto,
+    tenantId: string,
+  ) {
+    await this.getContactOrThrow(contactId, tenantId);
+    await this.ensureAddressBelongsToTenant(contactId, addressId, tenantId);
+
     return this.prisma.address.update({
-      where: { 
+      where: {
         id: addressId,
-        contactId, // Ensure the address belongs to the contact
+        contactId,
       },
       data: updateAddressDto,
     });
   }
 
-  removeAddress(contactId: string, addressId: string) {
+  async removeAddress(contactId: string, addressId: string, tenantId: string) {
+    await this.getContactOrThrow(contactId, tenantId);
+    await this.ensureAddressBelongsToTenant(contactId, addressId, tenantId);
+
     return this.prisma.address.delete({
-      where: { 
+      where: {
         id: addressId,
-        contactId, // Ensure the address belongs to the contact
+        contactId,
       },
     });
   }
 
   // Additional Contact management methods
-  addAdditionalContact(contactId: string, createAdditionalContactDto: CreateAdditionalContactDto) {
+  async addAdditionalContact(
+    contactId: string,
+    createAdditionalContactDto: CreateAdditionalContactDto,
+    tenantId: string,
+  ) {
+    await this.getContactOrThrow(contactId, tenantId);
+
     return this.prisma.additionalContact.create({
       data: {
         ...createAdditionalContactDto,
@@ -525,25 +723,35 @@ export class ContactsService {
     });
   }
 
-  updateAdditionalContact(contactId: string, additionalContactId: string, updateAdditionalContactDto: UpdateAdditionalContactDto) {
+  async updateAdditionalContact(
+    contactId: string,
+    additionalContactId: string,
+    updateAdditionalContactDto: UpdateAdditionalContactDto,
+    tenantId: string,
+  ) {
+    await this.getContactOrThrow(contactId, tenantId);
+    await this.ensureAdditionalContactBelongsToTenant(contactId, additionalContactId, tenantId);
+
     return this.prisma.additionalContact.update({
-      where: { 
+      where: {
         id: additionalContactId,
-        contactId, 
+        contactId,
       },
       data: updateAdditionalContactDto,
     });
   }
 
-  removeAdditionalContact(contactId: string, additionalContactId: string) {
+  async removeAdditionalContact(contactId: string, additionalContactId: string, tenantId: string) {
+    await this.getContactOrThrow(contactId, tenantId);
+    await this.ensureAdditionalContactBelongsToTenant(contactId, additionalContactId, tenantId);
+
     return this.prisma.additionalContact.delete({
-      where: { 
+      where: {
         id: additionalContactId,
         contactId,
       },
     });
   }
-
   private sanitizeAttachmentName(fileName: string) {
     return (fileName || 'anexo').replace(/[^\w.\-() ]+/g, '_');
   }
@@ -724,26 +932,25 @@ export class ContactsService {
     });
   }
 
-  async getContactRelations(contactId: string) {
-    // Busca relações onde o contato é ORIGEM
+  async getContactRelations(contactId: string, tenantId: string) {
+    await this.getContactOrThrow(contactId, tenantId);
+
     const fromRelations = await this.prisma.contactRelation.findMany({
-      where: { fromContactId: contactId },
+      where: { tenantId, fromContactId: contactId },
       include: {
         toContact: { select: { id: true, name: true, personType: true } },
         relationType: true,
       },
     });
 
-    // Busca relações onde o contato é DESTINO (Inversas)
     const toRelations = await this.prisma.contactRelation.findMany({
-      where: { toContactId: contactId },
+      where: { tenantId, toContactId: contactId },
       include: {
         fromContact: { select: { id: true, name: true, personType: true } },
         relationType: true,
       },
     });
 
-    // Formata para o frontend
     const formattedFrom = fromRelations.map(r => ({
       id: r.id,
       relatedContact: r.toContact,
@@ -754,9 +961,9 @@ export class ContactsService {
     const formattedTo = toRelations.map(r => ({
       id: r.id,
       relatedContact: r.fromContact,
-      type: r.relationType.isBilateral 
-        ? r.relationType.name // Se bilateral, o nome é o mesmo (Sócio)
-        : (r.relationType.reverseName || r.relationType.name + ' (Inverso)'), // Se unilateral, usa o reverso (Filho)
+      type: r.relationType.isBilateral
+        ? r.relationType.name
+        : (r.relationType.reverseName || `${r.relationType.name} (Inverso)`),
       isInverse: true,
     }));
 
@@ -764,6 +971,34 @@ export class ContactsService {
   }
 
   async createContactRelation(tenantId: string, fromContactId: string, data: any) {
+    await Promise.all([
+      this.getContactOrThrow(fromContactId, tenantId),
+      this.getContactOrThrow(data.toContactId, tenantId),
+    ]);
+
+    const relationType = await this.prisma.relationType.findFirst({
+      where: { id: data.relationTypeId, tenantId },
+      select: { id: true },
+    });
+
+    if (!relationType) {
+      throw new NotFoundException('Tipo de vinculo nao encontrado');
+    }
+
+    const duplicate = await this.prisma.contactRelation.findFirst({
+      where: {
+        tenantId,
+        fromContactId,
+        toContactId: data.toContactId,
+        relationTypeId: data.relationTypeId,
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new ConflictException('Este vinculo ja esta cadastrado para o contato.');
+    }
+
     return this.prisma.contactRelation.create({
       data: {
         tenantId,
@@ -775,10 +1010,9 @@ export class ContactsService {
   }
 
   async removeContactRelation(tenantId: string, relationId: string) {
-    // Security check: ensure tenant owns relation
     const relation = await this.prisma.contactRelation.findUnique({ where: { id: relationId } });
     if (!relation || relation.tenantId !== tenantId) {
-        throw new Error('Relation not found or access denied');
+      throw new NotFoundException('Vinculo nao encontrado');
     }
     return this.prisma.contactRelation.delete({
       where: { id: relationId },
@@ -803,9 +1037,11 @@ export class ContactsService {
     });
   }
 
-  async getContactAssets(contactId: string) {
+  async getContactAssets(contactId: string, tenantId: string) {
+    await this.getContactOrThrow(contactId, tenantId);
+
     return this.prisma.contactAsset.findMany({
-      where: { contactId },
+      where: { contactId, tenantId },
       include: {
         assetType: true,
       },
@@ -814,6 +1050,17 @@ export class ContactsService {
   }
 
   async createContactAsset(tenantId: string, contactId: string, data: any) {
+    await this.getContactOrThrow(contactId, tenantId);
+
+    const assetType = await this.prisma.assetType.findFirst({
+      where: { id: data.assetTypeId, tenantId },
+      select: { id: true },
+    });
+
+    if (!assetType) {
+      throw new NotFoundException('Tipo de patrimonio nao encontrado');
+    }
+
     return this.prisma.contactAsset.create({
       data: {
         ...data,
@@ -826,8 +1073,20 @@ export class ContactsService {
   async updateContactAsset(tenantId: string, assetId: string, data: any) {
     const asset = await this.prisma.contactAsset.findUnique({ where: { id: assetId } });
     if (!asset || asset.tenantId !== tenantId) {
-       throw new Error('Asset not found or access denied');
+      throw new NotFoundException('Patrimonio nao encontrado');
     }
+
+    if (data.assetTypeId) {
+      const assetType = await this.prisma.assetType.findFirst({
+        where: { id: data.assetTypeId, tenantId },
+        select: { id: true },
+      });
+
+      if (!assetType) {
+        throw new NotFoundException('Tipo de patrimonio nao encontrado');
+      }
+    }
+
     return this.prisma.contactAsset.update({
       where: { id: assetId },
       data,
@@ -837,13 +1096,212 @@ export class ContactsService {
   async removeContactAsset(tenantId: string, assetId: string) {
     const asset = await this.prisma.contactAsset.findUnique({ where: { id: assetId } });
     if (!asset || asset.tenantId !== tenantId) {
-       throw new Error('Asset not found or access denied');
+      throw new NotFoundException('Patrimonio nao encontrado');
     }
     return this.prisma.contactAsset.delete({
       where: { id: assetId },
     });
   }
 
+  async getContactInsights(contactId: string, tenantId: string) {
+    const contact = await this.getContactOrThrow(contactId, tenantId);
+
+    const [processParties, ownedProcesses, appointments, whatsappConversations, tickets] = await Promise.all([
+      this.prisma.processParty.findMany({
+        where: {
+          tenantId,
+          contactId,
+        },
+        include: {
+          role: {
+            select: { id: true, name: true, category: true },
+          },
+          process: {
+            select: {
+              id: true,
+              code: true,
+              title: true,
+              cnj: true,
+              status: true,
+              area: true,
+              class: true,
+              court: true,
+              district: true,
+              updatedAt: true,
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.process.findMany({
+        where: {
+          tenantId,
+          contactId,
+        },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          cnj: true,
+          status: true,
+          area: true,
+          class: true,
+          court: true,
+          district: true,
+          updatedAt: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.appointment.findMany({
+        where: {
+          tenantId,
+          participants: {
+            some: { contactId },
+          },
+        },
+        include: {
+          process: {
+            select: { id: true, title: true, code: true },
+          },
+          participants: {
+            where: { contactId },
+            select: { role: true, confirmed: true },
+          },
+        },
+        orderBy: { startAt: 'asc' },
+        take: 25,
+      }),
+      this.prisma.agentConversation.findMany({
+        where: {
+          tenantId,
+          contactId,
+          channel: 'WHATSAPP',
+        },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          priority: true,
+          queue: true,
+          waitingReply: true,
+          unreadCount: true,
+          lastMessagePreview: true,
+          lastMessageAt: true,
+          connection: {
+            select: { id: true, name: true, status: true },
+          },
+          ticket: {
+            select: { id: true, code: true, status: true, priority: true, queue: true },
+          },
+          messages: {
+            orderBy: { createdAt: 'desc' },
+            take: 6,
+            select: {
+              id: true,
+              direction: true,
+              role: true,
+              content: true,
+              contentType: true,
+              status: true,
+              senderName: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: { lastMessageAt: 'desc' },
+        take: 8,
+      }),
+      this.prisma.ticket.findMany({
+        where: {
+          tenantId,
+          contactId,
+          channel: 'WHATSAPP',
+        },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          status: true,
+          priority: true,
+          queue: true,
+          waitingReply: true,
+          lastMessageAt: true,
+          updatedAt: true,
+        },
+        orderBy: { lastMessageAt: 'desc' },
+        take: 8,
+      }),
+    ]);
+
+    const processesById = new Map<string, any>();
+
+    for (const ownedProcess of ownedProcesses) {
+      processesById.set(ownedProcess.id, {
+        ...ownedProcess,
+        relation: {
+          type: 'owner',
+          label: 'Contato principal',
+          isClient: true,
+          isOpposing: false,
+        },
+      });
+    }
+
+    for (const party of processParties) {
+      processesById.set(party.process.id, {
+        ...party.process,
+        relation: {
+          type: 'party',
+          label: party.role?.name || 'Parte',
+          roleCategory: party.role?.category || null,
+          isClient: party.isClient,
+          isOpposing: party.isOpposing,
+        },
+      });
+    }
+
+    return {
+      contact: {
+        id: contact.id,
+        name: contact.name,
+        whatsapp: contact.whatsapp,
+        phone: contact.phone,
+        email: contact.email,
+      },
+      processes: Array.from(processesById.values()).sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      ),
+      appointments: appointments.map(appointment => ({
+        id: appointment.id,
+        title: appointment.title,
+        type: appointment.type,
+        status: appointment.status,
+        startAt: appointment.startAt,
+        endAt: appointment.endAt,
+        location: appointment.location,
+        process: appointment.process,
+        participantRole: appointment.participants[0]?.role || null,
+        confirmed: appointment.participants[0]?.confirmed || false,
+      })),
+      whatsapp: {
+        conversations: whatsappConversations.map(conversation => ({
+          id: conversation.id,
+          title: conversation.title,
+          status: conversation.status,
+          priority: conversation.priority,
+          queue: conversation.queue,
+          waitingReply: conversation.waitingReply,
+          unreadCount: conversation.unreadCount,
+          lastMessagePreview: conversation.lastMessagePreview,
+          lastMessageAt: conversation.lastMessageAt,
+          connection: conversation.connection,
+          ticket: conversation.ticket,
+          messages: [...conversation.messages].reverse(),
+        })),
+        tickets,
+      },
+    };
+  }
 
   // --- Contracts Management ---
 

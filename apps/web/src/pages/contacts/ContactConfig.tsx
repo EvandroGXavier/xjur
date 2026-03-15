@@ -113,7 +113,7 @@ export function ContactConfig() {
     }
   };
 
-  const configCards: ConfigCard[] = [
+    const configCards: ConfigCard[] = [
     {
       id: 'import',
       icon: <Upload className="w-6 h-6" />,
@@ -125,61 +125,16 @@ export function ContactConfig() {
     {
       id: 'bulk',
       icon: <Zap className="w-6 h-6" />,
-      title: 'Ações em Massa',
-      description: 'Aplique etiquetas ou altere categorias de múltiplos contatos de uma vez (respeita filtros da tela anterior).',
+      title: 'Acoes em Massa',
+      description: 'Aplique etiquetas ou altere categorias de multiplos contatos de uma vez, respeitando os filtros da tela anterior.',
       action: () => setView('bulk'),
       gradient: 'from-yellow-500 to-orange-600',
-    },
-    {
-      id: 'tags',
-      icon: <Tags className="w-6 h-6" />,
-      title: 'Gerenciar Etiquetas',
-      description: 'Crie, edite e organize as etiquetas usadas para categorizar seus contatos.',
-      action: () => {},
-      badge: 'Em breve',
-      gradient: 'from-violet-500 to-purple-600',
-    },
-    {
-      id: 'columns',
-      icon: <Columns className="w-6 h-6" />,
-      title: 'Configurar Grid',
-      description: 'Personalize quais colunas são exibidas na listagem de contatos e sua ordem.',
-      action: () => {},
-      badge: 'Em breve',
-      gradient: 'from-sky-500 to-blue-600',
-    },
-    {
-      id: 'fields',
-      icon: <Database className="w-6 h-6" />,
-      title: 'Campos Personalizados',
-      description: 'Adicione campos customizados para armazenar informações específicas do seu escritório.',
-      action: () => {},
-      badge: 'Em breve',
-      gradient: 'from-amber-500 to-orange-600',
-    },
-    {
-      id: 'export',
-      icon: <FileSpreadsheet className="w-6 h-6" />,
-      title: 'Exportar Contatos',
-      description: 'Exporte sua base de contatos para planilha Excel ou CSV com filtros personalizados.',
-      action: () => {},
-      badge: 'Em breve',
-      gradient: 'from-rose-500 to-pink-600',
-    },
-    {
-      id: 'duplicates',
-      icon: <Users className="w-6 h-6" />,
-      title: 'Mesclar Duplicados',
-      description: 'Encontre e unifique contatos duplicados para manter sua base limpa e organizada.',
-      action: () => {},
-      badge: 'Em breve',
-      gradient: 'from-cyan-500 to-teal-600',
     },
     {
       id: 'cleanup',
       icon: <Database className="w-6 h-6" />,
       title: 'Limpeza de Base',
-      description: 'Apague contatos irregulares, repetidos ou com informações inválidas.',
+      description: 'Apague contatos irregulares, repetidos ou com informacoes invalidas.',
       action: handleCleanup,
       gradient: 'from-red-500 to-rose-600',
     },
@@ -396,3 +351,4 @@ export function ContactConfig() {
     </div>
   );
 }
+

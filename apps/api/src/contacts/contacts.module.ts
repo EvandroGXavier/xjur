@@ -7,9 +7,9 @@ import { ContactsImportService } from './contacts-import.service';
 import { PrismaService } from '../prisma.service';
 
 @Module({
-  imports: [], // Removing PrismaModule import if not needed/causing issues, sticking to providers
+  imports: [],
   controllers: [ContactsController],
   providers: [ContactsService, EnrichmentService, ContactsImportService, PrismaService],
-  exports: [ContactsService, ContactsImportService], // Exporting for usage in TicketsModule
+  exports: [ContactsService, ContactsImportService],
 })
 export class ContactsModule {}

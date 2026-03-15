@@ -223,3 +223,30 @@ export const helpOmnichannelConnections: HelpSection[] = [
     content: '<ul><li><b>Conexao nao conecta:</b> revise URL/API Key da Evolution, status da conexao e versao configurada.</li><li><b>Ticket nao aparece:</b> confira <code>tenantId</code>, canal, e se o webhook foi enviado para <code>/api/communications/webhook</code>.</li><li><b>Contato duplicado:</b> padronize o valor de <code>from</code> e de <code>externalThreadId</code> nos testes.</li><li><b>E-mail/Instagram sem inbound nativo:</b> use o exemplo de webhook manual ate o adaptador do provedor ser ligado.</li><li><b>Teste repetido criando entradas extras:</b> altere <code>externalMessageId</code> ou mantenha IDs estaveis quando quiser validar deduplicacao por fluxo.</li></ul><br/><b>Dica final:</b> para auditoria operacional, sempre documente nos testes qual conexao foi usada, qual canal foi disparado e qual <code>externalThreadId</code> representava a conversa.',
   },
 ];
+
+export const helpTelegram: HelpSection[] = [
+  {
+    title: 'Visão Geral (Chatbot Telegram)',
+    content: 'O módulo <b>Telegram</b> integra o seu bot oficial (criado via BotFather) diretamente ao ecossistema DrX. Ele suporta mensagens de texto, <b>transcrição de áudio (Voz)</b>, <b>leitura de documentos PDF</b> e integração total com o Agente de IA para automação jurídica.',
+  },
+  {
+    title: 'Passo 1: Criando seu Bot no Telegram',
+    content: '1. Abra o Telegram e procure por <b>@BotFather</b>.<br/>2. Digite <code>/newbot</code> e siga as instruções para dar um nome e um @username ao seu bot.<br/>3. Ao final, o BotFather enviará um <b>Token da API</b> (ex: <code>123456:ABC-DEF...</code>).<br/>4. <b>Guarde esse Token am segredo</b>, ele será usado na configuração do sistema.',
+  },
+  {
+    title: 'Passo 2: Configurando no Xjur',
+    content: '1. Vá em <b>Conexões & Canais</b> e clique em <b>Nova Conexão</b>.<br/>2. Escolha o canal <b>TELEGRAM</b>.<br/>3. No campo de configuração, cole o <b>Token da API</b> fornecido pelo BotFather.<br/>4. Salve a conexão e clique em <b>"Connect"</b>.<br/><br/><b>💡 Nota importante:</b> O sistema registrará automaticamente o Webhook para que as mensagens cheguem em tempo real.',
+  },
+  {
+    title: 'Funcionalidades Mágicas (IA)',
+    content: 'O bot do Telegram não apenas repete mensagens, ele possui superpoderes:<ul><li><b>Transcrição de Áudio:</b> Se o cliente enviar um áudio, a IA transcreve o conteúdo automaticamente e usa o texto para decidir o próximo passo.</li><li><b>Analista de PDF:</b> Ao enviar um arquivo PDF, o sistema extrai o texto e ativa a Skill de Leitor Jurídico para analisar o documento.</li><li><b>Modo Autônomo:</b> O DrX-Claw pode responder dúvidas, consultar processos e sugerir próximos passos diretamente no chat.</li></ul>',
+  },
+  {
+    title: 'Como Testar no Ambiente Local (IDX)',
+    content: 'Para testar o recebimento de mensagens na sua máquina local, você precisa de uma URL pública:<br/><br/>1. No terminal, rode o túnel: <code>npx cloudflared tunnel --url http://localhost:3000</code><br/>2. No arquivo <b>.env</b> da API, atualize a <code>APP_URL</code> com o link gerado pelo Cloudflare.<br/>3. Reinicie a API e clique em <b>"Connect"</b> na tela de conexões.<br/>4. Mande um "Oi" para o seu bot e veja a mágica acontecer!',
+  },
+  {
+    title: 'Atalhos e Facilidades',
+    content: '<ul><li><b>CTRL + F1</b>: Abre este manual de ajuda em qualquer tela.</li><li><b>Botão de "Connect"</b>: Força a reinicialização do Webhook caso o bot pare de responder.</li><li><b>Whitelisting</b>: Você pode configurar no DrX-Claw quais usuários ou grupos de chat o bot tem permissão para responder.</li></ul>',
+  }
+];

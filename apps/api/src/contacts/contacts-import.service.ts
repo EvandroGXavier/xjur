@@ -1,6 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import * as xlsx from 'xlsx';
-import { PrismaService } from '@drx/database';
 import { ContactsService } from './contacts.service';
 import { ImportContactsDto, ContactMappingDto } from './dto/import-contact.dto';
 import { CreateContactDto } from './dto/create-contact.dto';
@@ -8,7 +7,6 @@ import { CreateContactDto } from './dto/create-contact.dto';
 @Injectable()
 export class ContactsImportService {
   constructor(
-    private prisma: PrismaService,
     private contactsService: ContactsService
   ) {}
 
@@ -63,29 +61,18 @@ export class ContactsImportService {
              throw new Error('Name is required');
         }
 
-        // Check Duplicates
-        if (contactDto.document) {
-            const existing = await this.prisma.contact.findFirst({
-                where: { 
-                    tenantId, 
-                    document: contactDto.document 
-                }
-            });
+        const duplicate = await this.contactsService.findDuplicateContact(tenantId, contactDto);
+        if (duplicate) {
+            if (duplicateAction === 'skip') {
+                results.failed++;
+                results.errors.push({ row: index + 1, error: `Duplicate ${duplicate.matchedField} skipped` });
+                continue;
+            }
 
-            if (existing) {
-                if (duplicateAction === 'skip') {
-                    results.failed++;
-                    results.errors.push({ row: index + 1, error: 'Duplicate document skipped' });
-                    continue;
-                }
-                
-                if (duplicateAction === 'update') {
-                    // mapRowToDto returns CreateContactDto, we can use it as UpdateContactDto for basic fields
-                    // Note: This update implementation currently does NOT update addresses or additional contacts to avoid duplication/complexity
-                    await this.contactsService.update(existing.id, contactDto);
-                    results.success++;
-                    continue;
-                }
+            if (duplicateAction === 'update') {
+                await this.contactsService.update(duplicate.id, contactDto, tenantId);
+                results.success++;
+                continue;
             }
         }
 

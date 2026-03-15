@@ -14,38 +14,31 @@ export class ProductsController {
 
   @Post()
   create(@Body() createProductDto: CreateProductDto, @CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.productsService.create(createProductDto, user.tenantId);
   }
 
   @Get()
   findAll(@CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.productsService.findAll(user.tenantId);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.productsService.findOne(id, user.tenantId);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto, @CurrentUser() user: CurrentUserData) {
-
-    if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.productsService.update(id, updateProductDto, user.tenantId);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.productsService.remove(id, user.tenantId);
   }
 
   @Post(':id/movements')
   addMovement(@Param('id') id: string, @Body() createMovementDto: CreateMovementDto, @CurrentUser() user: CurrentUserData) {
-    if (!user || !user.tenantId) throw new Error('User context invalid');
     return this.productsService.addMovement(id, createMovementDto, user.tenantId);
   }
 }

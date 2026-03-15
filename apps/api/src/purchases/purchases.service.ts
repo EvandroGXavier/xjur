@@ -1,10 +1,14 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import { XMLParser } from "fast-xml-parser";
+import { StockService } from "../stock/stock.service";
 
 @Injectable()
 export class PurchasesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stockService: StockService,
+  ) {}
 
   async parseXmlPreview(tenantId: string, xmlContent: string) {
     const parser = new XMLParser({
@@ -16,22 +20,26 @@ export class PurchasesService {
     const nfeProc = parsed.nfeProc || parsed.NFeProc;
     const nfe = nfeProc?.NFe?.infNFe;
 
-    if (!nfe)
+    if (!nfe) {
       throw new BadRequestException(
-        "O arquivo enviado não parece ser um XML válido de NF-e.",
+        "O arquivo enviado nao parece ser um XML valido de NF-e.",
       );
+    }
 
-    const { emit, dest, det, cobr, ide, total } = nfe;
-    const dets = Array.isArray(det) ? det : [det];
+    const { emit, det, cobr, ide, total } = nfe;
+    const itemsXml = Array.isArray(det) ? det : [det];
     const dups = cobr?.dup
       ? Array.isArray(cobr.dup)
         ? cobr.dup
         : [cobr.dup]
       : [];
 
-    const doc = String(emit.CNPJ || emit.CPF || "").replace(/\D/g, "");
+    const supplierDocument = String(emit.CNPJ || emit.CPF || "").replace(
+      /\D/g,
+      "",
+    );
     let contact = await this.prisma.contact.findFirst({
-      where: { tenantId, document: doc },
+      where: { tenantId, document: supplierDocument },
     });
 
     if (!contact) {
@@ -39,7 +47,7 @@ export class PurchasesService {
         data: {
           tenantId,
           name: emit.xNome,
-          document: doc,
+          document: supplierDocument,
           personType: emit.CNPJ ? "PJ" : "PF",
           category: "Fornecedor",
         },
@@ -47,7 +55,11 @@ export class PurchasesService {
 
       if (emit.CNPJ) {
         await this.prisma.personDetailPJ.create({
-          data: { contactId: contact.id, cnpj: doc, companyName: emit.xNome },
+          data: {
+            contactId: contact.id,
+            cnpj: supplierDocument,
+            companyName: emit.xNome,
+          },
         });
       }
     }
@@ -57,37 +69,41 @@ export class PurchasesService {
       const existingInvoice = await this.prisma.invoice.findFirst({
         where: { tenantId, accessKey: invoiceKey },
       });
-      if (existingInvoice)
+
+      if (existingInvoice) {
         throw new BadRequestException(
-          `A NF-e ${ide.nNF} já foi importada anteriormente.`,
+          `A NF-e ${ide.nNF} ja foi importada anteriormente.`,
         );
+      }
     }
 
     const items = [];
-    for (const item of dets) {
-      const p = item.prod;
-      const code = String(p.cProd);
-      const name = String(p.xProd);
-      const qCom = parseFloat(p.qCom);
-      const vUnCom = parseFloat(p.vUnCom);
+
+    for (const item of itemsXml) {
+      const productXml = item.prod;
+      const code = String(productXml.cProd);
+      const name = String(productXml.xProd);
+      const quantity = parseInt(productXml.qCom, 10);
+      const unitCost = parseFloat(productXml.vUnCom);
 
       let product = await this.prisma.product.findFirst({
-        where: { tenantId, OR: [{ sku: code }, { name: name }] },
+        where: { tenantId, OR: [{ sku: code }, { name }] },
       });
 
       if (!product) {
         product = await this.prisma.product.create({
           data: {
             tenantId,
-            name: name,
+            name,
             sku: code,
-            barcode: p.cEAN !== "SEM GTIN" ? String(p.cEAN) : null,
-            ncm: String(p.NCM),
-            cest: p.CEST ? String(p.CEST) : null,
-            unit: String(p.uCom),
+            barcode:
+              productXml.cEAN !== "SEM GTIN" ? String(productXml.cEAN) : null,
+            ncm: String(productXml.NCM),
+            cest: productXml.CEST ? String(productXml.CEST) : null,
+            unit: String(productXml.uCom),
             currentStock: 0,
             type: "PRODUCT",
-            costPrice: vUnCom,
+            costPrice: unitCost,
             supplierId: contact.id,
           },
         });
@@ -95,11 +111,11 @@ export class PurchasesService {
 
       items.push({
         productId: product.id,
-        quantity: qCom,
-        unitCost: vUnCom,
+        quantity,
+        unitCost,
         discount: 0,
-        total: parseFloat(p.vProd),
-        _productName: name, // For frontend preview only
+        total: parseFloat(productXml.vProd),
+        _productName: name,
       });
     }
 
@@ -134,7 +150,6 @@ export class PurchasesService {
     } = data;
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Create Purchase Order
       const purchaseOrder = await tx.purchaseOrder.create({
         data: {
           tenantId,
@@ -149,158 +164,139 @@ export class PurchasesService {
           paymentConditionId,
           items: {
             create:
-              items?.map((i: any) => ({
-                productId: i.productId,
-                quantity: i.quantity,
-                unitCost: i.unitCost || i.unitPrice,
-                discount: i.discount || 0,
-                total: i.total,
+              items?.map((item: any) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                unitCost: item.unitCost || item.unitPrice,
+                discount: item.discount || 0,
+                total: item.total,
               })) || [],
           },
         },
         include: { items: true, contact: true },
       });
 
-      if (xmlData) {
-        // Create Invoice
-        const invoice = await tx.invoice.create({
-          data: {
-            tenantId,
-            purchaseOrderId: purchaseOrder.id,
-            contactId: purchaseOrder.contactId,
-            number: String(xmlData.number),
-            accessKey: xmlData.accessKey,
-            type: "INPUT",
-            status: "AUTHORIZED",
-            xmlContent: xmlData.xmlContent,
+      if (!xmlData) {
+        return purchaseOrder;
+      }
+
+      const invoice = await tx.invoice.create({
+        data: {
+          tenantId,
+          purchaseOrderId: purchaseOrder.id,
+          contactId: purchaseOrder.contactId,
+          number: String(xmlData.number),
+          accessKey: xmlData.accessKey,
+          type: "INPUT",
+          status: "AUTHORIZED",
+          xmlContent: xmlData.xmlContent,
+        },
+      });
+
+      for (const item of purchaseOrder.items) {
+        await this.stockService.applyMovement(tx, {
+          tenantId,
+          productId: item.productId,
+          type: "IN",
+          quantity: item.quantity,
+          unitPrice: Number(item.unitCost),
+          totalPrice: Number(item.total),
+          reason: `Entrada - Automatico via Compra #${purchaseOrder.code}`,
+          skipIfService: true,
+          productUpdates: {
+            costPrice: Number(item.unitCost),
           },
         });
+      }
 
-        // Update Products Stock & Cost, Create Inventory Movements
-        for (const item of purchaseOrder.items) {
-          const product = await tx.product.findUnique({
-            where: { id: item.productId },
-          });
-          if (product && product.type === "PRODUCT") {
-            await tx.product.update({
-              where: { id: product.id },
-              data: {
-                currentStock: product.currentStock + item.quantity,
-                costPrice: item.unitCost,
-              },
-            });
-
-            await tx.inventoryMovement.create({
-              data: {
-                tenantId,
-                productId: product.id,
-                type: "IN",
-                quantity: item.quantity,
-                unitPrice: item.unitCost,
-                totalPrice: item.total,
-                reason: `Entrada - Automático via Compra #${purchaseOrder.code}`,
-              },
-            });
-          }
+      let customInstallments = null;
+      if (paymentCondition && paymentCondition.startsWith("[")) {
+        try {
+          customInstallments = JSON.parse(paymentCondition);
+        } catch {
+          customInstallments = null;
         }
+      }
 
-        let customInstallments = null;
-        if (paymentCondition && paymentCondition.startsWith("[")) {
-          try {
-            customInstallments = JSON.parse(paymentCondition);
-          } catch (e) {}
-        }
-
-        // Generate Accounts Payable
-        if (
-          customInstallments &&
-          Array.isArray(customInstallments) &&
-          customInstallments.length > 0
-        ) {
-          for (let i = 0; i < customInstallments.length; i++) {
-            const inst = customInstallments[i];
-            await tx.financialRecord.create({
-              data: {
-                tenantId,
-                description: `Fornecedor ${xmlData.supplierName || ""} - NF ${xmlData.number} Parcela ${inst.installment || i + 1}/${customInstallments.length}`,
-                amount: parseFloat(inst.amount),
-                dueDate: new Date(inst.dueDate),
-                status: "PENDING",
-                type: "EXPENSE",
-                category: "FORNECEDORES / COMPRAS",
-                notes: `Ref. NFe: ${xmlData.accessKey}`,
-                installmentNumber: inst.installment || i + 1,
-                totalInstallments: customInstallments.length,
-                paymentConditionId: paymentConditionId || null,
-                purchaseOrderId: purchaseOrder.id,
-                invoice: i === 0 ? { connect: { id: invoice.id } } : undefined,
-                parties: {
-                  create: [
-                    {
-                      tenantId,
-                      contactId: purchaseOrder.contactId,
-                      role: "CREDITOR",
-                    },
-                    ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
-                  ],
-                },
-              },
-            });
-          }
-        } else if (xmlData.dups?.length > 0) {
-          for (let i = 0; i < xmlData.dups.length; i++) {
-            const dup = xmlData.dups[i];
-            await tx.financialRecord.create({
-              data: {
-                tenantId,
-                description: `Fornecedor ${xmlData.supplierName || ""} - NF ${xmlData.number} Parcela ${dup.nDup}`,
-                amount: parseFloat(dup.vDup),
-                dueDate: new Date(String(dup.dVenc)),
-                status: "PENDING",
-                type: "EXPENSE",
-                category: "FORNECEDORES / COMPRAS",
-                notes: `Ref. NFe: ${xmlData.accessKey}`,
-                purchaseOrderId: purchaseOrder.id,
-                invoice: i === 0 ? { connect: { id: invoice.id } } : undefined,
-                parties: {
-                  create: [
-                    {
-                      tenantId,
-                      contactId: purchaseOrder.contactId,
-                      role: "CREDITOR",
-                    },
-                    ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
-                  ],
-                },
-              },
-            });
-          }
-        } else if (xmlData.invoiceTotal > 0) {
+      if (
+        customInstallments &&
+        Array.isArray(customInstallments) &&
+        customInstallments.length > 0
+      ) {
+        for (let i = 0; i < customInstallments.length; i++) {
+          const installment = customInstallments[i];
           await tx.financialRecord.create({
             data: {
               tenantId,
-              description: `Para ${xmlData.supplierName || ""} - NF ${xmlData.number} (À Vista)`,
-              amount: xmlData.invoiceTotal,
-              dueDate: new Date(),
+              description: `Fornecedor ${xmlData.supplierName || ""} - NF ${xmlData.number} Parcela ${installment.installment || i + 1}/${customInstallments.length}`,
+              amount: parseFloat(installment.amount),
+              dueDate: new Date(installment.dueDate),
+              status: "PENDING",
+              type: "EXPENSE",
+              category: "FORNECEDORES / COMPRAS",
+              notes: `Ref. NFe: ${xmlData.accessKey}`,
+              installmentNumber: installment.installment || i + 1,
+              totalInstallments: customInstallments.length,
+              paymentConditionId: paymentConditionId || null,
+              purchaseOrderId: purchaseOrder.id,
+              invoice: i === 0 ? { connect: { id: invoice.id } } : undefined,
+              parties: {
+                create: this.buildParties(
+                  tenantId,
+                  purchaseOrder.contactId,
+                  purchaseOrder.buyerId,
+                ),
+              },
+            },
+          });
+        }
+      } else if (xmlData.dups?.length > 0) {
+        for (let i = 0; i < xmlData.dups.length; i++) {
+          const duplicate = xmlData.dups[i];
+          await tx.financialRecord.create({
+            data: {
+              tenantId,
+              description: `Fornecedor ${xmlData.supplierName || ""} - NF ${xmlData.number} Parcela ${duplicate.nDup}`,
+              amount: parseFloat(duplicate.vDup),
+              dueDate: new Date(String(duplicate.dVenc)),
               status: "PENDING",
               type: "EXPENSE",
               category: "FORNECEDORES / COMPRAS",
               notes: `Ref. NFe: ${xmlData.accessKey}`,
               purchaseOrderId: purchaseOrder.id,
-              invoice: { connect: { id: invoice.id } },
+              invoice: i === 0 ? { connect: { id: invoice.id } } : undefined,
               parties: {
-                create: [
-                  {
-                    tenantId,
-                    contactId: purchaseOrder.contactId,
-                    role: "CREDITOR",
-                  },
-                  ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
-                ],
+                create: this.buildParties(
+                  tenantId,
+                  purchaseOrder.contactId,
+                  purchaseOrder.buyerId,
+                ),
               },
             },
           });
         }
+      } else if (xmlData.invoiceTotal > 0) {
+        await tx.financialRecord.create({
+          data: {
+            tenantId,
+            description: `Para ${xmlData.supplierName || ""} - NF ${xmlData.number} (A Vista)`,
+            amount: xmlData.invoiceTotal,
+            dueDate: new Date(),
+            status: "PENDING",
+            type: "EXPENSE",
+            category: "FORNECEDORES / COMPRAS",
+            notes: `Ref. NFe: ${xmlData.accessKey}`,
+            purchaseOrderId: purchaseOrder.id,
+            invoice: { connect: { id: invoice.id } },
+            parties: {
+              create: this.buildParties(
+                tenantId,
+                purchaseOrder.contactId,
+                purchaseOrder.buyerId,
+              ),
+            },
+          },
+        });
       }
 
       return purchaseOrder;
@@ -324,8 +320,8 @@ export class PurchasesService {
         buyer: true,
         invoice: true,
         financialRecords: {
-           orderBy: { dueDate: 'asc' }
-        }
+          orderBy: { dueDate: "asc" },
+        },
       },
     });
   }
@@ -343,15 +339,21 @@ export class PurchasesService {
       items,
     } = data;
 
-    // Verify ownership
     const existing = await this.prisma.purchaseOrder.findFirst({
       where: { id, tenantId },
     });
-    if (!existing)
-      throw new BadRequestException("Pedido de Compra não encontrado");
+
+    if (!existing) {
+      throw new BadRequestException("Pedido de Compra nao encontrado");
+    }
+
+    if (existing.status === "RECEIVED") {
+      throw new BadRequestException(
+        "Pedidos recebidos nao podem ser editados sem estorno.",
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
-      // Clear previous items to replace with new ones
       await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
 
       return tx.purchaseOrder.update({
@@ -367,12 +369,12 @@ export class PurchasesService {
           paymentConditionId,
           items: {
             create:
-              items?.map((i: any) => ({
-                productId: i.productId,
-                quantity: i.quantity,
-                unitCost: i.unitCost || i.unitPrice,
-                discount: i.discount || 0,
-                total: i.total,
+              items?.map((item: any) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                unitCost: item.unitCost || item.unitPrice,
+                discount: item.discount || 0,
+                total: item.total,
               })) || [],
           },
         },
@@ -385,39 +387,41 @@ export class PurchasesService {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.purchaseOrder.findFirst({
         where: { id, tenantId },
-        include: { items: true, invoice: true }
+        include: { items: true, invoice: true },
       });
-      if (!existing)
-        throw new BadRequestException("Pedido de Compra não encontrado");
 
-      // Reverter estoque se RECEBIDO
+      if (!existing) {
+        throw new BadRequestException("Pedido de Compra nao encontrado");
+      }
+
       if (existing.status === "RECEIVED") {
         for (const item of existing.items) {
-          const product = await tx.product.findUnique({ where: { id: item.productId }});
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+          });
+
           if (product && product.type === "PRODUCT") {
             await tx.product.update({
               where: { id: product.id },
-              data: { currentStock: product.currentStock - item.quantity }
+              data: { currentStock: product.currentStock - item.quantity },
             });
             await tx.inventoryMovement.deleteMany({
               where: {
                 tenantId,
                 productId: product.id,
-                reason: { contains: existing.code.toString() }
-              }
+                reason: { contains: existing.code.toString() },
+              },
             });
           }
         }
       }
 
-      // Limpar XML
       if (existing.invoice) {
         await tx.invoice.delete({ where: { id: existing.invoice.id } });
       }
 
-      // Limpar Financeiro
       await tx.financialRecord.deleteMany({
-        where: { tenantId, purchaseOrderId: id }
+        where: { tenantId, purchaseOrderId: id },
       });
 
       return tx.purchaseOrder.delete({ where: { id } });
@@ -431,12 +435,15 @@ export class PurchasesService {
         include: { items: true, contact: true },
       });
 
-      if (!purchaseOrder)
-        throw new BadRequestException("Pedido de compra não encontrado");
+      if (!purchaseOrder) {
+        throw new BadRequestException("Pedido de compra nao encontrado");
+      }
 
-      if (purchaseOrder.status === "RECEIVED" && status === "RECEIVED") {
+      if (purchaseOrder.status === "RECEIVED") {
         throw new BadRequestException(
-          "Este pedido já foi dado entrada/recebido",
+          status === "RECEIVED"
+            ? "Este pedido ja foi dado entrada/recebido"
+            : "Pedidos recebidos nao podem mudar de status.",
         );
       }
 
@@ -445,7 +452,6 @@ export class PurchasesService {
         data: { status },
       });
 
-      // Se virou RECEBIDO (Entrada de Estoque e AP)
       if (status === "RECEIVED") {
         let customInstallments = null;
         if (
@@ -454,7 +460,9 @@ export class PurchasesService {
         ) {
           try {
             customInstallments = JSON.parse(purchaseOrder.paymentCondition);
-          } catch (e) {}
+          } catch {
+            customInstallments = null;
+          }
         }
 
         let mainFinancialId = null;
@@ -465,36 +473,38 @@ export class PurchasesService {
           customInstallments.length > 0
         ) {
           for (let i = 0; i < customInstallments.length; i++) {
-            const inst = customInstallments[i];
-            const fin = await tx.financialRecord.create({
+            const installment = customInstallments[i];
+            const financialRecord = await tx.financialRecord.create({
               data: {
                 tenantId,
-                description: `Compra / Cotação #${purchaseOrder.code} - Parcela ${inst.installment || i + 1}/${customInstallments.length} - ${purchaseOrder.contact.name}`,
-                amount: parseFloat(inst.amount),
-                dueDate: new Date(inst.dueDate),
+                description: `Compra / Cotacao #${purchaseOrder.code} - Parcela ${installment.installment || i + 1}/${customInstallments.length} - ${purchaseOrder.contact.name}`,
+                amount: parseFloat(installment.amount),
+                dueDate: new Date(installment.dueDate),
                 status: "PENDING",
                 type: "EXPENSE",
                 category: "FORNECEDORES / COMPRAS",
-                installmentNumber: inst.installment || i + 1,
+                installmentNumber: installment.installment || i + 1,
                 totalInstallments: customInstallments.length,
                 paymentConditionId: purchaseOrder.paymentConditionId || null,
                 purchaseOrderId: purchaseOrder.id,
                 parties: {
-                  create: [
-                    { tenantId, contactId: purchaseOrder.contactId, role: "CREDITOR" },
-                    ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
-                  ]
-                }
+                  create: this.buildParties(
+                    tenantId,
+                    purchaseOrder.contactId,
+                    purchaseOrder.buyerId,
+                  ),
+                },
               },
             });
-            if (i === 0) mainFinancialId = fin.id;
+            if (i === 0) {
+              mainFinancialId = financialRecord.id;
+            }
           }
         } else {
-          // 1. Generate Financial Record (Despesa / Contas a Pagar)
           const financialRecord = await tx.financialRecord.create({
             data: {
               tenantId,
-              description: `Compra / Cotação #${purchaseOrder.code} - Fornecedor: ${purchaseOrder.contact.name}`,
+              description: `Compra / Cotacao #${purchaseOrder.code} - Fornecedor: ${purchaseOrder.contact.name}`,
               amount: purchaseOrder.totalAmount,
               dueDate: new Date(),
               status: "PENDING",
@@ -502,17 +512,17 @@ export class PurchasesService {
               category: "FORNECEDORES / COMPRAS",
               purchaseOrderId: purchaseOrder.id,
               parties: {
-                create: [
-                  { tenantId, contactId: purchaseOrder.contactId, role: "CREDITOR" },
-                  ...(purchaseOrder.buyerId ? [{ tenantId, contactId: purchaseOrder.buyerId, role: "DEBTOR" }] : []),
-                ]
-              }
+                create: this.buildParties(
+                  tenantId,
+                  purchaseOrder.contactId,
+                  purchaseOrder.buyerId,
+                ),
+              },
             },
           });
           mainFinancialId = financialRecord.id;
         }
 
-        // 2. Setup Invoice (Entrada)
         await tx.invoice.create({
           data: {
             tenantId,
@@ -524,36 +534,47 @@ export class PurchasesService {
           },
         });
 
-        // 3. Inventory movements (Entrada) e Custo de Compra
         for (const item of purchaseOrder.items) {
-          const product = await tx.product.findUnique({
-            where: { id: item.productId },
+          await this.stockService.applyMovement(tx, {
+            tenantId,
+            productId: item.productId,
+            type: "IN",
+            quantity: item.quantity,
+            unitPrice: Number(item.unitCost),
+            totalPrice: Number(item.total),
+            reason: `Entrada - Automatico via Compra #${purchaseOrder.code}`,
+            skipIfService: true,
+            productUpdates: {
+              costPrice: Number(item.unitCost),
+            },
           });
-          if (product && product.type === "PRODUCT") {
-            await tx.product.update({
-              where: { id: product.id },
-              data: {
-                currentStock: product.currentStock + item.quantity,
-                costPrice: item.unitCost, // Atualiza custo da ultima compra
-              },
-            });
-
-            await tx.inventoryMovement.create({
-              data: {
-                tenantId,
-                productId: product.id,
-                type: "IN",
-                quantity: item.quantity,
-                unitPrice: item.unitCost,
-                totalPrice: item.total,
-                reason: `Entrada - Automático via Compra #${purchaseOrder.code}`,
-              },
-            });
-          }
         }
       }
 
       return updated;
     });
+  }
+
+  private buildParties(
+    tenantId: string,
+    creditorId: string,
+    debtorId?: string | null,
+  ) {
+    return [
+      {
+        tenantId,
+        contactId: creditorId,
+        role: "CREDITOR",
+      },
+      ...(debtorId
+        ? [
+            {
+              tenantId,
+              contactId: debtorId,
+              role: "DEBTOR",
+            },
+          ]
+        : []),
+    ];
   }
 }

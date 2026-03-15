@@ -1,9 +1,13 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
+import { StockService } from "../stock/stock.service";
 
 @Injectable()
 export class ProposalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stockService: StockService,
+  ) {}
 
   async create(tenantId: string, data: any) {
     const {
@@ -34,12 +38,12 @@ export class ProposalsService {
         paymentConditionId,
         items: {
           create:
-            items?.map((i: any) => ({
-              productId: i.productId,
-              quantity: i.quantity,
-              unitPrice: i.unitPrice,
-              discount: i.discount || 0,
-              total: i.total,
+            items?.map((item: any) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discount: item.discount || 0,
+              total: item.total,
             })) || [],
         },
       },
@@ -81,14 +85,21 @@ export class ProposalsService {
       items,
     } = data;
 
-    // Verify ownership
     const existing = await this.prisma.proposal.findFirst({
       where: { id, tenantId },
     });
-    if (!existing) throw new BadRequestException("Orçamento não encontrado");
+
+    if (!existing) {
+      throw new BadRequestException("Orcamento nao encontrado");
+    }
+
+    if (existing.status === "APPROVED") {
+      throw new BadRequestException(
+        "Orcamentos aprovados nao podem ser editados. Exclua ou cancele o registro para estornar.",
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
-      // Clear previous items to replace with new ones
       await tx.proposalItem.deleteMany({ where: { proposalId: id } });
 
       return tx.proposal.update({
@@ -105,12 +116,12 @@ export class ProposalsService {
           paymentConditionId,
           items: {
             create:
-              items?.map((i: any) => ({
-                productId: i.productId,
-                quantity: i.quantity,
-                unitPrice: i.unitPrice,
-                discount: i.discount || 0,
-                total: i.total,
+              items?.map((item: any) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                discount: item.discount || 0,
+                total: item.total,
               })) || [],
           },
         },
@@ -125,48 +136,34 @@ export class ProposalsService {
         where: { id, tenantId },
         include: { items: true },
       });
-      if (!existing) throw new BadRequestException("Orçamento não encontrado");
 
-      // Reverter estoque caso já tivesse sido faturado (aprovado)
+      if (!existing) {
+        throw new BadRequestException("Orcamento nao encontrado");
+      }
+
       if (existing.status === "APPROVED") {
         for (const item of existing.items) {
-          const product = await tx.product.findUnique({
-            where: { id: item.productId },
+          await this.stockService.applyMovement(tx, {
+            tenantId,
+            productId: item.productId,
+            type: "IN",
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            totalPrice: Number(item.total),
+            reason: `Estorno - Orcamento Cancelado #${existing.code}`,
+            skipIfService: true,
           });
-          if (product && product.type === "PRODUCT") {
-            // Estorno: Devolver ao estoque
-            await tx.product.update({
-              where: { id: product.id },
-              data: { currentStock: product.currentStock + item.quantity },
-            });
-
-            // Registro de estorno
-            await tx.inventoryMovement.create({
-              data: {
-                tenantId,
-                productId: product.id,
-                type: "IN",
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                totalPrice: item.total,
-                reason: `Estorno - Orçamento Cancelado #${existing.code}`,
-              },
-            });
-          }
         }
       }
 
-      // Remover Invoice (NF) atrelada
       await tx.invoice.deleteMany({
         where: { proposalId: id },
       });
 
-      // Remover Títulos a Receber (Financeiro) atrelados
       await tx.financialRecord.deleteMany({
         where: { proposalId: id },
       });
 
-      // Finalmente, deletar os itens e a proposta
       await tx.proposalItem.deleteMany({ where: { proposalId: id } });
       return tx.proposal.delete({ where: { id } });
     });
@@ -179,11 +176,15 @@ export class ProposalsService {
         include: { items: true, contact: true },
       });
 
-      if (!proposal) throw new BadRequestException("Orçamento não encontrado");
+      if (!proposal) {
+        throw new BadRequestException("Orcamento nao encontrado");
+      }
 
-      if (proposal.status === "APPROVED" && status === "APPROVED") {
+      if (proposal.status === "APPROVED") {
         throw new BadRequestException(
-          "Este orçamento já foi aprovado e processado",
+          status === "APPROVED"
+            ? "Este orcamento ja foi aprovado e processado"
+            : "Orcamentos aprovados nao podem mudar de status.",
         );
       }
 
@@ -200,7 +201,9 @@ export class ProposalsService {
         ) {
           try {
             customInstallments = JSON.parse(proposal.paymentCondition);
-          } catch (e) {}
+          } catch {
+            customInstallments = null;
+          }
         }
 
         let mainFinancialId = null;
@@ -211,30 +214,31 @@ export class ProposalsService {
           customInstallments.length > 0
         ) {
           for (let i = 0; i < customInstallments.length; i++) {
-            const inst = customInstallments[i];
-            const fin = await tx.financialRecord.create({
+            const installment = customInstallments[i];
+            const financialRecord = await tx.financialRecord.create({
               data: {
                 tenantId,
-                description: `Venda Ref. Orçamento #${proposal.code} - Parcela ${inst.installment || i + 1}/${customInstallments.length} - ${proposal.contact.name}`,
-                amount: parseFloat(inst.amount),
-                dueDate: new Date(inst.dueDate),
+                description: `Venda Ref. Orcamento #${proposal.code} - Parcela ${installment.installment || i + 1}/${customInstallments.length} - ${proposal.contact.name}`,
+                amount: parseFloat(installment.amount),
+                dueDate: new Date(installment.dueDate),
                 status: "PENDING",
                 type: "INCOME",
                 category: "VENDAS",
-                installmentNumber: inst.installment || i + 1,
+                installmentNumber: installment.installment || i + 1,
                 totalInstallments: customInstallments.length,
                 paymentConditionId: proposal.paymentConditionId || null,
                 proposalId: proposal.id,
               },
             });
-            if (i === 0) mainFinancialId = fin.id;
+            if (i === 0) {
+              mainFinancialId = financialRecord.id;
+            }
           }
         } else {
-          // 1. Generate Financial Record (Receita)
           const financialRecord = await tx.financialRecord.create({
             data: {
               tenantId,
-              description: `Venda Ref. Orçamento #${proposal.code} - ${proposal.contact.name}`,
+              description: `Venda Ref. Orcamento #${proposal.code} - ${proposal.contact.name}`,
               amount: proposal.totalAmount,
               dueDate: new Date(),
               status: "PENDING",
@@ -246,7 +250,6 @@ export class ProposalsService {
           mainFinancialId = financialRecord.id;
         }
 
-        // 2. Setup Invoice
         await tx.invoice.create({
           data: {
             tenantId,
@@ -258,29 +261,17 @@ export class ProposalsService {
           },
         });
 
-        // 3. Inventory movements
         for (const item of proposal.items) {
-          const product = await tx.product.findUnique({
-            where: { id: item.productId },
+          await this.stockService.applyMovement(tx, {
+            tenantId,
+            productId: item.productId,
+            type: "OUT",
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            totalPrice: Number(item.total),
+            reason: `Venda - Automatico via Orcamento #${proposal.code}`,
+            skipIfService: true,
           });
-          if (product && product.type === "PRODUCT") {
-            await tx.product.update({
-              where: { id: product.id },
-              data: { currentStock: product.currentStock - item.quantity },
-            });
-
-            await tx.inventoryMovement.create({
-              data: {
-                tenantId,
-                productId: product.id,
-                type: "OUT",
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                totalPrice: item.total,
-                reason: `Venda - Automático via Orçamento #${proposal.code}`,
-              },
-            });
-          }
         }
       }
 

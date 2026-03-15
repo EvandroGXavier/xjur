@@ -1,4 +1,13 @@
-import { IsString, IsOptional, IsNumber, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class CreateProductDto {
   @IsString()
@@ -33,19 +42,27 @@ export class CreateProductDto {
   cest?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   minStock?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   currentStock?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   costPrice?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   sellPrice?: number;
 
   @IsOptional()
@@ -54,22 +71,31 @@ export class CreateProductDto {
 
   // E-commerce fields
   @IsOptional()
+  @IsArray()
   images?: string[];
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   weight?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   width?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   height?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
+  @Min(0)
   length?: number;
 
   @IsOptional()
@@ -81,5 +107,7 @@ export class CreateProductDto {
   brand?: string;
 
   @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
   isEcommerce?: boolean;
 }

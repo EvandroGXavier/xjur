@@ -78,7 +78,6 @@ export function ContactList() {
         if (statusFilter !== 'ALL') params.active = statusFilter;
 
         const response = await api.get('/contacts', { params });
-        console.log('Contatos carregados:', response.data);
         setContacts(Array.isArray(response.data) ? response.data : []);
     } catch (err: any) {
         if (axios.isCancel(err)) return;

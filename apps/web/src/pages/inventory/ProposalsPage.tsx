@@ -35,7 +35,7 @@ export function ProposalsPage() {
     loadProposals();
     loadDependencies();
     fetchConditions();
-  }, [selectedProposal, isEditing]);
+  }, []);
 
   const handleNovaProposta = () => {
     setSelectedProposal(null);
@@ -249,6 +249,11 @@ export function ProposalsPage() {
   };
 
   const handleApprove = async (id: string) => {
+    if (selectedProposal?.status === "APPROVED") {
+      toast.info("Este orÃ§amento jÃ¡ foi aprovado.");
+      return;
+    }
+
     try {
       await api.patch(`/proposals/${id}/status`, { status: "APPROVED" });
       toast.success("Orçamento aprovado. Financeiro e estoque atualizados!");
@@ -272,6 +277,11 @@ export function ProposalsPage() {
   };
 
   const handleSave = async (shouldClose = true) => {
+    if (selectedProposal?.status === "APPROVED") {
+      toast.error("OrÃ§amentos aprovados nÃ£o podem ser editados.");
+      return;
+    }
+
     try {
       const totalAmount = formData.items.reduce(
         (acc: number, item: any) => acc + Number(item.total),
@@ -826,7 +836,13 @@ export function ProposalsPage() {
                     key={p.id}
                     className={`cursor-pointer transition-colors ${selectedProposal?.id === p.id ? "bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500" : "text-slate-300 hover:bg-slate-800/50 border-b border-slate-800"}`}
                     onClick={() => loadProposalDetails(p.id)}
-                    onDoubleClick={() => setIsEditing(true)}
+                    onDoubleClick={() => {
+                      if (p.status === "APPROVED") {
+                        toast.info("OrÃ§amentos aprovados nÃ£o podem ser editados.");
+                        return;
+                      }
+                      setIsEditing(true);
+                    }}
                   >
                     <td className="px-3 py-2 w-24 border-r border-slate-800 font-mono">
                       {String(p.code).padStart(6, "0")}
@@ -904,16 +920,22 @@ export function ProposalsPage() {
 
                 <div className="flex flex-col gap-2 w-48">
                   <button
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
                     onClick={() => handleApprove(selectedProposal.id)}
+                    disabled={selectedProposal.status === "APPROVED"}
                   >
                     Aprovar (Faturar)
                   </button>
                   <button
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
+                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
                     onClick={() => {
+                      if (selectedProposal.status === "APPROVED") {
+                        toast.info("OrÃ§amentos aprovados nÃ£o podem ser editados.");
+                        return;
+                      }
                       setIsEditing(true);
                     }}
+                    disabled={selectedProposal.status === "APPROVED"}
                   >
                     Editar Orçamento
                   </button>
