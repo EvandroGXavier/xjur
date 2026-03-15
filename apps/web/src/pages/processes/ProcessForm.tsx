@@ -124,6 +124,10 @@ type PdfDossierImportResult = {
     };
     drxSummary?: {
         answer?: string | null;
+        matchedSkills?: Array<{
+            id?: string | null;
+            name?: string | null;
+        }>;
     };
     analysis?: {
         pageCount?: number;
@@ -135,6 +139,18 @@ type PdfDossierImportResult = {
 };
 
 const normalizeCnjDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
+
+const formatMatchedSkillSummary = (drxSummary?: {
+    matchedSkills?: Array<{ name?: string | null }>;
+} | null) => {
+    const names = Array.isArray(drxSummary?.matchedSkills)
+        ? drxSummary.matchedSkills
+              .map((skill) => String(skill?.name || '').trim())
+              .filter(Boolean)
+        : [];
+
+    return names.length > 0 ? ` Skill aplicada: ${names.join(', ')}.` : '';
+};
 
 export function ProcessForm() {
     const { id } = useParams();
@@ -233,7 +249,7 @@ export function ProcessForm() {
             const pdfImport = data.metadata?.pdfDossierImport;
             setLastPdfImportSummary(
                 pdfImport
-                    ? `${pdfImport.importedCount || 0} andamento(s) extraido(s) do PDF do processo, ${pdfImport.explicitFatalDateCount || 0} com prazo fatal expresso e ${pdfImport.cnjMovementCount || 0} movimento(s) oficiais em paralelo no CNJ/DataJud.`
+                    ? `${pdfImport.importedCount || 0} andamento(s) extraido(s) do PDF do processo, ${pdfImport.explicitFatalDateCount || 0} com prazo fatal expresso e ${pdfImport.cnjMovementCount || 0} movimento(s) oficiais em paralelo no CNJ/DataJud.${formatMatchedSkillSummary(pdfImport.drxSummary)}`
                     : '',
             );
         } catch {
@@ -434,7 +450,7 @@ export function ProcessForm() {
             const result = response.data as PdfDossierImportResult;
 
             setLastPdfImportSummary(
-                `${result.importedCount || 0} andamento(s) novo(s) a partir do PDF do processo, ${result.explicitFatalDateCount || 0} com prazo fatal expresso e ${result.cnjMovementCount || 0} movimento(s) oficiais considerados em paralelo.`,
+                `${result.importedCount || 0} andamento(s) novo(s) a partir do PDF do processo, ${result.explicitFatalDateCount || 0} com prazo fatal expresso e ${result.cnjMovementCount || 0} movimento(s) oficiais considerados em paralelo.${formatMatchedSkillSummary(result.drxSummary)}`,
             );
 
             toast.success(result.importedCount > 0 ? 'PDF do processo importado com sucesso.' : 'PDF analisado sem novos andamentos.', {
@@ -445,7 +461,7 @@ export function ProcessForm() {
 
             if (result.drxSummary?.answer) {
                 toast.info('DrX-Claw gerou uma leitura operacional do processo.', {
-                    description: result.drxSummary.answer.slice(0, 220),
+                    description: `${result.drxSummary.answer.slice(0, 220)}${formatMatchedSkillSummary(result.drxSummary)}`.trim(),
                     duration: 10000,
                 });
             }
@@ -726,11 +742,11 @@ export function ProcessForm() {
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <span className="text-sm font-semibold text-white">PDF Integral do Processo</span>
                                                     <span className="rounded-full border border-violet-500/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-100">
-                                                        Cadastro/atualizacao + PDF + DrX
+                                                        Cadastro/atualizacao + PDF + Skill + DrX
                                                     </span>
                                                 </div>
                                                 <p className="text-sm text-slate-200">
-                                                    Detecta `PJe` ou `Eproc`, cadastra ou atualiza o processo pelo CNJ, sincroniza partes, importa andamentos por `ID` ou `EVENTO` e pede ao DrX-Claw um resumo operacional com proximo passo.
+                                                    Detecta `PJe` ou `Eproc`, cadastra ou atualiza o processo pelo CNJ, sincroniza partes, importa andamentos por `ID` ou `EVENTO` e aplica a skill de leitura processual antes de pedir ao DrX-Claw um resumo operacional com proximo passo.
                                                 </p>
                                                 <div className="flex flex-wrap gap-3 text-xs text-slate-300">
                                                     <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
@@ -770,7 +786,7 @@ export function ProcessForm() {
                                                     {importingPdfDossier ? 'Importando PDF do processo...' : 'Importar PDF do processo'}
                                                 </label>
                                                 <p className="text-xs text-slate-400">
-                                                    Melhor uso para o advogado: subir autos completos do PJe ou EPROC para montar o processo, enriquecer o historico e receber uma orientacao inicial do DrX-Claw.
+                                                    Melhor uso para o advogado: subir autos completos do PJe ou EPROC para montar o processo, enriquecer o historico e receber uma orientacao inicial do DrX-Claw apoiada pela skill juridica do sistema.
                                                 </p>
                                             </div>
                                         </div>

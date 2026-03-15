@@ -3,6 +3,11 @@ import axios from "axios";
 import { CommunicationsService } from "../communications/communications.service";
 import { PrismaService } from "../prisma.service";
 import { TicketsService } from "../tickets/tickets.service";
+import {
+  DEFAULT_SKILLS,
+  DrxSkill,
+  mergeDrxSkills,
+} from "./drx-skill.constants";
 
 type ProviderId =
   | "LOCAL"
@@ -37,15 +42,6 @@ type ProviderCatalogEntry = {
   models: ProviderModelOption[];
   fetchedLiveModels: boolean;
   liveLookupError: string | null;
-};
-
-type DrxSkill = {
-  id: string;
-  name: string;
-  description: string;
-  instructions: string;
-  triggerKeywords: string[];
-  enabled: boolean;
 };
 
 type DrxClawConfig = {
@@ -84,38 +80,7 @@ type DrxClawConfig = {
   skills: DrxSkill[];
 };
 
-const DEFAULT_SKILLS: DrxSkill[] = [
-  {
-    id: "triagem-juridica",
-    name: "Triagem Juridica",
-    description:
-      "Qualifica pedidos iniciais e organiza contexto antes de acionar equipes.",
-    instructions:
-      "Identifique demanda, urgencia, documentos faltantes e proximo passo recomendado.",
-    triggerKeywords: [
-      "triagem",
-      "novo cliente",
-      "analise inicial",
-      "qualificar",
-    ],
-    enabled: true,
-  },
-  {
-    id: "financeiro-cobranca",
-    name: "Financeiro e Cobranca",
-    description:
-      "Ajuda em cobrancas, lembretes de vencimento e negociacao de parcelas.",
-    instructions:
-      "Responda com tom objetivo, valores claros e proximo passo de cobranca.",
-    triggerKeywords: [
-      "boleto",
-      "vencimento",
-      "cobranca",
-      "pagamento",
-      "financeiro",
-    ],
-    enabled: true,
-  },
+/* Skill defaults moved to drx-skill.constants.ts.
   {
     id: "agenda-followup",
     name: "Agenda e Follow-up",
@@ -125,7 +90,7 @@ const DEFAULT_SKILLS: DrxSkill[] = [
     triggerKeywords: ["agenda", "retorno", "follow-up", "lembrete", "prazo"],
     enabled: true,
   },
-];
+*/
 
 const PROVIDER_ORDER: ProviderId[] = [
   "OPENAI",
@@ -420,10 +385,7 @@ export class DrxClawService {
         ...DEFAULT_CONFIG.playground,
         ...(config.playground || {}),
       },
-      skills:
-        Array.isArray(config.skills) && config.skills.length > 0
-          ? config.skills
-          : DEFAULT_SKILLS,
+      skills: mergeDrxSkills(config.skills),
     };
   }
 
@@ -461,6 +423,38 @@ export class DrxClawService {
       .filter((skill) => skill.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 4);
+  }
+
+  private sanitizeSkillIds(value: any) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
+
+  private resolveMatchedSkills(
+    prompt: string,
+    skills: DrxSkill[],
+    forcedSkillIds: string[] = [],
+  ) {
+    const forcedIds = new Set(this.sanitizeSkillIds(forcedSkillIds));
+    const forcedSkills = skills
+      .filter((skill) => skill.enabled && forcedIds.has(skill.id))
+      .map((skill) => ({
+        ...skill,
+        score: 100,
+      }));
+
+    const automaticSkills = prompt
+      ? this.matchSkills(prompt, skills).filter(
+          (skill) => !forcedIds.has(skill.id),
+        )
+      : [];
+
+    return [...forcedSkills, ...automaticSkills].slice(0, 4);
   }
 
   private buildSystemPrompt(
@@ -1580,6 +1574,10 @@ export class DrxClawService {
       config,
       summary: {
         enabledSkills: config.skills.filter((skill) => skill.enabled).length,
+        systemSkills: config.skills.filter((skill) => skill.scope === "SYSTEM")
+          .length,
+        customSkills: config.skills.filter((skill) => skill.scope !== "SYSTEM")
+          .length,
         whitelistCount: config.telegramWhitelist.length,
         provider: config.provider,
         model: this.getProviderModel(config),
@@ -1676,6 +1674,9 @@ export class DrxClawService {
   async runPlayground(tenantId: string, payload: any) {
     const prompt = String(payload?.prompt || "").trim();
     const scenario = String(payload?.scenario || "Livre");
+    const forcedSkillIds = this.sanitizeSkillIds(
+      payload?.forceSkillIds || payload?.skillIds,
+    );
 
     const { record, config: storedConfig } =
       await this.ensureConfigRecord(tenantId);
@@ -1686,7 +1687,11 @@ export class DrxClawService {
       payload?.config || storedConfig,
       tenant?.name,
     );
-    const matchedSkills = this.matchSkills(prompt, config.skills);
+    const matchedSkills = this.resolveMatchedSkills(
+      prompt,
+      config.skills,
+      forcedSkillIds,
+    );
     const runtime = this.resolveRuntime(config);
     const systemPrompt = this.buildSystemPrompt(config, matchedSkills);
 

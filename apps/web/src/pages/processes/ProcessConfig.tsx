@@ -25,6 +25,12 @@ import { clsx } from "clsx";
 import { toast } from "sonner";
 import { api } from "../../services/api";
 import { HelpModal, useHelpModal } from "../../components/HelpModal";
+import {
+  applyImportedPartyClassification,
+  buildImportedPartyReview,
+  ProcessImportPartyReview,
+  type ImportedPartyClassification,
+} from "../../components/processos/ProcessImportPartyReview";
 import { helpProcesses } from "../../data/helpManuals";
 import { masks } from "../../utils/masks";
 
@@ -127,7 +133,12 @@ export function ProcessConfig() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewCnj, setPreviewCnj] = useState("");
   const [previewData, setPreviewData] = useState<any | null>(null);
+  const [partyClassification, setPartyClassification] = useState<Record<string, ImportedPartyClassification>>({});
   const [testResult, setTestResult] = useState<any | null>(null);
+  const partyReview = useMemo(
+    () => buildImportedPartyReview(Array.isArray(previewData?.parties) ? previewData.parties : []),
+    [previewData?.parties],
+  );
 
   useEffect(() => {
     if (view === "bulk") {
@@ -138,6 +149,28 @@ export function ProcessConfig() {
       void fetchIntegration();
     }
   }, [view]);
+
+  useEffect(() => {
+    setPartyClassification((current) => {
+      const next: Record<string, ImportedPartyClassification> = {};
+      partyReview.principalParties.forEach((party) => {
+        if (current[party.reviewKey]) {
+          next[party.reviewKey] = current[party.reviewKey];
+          return;
+        }
+        if (party.isClient) {
+          next[party.reviewKey] = "CLIENT";
+          return;
+        }
+        if (party.isOpposing) {
+          next[party.reviewKey] = "OPPOSING";
+          return;
+        }
+        next[party.reviewKey] = "";
+      });
+      return next;
+    });
+  }, [partyReview]);
 
   const ready = useMemo(
     () => config.enabled && config.provider === "DATAJUD" && !!config.datajud.apiKey,
@@ -271,12 +304,25 @@ export function ProcessConfig() {
 
   const importPreview = async () => {
     if (!previewData) return;
+
+    const unresolvedParties = partyReview.principalParties.filter((party) => !partyClassification[party.reviewKey]);
+    if (unresolvedParties.length > 0) {
+      toast.warning("Classifique todas as partes principais como cliente ou contrário antes de cadastrar.");
+      return;
+    }
+
+    const clientCount = partyReview.principalParties.filter((party) => partyClassification[party.reviewKey] === "CLIENT").length;
+    if (clientCount === 0) {
+      toast.warning("Marque ao menos uma parte principal como cliente antes de cadastrar.");
+      return;
+    }
+
     try {
       setPreviewLoading(true);
       const { data } = await api.post("/processes", {
         ...previewData,
         category: "JUDICIAL",
-        parties: Array.isArray(previewData?.parties) ? previewData.parties : [],
+        parties: applyImportedPartyClassification(partyReview, partyClassification),
       });
       toast.success("Processo cadastrado com sucesso com capa e partes sincronizadas");
       navigate(`/processes/${data.id}`);
@@ -285,6 +331,25 @@ export function ProcessConfig() {
     } finally {
       setPreviewLoading(false);
     }
+  };
+
+  const applyDefaultClassification = () => {
+    const next: Record<string, ImportedPartyClassification> = {};
+    partyReview.activeParties.forEach((party) => {
+      next[party.reviewKey] = "CLIENT";
+    });
+    partyReview.passiveParties.forEach((party) => {
+      next[party.reviewKey] = "OPPOSING";
+    });
+    setPartyClassification(next);
+  };
+
+  const clearClassification = () => {
+    const next: Record<string, ImportedPartyClassification> = {};
+    partyReview.principalParties.forEach((party) => {
+      next[party.reviewKey] = "";
+    });
+    setPartyClassification(next);
   };
 
   const cards: ConfigCard[] = [
@@ -516,6 +581,38 @@ export function ProcessConfig() {
                           <div><span className="text-slate-500">Orgao:</span> <span className="text-white">{previewData.vars || "-"}</span></div>
                           <div><span className="text-slate-500">Partes:</span> <span className="text-white">{Array.isArray(previewData.parties) ? previewData.parties.length : 0}</span></div>
                         </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={applyDefaultClassification}
+                            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-300 transition hover:bg-emerald-500/15"
+                          >
+                            Ativo = Cliente
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearClassification}
+                            className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-300 transition hover:border-slate-700 hover:bg-slate-900"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                        {partyReview.principalParties.length > 0 ? (
+                          <ProcessImportPartyReview
+                            review={partyReview}
+                            classification={partyClassification}
+                            onClassificationChange={(reviewKey, value) =>
+                              setPartyClassification((current) => ({
+                                ...current,
+                                [reviewKey]: value,
+                              }))
+                            }
+                          />
+                        ) : (
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-500">
+                            Nenhuma parte principal foi identificada automaticamente na consulta.
+                          </div>
+                        )}
                         <button onClick={importPreview} disabled={previewLoading} className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-4 py-3 font-medium disabled:opacity-50">{previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}Cadastrar processo no sistema</button>
                       </>
                     ) : <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/50 p-6 text-center text-sm text-slate-400">Consulte um CNJ para ver o retorno antes de cadastrar.</div>}

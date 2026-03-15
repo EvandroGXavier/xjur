@@ -18,6 +18,7 @@ import {
   Zap,
   Tags,
   Database,
+  Wand2,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { HelpModal, useHelpModal } from "../components/HelpModal";
@@ -25,6 +26,7 @@ import { helpMicrosoft365 } from "../data/helpManuals";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { DrxClawTab } from "../components/settings/DrxClawTab";
 import { BackupTab } from "../components/settings/BackupTab";
+import { SkillsTab } from "../components/settings/SkillsTab";
 
 // --- COMPONENTS ---
 
@@ -910,6 +912,12 @@ export function Settings() {
           label="Minha Empresa"
         />
         <TabButton
+          active={activeTab === "skills"}
+          onClick={() => setActiveTab("skills")}
+          icon={Wand2}
+          label="Skills"
+        />
+        <TabButton
           active={activeTab === "drx-claw"}
           onClick={() => setActiveTab("drx-claw")}
           icon={Bot}
@@ -1265,6 +1273,8 @@ export function Settings() {
             )}
           </div>
         )}
+
+        {activeTab === "skills" && <SkillsTab />}
 
         {activeTab === "drx-claw" && <DrxClawTab />}
 

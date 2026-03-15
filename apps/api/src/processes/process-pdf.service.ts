@@ -7,6 +7,9 @@ type LegacyImportedParty = {
     email?: string;
     phone?: string;
     oab?: string;
+    representedNames?: string[];
+    isClient?: boolean;
+    isOpposing?: boolean;
 };
 
 export type ExtractedProcessData = {
@@ -165,7 +168,10 @@ export class ProcessPdfService {
         const metadata = this.buildMetadataSummary(normalizedText, parsed.pageCount, parsed.textLength, courtSystem, documents);
         const deadlineCandidates = this.extractDeadlineCandidates(normalizedText, documents);
         const proceduralActs = documents.filter((document) => this.isProceduralAct(document));
-        const parts = this.extractParties(normalizedText);
+        const parts = this.mergeImportedParties(
+            this.extractParties(normalizedText),
+            this.extractPjePartyLawyerBlock(normalizedText),
+        );
         const description = this.buildDescription(normalizedText, documents);
         const importSource = this.resolveImportSource(courtSystem);
         const timelineReferenceType = courtSystem === 'Eproc' ? 'EVENT' : 'DOCUMENT_ID';
@@ -426,18 +432,40 @@ export class ProcessPdfService {
         const lines = text.split(/\r?\n/);
         const parties = new Map<string, LegacyImportedParty>();
 
-        const pushParty = (name: string, type: string, document?: string) => {
+        const pushParty = (
+            name: string,
+            type: string,
+            document?: string,
+            options?: {
+                representedNames?: string[];
+                isClient?: boolean;
+                isOpposing?: boolean;
+            },
+        ) => {
             const cleanName = String(name || '').replace(/\s+/g, ' ').trim();
             if (!cleanName || cleanName.length < 3) return;
 
-            const key = `${this.normalizeLooseText(cleanName)}::${type}`;
-            if (!parties.has(key)) {
-                parties.set(key, {
-                    name: cleanName,
-                    type,
-                    document,
-                });
+            const normalizedDocument = String(document || '').replace(/\D/g, '');
+            const key = `${this.normalizeLooseText(cleanName)}::${type}::${normalizedDocument}`;
+            const existing = parties.get(key);
+            const representedNames = new Map<string, string>();
+
+            for (const candidate of [...(existing?.representedNames || []), ...(options?.representedNames || [])]) {
+                const normalizedCandidate = this.normalizeLooseText(candidate);
+                if (normalizedCandidate && !representedNames.has(normalizedCandidate)) {
+                    representedNames.set(normalizedCandidate, String(candidate).trim());
+                }
             }
+
+            parties.set(key, {
+                ...(existing || {}),
+                name: cleanName,
+                type,
+                document: existing?.document || document,
+                representedNames: Array.from(representedNames.values()),
+                isClient: options?.isClient ?? existing?.isClient,
+                isOpposing: options?.isOpposing ?? existing?.isOpposing,
+            });
         };
 
         for (const line of lines) {
@@ -508,6 +536,126 @@ export class ProcessPdfService {
             .slice(0, 30);
     }
 
+    private mergeImportedParties(...collections: LegacyImportedParty[][]) {
+        const merged = new Map<string, LegacyImportedParty>();
+
+        for (const collection of collections) {
+            for (const party of collection || []) {
+                const name = String(party?.name || '').replace(/\s+/g, ' ').trim();
+                if (!name) continue;
+
+                const normalizedDocument = String(party?.document || '').replace(/\D/g, '');
+                const normalizedType = this.normalizePartyType(String(party?.type || 'PARTE'));
+                const key = `${this.normalizeLooseText(name)}::${normalizedType}::${normalizedDocument}`;
+                const existing = merged.get(key);
+                const representedNames = new Map<string, string>();
+
+                for (const candidate of [...(existing?.representedNames || []), ...(party?.representedNames || [])]) {
+                    const normalizedCandidate = this.normalizeLooseText(candidate);
+                    if (normalizedCandidate && !representedNames.has(normalizedCandidate)) {
+                        representedNames.set(normalizedCandidate, String(candidate).trim());
+                    }
+                }
+
+                merged.set(key, {
+                    ...(existing || {}),
+                    ...party,
+                    name,
+                    type: normalizedType,
+                    document: existing?.document || party?.document,
+                    representedNames: Array.from(representedNames.values()),
+                    isClient: party?.isClient ?? existing?.isClient,
+                    isOpposing: party?.isOpposing ?? existing?.isOpposing,
+                });
+            }
+        }
+
+        return Array.from(merged.values());
+    }
+
+    private extractPjePartyLawyerBlock(text: string): LegacyImportedParty[] {
+        const lines = String(text || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        const headerIndex = lines.findIndex((line) => /Partes\s+Advogados/i.test(line));
+        if (headerIndex < 0) {
+            return [];
+        }
+
+        const sectionLines = lines.slice(headerIndex + 1, headerIndex + 80);
+        const parties = new Map<string, LegacyImportedParty>();
+        let pendingPrincipalNames: string[] = [];
+        let readingLawyerGroup = false;
+
+        const pushParty = (party: LegacyImportedParty) => {
+            const normalizedName = this.normalizeLooseText(party.name);
+            const normalizedDocument = String(party.document || '').replace(/\D/g, '');
+            const normalizedType = this.normalizePartyType(party.type);
+            const key = `${normalizedName}::${normalizedType}::${normalizedDocument}`;
+            const existing = parties.get(key);
+            const representedNames = new Map<string, string>();
+
+            for (const candidate of [...(existing?.representedNames || []), ...(party.representedNames || [])]) {
+                const normalizedCandidate = this.normalizeLooseText(candidate);
+                if (normalizedCandidate && !representedNames.has(normalizedCandidate)) {
+                    representedNames.set(normalizedCandidate, String(candidate).trim());
+                }
+            }
+
+            parties.set(key, {
+                ...(existing || {}),
+                ...party,
+                type: normalizedType,
+                representedNames: Array.from(representedNames.values()),
+            });
+        };
+
+        for (const line of sectionLines) {
+            if (/^(Documentos|Id\.\s*Data|Num\.)/i.test(line)) {
+                break;
+            }
+
+            const entryMatch = line.match(/^(.*?)\s+\(([^)]+)\)$/);
+            if (!entryMatch) {
+                continue;
+            }
+
+            const name = String(entryMatch[1] || '').replace(/\s+/g, ' ').trim();
+            const type = this.normalizePartyType(String(entryMatch[2] || '').trim());
+            if (!name || !type) {
+                continue;
+            }
+
+            if (this.isLawyerType(type)) {
+                pushParty({
+                    name,
+                    type,
+                    representedNames: pendingPrincipalNames,
+                });
+                readingLawyerGroup = true;
+                continue;
+            }
+
+            pushParty({ name, type });
+
+            if (readingLawyerGroup) {
+                pendingPrincipalNames = [name];
+                readingLawyerGroup = false;
+                continue;
+            }
+
+            pendingPrincipalNames = [...pendingPrincipalNames, name];
+        }
+
+        return Array.from(parties.values());
+    }
+
+    private isLawyerType(type: string) {
+        const normalized = this.normalizeLooseText(type);
+        return ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'].some((term) => normalized.includes(term));
+    }
+
     private normalizePartyType(type: string) {
         const normalized = this.normalizeLooseText(type);
         if (normalized.includes('AUTOR')) return 'AUTOR';
@@ -519,6 +667,9 @@ export class ProcessPdfService {
         if (normalized.includes('EXECUTADO')) return 'EXECUTADO';
         if (normalized.includes('APELANTE')) return 'APELANTE';
         if (normalized.includes('APELADO')) return 'APELADO';
+        if (['ADVOGADO', 'ADVOGADA', 'PROCURADOR', 'PROCURADORA', 'DEFENSOR'].some((term) => normalized.includes(term))) {
+            return normalized.includes('CONTRAR') ? 'ADVOGADO CONTRARIO' : 'ADVOGADO';
+        }
         return 'PARTE';
     }
 

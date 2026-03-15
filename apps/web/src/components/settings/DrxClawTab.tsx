@@ -26,6 +26,8 @@ type DrxSkill = {
   instructions: string;
   triggerKeywords: string[];
   enabled: boolean;
+  scope?: "SYSTEM" | "CUSTOM";
+  usageContexts?: string[];
 };
 
 type DrxClawConfig = {
@@ -599,6 +601,8 @@ export function DrxClawTab() {
             .map((keyword) => keyword.trim())
             .filter(Boolean),
           enabled: true,
+          scope: "CUSTOM",
+          usageContexts: [],
         },
       ],
     }));
@@ -621,7 +625,12 @@ export function DrxClawTab() {
       ...current,
       skills: [
         ...current.skills,
-        { ...skill, id: generateSkillId(skill.name) },
+        {
+          ...skill,
+          id: generateSkillId(skill.name),
+          scope: "CUSTOM",
+          usageContexts: skill.usageContexts || [],
+        },
       ],
     }));
   };

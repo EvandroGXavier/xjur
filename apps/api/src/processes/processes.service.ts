@@ -7,6 +7,7 @@ import { ProcessIntegrationsService } from './process-integrations.service';
 import { ProcessPdfService } from './process-pdf.service';
 import type { FullProcessPdfAnalysis, PdfProcessDocument } from './process-pdf.service';
 import { DrxClawService } from '../drx-claw/drx-claw.service';
+import { PROCESS_PDF_SKILL_ID } from '../drx-claw/drx-skill.constants';
 
 interface CreateProcessDto {
     tenantId?: string;
@@ -40,6 +41,8 @@ interface ImportedProcessPartyInput {
     email?: string | null;
     oab?: string | null;
     representedNames?: string[] | null;
+    isClient?: boolean;
+    isOpposing?: boolean;
 }
 
 interface ImportedPartySyncRef {
@@ -49,6 +52,9 @@ interface ImportedPartySyncRef {
     normalizedName: string;
     normalizedDocument?: string | null;
     representedNames: string[];
+    pole: 'ACTIVE' | 'PASSIVE' | null;
+    isClient: boolean;
+    isOpposing: boolean;
 }
 
 type TimelineImportReasonCode =
@@ -96,6 +102,10 @@ type PdfDossierImportResult = {
         model: string | null;
         answer: string | null;
         error: string | null;
+        matchedSkills: Array<{
+            id: string;
+            name: string;
+        }>;
     };
     analysis: {
         cnj: string | undefined;
@@ -264,6 +274,25 @@ export class ProcessesService {
             return 'ACTIVE';
         }
         return null;
+    }
+
+    private resolveImportedPartyFlags(roleName: string, party?: ImportedProcessPartyInput) {
+        const hasExplicitFlags = party?.isClient !== undefined || party?.isOpposing !== undefined;
+        const explicitClient = party?.isClient === true;
+        const explicitOpposing = party?.isOpposing === true && !explicitClient;
+
+        if (hasExplicitFlags) {
+            return {
+                isClient: explicitClient,
+                isOpposing: explicitOpposing,
+            };
+        }
+
+        const inferredPole = this.inferImportedPole(roleName);
+        return {
+            isClient: inferredPole === 'ACTIVE',
+            isOpposing: inferredPole === 'PASSIVE',
+        };
     }
 
     private buildProcessInclude() {
@@ -597,6 +626,7 @@ export class ProcessesService {
             const result = await this.drxClawService.runPlayground(tenantId, {
                 scenario: 'Integracao PDF completo do processo + DataJud',
                 prompt: promptLines.join('\n'),
+                forceSkillIds: [PROCESS_PDF_SKILL_ID],
             });
 
             return {
@@ -605,6 +635,14 @@ export class ProcessesService {
                 model: String(result?.model || '').trim() || null,
                 answer: String(result?.answer || '').trim() || null,
                 error: String(result?.error || '').trim() || null,
+                matchedSkills: Array.isArray(result?.matchedSkills)
+                    ? result.matchedSkills
+                          .map((skill: any) => ({
+                              id: String(skill?.id || '').trim(),
+                              name: String(skill?.name || '').trim(),
+                          }))
+                          .filter((skill: { id: string; name: string }) => skill.id && skill.name)
+                    : [],
             };
         } catch (error: any) {
             return {
@@ -613,6 +651,7 @@ export class ProcessesService {
                 model: null,
                 answer: null,
                 error: String(error?.message || 'Falha ao gerar parecer do DrX-Claw.'),
+                matchedSkills: [],
             };
         }
     }
@@ -1394,6 +1433,47 @@ export class ProcessesService {
         return null;
     }
 
+    private mergeImportedPartyInputs(parties: ImportedProcessPartyInput[]) {
+        const merged = new Map<string, ImportedProcessPartyInput>();
+
+        for (const party of parties) {
+            const normalizedName = this.normalizeText(party?.name);
+            const normalizedDocument = this.normalizeDocument(party?.document);
+            if (!normalizedName && !normalizedDocument) continue;
+
+            const roleName = this.normalizeImportedRole(party?.type);
+            const pole = this.inferImportedPole(roleName);
+            const key = pole && !this.isLawyerRole(roleName)
+                ? `${normalizedDocument || normalizedName}::${pole}`
+                : `${normalizedDocument || normalizedName}::${roleName}`;
+            const existing = merged.get(key);
+            const representedNames = new Map<string, string>();
+
+            for (const candidate of [...(existing?.representedNames || []), ...(party?.representedNames || [])]) {
+                const normalizedCandidate = this.normalizeText(candidate);
+                if (normalizedCandidate && !representedNames.has(normalizedCandidate)) {
+                    representedNames.set(normalizedCandidate, String(candidate).trim());
+                }
+            }
+
+            merged.set(key, {
+                ...(existing || {}),
+                ...party,
+                name: String(party?.name || existing?.name || '').trim(),
+                type: roleName,
+                document: existing?.document || party?.document || null,
+                email: existing?.email || party?.email || null,
+                phone: existing?.phone || party?.phone || null,
+                oab: existing?.oab || party?.oab || null,
+                representedNames: Array.from(representedNames.values()),
+                isClient: party?.isClient ?? existing?.isClient,
+                isOpposing: party?.isOpposing ?? existing?.isOpposing,
+            });
+        }
+
+        return Array.from(merged.values());
+    }
+
     private async ensureRole(tenantId: string, roleName: string) {
         const normalizedRoleName = this.normalizeImportedRole(roleName);
         const existing = await this.prisma.partyRole.findUnique({
@@ -1623,16 +1703,57 @@ export class ProcessesService {
         processId: string,
         contactId: string,
         roleName: string,
+        party?: ImportedProcessPartyInput,
         notes?: string,
     ) {
         console.log(`Upserting Imported Process Party: ContactId=${contactId}, Role=${roleName}`);
         const role = await this.ensureRole(tenantId, roleName);
-        const qualificationName = this.getQualificationNameForRole(role.name);
+        const flags = this.resolveImportedPartyFlags(role.name, party);
+        const qualificationName =
+            flags.isClient ? 'CLIENTE' : flags.isOpposing ? 'CONTRARIO' : this.getQualificationNameForRole(role.name);
         const qualification = qualificationName
             ? await this.ensureQualification(tenantId, qualificationName)
             : null;
+        const inferredPole = this.inferImportedPole(role.name);
 
-        const roleCategory = this.normalizeText(role.category);
+        const data = {
+            qualificationId: qualification?.id || null,
+            isClient: flags.isClient,
+            isOpposing: flags.isOpposing,
+            notes: notes || undefined,
+        };
+
+        const existingSamePole =
+            inferredPole && !this.isLawyerRole(role.name)
+                ? await this.prisma.processParty.findFirst({
+                      where: {
+                          processId,
+                          contactId,
+                          role: {
+                              category: inferredPole === 'ACTIVE' ? 'POLO_ATIVO' : 'POLO_PASSIVO',
+                          },
+                      },
+                      include: {
+                          role: {
+                              select: {
+                                  id: true,
+                                  name: true,
+                              },
+                          },
+                      },
+                      orderBy: { createdAt: 'asc' },
+                  })
+                : null;
+
+        if (existingSamePole) {
+            return this.prisma.processParty.update({
+                where: { id: existingSamePole.id },
+                data: {
+                    roleId: role.id,
+                    ...data,
+                },
+            });
+        }
 
         return this.prisma.processParty.upsert({
             where: {
@@ -1642,20 +1763,15 @@ export class ProcessesService {
                     roleId: role.id,
                 },
             },
-            update: {
-                qualificationId: qualification?.id || null,
-                isClient: roleCategory === 'POLO_ATIVO',
-                isOpposing: roleCategory === 'POLO_PASSIVO',
-                notes: notes || undefined,
-            },
+            update: data,
             create: {
                 tenantId,
                 processId,
                 contactId,
                 roleId: role.id,
                 qualificationId: qualification?.id || undefined,
-                isClient: roleCategory === 'POLO_ATIVO',
-                isOpposing: roleCategory === 'POLO_PASSIVO',
+                isClient: flags.isClient,
+                isOpposing: flags.isOpposing,
                 notes,
             },
         });
@@ -1682,7 +1798,7 @@ export class ProcessesService {
         processId: string,
         refs: ImportedPartySyncRef[],
     ) {
-        const principalRefs = refs.filter(ref => !this.isLawyerRole(ref.roleName) && this.inferImportedPole(ref.roleName));
+        const principalRefs = refs.filter(ref => !this.isLawyerRole(ref.roleName) && ref.pole);
         const lawyerRefs = refs.filter(ref => this.isLawyerRole(ref.roleName));
 
         for (const lawyer of lawyerRefs) {
@@ -1695,7 +1811,7 @@ export class ProcessesService {
             if (targets.length === 0) {
                 const inferredPole = this.inferImportedPole(lawyer.roleName);
                 if (inferredPole) {
-                    targets = principalRefs.filter(ref => this.inferImportedPole(ref.roleName) === inferredPole);
+                    targets = principalRefs.filter(ref => ref.pole === inferredPole);
                 }
             }
 
@@ -1726,6 +1842,73 @@ export class ProcessesService {
         }
     }
 
+    private async collapseImportedPrincipalDuplicates(processId: string) {
+        const processParties = await this.prisma.processParty.findMany({
+            where: { processId },
+            include: {
+                role: {
+                    select: {
+                        name: true,
+                        category: true,
+                    },
+                },
+                representativeLinks: {
+                    select: {
+                        representativePartyId: true,
+                    },
+                },
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        const grouped = new Map<string, typeof processParties>();
+        for (const party of processParties) {
+            if (this.isLawyerRole(party.role?.name)) continue;
+
+            const normalizedCategory = this.normalizeText(party.role?.category);
+            if (!['POLO_ATIVO', 'POLO_PASSIVO'].includes(normalizedCategory)) continue;
+
+            const key = `${party.contactId}::${normalizedCategory}`;
+            const current = grouped.get(key) || [];
+            current.push(party);
+            grouped.set(key, current);
+        }
+
+        for (const duplicates of grouped.values()) {
+            if (duplicates.length <= 1) continue;
+
+            const [primary, ...rest] = duplicates;
+
+            for (const duplicate of rest) {
+                for (const link of duplicate.representativeLinks) {
+                    await this.prisma.processPartyRepresentation.upsert({
+                        where: {
+                            partyId_representativePartyId: {
+                                partyId: primary.id,
+                                representativePartyId: link.representativePartyId,
+                            },
+                        },
+                        update: {},
+                        create: {
+                            tenantId: duplicate.tenantId,
+                            processId,
+                            partyId: primary.id,
+                            representativePartyId: link.representativePartyId,
+                        },
+                    });
+                }
+
+                await this.prisma.processPartyRepresentation.deleteMany({
+                    where: { partyId: duplicate.id },
+                });
+
+                await this.prisma.processParty.delete({
+                    where: { id: duplicate.id },
+                });
+            }
+        }
+    }
+
     private async assignPrimaryProcessContactIfMissing(
         processId: string,
         refs: ImportedPartySyncRef[],
@@ -1738,6 +1921,7 @@ export class ProcessesService {
         if (current?.contactId) return;
 
         const preferred =
+            refs.find(ref => ref.isClient && !this.isLawyerRole(ref.roleName)) ||
             refs.find(ref => this.inferImportedPole(ref.roleName) === 'ACTIVE' && !this.isLawyerRole(ref.roleName)) ||
             refs.find(ref => !this.isLawyerRole(ref.roleName));
 
@@ -1755,7 +1939,7 @@ export class ProcessesService {
         parties: any[] = [],
         judgeName?: string,
     ) {
-        const safeParties = (Array.isArray(parties) ? parties : []) as ImportedProcessPartyInput[];
+        const safeParties = this.mergeImportedPartyInputs((Array.isArray(parties) ? parties : []) as ImportedProcessPartyInput[]);
         console.log(`Syncing ${safeParties.length} imported parties for process ${processId}`);
         const syncedRefs: ImportedPartySyncRef[] = [];
 
@@ -1788,10 +1972,12 @@ export class ProcessesService {
                 processId,
                 contactId,
                 roleName,
+                party,
                 'Importado automaticamente via consulta/processo',
             );
 
             console.log(`Linked party ${name} (Contact: ${contactId}) to process as ${roleName}`);
+            const flags = this.resolveImportedPartyFlags(roleName, party);
 
             syncedRefs.push({
                 id: processParty.id,
@@ -1800,6 +1986,9 @@ export class ProcessesService {
                 normalizedName: this.normalizeText(name),
                 normalizedDocument: this.normalizeDocument(party?.document),
                 representedNames: Array.isArray(party?.representedNames) ? party.representedNames : [],
+                pole: this.inferImportedPole(roleName),
+                isClient: flags.isClient,
+                isOpposing: flags.isOpposing,
             });
         }
 
@@ -1816,6 +2005,7 @@ export class ProcessesService {
                     processId,
                     judgeContactId,
                     'MAGISTRADO',
+                    undefined,
                     'Magistrado importado automaticamente via consulta/processo',
                 );
 
@@ -1826,11 +2016,15 @@ export class ProcessesService {
                     normalizedName: this.normalizeText(String(judgeName).trim()),
                     normalizedDocument: null,
                     representedNames: [],
+                    pole: null,
+                    isClient: false,
+                    isOpposing: false,
                 });
             }
         }
 
         await this.linkImportedRepresentations(tenantId, processId, syncedRefs);
+        await this.collapseImportedPrincipalDuplicates(processId);
         await this.assignPrimaryProcessContactIfMissing(processId, syncedRefs);
     }
 
