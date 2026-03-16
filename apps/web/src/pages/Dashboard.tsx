@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { DashboardGrid } from '../components/dashboard/DashboardGrid';
 import { StatsWidget, StatusChartWidget, FinancialSummaryWidget } from '../components/dashboard/Widgets';
-import { Bell, Plus, Settings2, RefreshCw } from 'lucide-react';
+import { 
+  Bell, 
+  Plus, 
+  Settings2, 
+  RefreshCw, 
+  MessageSquare, 
+  Briefcase, 
+  UserPlus, 
+  LayoutGrid
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 export function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
   const loadData = async () => {
     setIsLoading(true);
@@ -22,6 +33,14 @@ export function Dashboard() {
     }
   };
 
+  const handleResetLayout = () => {
+    localStorage.removeItem('drx_dashboard_layouts_v3');
+    window.location.reload();
+  };
+
+
+
+
   useEffect(() => {
     loadData();
   }, []);
@@ -29,7 +48,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-2">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-2">
             Dashboard
@@ -37,22 +56,69 @@ export function Dashboard() {
           </h1>
           <p className="text-slate-400 mt-1 text-sm sm:text-base">Painel dinâmico e configurável da sua operação.</p>
         </div>
-        <div className="flex gap-3 w-full sm:w-auto">
-          <button 
-            onClick={loadData}
-            className="p-2 flex-shrink-0 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition"
-            title="Atualizar"
-          >
-            <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-          <button className="p-2 flex-shrink-0 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition">
-            <Settings2 size={20} />
-          </button>
-          <button className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 text-center flex items-center justify-center gap-2">
-            <Plus size={20} /> Novo Caso
-          </button>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Ações Rápidas */}
+          <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 mr-2">
+            <button 
+              onClick={() => navigate('/chat')}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-teal-400 hover:bg-slate-700 hover:text-teal-300 rounded-lg transition-all"
+              title="Novo Atendimento"
+            >
+              <MessageSquare size={18} />
+              <span className="hidden xl:inline">Novo Atendimento</span>
+            </button>
+            <div className="w-px h-6 bg-slate-700 mx-1 self-center"></div>
+            <button 
+              onClick={() => navigate('/processes/new')}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-emerald-400 hover:bg-slate-700 hover:text-emerald-300 rounded-lg transition-all"
+              title="Novo Processo"
+            >
+              <Briefcase size={18} />
+              <span className="hidden xl:inline">Novo Processo</span>
+            </button>
+            <div className="w-px h-6 bg-slate-700 mx-1 self-center"></div>
+            <button 
+              onClick={() => navigate('/contacts/new')}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-sky-400 hover:bg-slate-700 hover:text-sky-300 rounded-lg transition-all"
+              title="Novo Contato"
+            >
+              <UserPlus size={18} />
+              <span className="hidden xl:inline">Novo Contato</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 h-full">
+            <button 
+              onClick={loadData}
+              className="p-2.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition border border-slate-700"
+              title="Sincronizar Dados"
+            >
+              <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
+            </button>
+            
+            <button 
+              onClick={handleResetLayout}
+              className="p-2.5 rounded-lg bg-slate-800 text-slate-400 hover:text-amber-400 hover:bg-slate-700 transition border border-slate-700"
+              title="Resetar Layout"
+            >
+              <LayoutGrid size={20} />
+            </button>
+
+            <button className="p-2.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition border border-slate-700">
+              <Settings2 size={20} />
+            </button>
+            
+            <button 
+              onClick={() => navigate('/processes/new')}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20 active:scale-95 flex items-center gap-2 ring-1 ring-indigo-500/50"
+            >
+              <Plus size={20} strokeWidth={3} /> <span className="text-sm">NOVO CASO</span>
+            </button>
+          </div>
         </div>
       </div>
+
 
       {isLoading && !data ? (
         <div className="flex items-center justify-center h-[60vh]">

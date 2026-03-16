@@ -82,6 +82,30 @@ export const unmask = (value: string) => {
     return value.replace(/\D/g, '');
 };
 
+export const isValidCpf = (value: string) => {
+    const digits = unmask(value || '');
+
+    if (digits.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(digits)) return false;
+
+    const calculateDigit = (base: string) => {
+        let total = 0;
+        let multiplier = base.length + 1;
+
+        for (const digit of base) {
+            total += Number(digit) * multiplier--;
+        }
+
+        const remainder = total % 11;
+        return remainder < 2 ? 0 : 11 - remainder;
+    };
+
+    const firstDigit = calculateDigit(digits.slice(0, 9));
+    const secondDigit = calculateDigit(digits.slice(0, 10));
+
+    return digits.endsWith(`${firstDigit}${secondDigit}`);
+};
+
 export const isValidCnpj = (value: string) => {
     const digits = unmask(value || '');
 

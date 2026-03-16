@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api, getApiUrl } from '../../services/api';
-import { isValidCnpj, masks } from '../../utils/masks';
+import { isValidCnpj, isValidCpf, masks } from '../../utils/masks';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpContacts } from '../../data/helpManuals';
 import { useHotkeys } from '../../hooks/useHotkeys';
@@ -1134,6 +1134,32 @@ export function ContactForm() {
       }
     }
 
+    // CPF/CNPJ Validation (Allow blank, but if filled must be valid)
+    if (formData.cpf && formData.cpf.trim() !== '' && !isValidCpf(formData.cpf)) {
+        toast.error('O CPF informado é inválido.');
+        return;
+    }
+
+    if (formData.cnpj && formData.cnpj.trim() !== '' && !isValidCnpj(formData.cnpj)) {
+        toast.error('O CNPJ informado é inválido.');
+        return;
+    }
+
+    // If document is generic field, we could also validate it based on length
+    if (formData.document && formData.document.trim() !== '') {
+        const cleanDoc = formData.document.replace(/\D/g, '');
+        if (cleanDoc.length === 11 && !isValidCpf(cleanDoc)) {
+            toast.error('O CPF informado no campo documento é inválido.');
+            return;
+        } else if (cleanDoc.length === 14 && !isValidCnpj(cleanDoc)) {
+            toast.error('O CNPJ informado no campo documento é inválido.');
+            return;
+        } else if (cleanDoc.length !== 11 && cleanDoc.length !== 14) {
+             toast.error('O documento informado deve ser um CPF (11 dígitos) ou CNPJ (14 dígitos).');
+             return;
+        }
+    }
+
     setLoading(true);
     try {
         const toISO = (dateStr: any) => {
@@ -1355,7 +1381,10 @@ export function ContactForm() {
       if (!value || !value.trim()) return;
 
       // Ignorar placeholders
-      const isPlaceholderPhone = (val: string) => val.replace(/\D/g, '') === '9999999999';
+      const isPlaceholderPhone = (val: string) => {
+          const d = val.replace(/\D/g, '');
+          return d === '9999999999' || d === '99999999999';
+      };
       const isPlaceholderEmail = (val: string) => val.toLowerCase().trim() === 'nt@nt.com.br';
       
       if ((field === 'whatsapp' || field === 'phone') && isPlaceholderPhone(value)) return;

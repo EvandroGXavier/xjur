@@ -30,6 +30,7 @@ import { DrxClawModule } from "./drx-claw/drx-claw.module";
 import { BackupModule } from "./backup/backup.module";
 import { TelegramModule } from "./telegram/telegram.module";
 import { InboxModule } from "./inbox/inbox.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { InboxModule } from "./inbox/inbox.module";
     BackupModule,
     TelegramModule,
     InboxModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

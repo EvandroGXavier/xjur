@@ -50,6 +50,29 @@ export class ContactsService {
     data: Record<string, any>,
     existingContact?: Record<string, any> | null,
   ) {
+    // 1. Validar CPF se informado
+    const cpf = data.cpf ?? (existingContact as any)?.pfDetails?.cpf;
+    if (cpf && cpf.trim() !== '' && !this.isValidCpf(cpf)) {
+      throw new BadRequestException('O CPF informado e invalido.');
+    }
+
+    // 2. Validar CNPJ se informado
+    const cnpj = data.cnpj ?? (existingContact as any)?.pjDetails?.cnpj;
+    if (cnpj && cnpj.trim() !== '' && !this.isValidCnpj(cnpj)) {
+      throw new BadRequestException('O CNPJ informado e invalido.');
+    }
+
+    // 3. Validar DOCUMENTO (Genérico) se informado
+    const doc = data.document ?? existingContact?.document;
+    if (doc && doc.trim() !== '') {
+      const cleanDoc = this.normalizeDigits(doc);
+      if (cleanDoc.length === 11 && !this.isValidCpf(cleanDoc)) {
+        throw new BadRequestException('O CPF informado no campo documento e invalido.');
+      } else if (cleanDoc.length === 14 && !this.isValidCnpj(cleanDoc)) {
+        throw new BadRequestException('O CNPJ informado no campo documento e invalido.');
+      }
+    }
+
     const shouldRequire = await this.isRequireOneInfoEnabled(tenantId);
     if (!shouldRequire) return;
 
@@ -57,9 +80,9 @@ export class ContactsService {
       whatsapp: data.whatsapp ?? existingContact?.whatsapp ?? '',
       phone: data.phone ?? existingContact?.phone ?? '',
       email: data.email ?? existingContact?.email ?? '',
-      document: data.document ?? existingContact?.document ?? '',
-      cpf: data.cpf ?? existingContact?.pfDetails?.cpf ?? '',
-      cnpj: data.cnpj ?? existingContact?.pjDetails?.cnpj ?? '',
+      document: doc ?? '',
+      cpf: cpf ?? '',
+      cnpj: cnpj ?? '',
     };
 
     if (!this.hasCoreContactInfo(merged)) {
@@ -105,6 +128,44 @@ export class ContactsService {
 
   private normalizeDigits(value?: string | null) {
     return (value || '').replace(/\D/g, '');
+  }
+
+  private isValidCpf(value?: string | null) {
+    const digits = this.normalizeDigits(value);
+    if (!digits || digits.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(digits)) return false;
+
+    const calc = (base: string) => {
+      let sum = 0;
+      let mult = base.length + 1;
+      for (const d of base) sum += Number(d) * mult--;
+      const rem = sum % 11;
+      return rem < 2 ? 0 : 11 - rem;
+    };
+
+    const d1 = calc(digits.slice(0, 9));
+    const d2 = calc(digits.slice(0, 10));
+    return digits.endsWith(`${d1}${d2}`);
+  }
+
+  private isValidCnpj(value?: string | null) {
+    const digits = this.normalizeDigits(value);
+    if (!digits || digits.length !== 14) return false;
+    if (/^(\d)\1{13}$/.test(digits)) return false;
+
+    const calc = (base: string, factors: number[]) => {
+      let sum = 0;
+      for (let i = 0; i < base.length; i++) sum += Number(base[i]) * factors[i];
+      const rem = sum % 11;
+      return rem < 2 ? 0 : 11 - rem;
+    };
+
+    const f1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const f2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+    const d1 = calc(digits.slice(0, 12), f1);
+    const d2 = calc(digits.slice(0, 13), f2);
+    return digits.endsWith(`${d1}${d2}`);
   }
 
   private normalizeText(value?: string | null) {
@@ -689,7 +750,10 @@ export class ContactsService {
     const phone = this.normalizeDigits(data.phone);
     const email = clean(data.email).toLowerCase();
 
-    const isPlaceholderPhone = (val: string) => this.normalizeDigits(val) === '9999999999';
+    const isPlaceholderPhone = (val: string) => {
+      const d = this.normalizeDigits(val);
+      return d === '9999999999' || d === '99999999999';
+    };
     const isPlaceholderEmail = (val: string) => val.toLowerCase().trim() === 'nt@nt.com.br';
 
     const conditions: any[] = [];
