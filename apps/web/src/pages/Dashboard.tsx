@@ -1,83 +1,84 @@
-import { ArrowRight, Bell, Calendar, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api } from '../services/api';
+import { DashboardGrid } from '../components/dashboard/DashboardGrid';
+import { StatsWidget, StatusChartWidget, FinancialSummaryWidget } from '../components/dashboard/Widgets';
+import { Bell, Plus, Settings2, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function Dashboard() {
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await api.get('/dashboard/stats');
+      setData(res.data);
+    } catch (error) {
+      console.error('Erro ao carregar dashboard', error);
+      toast.error('Não foi possível carregar os dados do painel.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Dashboard</h1>
-          <p className="text-slate-400 mt-1 text-sm sm:text-base">Visão geral da sua operação jurídica.</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-2">
+            Dashboard
+            <span className="text-xs font-mono bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/30">V2</span>
+          </h1>
+          <p className="text-slate-400 mt-1 text-sm sm:text-base">Painel dinâmico e configurável da sua operação.</p>
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
-          <button className="p-2 flex-shrink-0 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition flex items-center justify-center">
-            <Bell size={20} />
+          <button 
+            onClick={loadData}
+            className="p-2 flex-shrink-0 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition"
+            title="Atualizar"
+          >
+            <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
           </button>
-          <button className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 text-center">
-            Novo Caso
+          <button className="p-2 flex-shrink-0 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition">
+            <Settings2 size={20} />
+          </button>
+          <button className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 text-center flex items-center justify-center gap-2">
+            <Plus size={20} /> Novo Caso
           </button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800 hover:border-indigo-500/50 transition-colors group">
-          <div className="flex items-start justify-between mb-4">
-            <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg group-hover:bg-indigo-500/20 transition">
-              <Bell size={24} />
+      {isLoading && !data ? (
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-slate-400 animate-pulse">Sincronizando dados reais...</p>
+          </div>
+        </div>
+      ) : (
+        <DashboardGrid>
+          <StatsWidget id="stats" data={data} />
+          <StatusChartWidget id="process_funnel" data={data} />
+          <FinancialSummaryWidget id="finance_chart" data={data} />
+          
+          {/* Placeholder para compromissos ou outras listas se necessário */}
+          <div id="appointments" className="p-4 h-full flex flex-col">
+            <h3 className="text-slate-200 text-sm font-semibold mb-4 flex items-center gap-2">
+              <Bell size={16} className="text-amber-400" />
+              Eventos Recentes
+            </h3>
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-slate-700 rounded-lg">
+              Nenhuma atividade importante agora.
             </div>
-            <span className="text-xs font-medium px-2 py-1 rounded-full bg-slate-800 text-slate-300">Hoje</span>
           </div>
-          <h3 className="text-slate-400 text-sm font-medium">Atendimentos Pendentes</h3>
-          <p className="text-3xl font-bold text-white mt-1">0</p>
-        </div>
-
-        <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800 hover:border-emerald-500/50 transition-colors group">
-           <div className="flex items-start justify-between mb-4">
-            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg group-hover:bg-emerald-500/20 transition">
-              <TrendingUp size={24} />
-            </div>
-            <span className="text-xs font-medium px-2 py-1 rounded-full bg-slate-800 text-slate-300">Ativos</span>
-          </div>
-          <h3 className="text-slate-400 text-sm font-medium">Processos em Andamento</h3>
-          <p className="text-3xl font-bold text-white mt-1">3</p>
-        </div>
-
-        <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800 hover:border-amber-500/50 transition-colors group">
-            <div className="flex items-start justify-between mb-4">
-            <div className="p-2 bg-amber-500/10 text-amber-400 rounded-lg group-hover:bg-amber-500/20 transition">
-              <Calendar size={24} />
-            </div>
-             <span className="text-xs font-medium px-2 py-1 rounded-full bg-slate-800 text-slate-300">Mês</span>
-          </div>
-          <h3 className="text-slate-400 text-sm font-medium">Faturamento Estimado</h3>
-          <p className="text-3xl font-bold text-white mt-1">R$ 0,00</p>
-        </div>
-      </div>
-
-      {/* Recent Activity Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Atividade Recente</h3>
-          <div className="flex flex-col items-center justify-center h-48 text-slate-500 text-sm border-2 border-dashed border-slate-800 rounded-lg">
-            Nenhuma atividade recente encontrada.
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/20 rounded-xl p-6 relative overflow-hidden">
-             <div className="relative z-10">
-                <h3 className="text-lg font-semibold text-white mb-2">Assistente IA</h3>
-                <p className="text-slate-400 text-sm mb-6 max-w-sm">
-                    Sua assistente jurídica está pronta para ajudar na análise de contratos e triagem de clientes.
-                </p>
-                <button className="flex items-center gap-2 text-indigo-400 hover:text-indigo-300 font-medium text-sm transition group">
-                    Iniciar Conversa <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                </button>
-             </div>
-             {/* Decorative blob */}
-             <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-indigo-600/20 rounded-full blur-3xl"></div>
-        </div>
-      </div>
+        </DashboardGrid>
+      )}
     </div>
   );
 }
