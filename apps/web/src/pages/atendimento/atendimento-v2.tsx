@@ -378,7 +378,7 @@ export function AtendimentoPage() {
     }
     if (connectionsResponse.status === 'fulfilled') {
       const all = Array.isArray(connectionsResponse.value.data) ? connectionsResponse.value.data : [];
-      setConnections(all.filter((connection: ConnectionSummary) => connection.type === 'WHATSAPP'));
+      setConnections(all.filter((connection: ConnectionSummary) => connection.type === 'WHATSAPP' || connection.type === 'TELEGRAM'));
     }
   };
 
@@ -387,8 +387,8 @@ export function AtendimentoPage() {
   };
 
   const sendConversationMessage = async (conversationId: string, content: string, file: File | null) => {
-    const endpoint = `${getApiUrl()}/inbox/conversations/${conversationId}/messages`;
-    const textEndpoint = `${getApiUrl()}/inbox/conversations/${conversationId}/messages/text`;
+    const endpoint = `/inbox/conversations/${conversationId}/messages`;
+    const textEndpoint = `/inbox/conversations/${conversationId}/messages/text`;
     const baseDiagnostics = {
       contentLength: content.length,
       hasFile: Boolean(file),
