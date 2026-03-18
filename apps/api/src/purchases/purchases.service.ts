@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import { XMLParser } from "fast-xml-parser";
 import { StockService } from "../stock/stock.service";
+import { isValidCnpj, isValidCpf, normalizeDigits } from "../common/validation-utils";
 
 @Injectable()
 export class PurchasesService {
@@ -14,11 +15,12 @@ export class PurchasesService {
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
+      parseTagValue: false, // Mantem CNPJ/IE e outros como string para nao perder zeros a esquerda
     });
     const parsed = parser.parse(xmlContent);
 
     const nfeProc = parsed.nfeProc || parsed.NFeProc;
-    const nfe = nfeProc?.NFe?.infNFe;
+    const nfe = nfeProc?.NFe?.infNFe || nfeProc?.infNFe || parsed.NFe?.infNFe;
 
     if (!nfe) {
       throw new BadRequestException(
@@ -34,10 +36,28 @@ export class PurchasesService {
         : [cobr.dup]
       : [];
 
-    const supplierDocument = String(emit.CNPJ || emit.CPF || "").replace(
-      /\D/g,
-      "",
-    );
+    let supplierDocument = normalizeDigits(emit.CNPJ || emit.CPF || "");
+    
+    // Pad leading zeros and validate
+    if (emit.CNPJ) {
+      supplierDocument = supplierDocument.padStart(14, '0');
+      if (!isValidCnpj(supplierDocument)) {
+        throw new BadRequestException(`O CNPJ do fornecedor no XML e invalido (${supplierDocument}).`);
+      }
+    } else if (emit.CPF) {
+      supplierDocument = supplierDocument.padStart(11, '0');
+      if (!isValidCpf(supplierDocument)) {
+        throw new BadRequestException(`O CPF do fornecedor no XML e invalido (${supplierDocument}).`);
+      }
+    }
+
+    if (!supplierDocument) {
+      throw new BadRequestException("CNPJ/CPF do fornecedor nao encontrado no XML.");
+    }
+
+    const email = emit.email || "";
+    const phone = emit.enderEmit?.fone || "";
+
     let contact = await this.prisma.contact.findFirst({
       where: { tenantId, document: supplierDocument },
     });
@@ -48,6 +68,8 @@ export class PurchasesService {
           tenantId,
           name: emit.xNome,
           document: supplierDocument,
+          email,
+          phone,
           personType: emit.CNPJ ? "PJ" : "PF",
           category: "Fornecedor",
         },
@@ -59,10 +81,24 @@ export class PurchasesService {
             contactId: contact.id,
             cnpj: supplierDocument,
             companyName: emit.xNome,
+            stateRegistration: emit.IE ? String(emit.IE) : null,
           },
         });
       }
+    } else {
+       // Se o contato ja existe, mas o e-mail ou telefone estao vazios, atualiza com os dados do XML
+       const updates: any = {};
+       if (!contact.email && email) updates.email = email;
+       if (!contact.phone && phone) updates.phone = phone;
+       
+       if (Object.keys(updates).length > 0) {
+          await this.prisma.contact.update({
+             where: { id: contact.id },
+             data: updates,
+          });
+       }
     }
+
 
     const invoiceKey = nfe["@_Id"]?.replace("NFe", "");
     if (invoiceKey) {

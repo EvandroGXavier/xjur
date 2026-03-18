@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { XMLParser } from 'fast-xml-parser';
 import { StockService } from '../stock/stock.service';
+import { isValidCnpj, normalizeDigits } from '../common/validation-utils';
 
 @Injectable()
 export class FiscalService {
@@ -15,11 +16,12 @@ export class FiscalService {
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: '@_',
+        parseTagValue: false, // Mantem CNPJ/IE e outros como string para nao perder zeros a esquerda
       });
       const jsonObj = parser.parse(xmlContent);
 
-      const nfeProc = jsonObj.nfeProc || jsonObj;
-      const nfe = nfeProc.NFe;
+      const nfeProc = jsonObj.nfeProc || jsonObj.NFeProc;
+      const nfe = nfeProc?.NFe || jsonObj.NFe;
 
       if (!nfe?.infNFe) {
         throw new Error(
@@ -52,8 +54,17 @@ export class FiscalService {
         const profitMargin = invConfig ? Number(invConfig.profitMargin) : 30;
 
         const emit = infNFe.emit;
-        const cnpj = String(emit.CNPJ || '').replace(/\D/g, '');
+        let cnpj = normalizeDigits(emit.CNPJ || '');
+        if (emit.CNPJ) {
+           cnpj = cnpj.padStart(14, '0');
+           if (!isValidCnpj(cnpj)) {
+              throw new BadRequestException(`O CNPJ do fornecedor no XML e invalido (${cnpj}).`);
+           }
+        }
+        
         const razaoSocial = emit.xNome;
+        const email = emit.email || "";
+        const phone = emit.enderEmit?.fone || "";
 
         let supplier = await tx.supplier.findFirst({
           where: { document: cnpj, tenantId },
@@ -79,16 +90,31 @@ export class FiscalService {
               tenantId,
               name: razaoSocial,
               document: cnpj,
+              email,
+              phone,
               category: 'Fornecedor',
               personType: 'PJ',
               pjDetails: {
                 create: {
                   cnpj,
                   companyName: razaoSocial,
+                  stateRegistration: emit.IE ? String(emit.IE) : null,
                 },
               },
             },
           });
+        } else {
+           // Atualiza dados se estiverem ausentes
+           const updates: any = {};
+           if (!contact.email && email) updates.email = email;
+           if (!contact.phone && phone) updates.phone = phone;
+           
+           if (Object.keys(updates).length > 0) {
+              await tx.contact.update({
+                 where: { id: contact.id },
+                 data: updates,
+              });
+           }
         }
 
         let items = infNFe.det;
