@@ -329,16 +329,22 @@ export function PurchasesPage() {
         setFormData({
           ...formData,
           contactId: data.contactId,
+          buyerId: data.buyerId,
+          paymentConditionId: data.paymentConditionId || "",
           expectedDate: data.expectedDate
             ? data.expectedDate.split("T")[0]
+            : "",
+          deliveryDate: data.deliveryDate
+            ? data.deliveryDate.split("T")[0]
             : "",
           notes: data.notes,
           items: data.items,
           xmlData: data.xmlData,
           supplierName: data.xmlData.supplierName,
+          buyerName: data.xmlData.buyerName, // We can use this to show in picker
           financialInstallments:
             data.xmlData.dups?.map((dup: any) => ({
-              dueDate: new Date(dup.dVenc).toISOString().split("T")[0],
+              dueDate: new Date(String(dup.dVenc) + "T12:00:00").toISOString().split("T")[0],
               amount: Number(dup.vDup).toFixed(2),
               installment: Number(dup.nDup),
             })) || [],
@@ -528,7 +534,9 @@ export function PurchasesPage() {
                             name: formData.supplierName,
                             document: "",
                           }
-                        : null
+                        : formData.contactId 
+                          ? { id: formData.contactId, name: "Carregando...", document: "" }
+                          : null
                   }
                   className="!p-0 !bg-transparent !border-none !shadow-none"
                 />
@@ -556,7 +564,15 @@ export function PurchasesPage() {
                           name: selectedPurchase.buyer.name,
                           document: selectedPurchase.buyer.document,
                         }
-                      : null
+                      : formData.buyerName
+                        ? {
+                            id: formData.buyerId,
+                            name: formData.buyerName,
+                            document: "",
+                          }
+                        : formData.buyerId
+                          ? { id: formData.buyerId, name: "Carregando...", document: "" }
+                          : null
                   }
                   className="!p-0 !bg-transparent !border-none !shadow-none"
                 />

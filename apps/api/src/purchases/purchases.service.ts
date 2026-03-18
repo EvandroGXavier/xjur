@@ -28,7 +28,7 @@ export class PurchasesService {
       );
     }
 
-    const { emit, det, cobr, ide, total } = nfe;
+    const { emit, dest, det, cobr, ide, total } = nfe;
     const itemsXml = Array.isArray(det) ? det : [det];
     const dups = cobr?.dup
       ? Array.isArray(cobr.dup)
@@ -106,10 +106,60 @@ export class PurchasesService {
         where: { tenantId, accessKey: invoiceKey },
       });
 
-      if (existingInvoice) {
+      if (existingInvoice)
         throw new BadRequestException(
-          `A NF-e ${ide.nNF} ja foi importada anteriormente.`,
+          `A NF-e ${ide.nNF} já foi importada anteriormente.`,
         );
+    }
+
+    // 2. Process Supplier Address
+    const enderEmit = emit.enderEmit;
+    if (enderEmit) {
+      const existingAddress = await this.prisma.address.findFirst({
+        where: {
+          contactId: contact.id,
+          zipCode: String(enderEmit.CEP || "").replace(/\D/g, ""),
+          number: String(enderEmit.nro || ""),
+        },
+      });
+
+      if (!existingAddress) {
+        await this.prisma.address.create({
+          data: {
+            contactId: contact.id,
+            type: "Principal",
+            zipCode: String(enderEmit.CEP || "").replace(/\D/g, ""),
+            street: enderEmit.xLgr,
+            number: String(enderEmit.nro || ""),
+            complement: enderEmit.xCpl ? String(enderEmit.xCpl) : null,
+            district: enderEmit.xBairro,
+            city: enderEmit.xMun,
+            state: enderEmit.UF,
+          },
+        });
+      }
+    }
+
+    // 3. Ensure PJ Details are complete
+    if (contact.personType === "PJ") {
+      const existingPJ = await this.prisma.personDetailPJ.findUnique({
+        where: { contactId: contact.id },
+      });
+
+      if (!existingPJ) {
+        await this.prisma.personDetailPJ.create({
+          data: {
+            contactId: contact.id,
+            cnpj: supplierDocument,
+            companyName: emit.xNome,
+            stateRegistration: emit.IE ? String(emit.IE) : null,
+          },
+        });
+      } else if (!existingPJ.stateRegistration && emit.IE) {
+        await this.prisma.personDetailPJ.update({
+          where: { contactId: contact.id },
+          data: { stateRegistration: String(emit.IE) },
+        });
       }
     }
 
@@ -155,18 +205,77 @@ export class PurchasesService {
       });
     }
 
+    // 4. Handle default cash payment if no installments are present
+    const invoiceTotalValue = parseFloat(total?.ICMSTot?.vNF || "0");
+    let finalDups = dups;
+    let autoPaymentConditionId = null;
+
+    if (dups.length === 0) {
+      finalDups = [{
+        nDup: "1",
+        dVenc: ide.dhEmi ? ide.dhEmi.split("T")[0] : new Date().toISOString().split("T")[0],
+        vDup: invoiceTotalValue.toFixed(2)
+      }];
+      
+      // Try to find an "À Vista" payment condition
+      const avista = await this.prisma.paymentCondition.findFirst({
+        where: { tenantId, name: { contains: "Vista", mode: 'insensitive' } }
+      });
+      if (avista) {
+        autoPaymentConditionId = avista.id;
+      }
+    }
+
+    // 5. Identify and ensure Buyer (Destinatário) exists
+    let buyerContactId = null;
+    if (dest) {
+      const buyerDoc = normalizeDigits(dest.CNPJ || dest.CPF || "");
+      if (buyerDoc) {
+        let buyerContact = await this.prisma.contact.findFirst({
+          where: { tenantId, document: buyerDoc },
+        });
+
+        if (!buyerContact) {
+          buyerContact = await this.prisma.contact.create({
+            data: {
+              tenantId,
+              name: dest.xNome,
+              document: buyerDoc,
+              personType: dest.CNPJ ? "PJ" : "PF",
+              category: "Cliente/Comprador",
+            },
+          });
+          
+          if (dest.CNPJ) {
+            await this.prisma.personDetailPJ.create({
+              data: {
+                contactId: buyerContact.id,
+                cnpj: buyerDoc,
+                companyName: dest.xNome,
+              },
+            });
+          }
+        }
+        buyerContactId = buyerContact.id;
+      }
+    }
+
     return {
       contactId: contact.id,
+      buyerId: buyerContactId,
+      paymentConditionId: autoPaymentConditionId,
       expectedDate: ide.dhEmi ? new Date(ide.dhEmi).toISOString() : null,
+      deliveryDate: ide.dhEmi ? new Date(ide.dhEmi).toISOString() : null,
       notes: `Ref. NFe: ${ide.nNF}`,
       items,
       xmlData: {
         xmlContent,
         accessKey: invoiceKey,
         number: ide.nNF,
-        dups,
+        dups: finalDups,
         supplierName: emit.xNome,
-        invoiceTotal: parseFloat(total?.ICMSTot?.vNF || "0"),
+        buyerName: dest ? dest.xNome : null,
+        invoiceTotal: invoiceTotalValue,
       },
     };
   }
