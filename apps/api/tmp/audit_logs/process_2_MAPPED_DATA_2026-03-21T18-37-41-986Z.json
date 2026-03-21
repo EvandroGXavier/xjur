@@ -1,0 +1,32 @@
+{
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "workflowId": "137551fe-a20f-471f-8206-395d35ed9186",
+  "cnj": null,
+  "category": "EXTRAJUDICIAL",
+  "title": "COMERCIAL HELIOMAR X EDER",
+  "code": "CASO-2026-0006",
+  "description": "analise Processo",
+  "folder": "",
+  "localFolder": "Z:\\MARCOS ROGERIO RODRIGUES DIAS\\Tributario\\CASO_NOVO",
+  "court": "",
+  "courtSystem": "",
+  "npu": null,
+  "vars": "",
+  "district": "",
+  "status": "ATIVO",
+  "area": "Tributario",
+  "subject": "Balanço Contabil",
+  "class": "",
+  "judge": "",
+  "value": 0,
+  "parties": [
+    {
+      "name": "MARCOS ROGERIO RODRIGUES DIAS",
+      "type": "CLIENTE",
+      "isClient": true
+    }
+  ],
+  "metadata": {
+    "proceduralStatus": "Consulta"
+  }
+}
