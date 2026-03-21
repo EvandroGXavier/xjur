@@ -79,6 +79,7 @@ const EMPTY_FORM = {
     description: '',
     folder: '',
     localFolder: '',
+    code: '',
     metadata: null as any,
     workflowId: '',
 };
@@ -319,6 +320,7 @@ export function ProcessForm() {
                 description: data.description || '',
                 folder: data.folder || data.msFolderUrl || '',
                 localFolder: data.localFolder || '',
+                code: data.code || '',
                 metadata: data.metadata || null,
                 workflowId: data.workflowId || '',
             });
@@ -627,12 +629,18 @@ export function ProcessForm() {
     };
 
     const handleSuggestLocalFolder = () => {
-        const baseDir = 'C:\\DrX_Processos';
-        const rawCnj = form.cnj ? masks.cnj(form.cnj) : '';
-        const titlePart = form.title ? form.title.replace(/[<>:"\/\\|?*]/g, '').trim() : '';
-        let folderName = `${rawCnj} - ${titlePart}`.replace(/^ - | - $/g, '').trim();
-        if (!folderName) folderName = `Processo_Novo_${Date.now()}`;
-        const fullPath = `${baseDir}\\${folderName}`;
+        const baseDir = 'Z:';
+        
+        // Extrair nome do cliente das partes importadas
+        const clientParty = importedParties.find(p => p.type === 'CLIENTE' || p.isClient);
+        const clientName = clientParty ? clientParty.name.replace(/[<>:"\/\\|?*]/g, '').trim() : 'CLIENTE_NAO_IDENTIFICADO';
+        
+        const areaName = form.area ? form.area.replace(/[<>:"\/\\|?*]/g, '').trim() : 'GERAL';
+        const internalId = form.code || (isEditing ? `CASO_PENDENTE_${id?.substring(0,4)}` : 'CASO_NOVO');
+        
+        // Padrão: Z:\NOME_CLIENTE\Area\REGISTRO_INTERNO
+        const fullPath = `${baseDir}\\${clientName}\\${areaName}\\${internalId}`;
+        
         setForm(current => ({ ...current, localFolder: fullPath }));
         return fullPath;
     };
@@ -864,14 +872,20 @@ export function ProcessForm() {
                         </div>
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
                             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Classificacao e Notas</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-1.5 min-w-[200px]">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                <div className="space-y-1.5">
+                                    <label className={labelClass}>Registro Interno (ID)</label>
+                                    <div className="bg-slate-950 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-indigo-300 font-mono font-bold">
+                                        {form.code || (isEditing ? 'GERANDO...' : 'SERÁ GERADO AO SALVAR')}
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
                                     <label className={labelClass}>Area</label>
-                                    <CreatableSelect value={form.area} onChange={val => setForm({ ...form, area: val })} options={dynamicOptions.areas} placeholder="Selecione ou digite a area..." className="!bg-slate-950" />
+                                    <CreatableSelect value={form.area} onChange={val => setForm({ ...form, area: val })} options={dynamicOptions.areas} placeholder="Selecione..." className="!bg-slate-950" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Assunto</label>
-                                    <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} className={inputClass} placeholder="Acao de Cobranca, Indenizacao..." />
+                                    <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} className={inputClass} placeholder="Acao de Cobranca..." />
                                 </div>
                             </div>
 

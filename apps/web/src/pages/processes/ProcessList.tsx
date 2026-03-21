@@ -55,6 +55,8 @@ interface Process {
     value?: number;
     distributionDate?: string;
     folder?: string;
+    localFolder?: string;
+    code?: string;
     responsibleLawyer?: string;
     createdAt: string;
     updatedAt: string;
@@ -265,6 +267,17 @@ export function ProcessList() {
                         onSelect={setSelectedIds}
                         onRowClick={(process) => navigate(`/processes/${process.id}`)}
                         columns={[
+                            {
+                                key: 'code',
+                                label: 'ID',
+                                render: (p) => (
+                                    <div className="flex flex-col min-w-[90px]">
+                                        <span className="font-mono font-bold text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20 whitespace-nowrap">
+                                            {p.code || 'NOVO'}
+                                        </span>
+                                    </div>
+                                )
+                            },
                             {
                                 key: 'title',
                                 label: 'Processo / Partes',
