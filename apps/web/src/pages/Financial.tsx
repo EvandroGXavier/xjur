@@ -96,6 +96,7 @@ interface FinancialRecord {
   periodicity?: string;
   isResidual?: boolean;
   children?: FinancialRecord[];
+  processId?: string;
   process?: {
     id: string;
     cnj: string;
@@ -122,6 +123,14 @@ interface TransactionSplit {
   amount: number;
   percentage?: number;
   description?: string;
+}
+
+interface ProcessOption {
+  id: string;
+  code?: string | null;
+  title?: string | null;
+  cnj?: string | null;
+  status?: string | null;
 }
 
 interface FinancialCategory {
@@ -434,6 +443,9 @@ export function Financial() {
   const [submitting, setSubmitting] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
+  const [processOptions, setProcessOptions] = useState<ProcessOption[]>([]);
+  const [processSearch, setProcessSearch] = useState("");
+  const [loadingProcesses, setLoadingProcesses] = useState(false);
   const [categories, setCategories] = useState<FinancialCategory[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [modalTab, setModalTab] = useState<"dados" | "partes">("dados");
@@ -538,6 +550,7 @@ export function Financial() {
     categoryId: "",
     paymentMethod: "",
     bankAccountId: "",
+    processId: "",
     notes: "",
     // Encargos
     fine: "",
@@ -1170,6 +1183,14 @@ export function Financial() {
     fetchCategories();
   }, [view]);
 
+  useEffect(() => {
+    if (!showModal) return;
+    const handle = window.setTimeout(() => {
+      fetchProcesses(processSearch);
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [showModal, processSearch]);
+
   const fetchData = async () => {
     try {
       const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -1214,6 +1235,22 @@ export function Financial() {
     }
   };
 
+  const fetchProcesses = async (search?: string) => {
+    setLoadingProcesses(true);
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const tenantId = user.tenantId || "default-tenant-id";
+      const response = await api.get(`/financial/processes?tenantId=${tenantId}`, {
+        params: { search: search?.trim() || undefined },
+      });
+      setProcessOptions(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Erro ao carregar processos:", error);
+    } finally {
+      setLoadingProcesses(false);
+    }
+  };
+
   const handleOpenModal = async (record?: FinancialRecord) => {
     setModalTab("dados");
     await fetchContacts();
@@ -1240,6 +1277,7 @@ export function Financial() {
         categoryId: fullRecord.categoryId || "",
         paymentMethod: fullRecord.paymentMethod || "",
         bankAccountId: fullRecord.bankAccount?.id || "",
+        processId: fullRecord.processId || fullRecord.process?.id || "",
         notes: fullRecord.notes || "",
         fine: fullRecord.fine ? fullRecord.fine.toString() : "",
         interest: fullRecord.interest ? fullRecord.interest.toString() : "",
@@ -1292,6 +1330,7 @@ export function Financial() {
         categoryId: "",
         paymentMethod: "",
         bankAccountId: "",
+        processId: "",
         notes: "",
         fine: "",
         interest: "",
@@ -1312,6 +1351,7 @@ export function Financial() {
     }
     setPastedImages([]);
     setAttachments([]);
+    setProcessSearch("");
     setShowModal(true);
     fetchPaymentConditions();
     setTimeout(() => {
@@ -1415,6 +1455,7 @@ export function Financial() {
         categoryId: formData.categoryId || undefined,
         paymentMethod: formData.paymentMethod || undefined,
         bankAccountId: formData.bankAccountId || undefined,
+        processId: formData.processId,
         notes: formData.notes.trim() || undefined,
         parties:
           !editingRecord && formData.parties.length > 0
@@ -3948,6 +3989,52 @@ export function Financial() {
                     placeholder="Ex: Honorários processo X"
                     required
                   />
+                </div>
+
+                {/* Processo (opcional) */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                    Processo (opcional)
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      value={processSearch}
+                      onChange={(e) => setProcessSearch(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Buscar por CNJ, código ou título..."
+                    />
+                    <select
+                      value={formData.processId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, processId: e.target.value })
+                      }
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Sem processo</option>
+                      {formData.processId &&
+                        !processOptions.some((p) => p.id === formData.processId) && (
+                          <option value={formData.processId}>
+                            Processo atual ({editingRecord?.process?.cnj || formData.processId})
+                          </option>
+                        )}
+                      {loadingProcesses && (
+                        <option value="" disabled>
+                          Carregando...
+                        </option>
+                      )}
+                      {!loadingProcesses &&
+                        processOptions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {(p.code ? `${p.code} - ` : "") + (p.title || p.cnj || p.id)}
+                            {p.cnj ? ` (${p.cnj})` : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Use para vincular honorários, despesas e pagamentos ao processo correspondente.
+                  </p>
                 </div>
 
                 {/* LINHA 4: Data Pagamento | Forma Pagamento | Conta Bancária */}

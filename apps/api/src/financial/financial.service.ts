@@ -49,6 +49,50 @@ export class FinancialService {
     return scaled;
   }
 
+  private normalizeOptionalId(value?: string | null) {
+    if (typeof value !== "string") return null;
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private async assertProcessExistsForTenant(processId: string, tenantId: string) {
+    const found = await this.prisma.process.findFirst({
+      where: { id: processId, tenantId },
+      select: { id: true },
+    });
+
+    if (!found) {
+      throw new BadRequestException("Processo não encontrado (ou não pertence ao tenant).");
+    }
+  }
+
+  async getProcesses(tenantId: string, search?: string) {
+    const where: any = { tenantId };
+    const term = typeof search === "string" ? search.trim() : "";
+
+    if (term) {
+      where.OR = [
+        { cnj: { contains: term, mode: "insensitive" } },
+        { title: { contains: term, mode: "insensitive" } },
+        { code: { contains: term, mode: "insensitive" } },
+      ];
+    }
+
+    return this.prisma.process.findMany({
+      where,
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        cnj: true,
+        status: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    });
+  }
+
   // ==================== INCLUDES PADRÃO ====================
 
   private readonly defaultRecordInclude = {
@@ -278,6 +322,11 @@ export class FinancialService {
   // ==================== FINANCIAL RECORDS ====================
 
   async createFinancialRecord(dto: CreateFinancialRecordDto, files?: any[]) {
+    const processId = this.normalizeOptionalId(dto.processId);
+    if (processId) {
+      await this.assertProcessExistsForTenant(processId, dto.tenantId);
+    }
+
     // Calcular valor final se houver encargos/descontos
     const amountFinal = this.calculateFinalAmount(
       dto.amount,
@@ -310,7 +359,7 @@ export class FinancialService {
       const parent = await this.prisma.financialRecord.create({
         data: {
           tenantId: dto.tenantId,
-          processId: dto.processId,
+          processId,
           bankAccountId: dto.bankAccountId,
           categoryId: dto.categoryId,
           paymentConditionId: dto.paymentConditionId,
@@ -378,7 +427,7 @@ export class FinancialService {
       const children = dto.installments.map((inst, i) => ({
         id: childIds[i],
         tenantId: dto.tenantId,
-        processId: dto.processId,
+        processId,
         bankAccountId: dto.bankAccountId,
         categoryId: dto.categoryId,
         description: `${dto.description} - Parcela ${inst.installmentNumber}/${totalInst}`,
@@ -468,7 +517,7 @@ export class FinancialService {
       const parent = await this.prisma.financialRecord.create({
         data: {
           tenantId: dto.tenantId,
-          processId: dto.processId,
+          processId,
           bankAccountId: dto.bankAccountId,
           categoryId: dto.categoryId,
           paymentConditionId: dto.paymentConditionId,
@@ -552,7 +601,7 @@ export class FinancialService {
         installments.push({
           id,
           tenantId: dto.tenantId,
-          processId: dto.processId,
+          processId,
           bankAccountId: dto.bankAccountId,
           categoryId: dto.categoryId,
           description: `${dto.description} - Parcela ${i + 1}/${dto.totalInstallments}`,
@@ -642,7 +691,7 @@ export class FinancialService {
     return this.prisma.financialRecord.create({
       data: {
         tenantId: dto.tenantId,
-        processId: dto.processId,
+        processId,
         bankAccountId: dto.bankAccountId,
         categoryId: dto.categoryId,
         paymentConditionId: dto.paymentConditionId,
@@ -706,6 +755,7 @@ export class FinancialService {
       category?: string;
       startDate?: string;
       endDate?: string;
+      processId?: string;
       parentId?: string;
       showInstallments?: boolean;
     },
@@ -722,6 +772,12 @@ export class FinancialService {
         { categoryId: filters.category },
         { category: filters.category },
       ];
+    }
+
+    const normalizedProcessId = this.normalizeOptionalId(filters?.processId);
+    if (normalizedProcessId) {
+      await this.assertProcessExistsForTenant(normalizedProcessId, tenantId);
+      where.processId = normalizedProcessId;
     }
     if (filters?.parentId) where.parentId = filters.parentId;
 
@@ -773,7 +829,13 @@ export class FinancialService {
     }
 
     const data: any = {};
-    if (dto.processId !== undefined) data.processId = dto.processId;
+    if (dto.processId !== undefined) {
+      const normalized = this.normalizeOptionalId(dto.processId);
+      if (normalized) {
+        await this.assertProcessExistsForTenant(normalized, tenantId);
+      }
+      data.processId = normalized;
+    }
     if (dto.bankAccountId !== undefined) data.bankAccountId = dto.bankAccountId;
     if (dto.categoryId !== undefined) data.categoryId = dto.categoryId;
     if (dto.description) data.description = dto.description;
@@ -945,7 +1007,8 @@ export class FinancialService {
       const baseCategory = data.category !== undefined ? data.category : existing.category;
       const basePaymentMethod =
         data.paymentMethod !== undefined ? data.paymentMethod : existing.paymentMethod;
-      const baseProcessId = data.processId || existing.processId;
+      const baseProcessId =
+        data.processId !== undefined ? data.processId : existing.processId;
       const baseBankAccountId = data.bankAccountId || existing.bankAccountId;
       const baseCategoryId = data.categoryId || existing.categoryId;
       const basePeriodicity = data.periodicity || existing.periodicity;
@@ -1103,6 +1166,11 @@ export class FinancialService {
    * Cria um registro "mãe" e N registros filhos vinculados pelo parentId.
    */
   async createInstallments(dto: CreateInstallmentsDto) {
+    const processId = this.normalizeOptionalId(dto.processId);
+    if (processId) {
+      await this.assertProcessExistsForTenant(processId, dto.tenantId);
+    }
+
     const installmentAmount =
       Math.floor((dto.totalAmount / dto.numInstallments) * 100) / 100;
     const remainder =
@@ -1114,7 +1182,7 @@ export class FinancialService {
     const parent = await this.prisma.financialRecord.create({
       data: {
         tenantId: dto.tenantId,
-        processId: dto.processId,
+        processId,
         bankAccountId: dto.bankAccountId,
         categoryId: dto.categoryId,
         description: dto.description,
@@ -1170,7 +1238,7 @@ export class FinancialService {
       installments.push({
         id,
         tenantId: dto.tenantId,
-        processId: dto.processId,
+        processId,
         bankAccountId: dto.bankAccountId,
         categoryId: dto.categoryId,
         description: `${dto.description} - Parcela ${i + 1}/${dto.numInstallments}`,
@@ -1782,8 +1850,14 @@ export class FinancialService {
 
   // ==================== DASHBOARD & REPORTS ====================
 
-  async getDashboard(tenantId: string, startDate?: string, endDate?: string) {
+  async getDashboard(tenantId: string, startDate?: string, endDate?: string, processId?: string) {
     const where: any = this.buildEffectiveRecordWhere(tenantId);
+
+    const normalizedProcessId = this.normalizeOptionalId(processId);
+    if (normalizedProcessId) {
+      await this.assertProcessExistsForTenant(normalizedProcessId, tenantId);
+      where.processId = normalizedProcessId;
+    }
 
     if (startDate || endDate) {
       where.dueDate = {};

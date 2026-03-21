@@ -1,0 +1,30 @@
+{
+  "title": "ROMILDO X INVENTÁRIO",
+  "cnj": "",
+  "court": "",
+  "courtSystem": "",
+  "vars": "",
+  "district": "",
+  "status": "ATIVO",
+  "category": "EXTRAJUDICIAL",
+  "area": "Civel",
+  "subject": "INVENTÁRIO",
+  "class": "",
+  "distributionDate": "",
+  "judge": "",
+  "value": 0,
+  "description": "",
+  "folder": "",
+  "localFolder": "",
+  "code": "",
+  "metadata": null,
+  "workflowId": "",
+  "parties": [
+    {
+      "name": "",
+      "type": "CLIENTE",
+      "isClient": true
+    }
+  ],
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903"
+}

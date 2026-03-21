@@ -2585,7 +2585,6 @@ export class ProcessesService {
 
         const { spawn } = require('child_process');
         try {
-            // Spawn é mais seguro para caminhos com espaços e caracteres especiais (acentos)
             const subprocess = spawn('explorer.exe', [process.localFolder], {
                 detached: true,
                 stdio: 'ignore',
@@ -2596,6 +2595,20 @@ export class ProcessesService {
         } catch (e: any) {
             console.error('[LOCAL_FOLDER] Erro spawn explorer.exe:', e);
             throw new BadRequestException(`Falha ao disparar explorer: ${e.message}`);
+        }
+    }
+
+    async pickLocalFolder() {
+        const { execSync } = require('child_process');
+        try {
+            // PowerShell folder picker dialog - abre na Z:\ por padrão
+            const command = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Selecione a pasta do processo'; $f.SelectedPath = 'Z:\\'; [void]$f.ShowDialog(); $f.SelectedPath"`;
+            const result = execSync(command, { encoding: 'utf8' }).trim();
+            if (!result) return { success: false, message: 'Nenhuma pasta selecionada.' };
+            return { success: true, path: result };
+        } catch (e: any) {
+            console.error('[LOCAL_FOLDER] Picker error:', e);
+            throw new BadRequestException('Não foi possível abrir o seletor de pastas do Windows.');
         }
     }
 }

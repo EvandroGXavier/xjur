@@ -1,0 +1,32 @@
+{
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "workflowId": null,
+  "cnj": null,
+  "category": "EXTRAJUDICIAL",
+  "title": "DESPACHANTE CAMINHÃO",
+  "code": "CASO-2026-0007",
+  "description": "verificar pendencia caminhão.",
+  "folder": "",
+  "localFolder": "Z:\\EQUIPAMENTOS ELETRONICOS SANTA MARIA EIRELI\\Civel\\CASO_NOVO",
+  "court": "",
+  "courtSystem": "",
+  "npu": null,
+  "vars": "",
+  "district": "",
+  "status": "ATIVO",
+  "area": "Civel",
+  "subject": "particular",
+  "class": "",
+  "judge": "",
+  "value": 0,
+  "parties": [
+    {
+      "name": "EQUIPAMENTOS ELETRONICOS SANTA MARIA EIRELI",
+      "type": "CLIENTE",
+      "isClient": true
+    }
+  ],
+  "metadata": {
+    "proceduralStatus": "Consulta"
+  }
+}

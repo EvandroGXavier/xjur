@@ -1,0 +1,43 @@
+{
+  "id": "402c085b-13c3-4513-9435-6b1bf249a006",
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "contactId": null,
+  "cnj": null,
+  "category": "EXTRAJUDICIAL",
+  "title": "teste",
+  "code": "CASO-2026-0010",
+  "folder": "",
+  "description": "",
+  "msDriveId": null,
+  "msFolderUrl": null,
+  "localFolder": "Z:\\CTI-EVANDRO\\Civel\\CASO_NOVO",
+  "npu": null,
+  "court": "",
+  "courtSystem": "",
+  "vars": "",
+  "district": "",
+  "status": "ATIVO",
+  "responsibleLawyer": null,
+  "area": "Civel",
+  "subject": "Assunto-teste",
+  "class": "",
+  "distributionDate": null,
+  "judge": "",
+  "value": "0",
+  "parties": [
+    {
+      "name": "CTI-EVANDRO",
+      "type": "CLIENTE",
+      "isClient": true,
+      "isOpposing": false
+    }
+  ],
+  "lastCrawledAt": null,
+  "autoUpdate": true,
+  "metadata": {
+    "proceduralStatus": "Consulta"
+  },
+  "createdAt": "2026-03-21T19:47:49.673Z",
+  "updatedAt": "2026-03-21T19:47:49.673Z",
+  "workflowId": null
+}

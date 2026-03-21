@@ -1,0 +1,32 @@
+{
+  "id": "43bb7a23-dd45-44e0-9f24-a1995a820e1c",
+  "data": {
+    "title": "ROMILDO X INVENTÁRIO",
+    "cnj": "",
+    "court": "",
+    "courtSystem": "",
+    "vars": "",
+    "district": "",
+    "status": "ATIVO",
+    "category": "EXTRAJUDICIAL",
+    "area": "Civel",
+    "subject": "INVENTÁRIO",
+    "class": "",
+    "distributionDate": "",
+    "judge": "",
+    "value": 0,
+    "description": "",
+    "folder": "",
+    "localFolder": "",
+    "code": "CASO-2026-0009",
+    "metadata": {},
+    "workflowId": "",
+    "parties": [
+      {
+        "name": "",
+        "type": "CLIENTE",
+        "isClient": true
+      }
+    ]
+  }
+}

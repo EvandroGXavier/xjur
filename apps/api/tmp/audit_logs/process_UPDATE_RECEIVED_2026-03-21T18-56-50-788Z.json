@@ -1,0 +1,32 @@
+{
+  "id": "fff4c102-3cc5-45a6-a439-d0496b9339ce",
+  "data": {
+    "title": "Titulo / Nome do Caso *",
+    "cnj": "",
+    "court": "",
+    "courtSystem": "",
+    "vars": "",
+    "district": "",
+    "status": "ATIVO",
+    "category": "EXTRAJUDICIAL",
+    "area": "Trabalhista",
+    "subject": "assunto teste",
+    "class": "",
+    "distributionDate": "",
+    "judge": "",
+    "value": 0,
+    "description": "Descricao / Objeto",
+    "folder": "",
+    "localFolder": "Z:\\CTI-EVANDRO\\Trabalhista\\CASO-2026-0008",
+    "code": "CASO-2026-0008",
+    "metadata": {},
+    "workflowId": "",
+    "parties": [
+      {
+        "name": "CTI-EVANDRO",
+        "type": "CLIENTE",
+        "isClient": true
+      }
+    ]
+  }
+}

@@ -191,12 +191,15 @@ export class ProcessesController {
         return this.processesService.openLocalFolder(id, user.tenantId);
     }
 
+    @Get('local-folder/pick')
+    async pickLocalFolder() {
+        return this.processesService.pickLocalFolder();
+    }
+
     @Delete(':id')
     async remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
         return this.processesService.remove(id, user.tenantId);
     }
-
-    // --- TIMELINES (Andamentos) ---
 
     @Public()
     @Get('timelines/attachments/:filename')

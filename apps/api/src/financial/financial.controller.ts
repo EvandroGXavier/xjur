@@ -54,6 +54,7 @@ export class FinancialController {
     @Query('category') category?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('processId') processId?: string,
     @Query('parentId') parentId?: string,
     @Query('showInstallments') showInstallments?: string,
   ) {
@@ -63,6 +64,7 @@ export class FinancialController {
       category,
       startDate,
       endDate,
+      processId,
       parentId,
       showInstallments: showInstallments === 'true',
     });
@@ -302,6 +304,14 @@ export class FinancialController {
     return this.financialService.getContacts(user.tenantId, search);
   }
 
+  @Get('processes')
+  getProcesses(
+    @CurrentUser() user: CurrentUserData,
+    @Query('search') search?: string,
+  ) {
+    return this.financialService.getProcesses(user.tenantId, search);
+  }
+
   // ==================== DASHBOARD & REPORTS ====================
 
   @Get('dashboard')
@@ -309,8 +319,9 @@ export class FinancialController {
     @CurrentUser() user: CurrentUserData,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('processId') processId?: string,
   ) {
-    return this.financialService.getDashboard(user.tenantId, startDate, endDate);
+    return this.financialService.getDashboard(user.tenantId, startDate, endDate, processId);
   }
 
   @Get('process/:processId/balance')

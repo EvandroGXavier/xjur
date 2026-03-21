@@ -1,0 +1,30 @@
+{
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "workflowId": null,
+  "cnj": null,
+  "category": "EXTRAJUDICIAL",
+  "title": "Titulo / Nome do Caso *",
+  "code": "CASO-2026-0008",
+  "description": "Descricao / Objeto",
+  "folder": "",
+  "localFolder": "Z:\\CTI-EVANDRO\\Trabalhista\\CASO_NOVO",
+  "court": "",
+  "courtSystem": "",
+  "npu": null,
+  "vars": "",
+  "district": "",
+  "status": "ATIVO",
+  "area": "Trabalhista",
+  "subject": "assunto teste",
+  "class": "",
+  "judge": "",
+  "value": 0,
+  "parties": [
+    {
+      "name": "CTI-EVANDRO",
+      "type": "CLIENTE",
+      "isClient": true
+    }
+  ],
+  "metadata": {}
+}

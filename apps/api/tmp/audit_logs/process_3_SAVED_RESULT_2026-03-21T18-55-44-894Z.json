@@ -1,0 +1,40 @@
+{
+  "id": "fff4c102-3cc5-45a6-a439-d0496b9339ce",
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+  "contactId": null,
+  "cnj": null,
+  "category": "EXTRAJUDICIAL",
+  "title": "Titulo / Nome do Caso *",
+  "code": "CASO-2026-0008",
+  "folder": "",
+  "description": "Descricao / Objeto",
+  "msDriveId": null,
+  "msFolderUrl": null,
+  "localFolder": "Z:\\CTI-EVANDRO\\Trabalhista\\CASO_NOVO",
+  "npu": null,
+  "court": "",
+  "courtSystem": "",
+  "vars": "",
+  "district": "",
+  "status": "ATIVO",
+  "responsibleLawyer": null,
+  "area": "Trabalhista",
+  "subject": "assunto teste",
+  "class": "",
+  "distributionDate": null,
+  "judge": "",
+  "value": "0",
+  "parties": [
+    {
+      "name": "CTI-EVANDRO",
+      "type": "CLIENTE",
+      "isClient": true
+    }
+  ],
+  "lastCrawledAt": null,
+  "autoUpdate": true,
+  "metadata": {},
+  "createdAt": "2026-03-21T18:55:44.867Z",
+  "updatedAt": "2026-03-21T18:55:44.867Z",
+  "workflowId": null
+}

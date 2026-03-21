@@ -215,6 +215,29 @@ export function ProcessForm() {
     const [form, setForm] = useState(EMPTY_FORM);
     const [workflows, setWorkflows] = useState<any[]>([]);
 
+    const loadDynamicOptions = async () => {
+        try {
+            const { data } = await api.get('/processes/filters/options');
+            if (data) {
+                const mapToOptions = (items: string[], defaults: { label: string, value: string }[]) => {
+                    const existingVals = new Set(defaults.map(d => d.value.toUpperCase()));
+                    const newOps = items
+                        .filter(i => !existingVals.has(i.toUpperCase()))
+                        .map(i => ({ label: i, value: i }));
+                    return [...defaults, ...newOps];
+                };
+
+                setDynamicOptions({
+                    categories: mapToOptions(data.categories || [], DEFAULT_CATEGORIES),
+                    statuses: mapToOptions(data.statuses || [], DEFAULT_STATUSES),
+                    areas: mapToOptions(data.areas || [], DEFAULT_AREAS),
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load dynamic options', error);
+        }
+    };
+
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
@@ -225,36 +248,8 @@ export function ProcessForm() {
             }
         };
 
-        const loadDynamicOptions = async () => {
-            try {
-                const { data } = await api.get('/processes/filters/options');
-                if (data) {
-                    const mapToOptions = (items: string[], defaults: { label: string, value: string }[]) => {
-                        const existingVals = new Set(defaults.map(d => d.value.toUpperCase()));
-                        const newOps = items
-                            .filter(i => !existingVals.has(i.toUpperCase()))
-                            .map(i => ({ label: i, value: i }));
-                        return [...defaults, ...newOps];
-                    };
-
-                    setDynamicOptions({
-                        categories: mapToOptions(data.categories || [], DEFAULT_CATEGORIES),
-                        statuses: mapToOptions(data.statuses || [], DEFAULT_STATUSES),
-                        areas: mapToOptions(data.areas || [], DEFAULT_AREAS),
-                    });
-                }
-            } catch (error) {
-                console.error('Failed to load dynamic options', error);
-            }
-        };
-
-        const init = async () => {
-            await Promise.allSettled([
-                fetchInitialData(),
-                loadDynamicOptions(),
-            ]);
-        };
-        init();
+        void fetchInitialData();
+        void loadDynamicOptions();
 
         if (isEditing) {
             void fetchProcess();
@@ -455,10 +450,17 @@ export function ProcessForm() {
             return;
         }
 
-            const payload = {
-                ...form,
-                parties: importedParties.length > 0 ? importedParties : undefined,
-            };
+        // NOVO: Validar Cliente Principal
+        const hasClient = importedParties.some(p => p.isClient || p.type.toUpperCase().includes('CLIENTE'));
+        if (!hasClient) {
+            toast.warning('É necessário vincular um Cliente Principal para salvar o processo.');
+            return;
+        }
+
+        const payload = {
+            ...form,
+            parties: importedParties.length > 0 ? importedParties : undefined,
+        };
 
         setLoading(true);
         try {
@@ -467,10 +469,12 @@ export function ProcessForm() {
                 toast.success('Processo atualizado!');
                 await fetchProcess();
                 await fetchCnjTimelineStatus(id);
+                loadDynamicOptions(); // Atualizar opções dinâmicas
                 if (shouldClose) navigate('/processes');
             } else {
                 const res = await api.post('/processes', payload);
                 toast.success('Processo criado!');
+                loadDynamicOptions(); // Atualizar opções dinâmicas
                 navigate(shouldClose ? '/processes' : `/processes/${res.data.id}`);
             }
         } catch (err: any) {
@@ -629,6 +633,11 @@ export function ProcessForm() {
     };
 
     const handleSuggestLocalFolder = () => {
+        if (!form.code) {
+           toast.warning('O Registro Interno (ID) ainda não foi gerado. Salve o processo primeiro para usar a sugestão automática baseada no número do caso.');
+           return null;
+        }
+
         const baseDir = 'Z:';
         
         // Extrair nome do cliente das partes importadas
@@ -636,13 +645,30 @@ export function ProcessForm() {
         const clientName = clientParty ? clientParty.name.replace(/[<>:"\/\\|?*]/g, '').trim() : 'CLIENTE_NAO_IDENTIFICADO';
         
         const areaName = form.area ? form.area.replace(/[<>:"\/\\|?*]/g, '').trim() : 'GERAL';
-        const internalId = form.code || (isEditing ? `CASO_PENDENTE_${id?.substring(0,4)}` : 'CASO_NOVO');
+        const internalId = form.code;
         
         // Padrão: Z:\NOME_CLIENTE\Area\REGISTRO_INTERNO
         const fullPath = `${baseDir}\\${clientName}\\${areaName}\\${internalId}`;
         
         setForm(current => ({ ...current, localFolder: fullPath }));
         return fullPath;
+    };
+
+    const handlePickLocalFolder = async () => {
+        try {
+            setLocalFolderStatus('opening');
+            const res = await api.get('/processes/local-folder/pick');
+            if (res.data?.success && res.data.path) {
+                setForm(prev => ({ ...prev, localFolder: res.data.path }));
+                toast.success('Pasta selecionada!');
+            } else if (res.data?.message) {
+                toast.info(res.data.message);
+            }
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Erro ao abrir o seletor de pastas do Windows.');
+        } finally {
+            setLocalFolderStatus('idle');
+        }
     };
 
     const handleCreateLocalFolder = async () => {
@@ -852,6 +878,7 @@ export function ProcessForm() {
                                         <CreatableSelect 
                                             value={form.category} 
                                             onChange={val => setForm({ ...form, category: val })} 
+                                            onCreate={newVal => setDynamicOptions(prev => ({ ...prev, categories: [...prev.categories, { label: newVal, value: newVal }] }))}
                                             options={dynamicOptions.categories} 
                                             placeholder="Selecione ou digite..." 
                                             className="!bg-slate-950" 
@@ -862,6 +889,7 @@ export function ProcessForm() {
                                         <CreatableSelect 
                                             value={form.status} 
                                             onChange={val => setForm({ ...form, status: val })} 
+                                            onCreate={newVal => setDynamicOptions(prev => ({ ...prev, statuses: [...prev.statuses, { label: newVal, value: newVal }] }))}
                                             options={dynamicOptions.statuses} 
                                             placeholder="Selecione ou digite..." 
                                             className="!bg-slate-950" 
@@ -881,7 +909,14 @@ export function ProcessForm() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Area</label>
-                                    <CreatableSelect value={form.area} onChange={val => setForm({ ...form, area: val })} options={dynamicOptions.areas} placeholder="Selecione..." className="!bg-slate-950" />
+                                    <CreatableSelect 
+                                        value={form.area} 
+                                        onChange={val => setForm({ ...form, area: val })} 
+                                        onCreate={newVal => setDynamicOptions(prev => ({ ...prev, areas: [...prev.areas, { label: newVal, value: newVal }] }))}
+                                        options={dynamicOptions.areas} 
+                                        placeholder="Selecione..." 
+                                        className="!bg-slate-950" 
+                                    />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Assunto</label>
@@ -936,14 +971,25 @@ export function ProcessForm() {
                                             className={`${inputClass} pr-12`} 
                                             placeholder="Ex: C:\Processos\João_vs_Maria" 
                                         />
-                                        <button 
-                                            type="button" 
-                                            onClick={handleSuggestLocalFolder}
-                                            title="Sugerir Nome de Pasta Inteligente"
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-emerald-300 p-1.5 rounded-md hover:bg-emerald-500/10 transition-colors"
-                                        >
-                                            <Wand2 size={18} />
-                                        </button>
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                            <button 
+                                                type="button" 
+                                                onClick={handlePickLocalFolder}
+                                                disabled={localFolderStatus !== 'idle'}
+                                                title="Escolher Pasta Existente no Explorer"
+                                                className="text-amber-400 hover:text-amber-300 p-1.5 rounded-md hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                                            >
+                                                {localFolderStatus === 'opening' ? <Loader2 size={16} className="animate-spin" /> : <Search size={18} />}
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={handleSuggestLocalFolder}
+                                                title="Sugerir Caminho Inteligente (Z:)"
+                                                className="text-emerald-400 hover:text-emerald-300 p-1.5 rounded-md hover:bg-emerald-500/10 transition-colors"
+                                            >
+                                                <Wand2 size={18} />
+                                            </button>
+                                        </div>
                                     </div>
                                     
                                     {!form.localFolder ? (
