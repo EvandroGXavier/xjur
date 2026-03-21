@@ -1,0 +1,28 @@
+{
+  "title": "TITULO-USUCAPIÃO VANDISLEIA X CASA",
+  "cnj": "",
+  "court": "",
+  "courtSystem": "",
+  "vars": "",
+  "district": "",
+  "status": "ATIVO",
+  "category": "EXTRAJUDICIAL",
+  "area": "Civel",
+  "subject": "ASSUNTO-USUCAPIÃO VANDISLEIA X CASA",
+  "class": "",
+  "distributionDate": "",
+  "judge": "",
+  "value": 0,
+  "description": "DESCRIÇÃO-USUCAPIÃO VANDISLEIA X CASA",
+  "folder": "",
+  "metadata": null,
+  "workflowId": "",
+  "parties": [
+    {
+      "name": "FABIANA DOS SANTOS LUCAS MAGALHAES",
+      "type": "CLIENTE",
+      "isClient": true
+    }
+  ],
+  "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903"
+}

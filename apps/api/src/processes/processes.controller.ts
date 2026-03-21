@@ -109,6 +109,11 @@ export class ProcessesController {
         });
     }
 
+    @Get('filters/options')
+    async getFilterOptions(@CurrentUser() user: CurrentUserData) {
+        return this.processesService.getFilterOptions(user.tenantId);
+    }
+
     @Get('config/integrations')
     async getIntegrationConfig(@CurrentUser() user: CurrentUserData) {
         return this.integrationsService.getIntegrationConfig(user.tenantId);
@@ -170,6 +175,20 @@ export class ProcessesController {
     @Post(':id/microsoft-folder/sync')
     async syncMicrosoftFolder(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
         return this.processesService.syncMicrosoftFolderForProcess(id, user.tenantId);
+    }
+
+    @Post(':id/local-folder')
+    async createLocalFolder(
+        @Param('id') id: string, 
+        @Body('path') requestedPath: string, 
+        @CurrentUser() user: CurrentUserData
+    ) {
+        return this.processesService.createLocalFolder(id, user.tenantId, requestedPath);
+    }
+
+    @Post(':id/local-folder/open')
+    async openLocalFolder(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.processesService.openLocalFolder(id, user.tenantId);
     }
 
     @Delete(':id')

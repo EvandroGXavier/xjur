@@ -22,6 +22,8 @@ import {
     DollarSign,
     Check,
     X,
+    FolderOpen,
+    Wand2,
 } from 'lucide-react';
 import { ContactPickerGlobal } from '../../components/contacts/ContactPickerGlobal';
 import { masks } from '../../utils/masks';
@@ -44,6 +46,21 @@ const DEFAULT_AREAS = [
     { label: 'Previdenciario', value: 'Previdenciario' },
 ];
 
+const DEFAULT_CATEGORIES = [
+    { label: 'Extrajudicial', value: 'Extrajudicial' },
+    { label: 'Judicial', value: 'Judicial' },
+    { label: 'Administrativo', value: 'Administrativo' },
+];
+
+const DEFAULT_STATUSES = [
+    { label: 'Ativo', value: 'ATIVO' },
+    { label: 'Em Andamento', value: 'EM_ANDAMENTO' },
+    { label: 'Suspenso', value: 'SUSPENSO' },
+    { label: 'Arquivado', value: 'ARQUIVADO' },
+    { label: 'Encerrado', value: 'ENCERRADO' },
+    { label: 'Oportunidade', value: 'OPORTUNIDADE' },
+];
+
 const EMPTY_FORM = {
     title: '',
     cnj: '',
@@ -61,6 +78,7 @@ const EMPTY_FORM = {
     value: 0,
     description: '',
     folder: '',
+    localFolder: '',
     metadata: null as any,
     workflowId: '',
 };
@@ -174,17 +192,25 @@ export function ProcessForm() {
     const [activeTab, setActiveTab] = useState('MAIN');
     const [loading, setLoading] = useState(false);
     const [syncingMicrosoftFolder, setSyncingMicrosoftFolder] = useState(false);
+    const [localFolderStatus, setLocalFolderStatus] = useState<'idle'|'creating'|'opening'>('idle');
     const [consultingCnj, setConsultingCnj] = useState(false);
     const [checkingCnjTimelineStatus, setCheckingCnjTimelineStatus] = useState(false);
     const [importingCnjTimelines, setImportingCnjTimelines] = useState(false);
-    const [importingPdfDossier, setImportingPdfDossier] = useState(false);
     const [importedParties, setImportedParties] = useState<ImportedParty[]>([]);
     const [importedMovements, setImportedMovements] = useState<any[]>([]);
     const [cnjTimelineStatus, setCnjTimelineStatus] = useState<CnjTimelineImportStatus | null>(null);
     const [savedProcessCnj, setSavedProcessCnj] = useState('');
     const [timelineRefreshToken, setTimelineRefreshToken] = useState(0);
-    const [lastConsultSummary, setLastConsultSummary] = useState('');
+    const [importingPdfDossier, setImportingPdfDossier] = useState(false);
     const [lastPdfImportSummary, setLastPdfImportSummary] = useState('');
+
+    const [dynamicOptions, setDynamicOptions] = useState({
+        categories: DEFAULT_CATEGORIES,
+        statuses: DEFAULT_STATUSES,
+        areas: DEFAULT_AREAS,
+    });
+
+    const [lastConsultSummary, setLastConsultSummary] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
     const [workflows, setWorkflows] = useState<any[]>([]);
 
@@ -197,7 +223,37 @@ export function ProcessForm() {
                 console.error('Failed to load workflows', error);
             }
         };
-        fetchInitialData();
+
+        const loadDynamicOptions = async () => {
+            try {
+                const { data } = await api.get('/processes/filters/options');
+                if (data) {
+                    const mapToOptions = (items: string[], defaults: { label: string, value: string }[]) => {
+                        const existingVals = new Set(defaults.map(d => d.value.toUpperCase()));
+                        const newOps = items
+                            .filter(i => !existingVals.has(i.toUpperCase()))
+                            .map(i => ({ label: i, value: i }));
+                        return [...defaults, ...newOps];
+                    };
+
+                    setDynamicOptions({
+                        categories: mapToOptions(data.categories || [], DEFAULT_CATEGORIES),
+                        statuses: mapToOptions(data.statuses || [], DEFAULT_STATUSES),
+                        areas: mapToOptions(data.areas || [], DEFAULT_AREAS),
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load dynamic options', error);
+            }
+        };
+
+        const init = async () => {
+            await Promise.allSettled([
+                fetchInitialData(),
+                loadDynamicOptions(),
+            ]);
+        };
+        init();
 
         if (isEditing) {
             void fetchProcess();
@@ -230,6 +286,7 @@ export function ProcessForm() {
         value: typeof payload.value === 'number' && payload.value > 0 ? payload.value : form.value,
         description: payload.description || form.description,
         folder: payload.folder || form.folder,
+        localFolder: payload.localFolder || form.localFolder,
         workflowId: form.workflowId,
         metadata: {
             ...(form.metadata && typeof form.metadata === 'object' ? form.metadata : {}),
@@ -261,6 +318,7 @@ export function ProcessForm() {
                 value: data.value ? parseFloat(data.value) : 0,
                 description: data.description || '',
                 folder: data.folder || data.msFolderUrl || '',
+                localFolder: data.localFolder || '',
                 metadata: data.metadata || null,
                 workflowId: data.workflowId || '',
             });
@@ -547,6 +605,7 @@ export function ProcessForm() {
                 setForm(current => ({
                     ...current,
                     folder: process.folder || process.msFolderUrl || current.folder,
+                    localFolder: process.localFolder || current.localFolder,
                 }));
             }
 
@@ -564,6 +623,63 @@ export function ProcessForm() {
             );
         } finally {
             setSyncingMicrosoftFolder(false);
+        }
+    };
+
+    const handleSuggestLocalFolder = () => {
+        const baseDir = 'C:\\DrX_Processos';
+        const rawCnj = form.cnj ? masks.cnj(form.cnj) : '';
+        const titlePart = form.title ? form.title.replace(/[<>:"\/\\|?*]/g, '').trim() : '';
+        let folderName = `${rawCnj} - ${titlePart}`.replace(/^ - | - $/g, '').trim();
+        if (!folderName) folderName = `Processo_Novo_${Date.now()}`;
+        const fullPath = `${baseDir}\\${folderName}`;
+        setForm(current => ({ ...current, localFolder: fullPath }));
+        return fullPath;
+    };
+
+    const handleCreateLocalFolder = async () => {
+        let folderToCreate = form.localFolder;
+        if (!folderToCreate) {
+            folderToCreate = handleSuggestLocalFolder() || '';
+            if (!folderToCreate) return;
+        }
+        if (!isEditing || !id) {
+            toast.warning('Salve o processo no sistema antes de criar a pasta vinculada!');
+            return;
+        }
+
+        try {
+            setLocalFolderStatus('creating');
+            const res = await api.post(`/processes/${id}/local-folder`, { path: folderToCreate });
+            if (res.data?.success) {
+                toast.success(res.data.message || 'Diretório vinculado.');
+                setForm(prev => ({ ...prev, localFolder: res.data.localFolder }));
+            }
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Erro ao criar diretório local.');
+        } finally {
+            setLocalFolderStatus('idle');
+        }
+    };
+
+    const handleOpenLocalFolder = async () => {
+        if (!form.localFolder || !id) return;
+        
+        // Se o que está na tela for diferente do que foi salvo, avisa para lincar
+        try {
+            setLocalFolderStatus('opening');
+            const res = await api.post(`/processes/${id}/local-folder/open`);
+            if (res.data?.success) toast.success('Windows Explorer aberto!', { duration: 1500 });
+        } catch (error: any) {
+            console.error('Erro ao abrir pasta', error);
+            const msg = error?.response?.data?.message || '';
+            if (msg.includes('DB vazio') || msg.includes('não configurada')) {
+                toast.error('Este caminho ainda não foi vinculado ao processo. Clique em "Vincular" primeiro!');
+            } else {
+                toast.error(msg || 'Falha ao abrir pasta no Windows Explorer.');
+            }
+        } finally {
+            setLocalFolderStatus('idle');
         }
     };
 
@@ -725,21 +841,23 @@ export function ProcessForm() {
                                 <div className="grid grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
                                         <label className={labelClass}>Categoria</label>
-                                        <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputClass}>
-                                            <option value="EXTRAJUDICIAL">Extrajudicial</option>
-                                            <option value="JUDICIAL">Judicial</option>
-                                            <option value="ADMINISTRATIVO">Administrativo</option>
-                                        </select>
+                                        <CreatableSelect 
+                                            value={form.category} 
+                                            onChange={val => setForm({ ...form, category: val })} 
+                                            options={dynamicOptions.categories} 
+                                            placeholder="Selecione ou digite..." 
+                                            className="!bg-slate-950" 
+                                        />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className={labelClass}>Status</label>
-                                        <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={inputClass}>
-                                            <option value="ATIVO">Ativo</option>
-                                            <option value="EM_ANDAMENTO">Em Andamento</option>
-                                            <option value="SUSPENSO">Suspenso</option>
-                                            <option value="ARQUIVADO">Arquivado</option>
-                                            <option value="ENCERRADO">Encerrado</option>
-                                        </select>
+                                        <CreatableSelect 
+                                            value={form.status} 
+                                            onChange={val => setForm({ ...form, status: val })} 
+                                            options={dynamicOptions.statuses} 
+                                            placeholder="Selecione ou digite..." 
+                                            className="!bg-slate-950" 
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -749,7 +867,7 @@ export function ProcessForm() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5 min-w-[200px]">
                                     <label className={labelClass}>Area</label>
-                                    <CreatableSelect value={form.area} onChange={val => setForm({ ...form, area: val })} options={DEFAULT_AREAS} placeholder="Selecione ou digite a area..." className="!bg-slate-950" />
+                                    <CreatableSelect value={form.area} onChange={val => setForm({ ...form, area: val })} options={dynamicOptions.areas} placeholder="Selecione ou digite a area..." className="!bg-slate-950" />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Assunto</label>
@@ -789,6 +907,53 @@ export function ProcessForm() {
                                         Visualizacao curta: <span className="font-mono text-indigo-300">{getOfficeFolderDisplayPath(form.folder)}</span>
                                     </p>
                                 )}
+                            </div>
+
+                            <div className="space-y-1.5 p-4 bg-slate-950/50 rounded-xl border border-slate-800/80">
+                                <label className={labelClass}>
+                                    Pasta Local (Computador)
+                                    <span className="ml-2 text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">Windows Explorer nativo</span>
+                                </label>
+                                <div className="flex flex-col gap-3 md:flex-row">
+                                    <div className="relative flex-1">
+                                        <input 
+                                            value={form.localFolder} 
+                                            onChange={e => setForm({ ...form, localFolder: e.target.value })} 
+                                            className={`${inputClass} pr-12`} 
+                                            placeholder="Ex: C:\Processos\João_vs_Maria" 
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={handleSuggestLocalFolder}
+                                            title="Sugerir Nome de Pasta Inteligente"
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-emerald-300 p-1.5 rounded-md hover:bg-emerald-500/10 transition-colors"
+                                        >
+                                            <Wand2 size={18} />
+                                        </button>
+                                    </div>
+                                    
+                                    {!form.localFolder ? (
+                                        <button 
+                                            type="button" 
+                                            onClick={handleCreateLocalFolder} 
+                                            disabled={!isEditing || localFolderStatus !== 'idle'} 
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2.5 text-sm font-medium text-indigo-300 transition hover:bg-indigo-500/20 disabled:opacity-50 min-w-[180px]"
+                                        >
+                                            {localFolderStatus === 'creating' ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
+                                            Criar Diretório no PC
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            type="button" 
+                                            onClick={handleOpenLocalFolder} 
+                                            disabled={!isEditing || localFolderStatus !== 'idle'} 
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-500/20 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-500/30 hover:scale-105 disabled:opacity-50 min-w-[180px] shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                                        >
+                                            {localFolderStatus === 'opening' ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
+                                            Abrir no Explorer
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="space-y-1.5">

@@ -1,0 +1,42 @@
+{
+  "id": "9d1e9ec9-95f1-4bcf-a568-6a95d390fac1",
+  "updated": {
+    "id": "9d1e9ec9-95f1-4bcf-a568-6a95d390fac1",
+    "tenantId": "0e168f4b-9aa5-4e66-b4c2-a25605f87903",
+    "contactId": "95b0c0cc-43ba-4fbc-858d-a072cb3e4c69",
+    "cnj": null,
+    "category": "EXTRAJUDICIAL",
+    "title": "TITULO-USUCAPIÃO VANDISLEIA X CASA",
+    "code": "CASO-2026-0005",
+    "folder": "",
+    "description": "DESCRIÇÃO-USUCAPIÃO VANDISLEIA X CASA",
+    "msDriveId": null,
+    "msFolderUrl": null,
+    "npu": null,
+    "court": "",
+    "courtSystem": "",
+    "vars": "",
+    "district": "",
+    "status": "ATIVO",
+    "responsibleLawyer": null,
+    "area": "Imobiliária",
+    "subject": "ASSUNTO-USUCAPIÃO VANDISLEIA X CASA",
+    "class": "",
+    "distributionDate": null,
+    "judge": "",
+    "value": "0",
+    "parties": [
+      {
+        "name": "FABIANA DOS SANTOS LUCAS MAGALHAES",
+        "type": "CLIENTE",
+        "isClient": true
+      }
+    ],
+    "lastCrawledAt": null,
+    "autoUpdate": true,
+    "metadata": {},
+    "createdAt": "2026-03-21T17:04:51.128Z",
+    "updatedAt": "2026-03-21T17:19:49.449Z",
+    "workflowId": null
+  }
+}

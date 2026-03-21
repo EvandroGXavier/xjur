@@ -8,6 +8,7 @@ import { ProcessPdfService } from './process-pdf.service';
 import type { FullProcessPdfAnalysis, PdfProcessDocument } from './process-pdf.service';
 import { DrxClawService } from '../drx-claw/drx-claw.service';
 import { PROCESS_PDF_SKILL_ID } from '../drx-claw/drx-skill.constants';
+import { ProcessTimelinesService } from './process-timelines.service';
 
 interface CreateProcessDto {
     tenantId?: string;
@@ -18,6 +19,7 @@ interface CreateProcessDto {
     code?: string;
     description?: string;
     folder?: string;
+    localFolder?: string;
     subject?: string;
     value?: number | string;
     status?: string;
@@ -2095,7 +2097,7 @@ export class ProcessesService {
         const normalizedStatus = this.normalizeLifecycleStatus(data.status, 'ATIVO');
         const processMetadata = this.buildProcessMetadata(data.metadata, data.status, normalizedStatus);
 
-        let finalWorkflowId = data.workflowId;
+        let finalWorkflowId = data.workflowId?.trim() || null;
         if (!finalWorkflowId) {
             const defaultWorkflow = await this.prisma.workflow.findFirst({
                 where: { tenantId, isDefault: true, isActive: true },
@@ -2107,13 +2109,14 @@ export class ProcessesService {
         const processData = {
             tenantId,
             contactId: data.contactId,
-            workflowId: finalWorkflowId,
+            workflowId: finalWorkflowId || null,
             cnj: this.normalizeCnj(data.cnj),
             category: data.category,
             title: data.title || `Processo ${this.normalizeCnj(data.cnj) || data.cnj}`,
             code,
             description: data.description,
             folder: data.folder,
+            localFolder: data.localFolder,
             court: data.court,
             courtSystem: data.courtSystem,
             npu: this.normalizeCnj(data.cnj),
@@ -2150,6 +2153,7 @@ export class ProcessesService {
                             code: processData.code,
                             description: processData.description,
                             folder: processData.folder,
+                            localFolder: processData.localFolder,
                             court: processData.court,
                             courtSystem: processData.courtSystem,
                             vars: processData.vars,
@@ -2332,6 +2336,7 @@ export class ProcessesService {
         if (data.category !== undefined) updateData.category = data.category;
         if (data.description !== undefined) updateData.description = data.description;
         if (data.folder !== undefined) updateData.folder = data.folder;
+        if (data.localFolder !== undefined) updateData.localFolder = data.localFolder;
         if (data.court !== undefined) updateData.court = data.court;
         if (data.courtSystem !== undefined) updateData.courtSystem = data.courtSystem;
         if (data.vars !== undefined) updateData.vars = data.vars;
@@ -2441,6 +2446,32 @@ export class ProcessesService {
         return { success: true, deleted: { id: deleted.id, title: deleted.title } };
     }
 
+    async getFilterOptions(tenantId: string) {
+        const [categories, statuses, areas] = await Promise.all([
+            this.prisma.process.findMany({
+                where: { tenantId, category: { not: '' } },
+                select: { category: true },
+                distinct: ['category'],
+            }),
+            this.prisma.process.findMany({
+                where: { tenantId, status: { not: '' } },
+                select: { status: true },
+                distinct: ['status'],
+            }),
+            this.prisma.process.findMany({
+                where: { tenantId, area: { not: null } },
+                select: { area: true },
+                distinct: ['area'],
+            }),
+        ]);
+
+        return {
+            categories: categories.map(c => c.category).filter(Boolean),
+            statuses: statuses.map(s => s.status).filter(Boolean),
+            areas: areas.map(a => a.area).filter(Boolean),
+        };
+    }
+
     async bulkAction(tenantId: string, dto: any) {
         const { action, tagId, status, lawyerName, category, processIds } = dto;
         const whereClause: any = { tenantId };
@@ -2507,6 +2538,64 @@ export class ProcessesService {
 
             default:
                 throw new BadRequestException('Invalid bulk action');
+        }
+    }
+
+    async createLocalFolder(processId: string, tenantId: string, requestedPath: string) {
+        const process = await this.prisma.process.findFirst({ where: { id: processId, tenantId } });
+        if (!process) throw new NotFoundException('Processo não encontrado');
+        if (!requestedPath) throw new BadRequestException('Caminho não fornecido');
+
+        const fs = require('fs');
+        console.log(`[LOCAL_FOLDER] Tentativa de criar/vincular: ${requestedPath}`);
+        
+        if (!fs.existsSync(requestedPath)) {
+            try {
+                fs.mkdirSync(requestedPath, { recursive: true });
+                console.log(`[LOCAL_FOLDER] Pasta criada fisicamente.`);
+            } catch (e: any) {
+                console.error(`[LOCAL_FOLDER] Erro mkdirSync: ${e.message}`);
+                throw new BadRequestException(`Erro ao criar pasta: ${e.message}`);
+            }
+        } else {
+            console.log(`[LOCAL_FOLDER] Pasta já existe fisicamente.`);
+        }
+
+        const updated = await this.prisma.process.update({
+            where: { id: processId },
+            data: { localFolder: requestedPath }
+        });
+        
+        console.log(`[LOCAL_FOLDER] Sucesso ao atualizar DB: ${updated.localFolder}`);
+        return { success: true, localFolder: updated.localFolder, message: 'Pasta local vinculada com sucesso!' };
+    }
+
+    async openLocalFolder(processId: string, tenantId: string) {
+        const process = await this.prisma.process.findFirst({ where: { id: processId, tenantId } });
+        if (!process) throw new NotFoundException('Processo não encontrado');
+        
+        console.log(`[LOCAL_FOLDER] Abrindo pasta: ${process.localFolder}`);
+        if (!process.localFolder) throw new BadRequestException('Pasta local não configurada neste processo (DB vazio)');
+
+        const fs = require('fs');
+        if (!fs.existsSync(process.localFolder)) {
+            console.warn(`[LOCAL_FOLDER] Pasta não existe no disco: ${process.localFolder}`);
+            throw new BadRequestException('A pasta física não foi encontrada no computador ou no drive de rede Z:.');
+        }
+
+        const { spawn } = require('child_process');
+        try {
+            // Spawn é mais seguro para caminhos com espaços e caracteres especiais (acentos)
+            const subprocess = spawn('explorer.exe', [process.localFolder], {
+                detached: true,
+                stdio: 'ignore',
+                windowsHide: false
+            });
+            subprocess.unref();
+            return { success: true, message: 'Pasta aberta!' };
+        } catch (e: any) {
+            console.error('[LOCAL_FOLDER] Erro spawn explorer.exe:', e);
+            throw new BadRequestException(`Falha ao disparar explorer: ${e.message}`);
         }
     }
 }

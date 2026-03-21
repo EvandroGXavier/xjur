@@ -42,6 +42,17 @@ export class WorkflowsService {
             });
         }
 
+        const stepsToCreate = (data.steps || []).map((step: any) => ({
+            order: step.order,
+            taskTitle: step.taskTitle,
+            description: step.description,
+            taskCategory: step.taskCategory,
+            taskPriority: step.taskPriority,
+            daysToInternal: step.daysToInternal,
+            daysToFatal: step.daysToFatal,
+            defaultAssigneeRole: step.defaultAssigneeRole,
+        }));
+
         return this.prisma.workflow.create({
             data: {
                 tenantId,
@@ -50,7 +61,7 @@ export class WorkflowsService {
                 isActive: data.isActive ?? true,
                 isDefault: data.isDefault ?? false,
                 steps: {
-                    create: data.steps || [],
+                    create: stepsToCreate,
                 },
             },
             include: {
@@ -78,6 +89,17 @@ export class WorkflowsService {
             });
         }
 
+        const stepsToCreate = data.steps ? data.steps.map((step: any) => ({
+            order: step.order,
+            taskTitle: step.taskTitle,
+            description: step.description,
+            taskCategory: step.taskCategory,
+            taskPriority: step.taskPriority,
+            daysToInternal: step.daysToInternal,
+            daysToFatal: step.daysToFatal,
+            defaultAssigneeRole: step.defaultAssigneeRole,
+        })) : undefined;
+
         return this.prisma.workflow.update({
             where: { id },
             data: {
@@ -85,9 +107,9 @@ export class WorkflowsService {
                 description: data.description,
                 isActive: data.isActive,
                 isDefault: data.isDefault,
-                ...(data.steps && {
+                ...(stepsToCreate && {
                     steps: {
-                        create: data.steps,
+                        create: stepsToCreate,
                     },
                 }),
             },

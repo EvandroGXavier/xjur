@@ -341,9 +341,10 @@ model Process {
   folder      String? // Pasta na Nuvem (Z:\, Google Drive)
   description String? @db.Text // Descrição Rica (HTML/Markdown)
 
-  // Microsoft 365 Integration
+  // Microsoft 365 Integration e Integração Local
   msDriveId   String? // ID da pasta do processo no OneDrive
   msFolderUrl String? // Link do OneDrive para acesso rápido
+  localFolder String? // Caminho físico no PC local Windows (C:\...)
 
   // Detalhes Jurídicos
   npu               String? // Numeração Única (Normalizada)
