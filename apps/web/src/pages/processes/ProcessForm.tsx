@@ -15,13 +15,22 @@ import {
     ExternalLink,
     Search,
     RefreshCcw,
+    Gavel,
+    Upload,
+    User,
+    Plus,
+    DollarSign,
+    Check,
+    X,
 } from 'lucide-react';
+import { ContactPickerGlobal } from '../../components/contacts/ContactPickerGlobal';
 import { masks } from '../../utils/masks';
 import { ProcessParties } from './ProcessParties';
 import { ProcessoAndamentos } from '../../components/processos/ProcessoAndamentos';
 import { ProcessAgenda } from '../../components/processos/ProcessAgenda';
 import { CreatableSelect } from '../../components/ui/CreatableSelect';
 import { useHotkeys } from '../../hooks/useHotkeys';
+import { clsx } from 'clsx';
 import { getOfficeFolderDisplayPath } from '../../utils/officePath';
 
 const DEFAULT_AREAS = [
@@ -53,6 +62,7 @@ const EMPTY_FORM = {
     description: '',
     folder: '',
     metadata: null as any,
+    workflowId: '',
 };
 
 const normalizeLifecycleStatus = (value?: string | null, fallback = 'ATIVO') => {
@@ -90,7 +100,11 @@ type ImportedParty = {
     email?: string;
     oab?: string;
     representedNames?: string[];
+    isClient?: boolean;
+    isOpposing?: boolean;
 };
+
+const LAWYER_TERMS = ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'];
 
 type CnjTimelineImportStatus = {
     canImport: boolean;
@@ -172,8 +186,19 @@ export function ProcessForm() {
     const [lastConsultSummary, setLastConsultSummary] = useState('');
     const [lastPdfImportSummary, setLastPdfImportSummary] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
+    const [workflows, setWorkflows] = useState<any[]>([]);
 
     useEffect(() => {
+        const fetchInitialData = async () => {
+            try {
+                const res = await api.get('/workflows');
+                setWorkflows(res.data.filter((w: any) => w.isActive) || []);
+            } catch (error) {
+                console.error('Failed to load workflows', error);
+            }
+        };
+        fetchInitialData();
+
         if (isEditing) {
             void fetchProcess();
             void fetchCnjTimelineStatus(id);
@@ -205,6 +230,7 @@ export function ProcessForm() {
         value: typeof payload.value === 'number' && payload.value > 0 ? payload.value : form.value,
         description: payload.description || form.description,
         folder: payload.folder || form.folder,
+        workflowId: form.workflowId,
         metadata: {
             ...(form.metadata && typeof form.metadata === 'object' ? form.metadata : {}),
             ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
@@ -236,6 +262,7 @@ export function ProcessForm() {
                 description: data.description || '',
                 folder: data.folder || data.msFolderUrl || '',
                 metadata: data.metadata || null,
+                workflowId: data.workflowId || '',
             });
             setImportedParties(Array.isArray(data.parties) ? data.parties : []);
             setImportedMovements(Array.isArray(data.movements) ? data.movements : []);
@@ -258,6 +285,23 @@ export function ProcessForm() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleToggleImportedPartyStatus = (idx: number) => {
+        setImportedParties(prev => prev.map((party, i) => {
+            if (idx !== i) return party;
+            
+            const isLawyer = LAWYER_TERMS.some(term => party.type.toUpperCase().includes(term));
+            if (isLawyer) return party;
+
+            if (!party.isClient && !party.isOpposing) {
+                return { ...party, isClient: true, isOpposing: false };
+            } else if (party.isClient) {
+                return { ...party, isClient: false, isOpposing: true };
+            } else {
+                return { ...party, isClient: false, isOpposing: false };
+            }
+        }));
     };
 
     const fetchCnjTimelineStatus = async (processId?: string) => {
@@ -592,8 +636,9 @@ export function ProcessForm() {
             </div>
 
             {(isEditing || importedParties.length > 0 || importedMovements.length > 0) && (
-                <div className="flex border-b border-slate-800 mb-6">
+                <div className="flex border-b border-slate-800 mb-6 overflow-x-auto scroller-hidden">
                     <TabButton tabId="MAIN" label="PRINCIPAL" icon={FileText} />
+                    <TabButton tabId="TJ" label="TJ" icon={Gavel} />
                     {(isEditing || importedParties.length > 0) && <TabButton tabId="PARTIES" label="PARTES" icon={Users} />}
                     {(isEditing || importedMovements.length > 0) && <TabButton tabId="TIMELINE" label="ANDAMENTOS" icon={Activity} />}
                     {isEditing && <TabButton tabId="AGENDA" label="AGENDA" icon={Calendar} />}
@@ -601,6 +646,54 @@ export function ProcessForm() {
             )}
 
             <div className="max-w-5xl">
+                {!isEditing && importedParties.length === 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 animate-in slide-in-from-top-4 duration-500">
+                        {/* IA Import Card */}
+                        <div 
+                            onClick={() => document.getElementById(pdfDossierInputId)?.click()}
+                            className="group relative overflow-hidden bg-slate-900 border border-slate-700 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-slate-800/50 transition cursor-pointer shadow-lg"
+                        >
+                            <div className="absolute top-0 right-0 p-2 bg-indigo-500 text-white text-[10px] font-bold rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity">POWERED BY DR.X</div>
+                            <div className="flex items-center gap-5">
+                                <div className="p-4 bg-indigo-500/10 text-indigo-400 rounded-2xl group-hover:scale-110 transition-transform">
+                                    <Upload size={28} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition-colors">Importar PDF (IA)</h3>
+                                    <p className="text-slate-400 text-sm mt-1">Carregar petição inicial ou capa para extração automática.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* CNJ Search Card */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-amber-500/50 transition shadow-lg">
+                            <div className="flex items-center gap-5">
+                                <div className="p-4 bg-amber-500/10 text-amber-400 rounded-2xl">
+                                    <Search size={28} />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-bold text-white mb-2">Sincronização Judicial</h3>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            value={form.cnj} 
+                                            onChange={e => setForm({...form, cnj: masks.cnj(e.target.value)})} 
+                                            placeholder="CNJ (0000000-00...)"
+                                            className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 transition"
+                                        />
+                                        <button 
+                                            type="button"
+                                            onClick={() => handleConsultCnj(false)}
+                                            disabled={consultingCnj}
+                                            className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-bold shadow-md transition disabled:opacity-50"
+                                        >
+                                            {consultingCnj ? <Loader2 size={16} className="animate-spin" /> : 'Consultar'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 <div className={activeTab === 'MAIN' ? 'block' : 'hidden'}>
                     <form onSubmit={e => { e.preventDefault(); void handleSubmit(true); }} className="space-y-6">
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
@@ -608,12 +701,121 @@ export function ProcessForm() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Titulo / Nome do Caso *</label>
-                                    <input id="focus-title" autoFocus value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className={inputClass} placeholder="Ex: Acao de Cobranca - Joao vs Maria" required />
+                                    <input id="focus-title" autoFocus value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className={inputClass} placeholder="Ex: Ação de Cobrança - João vs Maria" required />
                                 </div>
+                                {!isEditing && (
+                                    <div className="space-y-1.5">
+                                        <label className={labelClass}>Cliente Principal</label>
+                                        <ContactPickerGlobal 
+                                            contactLabel="Vincular cliente agora..."
+                                            onAdd={async (data) => {
+                                                setImportedParties([{ name: data.contactName || '', type: 'CLIENTE', isClient: true }]);
+                                                if (!form.title) setForm(prev => ({ ...prev, title: `Ação - ${data.contactName}` }));
+                                            }}
+                                            onSelectContact={(cid, cname) => {
+                                                setImportedParties([{ name: cname || '', type: 'CLIENTE', isClient: true }]);
+                                                if (!form.title) setForm(prev => ({ ...prev, title: `Ação - ${cname}` }));
+                                            }}
+                                            hideRole={true}
+                                            hideQualification={true}
+                                            className="!bg-slate-950"
+                                        />
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-2 gap-5">
+                                    <div className="space-y-1.5">
+                                        <label className={labelClass}>Categoria</label>
+                                        <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputClass}>
+                                            <option value="EXTRAJUDICIAL">Extrajudicial</option>
+                                            <option value="JUDICIAL">Judicial</option>
+                                            <option value="ADMINISTRATIVO">Administrativo</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className={labelClass}>Status</label>
+                                        <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={inputClass}>
+                                            <option value="ATIVO">Ativo</option>
+                                            <option value="EM_ANDAMENTO">Em Andamento</option>
+                                            <option value="SUSPENSO">Suspenso</option>
+                                            <option value="ARQUIVADO">Arquivado</option>
+                                            <option value="ENCERRADO">Encerrado</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Classificacao e Notas</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-1.5 min-w-[200px]">
+                                    <label className={labelClass}>Area</label>
+                                    <CreatableSelect value={form.area} onChange={val => setForm({ ...form, area: val })} options={DEFAULT_AREAS} placeholder="Selecione ou digite a area..." className="!bg-slate-950" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className={labelClass}>Assunto</label>
+                                    <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} className={inputClass} placeholder="Acao de Cobranca, Indenizacao..." />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-1 gap-5">
+                                <div className="space-y-1.5">
+                                    <label className={labelClass}>Esteira de Trabalho (Workflow Inicial)</label>
+                                    <select 
+                                        value={form.workflowId || ''} 
+                                        onChange={e => setForm({ ...form, workflowId: e.target.value })} 
+                                        className={inputClass}
+                                        disabled={isEditing}
+                                    >
+                                        <option value="">{isEditing ? 'Configurada no início (Inalterável)' : 'Padrão do Sistema (se houver)'}</option>
+                                        {workflows.map(wf => (
+                                            <option key={wf.id} value={wf.id}>{wf.name} {wf.isDefault ? '(Padrão)' : ''}</option>
+                                        ))}
+                                    </select>
+                                    {!isEditing && <p className="text-xs text-slate-500 mt-1">A esteira criará automaticamente as tarefas (andamentos) sequenciais para guiar este processo.</p>}
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className={labelClass}>Pasta na Nuvem</label>
+                                <div className="flex flex-col gap-3 md:flex-row">
+                                    <input value={form.folder} onChange={e => setForm({ ...form, folder: e.target.value })} className={inputClass} placeholder="Link da pasta Microsoft 365 ou caminho legado" />
+                                    <button type="button" onClick={handleSyncMicrosoftFolder} disabled={!isEditing || syncingMicrosoftFolder || loading} className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-50">
+                                        {syncingMicrosoftFolder ? <Loader2 size={16} className="animate-spin" /> : <FolderSync size={16} />}
+                                        Criar/Sincronizar Pasta
+                                    </button>
+                                </div>
+                                {form.folder && (
+                                    <p className="text-xs text-slate-400">
+                                        Visualizacao curta: <span className="font-mono text-indigo-300">{getOfficeFolderDisplayPath(form.folder)}</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className={labelClass}>Descricao / Objeto</label>
+                                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className={`${inputClass} min-h-[120px]`} placeholder="Descreva o objeto da acao ou do caso..." />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pb-6 border-t border-slate-800 pt-6">
+                            <button type="button" onClick={() => navigate('/processes')} className="px-6 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition">Cancelar (ESC)</button>
+                            <button type="button" onClick={() => void handleSubmit(true)} disabled={loading} className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium flex items-center gap-2 transition disabled:opacity-50 shadow-lg shadow-indigo-500/20">
+                                {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                                Salvar Tudo
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div className={activeTab === 'TJ' ? 'block' : 'hidden'}>
+                    <div className="space-y-6">
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Identificacao Judicial</h3>
+                            <div className="max-w-md">
                                 <div className="space-y-1.5">
                                     <label className={labelClass}>Numero CNJ</label>
                                     <div className="flex gap-2">
-                                        <input value={form.cnj} onChange={e => setForm({ ...form, cnj: masks.cnj(e.target.value) })} className={`${inputClass} font-mono`} placeholder="0000000-00.0000.0.00.0000" />
+                                        <input value={form.cnj} onChange={e => setForm({ ...form, cnj: masks.cnj(e.target.value) })} className={`${inputClass} font-mono text-lg`} placeholder="0000000-00.0000.0.00.0000" />
                                         <button type="button" onClick={() => void handleConsultCnj(false)} disabled={consultingCnj} className="inline-flex items-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2.5 text-sm font-medium text-indigo-300 transition hover:bg-indigo-500/20 disabled:opacity-50">
                                             {consultingCnj ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
                                             Consultar
@@ -626,30 +828,14 @@ export function ProcessForm() {
                                         </button>
                                     )}
                                 </div>
-                                <div className="space-y-1.5">
-                                    <label className={labelClass}>Categoria</label>
-                                    <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputClass}>
-                                        <option value="EXTRAJUDICIAL">Extrajudicial</option>
-                                        <option value="JUDICIAL">Judicial</option>
-                                        <option value="ADMINISTRATIVO">Administrativo</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className={labelClass}>Status</label>
-                                    <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={inputClass}>
-                                        <option value="ATIVO">Ativo</option>
-                                        <option value="EM_ANDAMENTO">Em Andamento</option>
-                                        <option value="SUSPENSO">Suspenso</option>
-                                        <option value="ARQUIVADO">Arquivado</option>
-                                        <option value="ENCERRADO">Encerrado</option>
-                                    </select>
-                                </div>
                             </div>
+
                             {lastConsultSummary && (
                                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
                                     {lastConsultSummary}
                                 </div>
                             )}
+
                             {shouldShowCnjTimelineCard && (
                                 <div className="grid gap-4 xl:grid-cols-2">
                                     <div className={`rounded-xl border px-4 py-4 ${cnjTimelineCardClass}`}>
@@ -680,22 +866,7 @@ export function ProcessForm() {
                                                     <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
                                                         Novos agora: {cnjTimelineCardState?.newMovementCount || 0}
                                                     </span>
-                                                    {cnjTimelineCardState?.sourceSystem && (
-                                                        <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
-                                                            Sistema: {cnjTimelineCardState.sourceSystem}
-                                                        </span>
-                                                    )}
-                                                    {cnjTimelineCardState?.sourceCourt && (
-                                                        <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
-                                                            Tribunal: {cnjTimelineCardState.sourceCourt}
-                                                        </span>
-                                                    )}
                                                 </div>
-                                                {cnjTimelineCardState?.lastSourceUpdateAt && (
-                                                    <p className="text-xs text-slate-400">
-                                                        Ultima atualizacao oficial detectada: {new Date(cnjTimelineCardState.lastSourceUpdateAt).toLocaleString('pt-BR')}
-                                                    </p>
-                                                )}
                                             </div>
                                             <div className="flex min-w-[240px] flex-col gap-2">
                                                 <button
@@ -707,7 +878,6 @@ export function ProcessForm() {
                                                         checkingCnjTimelineStatus
                                                     }
                                                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/15 px-4 py-3 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    title="Importa apenas os movimentos novos do CNJ, preservando o historico ja trabalhado pelo escritorio."
                                                 >
                                                     {importingCnjTimelines ? (
                                                         <Loader2 size={17} className="animate-spin" />
@@ -741,26 +911,12 @@ export function ProcessForm() {
                                             <div className="space-y-2">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <span className="text-sm font-semibold text-white">PDF Integral do Processo</span>
-                                                    <span className="rounded-full border border-violet-500/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-100">
-                                                        Cadastro/atualizacao + PDF + Skill + DrX
-                                                    </span>
                                                 </div>
                                                 <p className="text-sm text-slate-200">
-                                                    Detecta `PJe` ou `Eproc`, cadastra ou atualiza o processo pelo CNJ, sincroniza partes, importa andamentos por `ID` ou `EVENTO` e aplica a skill de leitura processual antes de pedir ao DrX-Claw um resumo operacional com proximo passo.
+                                                    Detecta `PJe` ou `Eproc`, cadastra ou atualiza o processo pelo CNJ e importa andamentos.
                                                 </p>
-                                                <div className="flex flex-wrap gap-3 text-xs text-slate-300">
-                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
-                                                        Fonte: autos completos do tribunal
-                                                    </span>
-                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
-                                                        OCR: sob demanda
-                                                    </span>
-                                                    <span className="rounded-md border border-white/10 bg-black/10 px-2 py-1">
-                                                        Nao sobrescreve historico existente
-                                                    </span>
-                                                </div>
                                                 {lastPdfImportSummary && (
-                                                    <p className="text-xs text-violet-100/90">
+                                                    <p className="text-xs text-violet-100/90 font-medium">
                                                         {lastPdfImportSummary}
                                                     </p>
                                                 )}
@@ -776,18 +932,14 @@ export function ProcessForm() {
                                                 <label
                                                     htmlFor={pdfDossierInputId}
                                                     className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/15 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/25 ${importingPdfDossier ? 'pointer-events-none opacity-60' : ''}`}
-                                                    title="Le o PDF do processo, cria ou atualiza o cadastro e importa apenas atos novos."
                                                 >
                                                     {importingPdfDossier ? (
                                                         <Loader2 size={17} className="animate-spin" />
                                                     ) : (
                                                         <FileText size={17} />
                                                     )}
-                                                    {importingPdfDossier ? 'Importando PDF do processo...' : 'Importar PDF do processo'}
+                                                    {importingPdfDossier ? 'Importando...' : 'Importar PDF do processo'}
                                                 </label>
-                                                <p className="text-xs text-slate-400">
-                                                    Melhor uso para o advogado: subir autos completos do PJe ou EPROC para montar o processo, enriquecer o historico e receber uma orientacao inicial do DrX-Claw apoiada pela skill juridica do sistema.
-                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -815,62 +967,13 @@ export function ProcessForm() {
                             </div>
                         </div>
 
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
-                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Classificacao e Notas</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-1.5 min-w-[200px]">
-                                    <label className={labelClass}>Area</label>
-                                    <CreatableSelect value={form.area} onChange={val => setForm({ ...form, area: val })} options={DEFAULT_AREAS} placeholder="Selecione ou digite a area..." className="!bg-slate-950" />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className={labelClass}>Assunto</label>
-                                    <input value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} className={inputClass} placeholder="Acao de Cobranca, Indenizacao..." />
-                                </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className={labelClass}>Pasta na Nuvem</label>
-                                <div className="flex flex-col gap-3 md:flex-row">
-                                    <input value={form.folder} onChange={e => setForm({ ...form, folder: e.target.value })} className={inputClass} placeholder="Link da pasta Microsoft 365 ou caminho legado" />
-                                    <button type="button" onClick={handleSyncMicrosoftFolder} disabled={!isEditing || syncingMicrosoftFolder || loading} className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-50">
-                                        {syncingMicrosoftFolder ? <Loader2 size={16} className="animate-spin" /> : <FolderSync size={16} />}
-                                        Criar/Sincronizar Pasta Microsoft 365
-                                    </button>
-                                    {form.folder && (
-                                        <button type="button" onClick={() => window.open(form.folder, '_blank', 'noopener,noreferrer')} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700">
-                                            <ExternalLink size={16} />
-                                            Abrir Pasta
-                                        </button>
-                                    )}
-                                </div>
-                                {form.folder && (
-                                    <p className="text-xs text-slate-400">
-                                        Visualizacao curta: <span className="font-mono text-indigo-300">{getOfficeFolderDisplayPath(form.folder)}</span>
-                                    </p>
-                                )}
-                                <p className="text-xs text-slate-500">
-                                    O teste do Microsoft 365 apenas valida acesso. Este botao cria ou sincroniza a pasta real do processo e suas subpastas padrao.
-                                </p>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className={labelClass}>Descricao / Objeto</label>
-                                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className={`${inputClass} min-h-[120px]`} placeholder="Descreva o objeto da acao ou do caso..." />
-                            </div>
-                        </div>
-
                         <div className="flex justify-end gap-3 pb-6 border-t border-slate-800 pt-6">
-                            <button type="button" onClick={() => navigate('/processes')} className="px-6 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition">Cancelar (ESC)</button>
-                            <button type="button" onClick={() => void handleSubmit(false)} disabled={loading} className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-2 transition disabled:opacity-50 shadow-lg shadow-blue-500/20">
+                            <button type="button" onClick={() => void handleSubmit(true)} disabled={loading} className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-2 transition disabled:opacity-50">
                                 {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                                Salvar
-                            </button>
-                            <button type="button" onClick={() => void handleSubmit(true)} disabled={loading} className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium flex items-center gap-2 transition disabled:opacity-50 shadow-lg shadow-indigo-500/20">
-                                {loading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                                Salvar e Sair
+                                Salvar Tudo
                             </button>
                         </div>
-                    </form>
+                    </div>
                 </div>
 
                 {activeTab === 'PARTIES' && (
@@ -884,26 +987,50 @@ export function ProcessForm() {
                                     <p className="text-xs text-slate-400 mt-1">Estas partes serao salvas e vinculadas ao processo assim que voce clicar em Salvar.</p>
                                 </div>
                                 <div className="divide-y divide-slate-800">
-                                    {importedParties.map((party, idx) => (
-                                        <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700">
-                                                    <Users size={20} />
+                                    {importedParties.map((party, idx) => {
+                                        const isLawyer = LAWYER_TERMS.some(term => party.type.toUpperCase().includes(term));
+                                        return (
+                                            <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition">
+                                                <div className="flex items-center gap-3">
+                                                    {!isLawyer && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleImportedPartyStatus(idx)}
+                                                            className={clsx(
+                                                                'w-6 h-6 flex items-center justify-center rounded-lg border transition-all active:scale-90 shrink-0',
+                                                                party.isClient
+                                                                    ? 'bg-emerald-500 text-white border-emerald-400'
+                                                                    : party.isOpposing
+                                                                      ? 'bg-red-500 text-white border-red-400'
+                                                                      : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500',
+                                                            )}
+                                                            title="Alternar Status (Cliente / Contrario / Neutro)"
+                                                        >
+                                                            {party.isClient ? <Check size={12} /> : party.isOpposing ? <X size={12} /> : <Plus size={12} />}
+                                                        </button>
+                                                    )}
+                                                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700">
+                                                        <Users size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium text-white">{party.name}</div>
+                                                        <div className="text-xs text-slate-500">{party.type} {party.document && `| ${party.document}`}</div>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <div className="font-medium text-white">{party.name}</div>
-                                                    <div className="text-xs text-slate-500">{party.type} {party.document && `| ${party.document}`}</div>
+                                                <div className="flex items-center gap-2">
+                                                    {party.isClient && <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">CLIENTE</span>}
+                                                    {party.isOpposing && <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">CONTRARIO</span>}
+                                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                                        isLawyer ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 
+                                                        String(party.type || '').includes('AUTOR') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                                        'bg-slate-700/50 text-slate-400 border border-slate-600'
+                                                    }`}>
+                                                        {party.type}
+                                                    </span>
                                                 </div>
                                             </div>
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                                String(party.type || '').includes('ADVOG') ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 
-                                                String(party.type || '').includes('AUTOR') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                                                'bg-slate-700/50 text-slate-400 border border-slate-600'
-                                            }`}>
-                                                {party.type}
-                                            </span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

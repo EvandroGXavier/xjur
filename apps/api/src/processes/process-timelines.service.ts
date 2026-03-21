@@ -51,7 +51,7 @@ export class ProcessTimelinesService {
         // --- Workflow Fields ---
         const category = data.category || 'REGISTRO';
         const status = data.status || 'PENDENTE';
-        const priority = data.priority || 'MEDIA';
+        const priority = data.priority || 'BAIXA';
         const templateCode = data.templateCode || null;
         const parentTimelineId = data.parentTimelineId || null;
 
@@ -61,7 +61,7 @@ export class ProcessTimelinesService {
                 processId,
                 title: data.title,
                 description: data.description,
-                date: new Date(data.date),
+                date: data.date ? new Date(data.date) : new Date(),
                 type: data.type || (attachments.length > 0 ? 'FILE' : 'MOVEMENT'),
                 origin: data.origin || 'INTERNO',
                 internalDate: data.internalDate ? new Date(data.internalDate) : null,
@@ -70,7 +70,7 @@ export class ProcessTimelinesService {
                 responsibleAdvogado: data.responsibleAdvogado,
                 metadata: metadata,
                 // Defaults
-                source: 'MANUAL',
+                source: data.source || 'MANUAL',
                 
                 // Workflow Fields
                 category,
@@ -78,7 +78,8 @@ export class ProcessTimelinesService {
                 priority,
                 templateCode,
                 parentTimelineId,
-                requesterName: user,
+                workflowStepId: data.workflowStepId || null,
+                requesterName: user || 'sistema',
                 responsibleName: data.responsibleName || null,
                 completedAt: status === 'CONCLUIDO' ? new Date() : null,
                 responsibleHistory: data.responsibleName ? [{ name: data.responsibleName, date: new Date() }] : [],
@@ -96,6 +97,23 @@ export class ProcessTimelinesService {
         }
 
         return newItem;
+    }
+
+    /**
+     * Creates a system-generated movement (AUTOMÁTICO)
+     */
+    async createSystemTimeline(processId: string, title: string, description: string, metadata: any = {}, category: 'REGISTRO' | 'ACAO' | 'AGENDA' = 'REGISTRO') {
+        return this.create(processId, {
+            title,
+            description,
+            date: new Date().toISOString(),
+            type: 'MOVEMENT',
+            origin: 'SYSTEM',
+            source: 'SYSTEM',
+            category,
+            status: 'CONCLUIDO',
+            metadata
+        }, [], 'SISTEMA');
     }
 
     private async generateWorkflowNovaDemanda(processId: string, parentId: string, user?: string) {
@@ -147,14 +165,15 @@ export class ProcessTimelinesService {
                     description: `Gerado via template WF_NOVA_DEMANDA`,
                     date: item.date,
                     type: item.type,
-                    origin: 'INTERNO',
-                    source: 'MANUAL',
+                    origin: 'AUTOMATICO',
+                    source: 'SYSTEM',
                     category: item.category,
                     status: item.status,
                     priority: item.priority,
                     internalDate: item.internalDate || null,
                     templateCode: 'WF_NOVA_DEMANDA',
                     requesterName: user || 'sistema',
+                    metadata: { generatedBy: 'WF_NOVA_DEMANDA' }
                 }
             });
         }
@@ -261,6 +280,11 @@ export class ProcessTimelinesService {
              await this.syncAppointment(updated);
         }
 
+        // --- Workflow trigger ---
+        if (updated.status === 'CONCLUIDO' && existing.status !== 'CONCLUIDO' && updated.workflowStepId) {
+            await this.triggerNextWorkflowStepsForCompletedTimeline(updated);
+        }
+
         return updated;
     }
 
@@ -276,6 +300,68 @@ export class ProcessTimelinesService {
     getAttachmentPath(fileName: string) {
         const path = require('path');
         return path.join(process.cwd(), 'uploads', 'timelines', fileName);
+    }
+
+    // --- Workflows (Esteira de Trabalho) ---
+
+    private async triggerNextWorkflowStepsForCompletedTimeline(timeline: any) {
+        if (!timeline.workflowStepId) return;
+
+        const currentStep = await this.prisma.workflowStep.findUnique({
+            where: { id: timeline.workflowStepId },
+            include: { workflow: true }
+        });
+
+        if (!currentStep) return;
+
+        await this.triggerNextWorkflowSteps(timeline.processId, currentStep.workflowId, currentStep.order, timeline.responsibleName || 'Sistema');
+    }
+
+    async triggerNextWorkflowSteps(processId: string, workflowId: string, currentOrder: number, user: string) {
+        // Find next steps (order = currentOrder + 1)
+        const nextSteps = await this.prisma.workflowStep.findMany({
+            where: { 
+                workflowId, 
+                order: currentOrder + 1 
+            }
+        });
+
+        if (!nextSteps.length) return; // Workflow completed or no next steps
+
+        const now = new Date();
+
+        for (const step of nextSteps) {
+            let internalDate = null;
+            let fatalDate = null;
+
+            if (step.daysToInternal !== null && step.daysToInternal !== undefined) {
+                internalDate = new Date(now.getTime() + step.daysToInternal * 24 * 60 * 60 * 1000);
+            }
+            if (step.daysToFatal !== null && step.daysToFatal !== undefined) {
+                fatalDate = new Date(now.getTime() + step.daysToFatal * 24 * 60 * 60 * 1000);
+            }
+
+            await this.prisma.processTimeline.create({
+                data: {
+                    processId,
+                    title: step.taskTitle,
+                    description: step.description || `Este andamento foi gerado automaticamente pela Esteira de Trabalho`,
+                    date: now,
+                    type: 'MOVEMENT',
+                    origin: 'AUTOMATICO',
+                    source: 'SYSTEM',
+                    category: step.taskCategory,
+                    status: 'PENDENTE',
+                    priority: step.taskPriority,
+                    internalDate,
+                    fatalDate,
+                    workflowStepId: step.id,
+                    requesterName: 'Sistema (Auto)',
+                    responsibleName: step.defaultAssigneeRole || null,
+                    metadata: { generatedByWorkflow: workflowId }
+                }
+            });
+        }
     }
 }
 

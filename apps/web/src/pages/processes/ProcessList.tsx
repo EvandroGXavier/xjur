@@ -16,14 +16,18 @@ import {
     Settings,
     MessageCircle,
     Phone as PhoneIcon,
-    Mail
+    Mail,
+    ChevronDown,
+    ChevronRight,
+    Activity,
+    Calendar,
+    Users
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { masks } from '../../utils/masks';
-import { MagicProcessModal } from './MagicProcessModal';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
@@ -73,7 +77,6 @@ interface Process {
 export function ProcessList() {
     const navigate = useNavigate();
     const [viewMode, setViewMode] = useState<'KANBAN' | 'LIST'>('LIST');
-    const [isMagicModalOpen, setIsMagicModalOpen] = useState(false);
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -127,12 +130,7 @@ export function ProcessList() {
     };
 
     useHotkeys({
-        onNew: () => setIsMagicModalOpen(true),
-        onCancel: () => {
-            if (isMagicModalOpen) {
-                setIsMagicModalOpen(false);
-            }
-        },
+        onNew: () => navigate('/processes/new'),
         onPrint: () => window.print()
     });
 
@@ -203,7 +201,7 @@ export function ProcessList() {
                         <button onClick={() => setViewMode('KANBAN')} className={clsx("p-2 rounded-md transition-all", viewMode === 'KANBAN' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-white")} title="Visualização Kanban"><Kanban size={18} /></button>
                         <button onClick={() => setViewMode('LIST')} className={clsx("p-2 rounded-md transition-all", viewMode === 'LIST' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-white")} title="Visualização em Lista"><List size={18} /></button>
                     </div>
-                    <button onClick={() => setIsMagicModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 whitespace-nowrap"><Plus size={20} /> Novo Processo</button>
+                    <button onClick={() => navigate('/processes/new')} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 whitespace-nowrap"><Plus size={20} /> Novo Processo</button>
                     <button 
                         onClick={() => navigate('/processes/config', { 
                             state: { 
@@ -531,7 +529,6 @@ export function ProcessList() {
                     </div>
                 )}
             </div>
-            <MagicProcessModal isOpen={isMagicModalOpen} onClose={() => setIsMagicModalOpen(false)} onSuccess={fetchProcesses} />
             <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Processos" sections={helpProcesses} />
         </div>
     );

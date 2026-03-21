@@ -29,8 +29,10 @@ interface CreateProcessDto {
     class?: string;
     distributionDate?: string | Date;
     judge?: string;
+    responsibleLawyer?: string;
     parties?: any;
     metadata?: any;
+    workflowId?: string;
 }
 
 interface ImportedProcessPartyInput {
@@ -126,6 +128,7 @@ export class ProcessesService {
         private readonly integrationsService: ProcessIntegrationsService,
         private readonly pdfService: ProcessPdfService,
         private readonly drxClawService: DrxClawService,
+        private readonly timelineService: ProcessTimelinesService,
     ) {}
 
     private async syncMicrosoftFolder(tenantId: string, processId: string) {
@@ -2092,9 +2095,19 @@ export class ProcessesService {
         const normalizedStatus = this.normalizeLifecycleStatus(data.status, 'ATIVO');
         const processMetadata = this.buildProcessMetadata(data.metadata, data.status, normalizedStatus);
 
+        let finalWorkflowId = data.workflowId;
+        if (!finalWorkflowId) {
+            const defaultWorkflow = await this.prisma.workflow.findFirst({
+                where: { tenantId, isDefault: true, isActive: true },
+                select: { id: true },
+            });
+            if (defaultWorkflow) finalWorkflowId = defaultWorkflow.id;
+        }
+
         const processData = {
             tenantId,
             contactId: data.contactId,
+            workflowId: finalWorkflowId,
             cnj: this.normalizeCnj(data.cnj),
             category: data.category,
             title: data.title || `Processo ${this.normalizeCnj(data.cnj) || data.cnj}`,
@@ -2156,6 +2169,23 @@ export class ProcessesService {
                     : await this.prisma.process.create({
                         data: processData,
                     });
+
+        // Registrar andamento automático de criação
+        await this.timelineService.createSystemTimeline(
+            process.id,
+            'Abertura do Processo',
+            `Processo cadastrado no sistema com status inicial: ${process.status}.`,
+            { action: 'CREATE', method: data.category === 'JUDICIAL' && data.cnj ? 'UPSERT' : 'CREATE' }
+        );
+
+        if (process.workflowId) {
+            await this.timelineService.triggerNextWorkflowSteps(
+                process.id,
+                process.workflowId,
+                0,
+                'Sistema (Auto)'
+            );
+        }
 
             this.logAudit('3_SAVED_RESULT', process);
             console.log(`Process saved successfully: ${process.id}`);
@@ -2292,6 +2322,7 @@ export class ProcessesService {
         this.logAudit('UPDATE_RECEIVED', { id, data });
 
         const updateData: any = {};
+        let statusChanged = false;
 
         if (data.title !== undefined) updateData.title = data.title;
         if (data.cnj !== undefined) {
@@ -2305,9 +2336,21 @@ export class ProcessesService {
         if (data.courtSystem !== undefined) updateData.courtSystem = data.courtSystem;
         if (data.vars !== undefined) updateData.vars = data.vars;
         if (data.district !== undefined) updateData.district = data.district;
+        
         if (data.status !== undefined) {
-            updateData.status = this.normalizeLifecycleStatus(data.status, existing.status || 'ATIVO');
+            const nextStatus = this.normalizeLifecycleStatus(data.status, existing.status || 'ATIVO');
+            if (nextStatus !== existing.status) {
+                updateData.status = nextStatus;
+                statusChanged = true;
+            }
         }
+        
+        let lawyerChanged = false;
+        if (data.responsibleLawyer !== undefined && data.responsibleLawyer !== existing.responsibleLawyer) {
+            updateData.responsibleLawyer = data.responsibleLawyer;
+            lawyerChanged = true;
+        }
+
         if (data.area !== undefined) updateData.area = data.area;
         if (data.subject !== undefined) updateData.subject = data.subject;
         if (data.class !== undefined) updateData.class = data.class;
@@ -2339,6 +2382,25 @@ export class ProcessesService {
                 where: { id },
                 data: updateData,
             });
+
+            // Registrar andamentos automáticos de auditoria
+            if (statusChanged) {
+                await this.timelineService.createSystemTimeline(
+                    id,
+                    'Alteração de Status',
+                    `O status do processo foi alterado de "${existing.status}" para "${updateData.status}".`,
+                    { oldStatus: existing.status, newStatus: updateData.status }
+                );
+            }
+
+            if (lawyerChanged) {
+                await this.timelineService.createSystemTimeline(
+                    id,
+                    'Responsável Alterado',
+                    `Advogado responsável alterado de "${existing.responsibleLawyer || 'Nenhum'}" para "${updateData.responsibleLawyer}".`,
+                    { oldLawyer: existing.responsibleLawyer, newLawyer: updateData.responsibleLawyer }
+                );
+            }
 
             this.logAudit('UPDATE_SUCCESS', { id, updated });
             console.log(`Process updated: ${id}`);

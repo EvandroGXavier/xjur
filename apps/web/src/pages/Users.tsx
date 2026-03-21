@@ -10,8 +10,10 @@ import {
   Search,
   Edit2,
   Lock,
-  Check
+  Check,
+  ShieldCheck
 } from 'lucide-react';
+import { TabButton } from '../components/ui/TabButton';
 import { clsx } from 'clsx';
 import { SYSTEM_MODULES } from '../config/modules';
 import { useHotkeys } from '../hooks/useHotkeys';
@@ -41,6 +43,7 @@ export function UsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [formData, setFormData] = useState<any>({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
 
+  const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -153,31 +156,53 @@ export function UsersPage() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-            <h1 className="text-2xl font-bold text-white">Equipe</h1>
-            <p className="text-sm text-slate-400">Gerencie os usuários do seu escritório</p>
+    <div className="p-8 space-y-6 animate-in fade-in duration-500">
+      {/* RICH HEADER */}
+      <div className="flex items-center justify-between bg-slate-900/40 p-6 rounded-2xl border border-slate-800 backdrop-blur-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-emerald-600/10 rounded-2xl flex items-center justify-center border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
+            <ShieldCheck className="text-emerald-400" size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Equipe</h1>
+            <p className="text-slate-400 text-sm mt-0.5">Gestão de colaboradores e níveis de acesso</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
-            <div className="relative">
-                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <div className="relative group">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
                 <input 
                     type="text" 
-                    placeholder="Pesquisar por nome ou e-mail..."
+                    placeholder="Pesquisar..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:border-indigo-500 outline-none w-64 transition-all focus:w-80"
+                    className="bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:border-emerald-500 outline-none w-64 transition-all focus:w-80 shadow-inner"
                 />
             </div>
             <button 
                 onClick={() => handleOpenModal()}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
             >
                 <UserPlus size={18} />
-                Novo Usuário
+                Novo Membro
             </button>
         </div>
+      </div>
+
+      {/* TABS */}
+      <div className="flex border-b border-slate-800">
+        <TabButton 
+          active={activeTab === 'users'} 
+          onClick={() => setActiveTab('users')} 
+          icon={User} 
+          label="Usuários Ativos" 
+        />
+        <TabButton 
+          active={activeTab === 'roles'} 
+          onClick={() => setActiveTab('roles')} 
+          icon={Lock} 
+          label="Cargos e Funções" 
+        />
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">

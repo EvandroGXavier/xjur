@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "../services/api";
 import {
   Settings as SettingsIcon,
@@ -27,23 +28,10 @@ import { useHotkeys } from "../hooks/useHotkeys";
 import { DrxClawTab } from "../components/settings/DrxClawTab";
 import { BackupTab } from "../components/settings/BackupTab";
 import { SkillsTab } from "../components/settings/SkillsTab";
+import { WorkflowsTab } from "../components/settings/WorkflowsTab";
+import { TabButton } from "../components/ui/TabButton";
 
 // --- COMPONENTS ---
-
-const TabButton = ({ active, onClick, icon: Icon, label }: any) => (
-  <button
-    onClick={onClick}
-    className={clsx(
-      "flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors",
-      active
-        ? "border-indigo-500 text-indigo-400"
-        : "border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700",
-    )}
-  >
-    <Icon size={18} />
-    {label}
-  </button>
-);
 
 const Modal = ({ isOpen, onClose, title, children }: any) => {
   if (!isOpen) return null;
@@ -536,7 +524,8 @@ const BulkActionsTab = () => {
 // --- MAIN PAGE ---
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState("options");
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(location.state?.tab || "options");
   const [loading, setLoading] = useState(false);
   const [testingMicrosoft365, setTestingMicrosoft365] = useState(false);
   const [microsoft365TestResult, setMicrosoft365TestResult] = useState<any>(null);
@@ -847,9 +836,13 @@ export function Settings() {
 
       // Aplica tema visual se houver wrapper no main index
       if (type === "theme") {
-        if (newPrefs.theme === "LIGHT")
+        if (newPrefs.theme === "LIGHT") {
+          document.documentElement.classList.add("light");
           document.documentElement.classList.remove("dark");
-        else document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.add("dark");
+          document.documentElement.classList.remove("light");
+        }
       }
 
       // Persiste na API
@@ -922,6 +915,12 @@ export function Settings() {
           onClick={() => setActiveTab("drx-claw")}
           icon={Bot}
           label="DrX-Claw"
+        />
+        <TabButton
+          active={activeTab === "workflows"}
+          onClick={() => setActiveTab("workflows")}
+          icon={SettingsIcon}
+          label="Esteiras de Trabalho"
         />
 
         {/* SAAS TABS - SUPER ADMIN ONLY */}
@@ -1275,6 +1274,8 @@ export function Settings() {
         )}
 
         {activeTab === "skills" && <SkillsTab />}
+
+        {activeTab === "workflows" && <WorkflowsTab />}
 
         {activeTab === "drx-claw" && <DrxClawTab />}
 

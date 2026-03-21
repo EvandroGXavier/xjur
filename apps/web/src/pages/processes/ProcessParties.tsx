@@ -9,6 +9,7 @@ import {
     MessageCircle,
     Phone,
     Plus,
+    Check,
     Search,
     Trash2,
     UserPlus,
@@ -453,19 +454,47 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
         }
     };
 
-    const renderQualificationBadge = (qualification?: PartyQualification) => {
-        if (!qualification) return null;
-        const normalizedName = normalizeText(qualification.name);
-        const badgeClass =
-            normalizedName === 'CLIENTE'
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                : normalizedName === 'CONTRARIO'
-                  ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                  : 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    const handleTogglePartyStatus = async (party: ProcessParty) => {
+        if (isLawyerParty(party)) return;
+
+        let nextState = { isClient: false, isOpposing: false };
+        if (!party.isClient && !party.isOpposing) {
+            nextState = { isClient: true, isOpposing: false };
+        } else if (party.isClient) {
+            nextState = { isClient: false, isOpposing: true };
+        } else {
+            nextState = { isClient: false, isOpposing: false };
+        }
+
+        try {
+            await api.patch(`/processes/${processId}/parties/${party.id}`, nextState);
+            // Atualizar localmente para feedback imediato
+            setParties(prev =>
+                prev.map(p => (p.id === party.id ? { ...p, ...nextState } : p)),
+            );
+        } catch (error) {
+            toast.error('Erro ao atualizar status da parte');
+        }
+    };
+
+    const renderQualificationBadge = (party: ProcessParty) => {
+        // Advogados não levam marca de cliente/contrário segundo a regra do usuário
+        if (isLawyerParty(party)) return null;
+
+        if (!party.isClient && !party.isOpposing) return null;
+
+        const badgeClass = party.isClient
+            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            : 'bg-red-500/10 text-red-400 border-red-500/20';
 
         return (
-            <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide border', badgeClass)}>
-                {qualification.name}
+            <span
+                className={clsx(
+                    'text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide border transition-all duration-300',
+                    badgeClass,
+                )}
+            >
+                {party.isClient ? 'CLIENTE' : 'CONTRARIO'}
             </span>
         );
     };
@@ -497,15 +526,44 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
         return (
             <div key={party.id} className="group px-4 py-3 hover:bg-white/5 transition-colors">
                 <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5">
-                            <button type="button" className="min-w-0 truncate text-left font-semibold text-slate-100 hover:text-indigo-300 transition-colors" onClick={() => navigate(`/contacts/${party.contact.id}`)}>
-                                {party.contact.name}
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                        {!isLawyerParty(party) && (
+                            <button
+                                type="button"
+                                onClick={() => handleTogglePartyStatus(party)}
+                                className={clsx(
+                                    'w-6 h-6 mt-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-90 shrink-0',
+                                    party.isClient
+                                        ? 'bg-emerald-500 text-white border-emerald-400'
+                                        : party.isOpposing
+                                          ? 'bg-red-500 text-white border-red-400'
+                                          : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500',
+                                )}
+                                title="Alternar Status (Cliente / Contrario / Neutro)"
+                            >
+                                {party.isClient ? <Check size={12} /> : party.isOpposing ? <X size={12} /> : <Plus size={12} />}
                             </button>
-                            {party.contact.document && <span className="font-mono text-[11px] text-slate-400">{party.contact.document}</span>}
-                            <span className="text-[11px] uppercase tracking-wide text-slate-500">({party.role.name})</span>
-                            {renderQualificationBadge(party.qualification)}
-                        </div>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5">
+                                <button
+                                    type="button"
+                                    className="min-w-0 truncate text-left font-semibold text-slate-100 hover:text-indigo-300 transition-colors"
+                                    onClick={() => navigate(`/contacts/${party.contact.id}`)}
+                                >
+                                    {party.contact.name}
+                                </button>
+                                {party.contact.document && (
+                                    <span className="font-mono text-[11px] text-slate-400">
+                                        {party.contact.document}
+                                    </span>
+                                )}
+                                <span className="text-[11px] uppercase tracking-wide text-slate-500">
+                                    ({party.role.name})
+                                </span>
+                                {renderQualificationBadge(party)}
+                            </div>
 
                         {party.notes && <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{party.notes}</p>}
 
@@ -523,7 +581,7 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
                                                         </button>
                                                         {link.representativeParty.contact.document && <span className="font-mono text-[10px] text-slate-500">{link.representativeParty.contact.document}</span>}
                                                         <span className="text-[10px] uppercase tracking-wide text-slate-500">({link.representativeParty.role.name})</span>
-                                                        {renderQualificationBadge(link.representativeParty.qualification)}
+                                                        {renderQualificationBadge(link.representativeParty)}
                                                     </div>
                                                 </div>
                                             </div>
@@ -559,11 +617,12 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
                             </button>
                         </div>
 
-                        {isComposerOpen && (
-                            <div className="mt-3 pl-5">
-                                <InlinePartyComposer title="Vincular Procurador" actionLabel="Vincular" onCancel={() => setComposer(null)} onConfirm={payload => handleAddRepresentative(party.id, payload)} />
-                            </div>
-                        )}
+                            {isComposerOpen && (
+                                <div className="mt-3 pl-5">
+                                    <InlinePartyComposer title="Vincular Procurador" actionLabel="Vincular" onCancel={() => setComposer(null)} onConfirm={payload => handleAddRepresentative(party.id, payload)} />
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
@@ -640,14 +699,37 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
                 {items.map(item => (
                     <div key={item.id} className="group px-4 py-3 hover:bg-white/5 transition-colors">
                         <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5">
-                                    <button type="button" className="min-w-0 truncate text-left font-medium text-slate-200 hover:text-indigo-300 transition-colors" onClick={() => navigate(`/contacts/${item.contact.id}`)}>
-                                        {item.contact.name}
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                                {!isLawyerParty(item) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTogglePartyStatus(item)}
+                                        className={clsx(
+                                            'w-6 h-6 mt-0.5 flex items-center justify-center rounded-lg border transition-all active:scale-90 shrink-0',
+                                            item.isClient
+                                                ? 'bg-emerald-500 text-white border-emerald-400'
+                                                : item.isOpposing
+                                                  ? 'bg-red-500 text-white border-red-400'
+                                                  : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500',
+                                        )}
+                                        title="Alternar Status"
+                                    >
+                                        {item.isClient ? <Check size={12} /> : item.isOpposing ? <X size={12} /> : <Plus size={12} />}
                                     </button>
-                                    {item.contact.document && <span className="font-mono text-[11px] text-slate-400">{item.contact.document}</span>}
-                                    <span className="text-[11px] uppercase tracking-wide text-slate-500">({item.role.name})</span>
-                                    {renderQualificationBadge(item.qualification)}
+                                )}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5">
+                                        <button
+                                            type="button"
+                                            className="min-w-0 truncate text-left font-medium text-slate-200 hover:text-indigo-300 transition-colors"
+                                            onClick={() => navigate(`/contacts/${item.contact.id}`)}
+                                        >
+                                            {item.contact.name}
+                                        </button>
+                                        {item.contact.document && <span className="font-mono text-[11px] text-slate-400">{item.contact.document}</span>}
+                                        <span className="text-[11px] uppercase tracking-wide text-slate-500">({item.role.name})</span>
+                                        {renderQualificationBadge(item)}
+                                    </div>
                                 </div>
                             </div>
 

@@ -850,9 +850,23 @@ export class ContactsService {
   async remove(id: string, tenantId: string) {
     await this.getContactOrThrow(id, tenantId);
 
-    return this.prisma.contact.delete({
-      where: { id },
-    });
+    try {
+      return await this.prisma.contact.delete({
+        where: { id },
+      });
+    } catch (error: any) {
+      // Quando o contato possui vínculos obrigatórios (processos, financeiro, etc),
+      // o Prisma lança erro de FK/relação requerida e o DELETE vira 500.
+      // Para o usuário, "excluir" deve ao menos remover da operação: inativamos.
+      if (error?.code === 'P2003' || error?.code === 'P2014') {
+        return this.prisma.contact.update({
+          where: { id },
+          data: { active: false },
+        });
+      }
+
+      throw error;
+    }
   }
   // Address management methods
   async addAddress(contactId: string, createAddressDto: CreateAddressDto, tenantId: string) {

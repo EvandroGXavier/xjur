@@ -53,7 +53,7 @@ type CardFilter = 'ALL' | 'LEADS' | 'PJ' | 'PF' | 'RECENT';
 export function ContactList() {
   const navigate = useNavigate();
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'true' | 'false'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'true' | 'false'>('true');
   const [includedTags, setIncludedTags] = useState<string[]>([]);
   const [excludedTags, setExcludedTags] = useState<string[]>([]);
   const [birthDateStart, setBirthDateStart] = useState('');
@@ -150,8 +150,12 @@ export function ContactList() {
   const handleDeleteContact = async (id: string, name: string) => {
     if (!window.confirm(`Tem certeza que deseja excluir o contato ${name}?`)) return;
     try {
-       await api.delete(`/contacts/${id}`);
-       toast.success('Contato excluído com sucesso!');
+       const response = await api.delete(`/contacts/${id}`);
+       if ((response.data as any)?.active === false) {
+         toast.success('Contato inativado com sucesso!');
+       } else {
+         toast.success('Contato excluído com sucesso!');
+       }
        fetchContacts();
     } catch (err) {
        console.error(err);

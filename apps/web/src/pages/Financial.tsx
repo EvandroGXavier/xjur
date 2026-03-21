@@ -971,10 +971,19 @@ export function Financial() {
 
   const handleOpenSettleModal = async (record: FinancialRecord) => {
     await fetchContacts();
-    setSettlingRecord(record);
+
+    let fullRecord: FinancialRecord = record;
+    try {
+      const response = await api.get(`/financial/records/${record.id}`);
+      fullRecord = response.data;
+    } catch (error) {
+      console.error("Erro ao carregar registro financeiro para liquidação:", error);
+    }
+
+    setSettlingRecord(fullRecord);
 
     const today = new Date().toISOString().split("T")[0];
-    const due = new Date(record.dueDate);
+    const due = new Date(fullRecord.dueDate);
     const todayDate = new Date(today);
     due.setHours(0, 0, 0, 0);
     todayDate.setHours(0, 0, 0, 0);
@@ -990,11 +999,11 @@ export function Financial() {
     if (daysLate > 0) {
       const fineP = 2; // Multa padrão 2%
       autoFinePercent = fineP.toString();
-      autoFine = ((Number(record.amount) * fineP) / 100).toFixed(2);
+      autoFine = ((Number(fullRecord.amount) * fineP) / 100).toFixed(2);
       const months = Math.max(1, Math.ceil(daysLate / 30));
       const interestP = months; // 1% ao mês
       autoInterestPercent = interestP.toString();
-      autoInterest = ((Number(record.amount) * interestP) / 100).toFixed(2);
+      autoInterest = ((Number(fullRecord.amount) * interestP) / 100).toFixed(2);
     }
 
     setSettleFinalOverride("");
@@ -1011,8 +1020,8 @@ export function Financial() {
       discount: "",
       discountPercent: "",
       discountType: "VALUE",
-      paymentMethod: record.paymentMethod || "",
-      bankAccountId: record.bankAccount?.id || "",
+      paymentMethod: fullRecord.paymentMethod || "",
+      bankAccountId: fullRecord.bankAccount?.id || "",
       notes: "",
     });
     setShowSettleModal(true);
@@ -1211,47 +1220,55 @@ export function Financial() {
     await fetchCategories();
 
     if (record) {
-      setEditingRecord(record);
+      let fullRecord: FinancialRecord = record;
+      try {
+        const response = await api.get(`/financial/records/${record.id}`);
+        fullRecord = response.data;
+      } catch (error) {
+        console.error("Erro ao carregar registro financeiro:", error);
+      }
+
+      setEditingRecord(fullRecord);
       setFormData({
-        description: record.description,
-        amount: record.amount.toString(),
-        dueDate: record.dueDate.split("T")[0],
-        paymentDate: record.paymentDate ? record.paymentDate.split("T")[0] : "",
-        status: record.status,
-        type: record.type,
-        category: record.category || "",
-        categoryId: record.categoryId || "",
-        paymentMethod: record.paymentMethod || "",
-        bankAccountId: record.bankAccount?.id || "",
-        notes: record.notes || "",
-        fine: record.fine ? record.fine.toString() : "",
-        interest: record.interest ? record.interest.toString() : "",
-        monetaryCorrection: record.monetaryCorrection
-          ? record.monetaryCorrection.toString()
+        description: fullRecord.description,
+        amount: fullRecord.amount.toString(),
+        dueDate: fullRecord.dueDate.split("T")[0],
+        paymentDate: fullRecord.paymentDate ? fullRecord.paymentDate.split("T")[0] : "",
+        status: fullRecord.status,
+        type: fullRecord.type,
+        category: fullRecord.category || "",
+        categoryId: fullRecord.categoryId || "",
+        paymentMethod: fullRecord.paymentMethod || "",
+        bankAccountId: fullRecord.bankAccount?.id || "",
+        notes: fullRecord.notes || "",
+        fine: fullRecord.fine ? fullRecord.fine.toString() : "",
+        interest: fullRecord.interest ? fullRecord.interest.toString() : "",
+        monetaryCorrection: fullRecord.monetaryCorrection
+          ? fullRecord.monetaryCorrection.toString()
           : "",
-        discount: record.discount ? record.discount.toString() : "",
+        discount: fullRecord.discount ? fullRecord.discount.toString() : "",
         discountType:
-          (record.discountType as "VALUE" | "PERCENTAGE") || "VALUE",
-        totalInstallments: record.totalInstallments
-          ? record.totalInstallments.toString()
+          (fullRecord.discountType as "VALUE" | "PERCENTAGE") || "VALUE",
+        totalInstallments: fullRecord.totalInstallments
+          ? fullRecord.totalInstallments.toString()
           : "1",
-        periodicity: record.periodicity || "Mensal",
+        periodicity: fullRecord.periodicity || "Mensal",
         paymentConditionId: "",
-        origin: (record as any).origin || "MANUAL",
+        origin: (fullRecord as any).origin || "MANUAL",
         showCharges: !!(
-          record.fine ||
-          record.interest ||
-          record.monetaryCorrection ||
-          record.discount
+          fullRecord.fine ||
+          fullRecord.interest ||
+          fullRecord.monetaryCorrection ||
+          fullRecord.discount
         ),
         parties:
-          record.parties?.map((p) => ({
+          fullRecord.parties?.map((p) => ({
             contactId: p.contactId,
             role: p.role,
             amount: p.amount ? Number(p.amount) : undefined,
           })) || [],
         splits:
-          record.splits?.map((s) => ({
+          fullRecord.splits?.map((s) => ({
             contactId: s.contactId,
             role: s.role,
             amount: Number(s.amount),
@@ -1261,7 +1278,7 @@ export function Financial() {
       });
       setInstallments([]);
       setNxInput("");
-      await preloadSavedAttachments(record);
+      await preloadSavedAttachments(fullRecord);
     } else {
       setEditingRecord(null);
       setFormData({
@@ -3300,7 +3317,7 @@ export function Financial() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="flex gap-1 justify-end">
-                          {isOpenRecord(record) && (
+                          {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
                             <button
                               onClick={() => handleOpenSettleModal(record)}
                               disabled={!hasPartiesToSettle(record)}

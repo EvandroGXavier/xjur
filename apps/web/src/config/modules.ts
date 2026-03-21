@@ -17,9 +17,9 @@ import {
 export const SYSTEM_MODULES = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/' },
   { id: 'chat', label: 'Atendimento', icon: MessageSquare, to: '/chat' },
-  { id: 'kanban', label: 'Kanban', icon: Columns, to: '/kanban' },
   { id: 'processes', label: 'Processos', icon: Scale, to: '/processes' },
   { id: 'contacts', label: 'Contatos', icon: Users, to: '/contacts' },
+  { id: 'kanban', label: 'Kanban', icon: Columns, to: '/kanban' },
   { id: 'agenda', label: 'Agenda', icon: Calendar, to: '/agenda' },
   { 
     id: 'financial', 

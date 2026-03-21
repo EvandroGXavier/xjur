@@ -112,9 +112,9 @@ describe('ContactsService', () => {
       email: 'contato@xpto.com',
       whatsapp: null,
       phone: null,
-      document: '12345678000190',
+      document: '11222333000181',
       pfDetails: null,
-      pjDetails: { id: 'pj-1', cnpj: '12345678000190' },
+      pjDetails: { id: 'pj-1', cnpj: '11222333000181' },
     });
     prisma.contact.findMany.mockResolvedValue([]);
     prisma.contact.update.mockResolvedValue({
@@ -123,7 +123,7 @@ describe('ContactsService', () => {
       name: 'Fulano da Silva',
       personType: 'PF',
       email: 'fulano@xpto.com',
-      pfDetails: { id: 'pf-1', cpf: '12345678901' },
+      pfDetails: { id: 'pf-1', cpf: '11144477735' },
       pjDetails: null,
       addresses: [],
       additionalContacts: [],
@@ -135,7 +135,7 @@ describe('ContactsService', () => {
         personType: 'PF',
         name: 'Fulano da Silva',
         email: 'fulano@xpto.com',
-        cpf: '12345678901',
+        cpf: '11144477735',
       } as never,
       'tenant-1',
     );
@@ -162,6 +162,22 @@ describe('ContactsService', () => {
         relationTypeId: 'type-1',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('inativa o contato quando a exclusao falha por vinculos obrigatorios', async () => {
+    const { prisma, service } = createService();
+    prisma.contact.findFirst.mockResolvedValue({ id: 'contact-1', tenantId: 'tenant-1' });
+    prisma.contact.delete.mockRejectedValue({ code: 'P2003' });
+    prisma.contact.update.mockResolvedValue({ id: 'contact-1', tenantId: 'tenant-1', active: false });
+
+    const result = await service.remove('contact-1', 'tenant-1');
+
+    expect(prisma.contact.delete).toHaveBeenCalledWith({ where: { id: 'contact-1' } });
+    expect(prisma.contact.update).toHaveBeenCalledWith({
+      where: { id: 'contact-1' },
+      data: { active: false },
+    });
+    expect(result.active).toBe(false);
   });
 
   it('consolida insights de processos, agenda e whatsapp', async () => {

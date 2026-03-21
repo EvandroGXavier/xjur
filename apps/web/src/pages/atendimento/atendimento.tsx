@@ -49,6 +49,7 @@ import { MessageBubble } from './components/MessageBubble';
 import { InfoPanel } from './components/InfoPanel';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpAtendimento, helpOmnichannelConnections } from '../../data/helpManuals';
+import { TabButton } from '../../components/ui/TabButton';
 
 // =========================
 // INTERFACES
@@ -679,33 +680,75 @@ export function AtendimentoPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-theme(spacing.16))] bg-slate-950 overflow-hidden text-slate-200">
-      <div className="w-16 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-4 gap-2 z-20 shadow-xl shrink-0">
-        <ModuleButton active={activeModule === 'chats'} icon={MessageSquare} label="Chats" onClick={() => setActiveModule('chats')} />
-        <ModuleButton active={activeModule === 'quick_replies'} icon={Zap} label="Respostas" onClick={() => setActiveModule('quick_replies')} />
-        <ModuleButton active={activeModule === 'kanban'} icon={KanbanIcon} label="Kanban" onClick={() => setActiveModule('kanban')} />
-        <div className="h-px w-8 bg-slate-800 my-2" />
-        <ModuleButton active={activeModule === 'tags'} icon={Tags} label="Tags" onClick={() => setActiveModule('tags')} color="text-pink-400" />
-        <ModuleButton active={activeModule === 'bot'} icon={Bot} label="Bots" onClick={() => setActiveModule('bot')} color="text-cyan-400" />
-        <ModuleButton active={activeModule === 'connections'} icon={QrCode} label="Conectar (QR)" onClick={() => setActiveModule('connections')} color="text-emerald-400" />
-        <ModuleButton active={activeModule === 'security'} icon={ShieldCheck} label="Ajustes Instância" onClick={() => setActiveModule('security')} color="text-emerald-500" />
-        <div className="flex-1" />
-        <ModuleButton active={activeModule === 'settings'} icon={Sliders} label="Config" onClick={() => setActiveModule('settings')} />
+    <div className="flex flex-col h-[calc(100vh-theme(spacing.16))] bg-slate-950 overflow-hidden text-slate-200">
+      {/* RICH HEADER TABS */}
+      <div className="bg-slate-900 border-b border-slate-800 px-4 flex items-center gap-1 overflow-x-auto shrink-0 shadow-2xl z-20 custom-scrollbar scrollbar-none">
+        <TabButton 
+          active={activeModule === 'chats'} 
+          onClick={() => setActiveModule('chats')} 
+          icon={MessageSquare} 
+          label="Conversas" 
+        />
+        <TabButton 
+          active={activeModule === 'kanban'} 
+          onClick={() => setActiveModule('kanban')} 
+          icon={KanbanIcon} 
+          label="Kanban CRM" 
+        />
+        <TabButton 
+          active={activeModule === 'quick_replies'} 
+          onClick={() => setActiveModule('quick_replies')} 
+          icon={Zap} 
+          label="Respostas Rápidas" 
+        />
+        <TabButton 
+          active={activeModule === 'tags'} 
+          onClick={() => setActiveModule('tags')} 
+          icon={Tags} 
+          label="Etiquetas" 
+        />
+        <TabButton 
+          active={activeModule === 'bot'} 
+          onClick={() => setActiveModule('bot')} 
+          icon={Bot} 
+          label="IA & Bots" 
+        />
+        <TabButton 
+          active={activeModule === 'connections'} 
+          onClick={() => setActiveModule('connections')} 
+          icon={QrCode} 
+          label="Conexões (Omnichannel)" 
+        />
+        <TabButton 
+          active={activeModule === 'security'} 
+          onClick={() => setActiveModule('security')} 
+          icon={ShieldCheck} 
+          label="Instâncias" 
+        />
+        <TabButton 
+          active={activeModule === 'settings'} 
+          onClick={() => setActiveModule('settings')} 
+          icon={Sliders} 
+          label="Gestão" 
+        />
       </div>
-      {renderCurrentModule()}
-      <NewTicketModal open={showNewTicketModal} onClose={() => setShowNewTicketModal(false)} onSuccess={(id) => { fetchTickets(); setSelectedTicketId(id); }} />
-      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title={currentHelpTitle} sections={currentHelpSections} />
-    </div>
-  );
-}
 
-function ModuleButton({ icon: Icon, label, active, onClick, color }: { icon: any, label: string, active: boolean, onClick: () => void, color?: string }) {
-  return (
-    <button 
-      onClick={onClick} className={clsx("p-3 rounded-xl transition-all group relative", active ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title={label}
-    >
-      <Icon size={22} className={clsx(active ? "text-white" : (color || "text-slate-400 group-hover:text-white"))} />
-      {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white/20 rounded-r-lg" />}
-    </button>
+      <div className="flex-1 flex overflow-hidden">
+        {renderCurrentModule()}
+      </div>
+
+      <NewTicketModal 
+        open={showNewTicketModal} 
+        onClose={() => setShowNewTicketModal(false)} 
+        onSuccess={(id) => { fetchTickets(); setSelectedTicketId(id); }} 
+      />
+      
+      <HelpModal 
+        isOpen={isHelpOpen} 
+        onClose={() => setIsHelpOpen(false)} 
+        title={currentHelpTitle} 
+        sections={currentHelpSections} 
+      />
+    </div>
   );
 }

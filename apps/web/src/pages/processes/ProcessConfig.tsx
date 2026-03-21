@@ -371,13 +371,12 @@ export function ProcessConfig() {
       action: () => setView("bulk"),
     },
     {
-      id: "automations",
-      title: "Regras de Automacao",
-      description: "Camada pronta para futuras rotinas de sincronizacao.",
+      id: "workflows",
+      title: "Esteiras de Trabalho",
+      description: "Gerencie fluxos, andamentos automáticos e SLAs.",
       gradient: "from-emerald-500 to-teal-600",
-      icon: <Layout className="w-6 h-6" />,
-      action: () => undefined,
-      badge: "Em breve",
+      icon: <Workflow className="w-6 h-6" />,
+      action: () => navigate("/settings", { state: { tab: "workflows" } }),
     },
     {
       id: "fields",

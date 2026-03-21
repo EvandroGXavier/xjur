@@ -77,6 +77,7 @@ model Tenant {
   agentParticipants           AgentParticipant[]
   agentMessageEvents          AgentMessageEvent[]
   agentMessageLinks           AgentMessageLink[]
+  workflows                   Workflow[]
 
   // Preferences
   contactRequireOneInfo Boolean @default(true) // Se false, celular/telefone/email ficam não-obrigatórios
@@ -384,6 +385,9 @@ model Process {
   agentConversations          AgentConversation[]
   agentMessageLinks           AgentMessageLink[]
 
+  workflowId                  String?
+  workflow                    Workflow? @relation(fields: [workflowId], references: [id])
+
   @@unique([tenantId, code])
   @@unique([tenantId, cnj])
   @@map("processes")
@@ -503,6 +507,11 @@ model ProcessTimeline {
   process           Process            @relation(fields: [processId], references: [id], onDelete: Cascade)
   agentMessageLinks AgentMessageLink[]
 
+  workflowStepId    String?
+  workflowStep      WorkflowStep?      @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
+
+  @@index([processId, date])
+  @@index([workflowStepId])
   @@map("process_timelines")
 }
 
@@ -1378,4 +1387,50 @@ model SecuritySetting {
 
   @@unique([tenantId, entityType, entityId])
   @@map("security_settings")
+}
+
+// 11. WORKFLOWS / ESTEIRAS DE TRABALHO
+model Workflow {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  steps       WorkflowStep[]
+  processes   Process[]
+
+  @@unique([tenantId, name])
+  @@map("workflows")
+}
+
+model WorkflowStep {
+  id                  String   @id @default(uuid())
+  workflowId          String
+  order               Int
+  
+  taskTitle           String
+  description         String?  @db.Text
+  taskCategory        String   @default("ACAO") // REGISTRO, ACAO, AGENDA
+  taskPriority        String   @default("MEDIA") // BAIXA, MEDIA, ALTA, URGENTE
+  
+  daysToInternal      Int?
+  daysToFatal         Int?
+  defaultAssigneeRole String? // Tipo de parte (Role) ou ID do Usuário
+  
+  // Next step trigger - store as JSON array of taskTitles or IDs if needed, keeping simple string[] for PostgreSQL
+  nextStepIds         String[] 
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  workflow            Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  timelines           ProcessTimeline[]
+
+  @@unique([workflowId, order, taskTitle])
+  @@map("workflow_steps")
 }

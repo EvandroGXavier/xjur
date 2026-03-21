@@ -4,6 +4,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { PrismaService } from "@drx/database";
 import { Decimal } from "@prisma/client/runtime/library";
 import {
@@ -20,6 +21,33 @@ import { UpdateBankAccountDto } from "./dto/update-bank-account.dto";
 @Injectable()
 export class FinancialService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private allocateAmountsToTarget(amounts: number[], target: number) {
+    if (amounts.length === 0) return [];
+    const total = amounts.reduce((sum, val) => sum + (Number(val) || 0), 0);
+    if (total === 0) {
+      return amounts.map(() => 0);
+    }
+
+    const ratio = target / total;
+    const scaled: number[] = [];
+    let acc = 0;
+
+    for (let i = 0; i < amounts.length; i++) {
+      if (i === amounts.length - 1) {
+        const last = Math.round((target - acc) * 100) / 100;
+        scaled.push(last);
+        break;
+      }
+
+      const raw = (Number(amounts[i]) || 0) * ratio;
+      const val = Math.floor(raw * 100) / 100;
+      scaled.push(val);
+      acc = Math.round((acc + val) * 100) / 100;
+    }
+
+    return scaled;
+  }
 
   // ==================== INCLUDES PADRÃO ====================
 
@@ -54,6 +82,16 @@ export class FinancialService {
         amountFinal: true,
         amountPaid: true,
         paymentDate: true,
+        parties: {
+          select: {
+            contactId: true,
+            role: true,
+            amount: true,
+          },
+        },
+        tags: {
+          include: { tag: true },
+        },
       },
       orderBy: { installmentNumber: "asc" as const },
     },
@@ -323,7 +361,22 @@ export class FinancialService {
         },
       });
 
-      const installments = dto.installments.map((inst, i) => ({
+      const partiesTemplate = dto.parties || [];
+      const partiesAmountIndexes = partiesTemplate
+        .map((p, idx) => (p.amount !== undefined ? idx : -1))
+        .filter((idx) => idx >= 0);
+      const partiesSourceAmounts = partiesAmountIndexes.map((idx) =>
+        Number(partiesTemplate[idx].amount || 0),
+      );
+
+      const splitsTemplate = dto.splits || [];
+      const splitsSourceAmounts = splitsTemplate.map((s) => Number(s.amount || 0));
+
+      const tagIds: string[] = [];
+
+      const childIds = dto.installments.map(() => randomUUID());
+      const children = dto.installments.map((inst, i) => ({
+        id: childIds[i],
         tenantId: dto.tenantId,
         processId: dto.processId,
         bankAccountId: dto.bankAccountId,
@@ -333,22 +386,78 @@ export class FinancialService {
         amountFinal: inst.amount,
         dueDate: new Date(inst.dueDate),
         status: i === 0 && dto.status === "PAID" ? "PAID" : "PENDING",
-        paymentDate:
-          i === 0 && dto.status === "PAID" ? parent.paymentDate : null,
+        paymentDate: i === 0 && dto.status === "PAID" ? parent.paymentDate : null,
         type: dto.type,
         category: dto.category,
         paymentMethod: dto.paymentMethod,
+        notes: parent.notes,
         parentId: parent.id,
         installmentNumber: inst.installmentNumber,
         totalInstallments: totalInst,
         periodicity: dto.periodicity,
         paymentConditionId: dto.paymentConditionId,
-        isResidual: dto.isResidual,
         origin: dto.origin || "MANUAL",
+        metadata: parent.metadata,
       }));
 
-      await this.prisma.financialRecord.createMany({
-        data: installments,
+      await this.prisma.$transaction(async (tx) => {
+        await tx.financialRecord.createMany({ data: children });
+
+        if (partiesTemplate.length > 0) {
+          const partiesRows: any[] = [];
+          children.forEach((child) => {
+            const childTotal = Number(child.amountFinal ?? child.amount ?? 0);
+            const scaled = this.allocateAmountsToTarget(partiesSourceAmounts, childTotal);
+            partiesTemplate.forEach((p, idx) => {
+              const amount =
+                partiesAmountIndexes.includes(idx)
+                  ? scaled[partiesAmountIndexes.indexOf(idx)]
+                  : p.amount;
+              partiesRows.push({
+                tenantId: dto.tenantId,
+                financialRecordId: child.id,
+                contactId: p.contactId,
+                role: p.role,
+                amount,
+              });
+            });
+          });
+          await tx.financialParty.createMany({ data: partiesRows });
+        }
+
+        if (splitsTemplate.length > 0) {
+          const splitsRows: any[] = [];
+          children.forEach((child) => {
+            const childTotal = Number(child.amountFinal ?? child.amount ?? 0);
+            const scaled = this.allocateAmountsToTarget(splitsSourceAmounts, childTotal);
+            splitsTemplate.forEach((s, idx) => {
+              const amount = scaled[idx];
+              splitsRows.push({
+                tenantId: dto.tenantId,
+                financialRecordId: child.id,
+                contactId: s.contactId,
+                role: s.role,
+                amount,
+                percentage:
+                  childTotal > 0 ? Math.round((amount / childTotal) * 10000) / 100 : undefined,
+                description: s.description,
+                notes: s.notes,
+              });
+            });
+          });
+          await tx.transactionSplit.createMany({ data: splitsRows });
+        }
+
+        if (tagIds.length > 0) {
+          const tagRows = children.flatMap((child) =>
+            tagIds.map((tagId) => ({
+              tenantId: dto.tenantId,
+              financialRecordId: child.id,
+              tagId,
+            })),
+          );
+          await tx.financialRecordTag.createMany({ data: tagRows, skipDuplicates: true });
+        }
       });
 
       return this.findOneFinancialRecord(parent.id, dto.tenantId);
@@ -409,7 +518,20 @@ export class FinancialService {
         },
       });
 
-      const installments = [];
+      const partiesTemplate = dto.parties || [];
+      const partiesAmountIndexes = partiesTemplate
+        .map((p, idx) => (p.amount !== undefined ? idx : -1))
+        .filter((idx) => idx >= 0);
+      const partiesSourceAmounts = partiesAmountIndexes.map((idx) =>
+        Number(partiesTemplate[idx].amount || 0),
+      );
+
+      const splitsTemplate = dto.splits || [];
+      const splitsSourceAmounts = splitsTemplate.map((s) => Number(s.amount || 0));
+
+      const tagIds: string[] = [];
+
+      const installments: any[] = [];
       const parentAmountFinal = Number(amountFinal);
       const installmentAmount =
         Math.floor((parentAmountFinal / dto.totalInstallments) * 100) / 100;
@@ -426,7 +548,9 @@ export class FinancialService {
             ? installmentAmount + remainder
             : installmentAmount;
 
+        const id = randomUUID();
         installments.push({
+          id,
           tenantId: dto.tenantId,
           processId: dto.processId,
           bankAccountId: dto.bankAccountId,
@@ -441,16 +565,75 @@ export class FinancialService {
           type: dto.type,
           category: dto.category,
           paymentMethod: dto.paymentMethod,
+          notes: parent.notes,
           parentId: parent.id,
           installmentNumber: i + 1,
           totalInstallments: dto.totalInstallments,
           periodicity: dto.periodicity,
           paymentConditionId: dto.paymentConditionId,
+          origin: dto.origin || "MANUAL",
+          metadata: parent.metadata,
         });
       }
 
-      await this.prisma.financialRecord.createMany({
-        data: installments,
+      await this.prisma.$transaction(async (tx) => {
+        await tx.financialRecord.createMany({ data: installments });
+
+        if (partiesTemplate.length > 0) {
+          const partiesRows: any[] = [];
+          installments.forEach((child) => {
+            const childTotal = Number(child.amountFinal ?? child.amount ?? 0);
+            const scaled = this.allocateAmountsToTarget(partiesSourceAmounts, childTotal);
+            partiesTemplate.forEach((p, idx) => {
+              const amount =
+                partiesAmountIndexes.includes(idx)
+                  ? scaled[partiesAmountIndexes.indexOf(idx)]
+                  : p.amount;
+              partiesRows.push({
+                tenantId: dto.tenantId,
+                financialRecordId: child.id,
+                contactId: p.contactId,
+                role: p.role,
+                amount,
+              });
+            });
+          });
+          await tx.financialParty.createMany({ data: partiesRows });
+        }
+
+        if (splitsTemplate.length > 0) {
+          const splitsRows: any[] = [];
+          installments.forEach((child) => {
+            const childTotal = Number(child.amountFinal ?? child.amount ?? 0);
+            const scaled = this.allocateAmountsToTarget(splitsSourceAmounts, childTotal);
+            splitsTemplate.forEach((s, idx) => {
+              const amount = scaled[idx];
+              splitsRows.push({
+                tenantId: dto.tenantId,
+                financialRecordId: child.id,
+                contactId: s.contactId,
+                role: s.role,
+                amount,
+                percentage:
+                  childTotal > 0 ? Math.round((amount / childTotal) * 10000) / 100 : undefined,
+                description: s.description,
+                notes: s.notes,
+              });
+            });
+          });
+          await tx.transactionSplit.createMany({ data: splitsRows });
+        }
+
+        if (tagIds.length > 0) {
+          const tagRows = installments.flatMap((child) =>
+            tagIds.map((tagId) => ({
+              tenantId: dto.tenantId,
+              financialRecordId: child.id,
+              tagId,
+            })),
+          );
+          await tx.financialRecordTag.createMany({ data: tagRows, skipDuplicates: true });
+        }
       });
 
       return this.findOneFinancialRecord(parent.id, dto.tenantId);
@@ -578,7 +761,11 @@ export class FinancialService {
   ) {
     const existing = await this.prisma.financialRecord.findUnique({
       where: { id, tenantId },
-      include: { parties: true, splits: true },
+      include: {
+        parties: true,
+        splits: true,
+        tags: { select: { tagId: true } },
+      },
     });
 
     if (!existing) {
@@ -598,6 +785,7 @@ export class FinancialService {
     if (dto.category !== undefined) data.category = dto.category;
     if (dto.paymentMethod !== undefined) data.paymentMethod = dto.paymentMethod;
     if (dto.notes !== undefined) data.notes = dto.notes;
+    if (dto.paymentConditionId !== undefined) data.paymentConditionId = dto.paymentConditionId;
 
     // Encargos & Descontos
     if (dto.fine !== undefined) data.fine = dto.fine;
@@ -715,42 +903,145 @@ export class FinancialService {
 
       // Remover parcelas antigas
       await this.prisma.financialRecord.deleteMany({
-        where: { parentId: id },
+        where: { parentId: id, tenantId },
       });
 
       // Criar novas parcelas
       const totalInst = dto.installments.length;
-      await this.prisma.financialRecord.createMany({
-        data: dto.installments.map((inst, i) => ({
-          tenantId,
-          processId: data.processId || existing.processId,
-          bankAccountId: data.bankAccountId || existing.bankAccountId,
-          categoryId: data.categoryId || existing.categoryId,
-          description: `${data.description || existing.description} - Parcela ${inst.installmentNumber}/${totalInst}`,
-          amount: inst.amount,
-          amountFinal: inst.amount,
-          dueDate: new Date(inst.dueDate),
-          status:
-            i === 0 && (data.status || existing.status) === "PAID"
-              ? "PAID"
-              : "PENDING",
-          paymentDate:
-            i === 0 && (data.status || existing.status) === "PAID"
-              ? data.paymentDate || existing.paymentDate
-              : null,
-          type: data.type || existing.type,
-          category:
-            data.category !== undefined ? data.category : existing.category,
-          paymentMethod:
-            data.paymentMethod !== undefined
-              ? data.paymentMethod
-              : existing.paymentMethod,
-          parentId: id,
-          installmentNumber: inst.installmentNumber,
-          totalInstallments: totalInst,
-          periodicity: data.periodicity || existing.periodicity,
-          paymentConditionId: dto.paymentConditionId,
-        })),
+
+      const effectiveParties = dto.parties
+        ? dto.parties
+        : (existing.parties || []).map((p) => ({
+            contactId: p.contactId,
+            role: p.role,
+            amount: p.amount !== null && p.amount !== undefined ? Number(p.amount) : undefined,
+          }));
+      const partiesAmountIndexes = effectiveParties
+        .map((p, idx) => (p.amount !== undefined ? idx : -1))
+        .filter((idx) => idx >= 0);
+      const partiesSourceAmounts = partiesAmountIndexes.map((idx) =>
+        Number(effectiveParties[idx].amount || 0),
+      );
+
+      const effectiveSplits = dto.splits
+        ? dto.splits
+        : (existing.splits || []).map((s) => ({
+            contactId: s.contactId,
+            role: s.role,
+            amount: Number(s.amount),
+            percentage: s.percentage !== null && s.percentage !== undefined ? Number(s.percentage) : undefined,
+            description: s.description || undefined,
+            notes: s.notes || undefined,
+          }));
+      const splitsSourceAmounts = effectiveSplits.map((s) => Number(s.amount || 0));
+
+      const tagIds = Array.isArray((existing as any).tags)
+        ? (existing as any).tags.map((t: any) => t.tagId)
+        : [];
+
+      const baseDescription = data.description || existing.description;
+      const baseNotes = data.notes !== undefined ? data.notes : existing.notes;
+      const baseType = data.type || existing.type;
+      const baseCategory = data.category !== undefined ? data.category : existing.category;
+      const basePaymentMethod =
+        data.paymentMethod !== undefined ? data.paymentMethod : existing.paymentMethod;
+      const baseProcessId = data.processId || existing.processId;
+      const baseBankAccountId = data.bankAccountId || existing.bankAccountId;
+      const baseCategoryId = data.categoryId || existing.categoryId;
+      const basePeriodicity = data.periodicity || existing.periodicity;
+      const basePaymentConditionId =
+        data.paymentConditionId !== undefined ? data.paymentConditionId : existing.paymentConditionId;
+      const baseOrigin = data.origin || existing.origin;
+      const baseMetadata = (existing as any).metadata;
+
+      const childIds = dto.installments.map(() => randomUUID());
+      const children = dto.installments.map((inst, i) => ({
+        id: childIds[i],
+        tenantId,
+        processId: baseProcessId,
+        bankAccountId: baseBankAccountId,
+        categoryId: baseCategoryId,
+        description: `${baseDescription} - Parcela ${inst.installmentNumber}/${totalInst}`,
+        amount: inst.amount,
+        amountFinal: inst.amount,
+        dueDate: new Date(inst.dueDate),
+        status:
+          i === 0 && (data.status || existing.status) === "PAID" ? "PAID" : "PENDING",
+        paymentDate:
+          i === 0 && (data.status || existing.status) === "PAID"
+            ? data.paymentDate || existing.paymentDate
+            : null,
+        type: baseType,
+        category: baseCategory,
+        paymentMethod: basePaymentMethod,
+        notes: baseNotes,
+        parentId: id,
+        installmentNumber: inst.installmentNumber,
+        totalInstallments: totalInst,
+        periodicity: basePeriodicity,
+        paymentConditionId: basePaymentConditionId,
+        origin: baseOrigin,
+        metadata: baseMetadata,
+      }));
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.financialRecord.createMany({ data: children });
+
+        if (effectiveParties.length > 0) {
+          const partiesRows: any[] = [];
+          children.forEach((child) => {
+            const childTotal = Number(child.amountFinal ?? child.amount ?? 0);
+            const scaled = this.allocateAmountsToTarget(partiesSourceAmounts, childTotal);
+            effectiveParties.forEach((p, idx) => {
+              const amount =
+                partiesAmountIndexes.includes(idx)
+                  ? scaled[partiesAmountIndexes.indexOf(idx)]
+                  : p.amount;
+              partiesRows.push({
+                tenantId,
+                financialRecordId: child.id,
+                contactId: p.contactId,
+                role: p.role,
+                amount,
+              });
+            });
+          });
+          await tx.financialParty.createMany({ data: partiesRows });
+        }
+
+        if (effectiveSplits.length > 0) {
+          const splitsRows: any[] = [];
+          children.forEach((child) => {
+            const childTotal = Number(child.amountFinal ?? child.amount ?? 0);
+            const scaled = this.allocateAmountsToTarget(splitsSourceAmounts, childTotal);
+            effectiveSplits.forEach((s, idx) => {
+              const amount = scaled[idx];
+              splitsRows.push({
+                tenantId,
+                financialRecordId: child.id,
+                contactId: s.contactId,
+                role: s.role,
+                amount,
+                percentage:
+                  childTotal > 0 ? Math.round((amount / childTotal) * 10000) / 100 : undefined,
+                description: s.description,
+                notes: s.notes,
+              });
+            });
+          });
+          await tx.transactionSplit.createMany({ data: splitsRows });
+        }
+
+        if (tagIds.length > 0) {
+          const tagRows = children.flatMap((child) =>
+            tagIds.map((tagId: string) => ({
+              tenantId,
+              financialRecordId: child.id,
+              tagId,
+            })),
+          );
+          await tx.financialRecordTag.createMany({ data: tagRows, skipDuplicates: true });
+        }
       });
 
       // O registro-mãe mantém o valor total; relatórios ignoram containers para não duplicar.
@@ -853,7 +1144,15 @@ export class FinancialService {
     });
 
     // 2) Gerar as parcelas filhas
-    const installments = [];
+    const partiesTemplate = dto.parties || [];
+    const partiesAmountIndexes = partiesTemplate
+      .map((p, idx) => (p.amount !== undefined ? idx : -1))
+      .filter((idx) => idx >= 0);
+    const partiesSourceAmounts = partiesAmountIndexes.map((idx) =>
+      Number(partiesTemplate[idx].amount || 0),
+    );
+
+    const installments: any[] = [];
     for (let i = 0; i < dto.numInstallments; i++) {
       const dueDate = this.calculateNextDueDate(
         dto.firstDueDate,
@@ -867,7 +1166,9 @@ export class FinancialService {
           ? installmentAmount + remainder
           : installmentAmount;
 
+      const id = randomUUID();
       installments.push({
+        id,
         tenantId: dto.tenantId,
         processId: dto.processId,
         bankAccountId: dto.bankAccountId,
@@ -880,15 +1181,40 @@ export class FinancialService {
         type: dto.type,
         category: dto.category,
         paymentMethod: dto.paymentMethod,
+        notes: parent.notes,
         parentId: parent.id,
         installmentNumber: i + 1,
         totalInstallments: dto.numInstallments,
         periodicity: dto.periodicity,
+        origin: parent.origin,
+        metadata: parent.metadata,
       });
     }
 
-    await this.prisma.financialRecord.createMany({
-      data: installments,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.financialRecord.createMany({ data: installments });
+
+      if (partiesTemplate.length > 0) {
+        const partiesRows: any[] = [];
+        installments.forEach((child) => {
+          const childTotal = Number(child.amountFinal ?? child.amount ?? 0);
+          const scaled = this.allocateAmountsToTarget(partiesSourceAmounts, childTotal);
+          partiesTemplate.forEach((p, idx) => {
+            const amount =
+              partiesAmountIndexes.includes(idx)
+                ? scaled[partiesAmountIndexes.indexOf(idx)]
+                : p.amount;
+            partiesRows.push({
+              tenantId: dto.tenantId,
+              financialRecordId: child.id,
+              contactId: p.contactId,
+              role: p.role,
+              amount,
+            });
+          });
+        });
+        await tx.financialParty.createMany({ data: partiesRows });
+      }
     });
 
     // 3) Retornar o registro mãe com todas as parcelas
