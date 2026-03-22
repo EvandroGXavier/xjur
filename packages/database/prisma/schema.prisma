@@ -147,7 +147,6 @@ model Contact {
   // Relacionamentos
   addresses          Address[]
   additionalContacts AdditionalContact[]
-  processes          Process[]
   communications     CommunicationLog[]
   relationsFrom      ContactRelation[]   @relation("RelationsFrom")
   relationsTo        ContactRelation[]   @relation("RelationsTo")
@@ -331,7 +330,6 @@ model AdditionalContact {
 model Process {
   id        String  @id @default(uuid())
   tenantId  String
-  contactId String? // Pode ser nulo inicialmente se criado via automação
   cnj       String? // Opcional para Casos/Consultivo
 
   // Identificação Interna
@@ -376,7 +374,6 @@ model Process {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
-  contact                     Contact?                     @relation(fields: [contactId], references: [id])
   timeline                    ProcessTimeline[]
   financials                  FinancialRecord[]
   appointments                Appointment[]

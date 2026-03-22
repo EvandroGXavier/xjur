@@ -5,6 +5,166 @@ import { PrismaService } from '@drx/database';
 export class ProcessTimelinesService {
     constructor(private prisma: PrismaService) {}
 
+    async listTasksForTenant(
+        tenantId: string,
+        currentUserEmail: string,
+        query: {
+            q?: string;
+            scope?: 'mine' | 'all' | 'unassigned';
+            status?: string;
+            category?: string;
+            overdue?: string;
+            includeCompleted?: string;
+            limit?: string;
+        } = {},
+    ) {
+        const search = String(query.q || '').trim();
+        const scope = (query.scope || 'mine') as 'mine' | 'all' | 'unassigned';
+        const includeCompleted = String(query.includeCompleted || '').toLowerCase() === 'true';
+        const overdueOnly = String(query.overdue || '').toLowerCase() === 'true';
+        const limit = Math.min(Math.max(parseInt(String(query.limit || '200'), 10) || 200, 1), 500);
+
+        const baseWhere: any = {
+            process: { is: { tenantId } },
+            AND: [
+                {
+                    OR: [
+                        { category: { in: ['ACAO', 'AGENDA'] } },
+                        { internalDate: { not: null } },
+                        { fatalDate: { not: null } },
+                        { responsibleName: { not: null } },
+                    ],
+                },
+            ],
+        };
+
+        if (!includeCompleted) {
+            baseWhere.AND.push({ status: { not: 'CONCLUIDO' } });
+        }
+
+        if (query.category) {
+            baseWhere.AND.push({ category: String(query.category) });
+        }
+
+        if (query.status) {
+            baseWhere.AND.push({ status: String(query.status) });
+        }
+
+        if (scope === 'mine') {
+            baseWhere.AND.push({
+                responsibleName: { equals: currentUserEmail, mode: 'insensitive' },
+            });
+        } else if (scope === 'unassigned') {
+            baseWhere.AND.push({
+                OR: [{ responsibleName: null }, { responsibleName: '' }],
+            });
+        }
+
+        if (overdueOnly) {
+            const now = new Date();
+            baseWhere.AND.push({ status: { not: 'CONCLUIDO' } });
+            baseWhere.AND.push({
+                OR: [{ fatalDate: { lt: now } }, { internalDate: { lt: now } }],
+            });
+        }
+
+        if (search) {
+            baseWhere.AND.push({
+                OR: [
+                    { title: { contains: search, mode: 'insensitive' } },
+                    { description: { contains: search, mode: 'insensitive' } },
+                    { responsibleName: { contains: search, mode: 'insensitive' } },
+                    { requesterName: { contains: search, mode: 'insensitive' } },
+                    { process: { is: { title: { contains: search, mode: 'insensitive' } } } },
+                    { process: { is: { code: { contains: search, mode: 'insensitive' } } } },
+                    { process: { is: { cnj: { contains: search, mode: 'insensitive' } } } },
+                ],
+            });
+        }
+
+        const items = await this.prisma.processTimeline.findMany({
+            where: baseWhere,
+            include: {
+                process: {
+                    select: {
+                        id: true,
+                        code: true,
+                        title: true,
+                        cnj: true,
+                        status: true,
+                        category: true,
+                    },
+                },
+            },
+            orderBy: [
+                { fatalDate: 'asc' },
+                { internalDate: 'asc' },
+                { date: 'desc' },
+            ],
+            take: limit,
+        });
+
+        const now = new Date();
+        const summaryBaseWhere: any = {
+            process: { is: { tenantId } },
+            OR: [
+                { category: { in: ['ACAO', 'AGENDA'] } },
+                { internalDate: { not: null } },
+                { fatalDate: { not: null } },
+                { responsibleName: { not: null } },
+            ],
+        };
+
+        const [myOpen, myOverdue, openTotal, overdueTotal] = await Promise.all([
+            this.prisma.processTimeline.count({
+                where: {
+                    ...summaryBaseWhere,
+                    status: { not: 'CONCLUIDO' },
+                    responsibleName: { equals: currentUserEmail, mode: 'insensitive' },
+                },
+            }),
+            this.prisma.processTimeline.count({
+                where: {
+                    ...summaryBaseWhere,
+                    status: { not: 'CONCLUIDO' },
+                    responsibleName: { equals: currentUserEmail, mode: 'insensitive' },
+                    OR: [{ fatalDate: { lt: now } }, { internalDate: { lt: now } }],
+                },
+            }),
+            this.prisma.processTimeline.count({
+                where: {
+                    ...summaryBaseWhere,
+                    status: { not: 'CONCLUIDO' },
+                },
+            }),
+            this.prisma.processTimeline.count({
+                where: {
+                    ...summaryBaseWhere,
+                    status: { not: 'CONCLUIDO' },
+                    OR: [{ fatalDate: { lt: now } }, { internalDate: { lt: now } }],
+                },
+            }),
+        ]);
+
+        return {
+            items: items.map((item) => ({
+                ...item,
+                dueAt: item.fatalDate || item.internalDate || null,
+                isOverdue:
+                    item.status !== 'CONCLUIDO' &&
+                    ((item.fatalDate && item.fatalDate < now) ||
+                        (item.internalDate && item.internalDate < now)) &&
+                    true,
+            })),
+            summary: {
+                myOpen,
+                myOverdue,
+                openTotal,
+                overdueTotal,
+            },
+        };
+    }
+
     async create(processId: string, data: any, files?: any[], user?: string) {
         let metadata: any = data.metadata || {};
         

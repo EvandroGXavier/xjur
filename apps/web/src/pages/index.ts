@@ -16,6 +16,7 @@ export * from './ResetPassword';
 export { AtendimentoPage } from './atendimento/atendimento-v2';
 export { Kanban } from './Kanban';
 export { ProcessConfig } from './processes/ProcessConfig';
+export { ProcessTasks } from './processes/ProcessTasks';
 export { ProposalsPage } from './inventory/ProposalsPage';
 export { PurchasesPage } from './inventory/PurchasesPage';
 export { FiscalPage } from './inventory/FiscalPage';

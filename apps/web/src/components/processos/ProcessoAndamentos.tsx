@@ -25,6 +25,7 @@ import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 import { AttachmentPreview } from '../ui/AttachmentPreview';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
+import { ContactSelectInput } from '../contacts/ContactSelectInput';
 
 interface TimelineItem {
     id: string;
@@ -132,7 +133,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             internalDate: '',
             fatalDate: '',
             type: 'MOVEMENT',
-            category: 'REGISTRO',
+            category: activeTab,
             status: 'PENDENTE',
             priority: 'MEDIA',
             templateCode: '',
@@ -320,28 +321,29 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     };
 
-    const handleGenerateDocSuccess = async (file: File) => {
-        if (!targetTimelineId || !processId) return;
+    const handleGenerateDocSuccess = (file?: File) => {
+        if (!file || !targetTimelineId || !processId) return;
         
         setIsSaving(true);
-        try {
-            const data = new FormData();
-            data.append('files', file);
+        const data = new FormData();
+        data.append('files', file);
 
-            await api.patch(`/processes/${processId}/timelines/${targetTimelineId}`, data, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
+        api.patch(`/processes/${processId}/timelines/${targetTimelineId}`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        .then(() => {
             toast.success('Documento PDF gerado e anexado com sucesso!');
             setIsDocGenOpen(false);
             setTargetTimelineId(null);
             fetchTimelines();
-        } catch (error) {
+        })
+        .catch((error) => {
             console.error(error);
             toast.error('Erro ao salvar documento PDF.');
-        } finally {
+        })
+        .finally(() => {
             setIsSaving(false);
-        }
+        });
     };
 
     const getOriginBadge = (origin?: string) => {
@@ -861,12 +863,10 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
 
                                 <div>
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Responsável</label>
-                                    <input 
-                                        type="text" 
+                                    <ContactSelectInput 
                                         value={formData.responsibleName}
-                                        onChange={e => setFormData({...formData, responsibleName: e.target.value})}
-                                        placeholder="Pesquisar advogado..."
-                                        className="w-full bg-slate-950 border border-slate-800 rounded-md px-3 py-2 text-white text-sm focus:border-indigo-500 outline-none transition"
+                                        onChange={val => setFormData({...formData, responsibleName: val})}
+                                        placeholder="Buscar advogado ou colaborador..."
                                     />
                                 </div>
 

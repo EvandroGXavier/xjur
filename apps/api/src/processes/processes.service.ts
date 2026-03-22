@@ -1,7 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as fs from 'fs';
-import * as path from 'path';
 import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
 import { ProcessIntegrationsService } from './process-integrations.service';
 import { ProcessPdfService } from './process-pdf.service';
@@ -181,21 +180,6 @@ export class ProcessesService {
         const tenant = await this.prisma.tenant.findFirst();
         if (!tenant) throw new NotFoundException('Nenhum tenant encontrado');
         return tenant.id;
-    }
-
-    private logAudit(step: string, data: any) {
-        try {
-            const logDir = path.join(process.cwd(), 'tmp', 'audit_logs');
-            if (!fs.existsSync(logDir)) {
-                fs.mkdirSync(logDir, { recursive: true });
-            }
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `process_${step}_${timestamp}.json`;
-            fs.writeFileSync(path.join(logDir, filename), JSON.stringify(data, null, 2));
-            console.log(`[AUDIT] Log saved: ${filename}`);
-        } catch (e) {
-            console.error('[AUDIT] Failed to save log:', e);
-        }
     }
 
     private normalizeText(value?: string | null) {
@@ -959,7 +943,6 @@ export class ProcessesService {
             where: { tenantId, cnj: normalizedCnj },
             select: {
                 id: true,
-                contactId: true,
                 title: true,
                 code: true,
                 description: true,
@@ -1002,7 +985,6 @@ export class ProcessesService {
         const code = existing?.code || (await this.buildProcessCode(tenantId, { category: 'JUDICIAL', cnj: normalizedCnj } as CreateProcessDto));
         const processData = {
             tenantId,
-            contactId: existing?.contactId || undefined,
             cnj: normalizedCnj,
             category: 'JUDICIAL',
             title: analysis.title || existing?.title || `Processo ${normalizedCnj}`,
@@ -1760,6 +1742,19 @@ export class ProcessesService {
             });
         }
 
+        // Se estivermos mudando de polo, remover registros antigos deste contato em outros polos principais
+        if (inferredPole && !this.isLawyerRole(role.name)) {
+            await this.prisma.processParty.deleteMany({
+                where: {
+                    processId,
+                    contactId,
+                    role: {
+                        category: { in: ['POLO_ATIVO', 'POLO_PASSIVO'] }
+                    }
+                }
+            });
+        }
+
         return this.prisma.processParty.upsert({
             where: {
                 processId_contactId_roleId: {
@@ -1914,30 +1909,6 @@ export class ProcessesService {
         }
     }
 
-    private async assignPrimaryProcessContactIfMissing(
-        processId: string,
-        refs: ImportedPartySyncRef[],
-    ) {
-        const current = await this.prisma.process.findUnique({
-            where: { id: processId },
-            select: { contactId: true },
-        });
-
-        if (current?.contactId) return;
-
-        const preferred =
-            refs.find(ref => ref.isClient && !this.isLawyerRole(ref.roleName)) ||
-            refs.find(ref => this.inferImportedPole(ref.roleName) === 'ACTIVE' && !this.isLawyerRole(ref.roleName)) ||
-            refs.find(ref => !this.isLawyerRole(ref.roleName));
-
-        if (preferred) {
-            await this.prisma.process.update({
-                where: { id: processId },
-                data: { contactId: preferred.contactId },
-            });
-        }
-    }
-
     private async syncImportedProcessParties(
         processId: string,
         tenantId: string,
@@ -2030,7 +2001,6 @@ export class ProcessesService {
 
         await this.linkImportedRepresentations(tenantId, processId, syncedRefs);
         await this.collapseImportedPrincipalDuplicates(processId);
-        await this.assignPrimaryProcessContactIfMissing(processId, syncedRefs);
     }
 
     private async resolveTenantId(inputTenantId?: string) {
@@ -2082,9 +2052,6 @@ export class ProcessesService {
     }
 
     async create(data: CreateProcessDto) {
-        this.logAudit('1_RECEIVED_PAYLOAD', data);
-        console.log('Creating process payload:', JSON.stringify(data, null, 2));
-
         if (data.category === 'JUDICIAL' && !data.cnj) {
             throw new BadRequestException('CNJ e obrigatorio para processos judiciais.');
         }
@@ -2106,9 +2073,11 @@ export class ProcessesService {
             if (defaultWorkflow) finalWorkflowId = defaultWorkflow.id;
         }
 
-        const processData = {
+        const inputParties = Array.isArray(data.parties) ? data.parties : [];
+        const hasClientInParties = inputParties.some(p => p.isClient || String(p.type || '').toUpperCase().includes('CLIENTE'));
+        
+        const processData: any = {
             tenantId,
-            contactId: data.contactId,
             workflowId: finalWorkflowId || null,
             cnj: this.normalizeCnj(data.cnj),
             category: data.category,
@@ -2129,11 +2098,9 @@ export class ProcessesService {
             distributionDate: this.parseDate(data.distributionDate),
             judge: data.judge,
             value: this.parseMoneyValue(data.value),
-            parties: Array.isArray(data.parties) ? data.parties : [],
             metadata: processMetadata,
+            parties: Array.isArray(data.parties) ? data.parties : [],
         };
-
-        this.logAudit('2_MAPPED_DATA', processData);
 
         try {
             const process =
@@ -2146,7 +2113,6 @@ export class ProcessesService {
                             }
                         },
                         update: {
-                            contactId: processData.contactId,
                             cnj: processData.cnj,
                             category: processData.category,
                             title: processData.title,
@@ -2165,7 +2131,6 @@ export class ProcessesService {
                             distributionDate: processData.distributionDate,
                             judge: processData.judge,
                             value: processData.value,
-                            parties: processData.parties,
                             metadata: processData.metadata,
                         },
                         create: processData,
@@ -2191,9 +2156,6 @@ export class ProcessesService {
             );
         }
 
-            this.logAudit('3_SAVED_RESULT', process);
-            console.log(`Process saved successfully: ${process.id}`);
-
             if (
                 (Array.isArray(processData.parties) && processData.parties.length > 0) ||
                 this.isInformativeJudgeName(processData.judge)
@@ -2209,7 +2171,6 @@ export class ProcessesService {
             await this.syncMicrosoftFolder(tenantId, process.id);
             return this.findOne(process.id, tenantId);
         } catch (error: any) {
-            this.logAudit('ERROR_SAVING', { error: error.message, stack: error.stack });
             console.error('Error creating/upserting process:', error);
             throw error;
         }
@@ -2236,6 +2197,15 @@ export class ProcessesService {
                 { code: { contains: search, mode: 'insensitive' } },
                 { court: { contains: search, mode: 'insensitive' } },
                 { district: { contains: search, mode: 'insensitive' } },
+                {
+                    processParties: {
+                        some: {
+                            contact: {
+                                name: { contains: search, mode: 'insensitive' },
+                            },
+                        },
+                    },
+                },
             ];
         }
 
@@ -2277,53 +2247,107 @@ export class ProcessesService {
             }
         }
 
-        return this.prisma.process.findMany({
+        const rawProcesses = await this.prisma.process.findMany({
             where,
             include: {
-                tags: {
-                    include: {
-                        tag: true,
-                    },
-                },
+                tags: { include: { tag: true } },
                 processParties: {
                     include: {
                         contact: {
-                            select: { id: true, name: true, email: true, phone: true, whatsapp: true },
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                phone: true,
+                                whatsapp: true,
+                            },
                         },
-                        role: { select: { name: true, category: true } },
-                        qualification: { select: { name: true } },
+                        role: true,
+                        qualification: true,
                     },
                 },
                 timeline: {
                     orderBy: { date: 'desc' },
                     take: 1,
-                    select: { date: true, title: true, description: true },
                 },
             },
             orderBy: { createdAt: 'desc' },
+        });
+
+        return rawProcesses.map(p => {
+            const clientParty = p.processParties.find(cp => cp.isClient) || p.processParties[0];
+            return {
+                ...p,
+                client: clientParty?.contact?.name || 'S/ CLIENTE',
+            };
         });
     }
 
     async findOne(id: string, tenantId: string) {
         const process = await this.prisma.process.findFirst({
             where: { id, tenantId },
-            include: this.buildProcessInclude(),
+            include: {
+                tags: { include: { tag: true } },
+                processParties: {
+                    include: {
+                        contact: {
+                            include: {
+                                additionalContacts: true,
+                            },
+                        },
+                        role: true,
+                        qualification: true,
+                        representativeLinks: {
+                            include: {
+                                representativeParty: {
+                                    include: {
+                                        contact: true,
+                                        role: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                timeline: {
+                    orderBy: { date: 'desc' },
+                },
+                workflow: {
+                    include: {
+                        steps: {
+                            orderBy: { order: 'asc' },
+                        },
+                    },
+                },
+            },
         });
 
-        if (!process) {
-            throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
-        }
+        if (!process) throw new NotFoundException('Processo nao encontrado');
 
-        return process;
+        const clientParty = process.processParties.find(cp => cp.isClient) || process.processParties[0];
+
+        return {
+            ...process,
+            client: clientParty?.contact?.name || 'S/ CLIENTE',
+        };
     }
 
     async update(id: string, data: Partial<CreateProcessDto>, tenantId: string) {
-        const existing = await this.prisma.process.findFirst({ where: { id, tenantId } });
+        const existing = await this.prisma.process.findFirst({ 
+            where: { id, tenantId },
+            include: { processParties: true }
+        });
         if (!existing) {
             throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
         }
 
-        this.logAudit('UPDATE_RECEIVED', { id, data });
+        const inputParties = Array.isArray(data.parties) ? data.parties : [];
+        const hasClientInParties = inputParties.some(p => p.isClient || String(p.type || '').toUpperCase().includes('CLIENTE'));
+        const hasClientInExisting = existing.processParties.some(p => p.isClient);
+        
+        if (!hasClientInParties && !hasClientInExisting) {
+            throw new BadRequestException('O processo deve manter ao menos um Cliente Principal vinculado nas Partes.');
+        }
 
         const updateData: any = {};
         let statusChanged = false;
@@ -2360,7 +2384,8 @@ export class ProcessesService {
         if (data.subject !== undefined) updateData.subject = data.subject;
         if (data.class !== undefined) updateData.class = data.class;
         if (data.judge !== undefined) updateData.judge = data.judge;
-        if (data.parties !== undefined) updateData.parties = data.parties;
+        // Removido updateData.parties para evitar erro no Prisma, as partes são processadas via syncImportedProcessParties
+        // if (data.parties !== undefined) updateData.parties = data.parties;
         if (data.metadata !== undefined || data.status !== undefined) {
             const nextStatus =
                 updateData.status ||
@@ -2372,7 +2397,9 @@ export class ProcessesService {
                 nextStatus,
             );
         }
-        if (data.contactId !== undefined) updateData.contactId = data.contactId;
+        
+        // Removido contactId para centralizar em Partes
+        // if (data.contactId !== undefined) updateData.contactId = data.contactId;
 
         if (data.distributionDate !== undefined) {
             updateData.distributionDate = this.parseDate(data.distributionDate);
@@ -2407,9 +2434,6 @@ export class ProcessesService {
                 );
             }
 
-            this.logAudit('UPDATE_SUCCESS', { id, updated });
-            console.log(`Process updated: ${id}`);
-
             if (
                 (Array.isArray(data.parties) && data.parties.length > 0) ||
                 this.isInformativeJudgeName(data.judge)
@@ -2425,7 +2449,6 @@ export class ProcessesService {
             await this.syncMicrosoftFolder(tenantId, updated.id);
             return this.findOne(updated.id, tenantId);
         } catch (error: any) {
-            this.logAudit('UPDATE_ERROR', { id, error: error.message });
             console.error('Error updating process:', error);
             throw error;
         }
@@ -2437,12 +2460,9 @@ export class ProcessesService {
             throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
         }
 
-        this.logAudit('DELETE', { id, title: existing.title, cnj: existing.cnj });
-
         await this.prisma.processTimeline.deleteMany({ where: { processId: id } });
 
         const deleted = await this.prisma.process.delete({ where: { id } });
-        console.log(`Process deleted: ${id} (${existing.title || existing.cnj})`);
         return { success: true, deleted: { id: deleted.id, title: deleted.title } };
     }
 
@@ -2599,16 +2619,24 @@ export class ProcessesService {
     }
 
     async pickLocalFolder() {
-        const { execSync } = require('child_process');
-        try {
-            // PowerShell folder picker dialog - abre na Z:\ por padrão
-            const command = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Selecione a pasta do processo'; $f.SelectedPath = 'Z:\\'; [void]$f.ShowDialog(); $f.SelectedPath"`;
-            const result = execSync(command, { encoding: 'utf8' }).trim();
-            if (!result) return { success: false, message: 'Nenhuma pasta selecionada.' };
-            return { success: true, path: result };
-        } catch (e: any) {
-            console.error('[LOCAL_FOLDER] Picker error:', e);
-            throw new BadRequestException('Não foi possível abrir o seletor de pastas do Windows.');
-        }
+        const { exec } = require('child_process');
+        return new Promise((resolve) => {
+            // PowerShell folder picker dialog - TopMost garante que a janela não fique escondida
+            const command = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Selecione a pasta do processo'; $f.SelectedPath = 'Z:\\'; $f.ShowNewFolderButton = $true; $form = New-Object System.Windows.Forms.Form; $form.TopMost = $true; [void]$f.ShowDialog($form); $f.SelectedPath"`;
+            
+            exec(command, (error: any, stdout: string) => {
+                if (error) {
+                    console.error('[LOCAL_FOLDER] Picker error:', error);
+                    resolve({ success: false, message: 'Erro ao abrir o seletor de pastas do Windows.' });
+                    return;
+                }
+                const result = stdout.trim();
+                if (!result) {
+                    resolve({ success: false, message: 'Nenhuma pasta selecionada.' });
+                } else {
+                    resolve({ success: true, path: result });
+                }
+            });
+        });
     }
 }

@@ -21,6 +21,7 @@ import { useHotkeys } from '../../hooks/useHotkeys';
 
 interface ProcessPartiesProps {
     processId: string;
+    onPartiesChange?: (parties: ProcessParty[]) => void;
 }
 
 type PoleKey = 'active' | 'passive';
@@ -316,18 +317,30 @@ function InlinePartyComposer({
     );
 }
 
-export function ProcessParties({ processId }: ProcessPartiesProps) {
+export function ProcessParties({ processId, onPartiesChange }: ProcessPartiesProps) {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [parties, setParties] = useState<ProcessParty[]>([]);
     const [selectedSection, setSelectedSection] = useState<PoleKey>('active');
     const [composer, setComposer] = useState<ComposerState>(null);
+    const [roles, setRoles] = useState<PartyRole[]>([]);
     const [showCourt, setShowCourt] = useState(false);
     const [showOthers, setShowOthers] = useState(false);
+    const [draggingPartyId, setDraggingPartyId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchParties();
+        fetchRoles();
     }, [processId]);
+
+    const fetchRoles = async () => {
+        try {
+            const res = await api.get('/processes/party-roles');
+            setRoles(res.data);
+        } catch (error) {
+            console.error('Erro ao buscar papéis:', error);
+        }
+    };
 
     useHotkeys({
         onNew: () => {
@@ -345,6 +358,7 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
             setLoading(true);
             const res = await api.get(`/processes/${processId}/parties`);
             setParties(res.data);
+            if (onPartiesChange) onPartiesChange(res.data);
         } catch (error) {
             toast.error('Erro ao buscar partes do processo');
         } finally {
@@ -469,11 +483,45 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
         try {
             await api.patch(`/processes/${processId}/parties/${party.id}`, nextState);
             // Atualizar localmente para feedback imediato
-            setParties(prev =>
-                prev.map(p => (p.id === party.id ? { ...p, ...nextState } : p)),
-            );
+            setParties(prev => {
+                const updated = prev.map(p => (p.id === party.id ? { ...p, ...nextState } : p));
+                if (onPartiesChange) onPartiesChange(updated);
+                return updated;
+            });
         } catch (error) {
             toast.error('Erro ao atualizar status da parte');
+        }
+    };
+
+    const handleDrop = async (e: React.DragEvent, targetPole: 'active' | 'passive') => {
+        e.preventDefault();
+        if (!draggingPartyId) return;
+
+        const party = parties.find(p => p.id === draggingPartyId);
+        if (!party) return;
+
+        const currentPole = getPole(party);
+        if (currentPole === targetPole) return;
+
+        // Tentar encontrar um papel equivalente no polo de destino
+        const targetRoleName = targetPole === 'active' ? 'AUTOR' : 'REU';
+        const targetRole = roles.find(r => normalizeText(r.name) === targetRoleName);
+
+        if (!targetRole) {
+            toast.error(`Tipo de parte "${targetRoleName}" não encontrado no sistema.`);
+            return;
+        }
+
+        try {
+            await api.patch(`/processes/${processId}/parties/${draggingPartyId}`, {
+                roleId: targetRole.id
+            });
+            toast.success(`Parte movida para o Polo ${targetPole === 'active' ? 'Ativo' : 'Passivo'}`);
+            fetchParties();
+        } catch (error) {
+            toast.error('Erro ao mover parte');
+        } finally {
+            setDraggingPartyId(null);
         }
     };
 
@@ -524,7 +572,16 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
         const isComposerOpen = composer?.mode === 'representative' && composer.partyId === party.id;
 
         return (
-            <div key={party.id} className="group px-4 py-3 hover:bg-white/5 transition-colors">
+            <div 
+                key={party.id} 
+                className={clsx(
+                    "group px-4 py-3 hover:bg-white/5 transition-colors cursor-grab active:cursor-grabbing",
+                    draggingPartyId === party.id && "opacity-40"
+                )}
+                draggable={!isLawyerParty(party)}
+                onDragStart={() => setDraggingPartyId(party.id)}
+                onDragEnd={() => setDraggingPartyId(null)}
+            >
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0 flex-1">
                         {!isLawyerParty(party) && (
@@ -647,7 +704,20 @@ export function ProcessParties({ processId }: ProcessPartiesProps) {
         const isPrincipalComposerOpen = composer?.mode === 'principal' && composer.pole === pole;
 
         return (
-            <div className={clsx('rounded-xl border bg-slate-900/45 backdrop-blur-sm overflow-hidden shadow-lg shadow-black/20', colorClass, isSelected && 'ring-1 ring-indigo-500/40')} onClick={() => setSelectedSection(pole)}>
+            <div 
+                className={clsx(
+                    'rounded-xl border bg-slate-900/45 backdrop-blur-sm overflow-hidden shadow-lg shadow-black/20 transition-all duration-300', 
+                    colorClass, 
+                    isSelected && 'ring-1 ring-indigo-500/40',
+                    draggingPartyId && "ring-2 ring-dashed ring-indigo-500/50 bg-indigo-500/5"
+                )} 
+                onClick={() => setSelectedSection(pole)}
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(e) => handleDrop(e, pole)}
+            >
                 <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/85 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2">

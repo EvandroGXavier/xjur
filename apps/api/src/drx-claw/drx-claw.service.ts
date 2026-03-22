@@ -1200,7 +1200,11 @@ export class DrxClawService {
             take: 3,
             orderBy: { updatedAt: 'desc' },
             include: {
-              contact: { select: { name: true } },
+              processParties: {
+                where: { isClient: true },
+                select: { contact: { select: { name: true } } },
+                take: 1,
+              },
             },
           });
 
@@ -1213,7 +1217,7 @@ export class DrxClawService {
               code: process.code,
               title: process.title,
               status: process.status,
-              contact: process.contact?.name || null,
+              contact: process.processParties?.[0]?.contact?.name || null,
             })),
           });
           continue;

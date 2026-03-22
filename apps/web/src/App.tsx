@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
-import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ProposalsPage, PurchasesPage, FiscalPage, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions, InventoryDashboard } from './pages';
+import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, ProcessTasks, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ProposalsPage, PurchasesPage, FiscalPage, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions, InventoryDashboard } from './pages';
 import { ProcessForm } from './pages/processes/ProcessForm';
 
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
@@ -25,6 +25,7 @@ function App() {
           <Route path="kanban" element={<Kanban />} />
           <Route path="processes" element={<Processes />} />
           <Route path="processes/config" element={<ProcessConfig />} />
+          <Route path="processes/tasks" element={<ProcessTasks />} />
           <Route path="processes/new" element={<ProcessForm />} />
           <Route path="processes/:id" element={<ProcessForm />} />
           <Route path="agenda" element={<Agenda />} />

@@ -188,68 +188,6 @@ export class CreateFinancialRecordDto {
   splits?: CreateTransactionSplitDto[];
 }
 
-// DTO para parcelamento
-export class CreateInstallmentsDto {
-  @IsString()
-  @IsNotEmpty()
-  tenantId: string;
-
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0.01)
-  totalAmount: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(2, { message: 'Mínimo de 2 parcelas' })
-  numInstallments: number;
-
-  @IsOptional()
-  @IsString()
-  periodicity?: string;
-
-  @IsString()
-  @IsIn(['INCOME', 'EXPENSE'])
-  type: 'INCOME' | 'EXPENSE';
-
-  @IsString()
-  @IsNotEmpty()
-  description: string;
-
-  @IsDateString()
-  firstDueDate: string;
-
-  @IsOptional()
-  @IsString()
-  category?: string;
-
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
-
-  @IsOptional()
-  @IsString()
-  processId?: string;
-
-  @IsOptional()
-  @IsString()
-  bankAccountId?: string;
-
-  @IsOptional()
-  @IsString()
-  paymentMethod?: string;
-
-  @IsOptional()
-  @IsString()
-  notes?: string;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => CreateFinancialPartyDto)
-  parties?: CreateFinancialPartyDto[];
-}
-
 // DTO para pagamento parcial
 export class PartialPaymentDto {
   @IsString()

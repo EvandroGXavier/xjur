@@ -34,6 +34,7 @@ import { CreatableSelect } from '../../components/ui/CreatableSelect';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { clsx } from 'clsx';
 import { getOfficeFolderDisplayPath } from '../../utils/officePath';
+import { Financial } from '../Financial';
 
 const DEFAULT_AREAS = [
     { label: 'Civel', value: 'Civel' },
@@ -197,6 +198,7 @@ export function ProcessForm() {
     const [consultingCnj, setConsultingCnj] = useState(false);
     const [checkingCnjTimelineStatus, setCheckingCnjTimelineStatus] = useState(false);
     const [importingCnjTimelines, setImportingCnjTimelines] = useState(false);
+    const [isAddingAsAutor, setIsAddingAsAutor] = useState(true);
     const [importedParties, setImportedParties] = useState<ImportedParty[]>([]);
     const [importedMovements, setImportedMovements] = useState<any[]>([]);
     const [cnjTimelineStatus, setCnjTimelineStatus] = useState<CnjTimelineImportStatus | null>(null);
@@ -451,9 +453,13 @@ export function ProcessForm() {
         }
 
         // NOVO: Validar Cliente Principal
-        const hasClient = importedParties.some(p => p.isClient || p.type.toUpperCase().includes('CLIENTE'));
+        // NOVO: Validar Cliente Principal
+        const hasClient = importedParties.some(p => p.isClient || (p.type && p.type.toUpperCase().includes('CLIENTE')));
         if (!hasClient) {
-            toast.warning('É necessário vincular um Cliente Principal para salvar o processo.');
+            toast.warning('Bloqueio de Segurança: Não é possível salvar um processo sem um Cliente Principal vinculado.', {
+                description: 'Use o campo "Cliente Principal" na aba Identificação ou marque uma das partes como Cliente na aba Partes.',
+                duration: 6000
+            });
             return;
         }
 
@@ -792,6 +798,7 @@ export function ProcessForm() {
                     {(isEditing || importedParties.length > 0) && <TabButton tabId="PARTIES" label="PARTES" icon={Users} />}
                     {(isEditing || importedMovements.length > 0) && <TabButton tabId="TIMELINE" label="ANDAMENTOS" icon={Activity} />}
                     {isEditing && <TabButton tabId="AGENDA" label="AGENDA" icon={Calendar} />}
+                    {isEditing && <TabButton tabId="FINANCIAL" label="FINANCEIRO" icon={DollarSign} />}
                 </div>
             )}
 
@@ -855,22 +862,45 @@ export function ProcessForm() {
                                 </div>
                                 {!isEditing && (
                                     <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between mb-1">
                                         <label className={labelClass}>Cliente Principal</label>
-                                        <ContactPickerGlobal 
-                                            contactLabel="Vincular cliente agora..."
-                                            onAdd={async (data) => {
-                                                setImportedParties([{ name: data.contactName || '', type: 'CLIENTE', isClient: true }]);
-                                                if (!form.title) setForm(prev => ({ ...prev, title: `Ação - ${data.contactName}` }));
-                                            }}
-                                            onSelectContact={(cid, cname) => {
-                                                setImportedParties([{ name: cname || '', type: 'CLIENTE', isClient: true }]);
-                                                if (!form.title) setForm(prev => ({ ...prev, title: `Ação - ${cname}` }));
-                                            }}
-                                            hideRole={true}
-                                            hideQualification={true}
-                                            className="!bg-slate-950"
-                                        />
+                                        <label className="flex items-center gap-1.5 cursor-pointer group">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isAddingAsAutor} 
+                                                onChange={e => setIsAddingAsAutor(e.target.checked)}
+                                                className="w-3 h-3 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-0 focus:ring-offset-0 transition-colors"
+                                            />
+                                            <span className="text-[10px] font-bold text-slate-500 group-hover:text-slate-300 transition-colors uppercase tracking-wider">
+                                                {isAddingAsAutor ? 'Adicionar como Autor' : 'Adicionar como Réu'}
+                                            </span>
+                                        </label>
                                     </div>
+                                    <ContactPickerGlobal 
+                                        hideContactLabel={true}
+                                        onAdd={async (data) => {
+                                            setImportedParties([{ 
+                                                name: data.contactName || '', 
+                                                type: isAddingAsAutor ? 'AUTOR' : 'REU', 
+                                                isClient: true,
+                                                isOpposing: !isAddingAsAutor
+                                            }]);
+                                            if (!form.title) setForm(prev => ({ ...prev, title: `Ação - ${data.contactName}` }));
+                                        }}
+                                        onSelectContact={(cid, cname) => {
+                                            setImportedParties([{ 
+                                                name: cname || '', 
+                                                type: isAddingAsAutor ? 'AUTOR' : 'REU', 
+                                                isClient: true, 
+                                                isOpposing: !isAddingAsAutor
+                                            }]);
+                                            if (!form.title) setForm(prev => ({ ...prev, title: `Ação - ${cname}` }));
+                                        }}
+                                        hideRole={true}
+                                        hideQualification={true}
+                                        className="!bg-slate-950 shadow-inner border-slate-800/50"
+                                    />
+                                </div>
                                 )}
                                 <div className="grid grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
@@ -1201,10 +1231,22 @@ export function ProcessForm() {
                     </div>
                 </div>
 
-                {activeTab === 'PARTIES' && (
+                        {activeTab === 'PARTIES' && (
                     <div className="animate-in fade-in">
                         {isEditing ? (
-                            <ProcessParties processId={id!} />
+                            <ProcessParties 
+                                processId={id!} 
+                                onPartiesChange={(newParties) => {
+                                    const mapped = newParties.map(p => ({
+                                        name: p.contact.name,
+                                        type: p.role.name,
+                                        isClient: p.isClient,
+                                        isOpposing: p.isOpposing,
+                                        document: p.contact.document
+                                    }));
+                                    setImportedParties(mapped);
+                                }}
+                            />
                         ) : (
                             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                                 <div className="p-4 border-b border-slate-800 bg-slate-800/50">
@@ -1291,6 +1333,12 @@ export function ProcessForm() {
                 )}
                 
                 {isEditing && activeTab === 'AGENDA' && <div className="animate-in fade-in"><ProcessAgenda processId={id!} /></div>}
+
+                {isEditing && activeTab === 'FINANCIAL' && (
+                    <div className="animate-in fade-in">
+                        <Financial processContext={{ id: id!, title: form.title, cnj: form.cnj, code: form.code }} />
+                    </div>
+                )}
             </div>
         </div>
     );

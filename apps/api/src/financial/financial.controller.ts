@@ -21,7 +21,6 @@ import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.
 import { CreateBankAccountDto } from './dto/create-bank-account.dto';
 import {
   CreateFinancialRecordDto,
-  CreateInstallmentsDto,
   CreateTransactionSplitDto,
   PartialPaymentDto,
   SettleRecordDto,
@@ -129,14 +128,6 @@ export class FinancialController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.financialService.deleteFinancialRecord(id, user.tenantId);
-  }
-
-  // ==================== PARCELAMENTO ====================
-
-  @Post('installments')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  createInstallments(@Body() dto: CreateInstallmentsDto, @CurrentUser() user: CurrentUserData) {
-    return this.financialService.createInstallments({ ...dto, tenantId: user.tenantId });
   }
 
   // ==================== PAGAMENTO PARCIAL ====================

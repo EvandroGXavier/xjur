@@ -1339,7 +1339,12 @@ export class ContactsService {
       this.prisma.process.findMany({
         where: {
           tenantId,
-          contactId,
+          processParties: {
+            some: {
+              contactId,
+              isClient: true,
+            },
+          },
         },
         select: {
           id: true,

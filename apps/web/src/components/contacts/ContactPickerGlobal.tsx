@@ -230,7 +230,7 @@ export function ContactPickerGlobal({
             <div className="flex flex-col gap-3">
                 {/* LINE 1: SEARCH & QUICK ADD */}
                 <div className="flex flex-col md:flex-row gap-2 items-start">
-                    {!hideContactLabel && (
+                    {(!hideContactLabel && contactLabel) && (
                         <div className="shrink-0 pt-2 min-w-[60px]">
                             <label className={`${labelClass} text-indigo-400`}>{contactLabel}</label>
                         </div>
@@ -342,7 +342,7 @@ export function ContactPickerGlobal({
                             <button 
                                 onClick={handleFullAdd}
                                 className="shrink-0 p-2.5 rounded-lg border border-indigo-500/30 text-indigo-400 hover:text-white hover:bg-indigo-600 transition flex items-center justify-center w-[44px] h-[34px]"
-                                title="Cadastro Completo de Contato"
+                                title="Cadastro Completo (Atenção: Você sairá desta página e poderá perder dados não salvos!)"
                             >
                                 <UserPlus size={18} />
                             </button>

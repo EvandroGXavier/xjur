@@ -201,6 +201,11 @@ export class ProcessesController {
         return this.processesService.remove(id, user.tenantId);
     }
 
+    @Get('timelines/tasks')
+    async listTimelineTasks(@CurrentUser() user: CurrentUserData, @Query() query: any) {
+        return this.timelinesService.listTasksForTenant(user.tenantId, user.email, query);
+    }
+
     @Public()
     @Get('timelines/attachments/:filename')
     async downloadAttachment(@Param('filename') filename: string, @Res() res: Response) {

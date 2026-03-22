@@ -1,4 +1,4 @@
-import {
+﻿import {
   useState,
   useEffect,
   useCallback,
@@ -31,7 +31,6 @@ import {
   Trash2,
   Download,
   User,
-  Repeat,
   Percent,
   Calculator,
   ChevronDown,
@@ -403,16 +402,29 @@ const matchesCardFilter = (
   }
 };
 
-export function Financial() {
+type FinancialProcessContext = {
+  id: string;
+  code?: string;
+  title?: string;
+  cnj?: string;
+};
+
+type FinancialProps = {
+  processContext?: FinancialProcessContext;
+};
+
+export function Financial(props: FinancialProps = {}) {
   const navigate = useNavigate();
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+  const lockedProcessId = props.processContext?.id;
+  const isEmbeddedInProcess = Boolean(lockedProcessId);
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<
     "dashboard" | "records" | "accounts" | "conditions"
-  >("dashboard");
+  >(isEmbeddedInProcess ? "records" : "dashboard");
   const [searchTerm, setSearchTerm] = useState("");
 
   useHotkeys({
@@ -420,7 +432,6 @@ export function Financial() {
     onCancel: () => {
       if (showModal) setShowModal(false);
       if (showBankModal) setShowBankModal(false);
-      if (showInstallmentModal) setShowInstallmentModal(false);
       if (showSettleModal) setShowSettleModal(false);
       if (showConditionSubModal) setShowConditionSubModal(false);
     },
@@ -429,7 +440,6 @@ export function Financial() {
 
   const [showModal, setShowModal] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
-  const [showInstallmentModal, setShowInstallmentModal] = useState(false);
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [selectedBankAccount, setSelectedBankAccount] =
     useState<BankAccount | null>(null);
@@ -573,20 +583,6 @@ export function Financial() {
       percentage?: number;
       description?: string;
     }[],
-  });
-
-  const [installmentData, setInstallmentData] = useState({
-    totalAmount: "",
-    numInstallments: "2",
-    periodicity: "Mensal",
-    type: "INCOME" as "INCOME" | "EXPENSE",
-    description: "",
-    firstDueDate: new Date().toISOString().split("T")[0],
-    category: "",
-    categoryId: "",
-    bankAccountId: "",
-    paymentMethod: "",
-    notes: "",
   });
 
   const [settleData, setSettleData] = useState({
@@ -983,7 +979,6 @@ export function Financial() {
   }, [settleData, calcSettleFinalAmount, settlingRecord]);
 
   const handleOpenSettleModal = async (record: FinancialRecord) => {
-    await fetchContacts();
 
     let fullRecord: FinancialRecord = record;
     try {
@@ -1120,64 +1115,6 @@ export function Financial() {
     }
   };
 
-  const handleOpenInstallmentModal = async () => {
-    await fetchContacts();
-    await fetchCategories();
-    setInstallmentData({
-      totalAmount: "",
-      numInstallments: "2",
-      periodicity: "Mensal",
-      type: "INCOME",
-      description: "",
-      firstDueDate: new Date().toISOString().split("T")[0],
-      category: "",
-      categoryId: "",
-      bankAccountId: "",
-      paymentMethod: "",
-      notes: "",
-    });
-    setShowInstallmentModal(true);
-  };
-
-  const handleInstallmentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const total = parseFloat(installmentData.totalAmount);
-    if (isNaN(total) || total <= 0) {
-      toast.error("Valor total inválido");
-      return;
-    }
-    const num = parseInt(installmentData.numInstallments);
-    if (isNaN(num) || num < 2) {
-      toast.error("Mínimo 2 parcelas");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await api.post("/financial/installments", {
-        totalAmount: total,
-        numInstallments: num,
-        periodicity: installmentData.periodicity,
-        type: installmentData.type,
-        description: installmentData.description,
-        firstDueDate: installmentData.firstDueDate,
-        category: installmentData.category || undefined,
-        categoryId: installmentData.categoryId || undefined,
-        bankAccountId: installmentData.bankAccountId || undefined,
-        paymentMethod: installmentData.paymentMethod || undefined,
-        notes: installmentData.notes || undefined,
-      });
-      toast.success(
-        `Parcelamento criado: ${num}x de R$ ${(total / num).toFixed(2)}`,
-      );
-      setShowInstallmentModal(false);
-      await fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Erro ao parcelar");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   useEffect(() => {
     fetchData();
     fetchCategories();
@@ -1185,21 +1122,23 @@ export function Financial() {
 
   useEffect(() => {
     if (!showModal) return;
+    if (isEmbeddedInProcess) return;
     const handle = window.setTimeout(() => {
       fetchProcesses(processSearch);
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [showModal, processSearch]);
+  }, [showModal, processSearch, isEmbeddedInProcess]);
 
   const fetchData = async () => {
     try {
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       const tenantId = user.tenantId || "default-tenant-id";
+      const processId = lockedProcessId;
 
       if (view === "dashboard" || view === "records") {
         const [dashboardRes, recordsRes, accountsRes] = await Promise.all([
-          api.get(`/financial/dashboard?tenantId=${tenantId}`),
-          api.get(`/financial/records?tenantId=${tenantId}`),
+          api.get(`/financial/dashboard?tenantId=${tenantId}${processId ? `&processId=${processId}` : ""}`),
+          api.get(`/financial/records?tenantId=${tenantId}${processId ? `&processId=${processId}` : ""}`),
           api.get(`/financial/bank-accounts?tenantId=${tenantId}`),
         ]);
         setDashboard(dashboardRes.data);
@@ -1277,7 +1216,7 @@ export function Financial() {
         categoryId: fullRecord.categoryId || "",
         paymentMethod: fullRecord.paymentMethod || "",
         bankAccountId: fullRecord.bankAccount?.id || "",
-        processId: fullRecord.processId || fullRecord.process?.id || "",
+        processId: lockedProcessId || fullRecord.processId || fullRecord.process?.id || "",
         notes: fullRecord.notes || "",
         fine: fullRecord.fine ? fullRecord.fine.toString() : "",
         interest: fullRecord.interest ? fullRecord.interest.toString() : "",
@@ -1330,7 +1269,7 @@ export function Financial() {
         categoryId: "",
         paymentMethod: "",
         bankAccountId: "",
-        processId: "",
+        processId: lockedProcessId || "",
         notes: "",
         fine: "",
         interest: "",
@@ -2211,28 +2150,30 @@ export function Financial() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className={isEmbeddedInProcess ? "space-y-6" : "p-8 space-y-6"}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-3">
             <DollarSign className="text-indigo-400" size={32} />
-            Módulo Financeiro
+            {isEmbeddedInProcess ? "Financeiro do Processo" : "Módulo Financeiro"}
           </h1>
-          <p className="text-slate-400 mt-1">
-            Gestão completa de receitas, despesas e contas bancárias
-          </p>
+          {isEmbeddedInProcess ? (
+            <p className="text-slate-400 mt-1">
+              {props.processContext?.title ||
+                "Lançamentos vinculados ao processo em tela"}
+              {props.processContext?.cnj ? ` • ${props.processContext.cnj}` : ""}
+              {props.processContext?.code ? ` • ${props.processContext.code}` : ""}
+            </p>
+          ) : (
+            <p className="text-slate-400 mt-1">
+              Gestão completa de receitas, despesas e contas bancárias
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           {view === "records" && (
             <>
-              <button
-                onClick={() => handleOpenInstallmentModal()}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
-              >
-                <Repeat size={20} />
-                Parcelar
-              </button>
               <button
                 onClick={() => handleOpenModal()}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
@@ -2242,7 +2183,7 @@ export function Financial() {
               </button>
             </>
           )}
-          {view === "accounts" && (
+          {!isEmbeddedInProcess && view === "accounts" && (
             <button
               onClick={() => handleOpenBankModal()}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
@@ -2276,26 +2217,30 @@ export function Financial() {
         >
           Transações
         </button>
-        <button
-          onClick={() => setView("accounts")}
-          className={`px-4 py-2 font-medium transition-colors ${
-            view === "accounts"
-              ? "text-indigo-400 border-b-2 border-indigo-400"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          Contas Bancárias
-        </button>
-        <button
-          onClick={() => setView("conditions")}
-          className={`px-4 py-2 font-medium transition-colors ${
-            view === "conditions"
-              ? "text-indigo-400 border-b-2 border-indigo-400"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          Cond. Pagamento
-        </button>
+        {!isEmbeddedInProcess && (
+          <>
+            <button
+              onClick={() => setView("accounts")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                view === "accounts"
+                  ? "text-indigo-400 border-b-2 border-indigo-400"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Contas Bancárias
+            </button>
+            <button
+              onClick={() => setView("conditions")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                view === "conditions"
+                  ? "text-indigo-400 border-b-2 border-indigo-400"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Cond. Pagamento
+            </button>
+          </>
+        )}
       </div>
 
       {/* Dashboard View */}
@@ -3996,42 +3941,63 @@ export function Financial() {
                   <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
                     Processo (opcional)
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      value={processSearch}
-                      onChange={(e) => setProcessSearch(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Buscar por CNJ, código ou título..."
-                    />
-                    <select
-                      value={formData.processId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, processId: e.target.value })
-                      }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="">Sem processo</option>
-                      {formData.processId &&
-                        !processOptions.some((p) => p.id === formData.processId) && (
-                          <option value={formData.processId}>
-                            Processo atual ({editingRecord?.process?.cnj || formData.processId})
+                  {isEmbeddedInProcess ? (
+                    <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Processo em tela
+                      </p>
+                      <p className="text-sm font-medium text-white mt-0.5">
+                        {props.processContext?.title || "Processo vinculado"}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {props.processContext?.cnj ||
+                          props.processContext?.code ||
+                          lockedProcessId}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <input
+                        type="text"
+                        value={processSearch}
+                        onChange={(e) => setProcessSearch(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Buscar por CNJ, código ou título..."
+                      />
+                      <select
+                        value={formData.processId}
+                        onChange={(e) =>
+                          setFormData({ ...formData, processId: e.target.value })
+                        }
+                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Sem processo</option>
+                        {formData.processId &&
+                          !processOptions.some(
+                            (p) => p.id === formData.processId,
+                          ) && (
+                            <option value={formData.processId}>
+                              Processo atual (
+                              {editingRecord?.process?.cnj || formData.processId}
+                              )
+                            </option>
+                          )}
+                        {loadingProcesses && (
+                          <option value="" disabled>
+                            Carregando...
                           </option>
                         )}
-                      {loadingProcesses && (
-                        <option value="" disabled>
-                          Carregando...
-                        </option>
-                      )}
-                      {!loadingProcesses &&
-                        processOptions.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {(p.code ? `${p.code} - ` : "") + (p.title || p.cnj || p.id)}
-                            {p.cnj ? ` (${p.cnj})` : ""}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
+                        {!loadingProcesses &&
+                          processOptions.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {(p.code ? `${p.code} - ` : "") +
+                                (p.title || p.cnj || p.id)}
+                              {p.cnj ? ` (${p.cnj})` : ""}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
                   <p className="text-[10px] text-slate-500 mt-1">
                     Use para vincular honorários, despesas e pagamentos ao processo correspondente.
                   </p>
@@ -4589,229 +4555,6 @@ export function Financial() {
           </div>
         </div>
       )}
-      {/* Modal de Parcelamento */}
-      {showInstallmentModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Repeat className="text-purple-400" size={24} />
-                Criar Parcelamento
-              </h2>
-              <button
-                onClick={() => setShowInstallmentModal(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleInstallmentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Descrição *
-                </label>
-                <input
-                  type="text"
-                  value={installmentData.description}
-                  onChange={(e) =>
-                    setInstallmentData({
-                      ...installmentData,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Valor Total *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={installmentData.totalAmount}
-                    onChange={(e) =>
-                      setInstallmentData({
-                        ...installmentData,
-                        totalAmount: e.target.value,
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Nº Parcelas *
-                  </label>
-                  <input
-                    type="number"
-                    min="2"
-                    max="120"
-                    value={installmentData.numInstallments}
-                    onChange={(e) =>
-                      setInstallmentData({
-                        ...installmentData,
-                        numInstallments: e.target.value,
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {installmentData.totalAmount &&
-                installmentData.numInstallments && (
-                  <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg text-center">
-                    <p className="text-purple-400 text-sm">
-                      {installmentData.numInstallments}x de{" "}
-                      <strong>
-                        {formatCurrency(
-                          parseFloat(installmentData.totalAmount) /
-                            parseInt(installmentData.numInstallments || "1"),
-                        )}
-                      </strong>
-                    </p>
-                  </div>
-                )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Tipo
-                  </label>
-                  <select
-                    value={installmentData.type}
-                    onChange={(e) =>
-                      setInstallmentData({
-                        ...installmentData,
-                        type: e.target.value as "INCOME" | "EXPENSE",
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="INCOME">Receita</option>
-                    <option value="EXPENSE">Despesa</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Periodicidade
-                  </label>
-                  <input
-                    type="text"
-                    list="installment-periodicity-list"
-                    value={installmentData.periodicity}
-                    onChange={(e) =>
-                      setInstallmentData({
-                        ...installmentData,
-                        periodicity: e.target.value as any,
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Ex: Mensal, Anual"
-                  />
-                  <datalist id="installment-periodicity-list">
-                    <option value="Mensal" />
-                    <option value="Quinzenal" />
-                    <option value="Semanal" />
-                    <option value="Anual" />
-                  </datalist>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  1º Vencimento *
-                </label>
-                <input
-                  type="date"
-                  value={installmentData.firstDueDate}
-                  onChange={(e) =>
-                    setInstallmentData({
-                      ...installmentData,
-                      firstDueDate: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Conta Bancária
-                  </label>
-                  <select
-                    value={installmentData.bankAccountId}
-                    onChange={(e) =>
-                      setInstallmentData({
-                        ...installmentData,
-                        bankAccountId: e.target.value,
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">Nenhuma</option>
-                    {bankAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Forma Pgto
-                  </label>
-                  <select
-                    value={installmentData.paymentMethod}
-                    onChange={(e) =>
-                      setInstallmentData({
-                        ...installmentData,
-                        paymentMethod: e.target.value,
-                      })
-                    }
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">Selecione</option>
-                    <option value="PIX">PIX</option>
-                    <option value="BOLETO">Boleto</option>
-                    <option value="TED">TED</option>
-                    <option value="DINHEIRO">Dinheiro</option>
-                    <option value="CARTAO">Cartão</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowInstallmentModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
-                >
-                  Cancelar (ESC)
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className={`flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors ${submitting ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  {submitting ? "Criando..." : "Criar Parcelamento"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Modal de Liquidação - REDESENHADO */}
       {showSettleModal && settlingRecord && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">

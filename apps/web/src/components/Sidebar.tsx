@@ -13,8 +13,7 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
   const location = useLocation();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
-  const toggleMenu = (id: string, e: React.MouseEvent) => {
-    e.preventDefault();
+  const toggleMenu = (id: string) => {
     setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
@@ -63,11 +62,7 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
               <NavLink
                 to={item.to}
                 onClick={(e) => {
-                  if (hasSubItems) {
-                    toggleMenu(item.id, e);
-                  } else {
-                    closeSidebar();
-                  }
+                  closeSidebar();
                 }}
                 className={({ isActive }) => clsx(
                   'flex items-center justify-between px-3 py-2.5 lg:px-4 lg:py-3 rounded-lg text-sm font-medium transition-all duration-200',
@@ -81,9 +76,18 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
                   {item.label}
                 </div>
                 {hasSubItems && (
-                  <div className="text-slate-500">
+                  <button
+                    type="button"
+                    onClick={(ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      toggleMenu(item.id);
+                    }}
+                    className="text-slate-500 hover:text-slate-200 transition-colors p-1 -mr-1 rounded-md hover:bg-slate-800/60"
+                    aria-label={isMenuOpen ? "Fechar submenu" : "Abrir submenu"}
+                  >
                     {isMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </div>
+                  </button>
                 )}
               </NavLink>
 
