@@ -9,6 +9,7 @@ import {
   setUser,
   type AuthPersistence,
 } from '../auth/authStorage';
+import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, type ThemePreference } from '../utils/theme';
 
 function guessDeviceName() {
   const ua = navigator.userAgent || '';
@@ -65,6 +66,11 @@ export function Login() {
     }
   }, [location]);
 
+  useEffect(() => {
+    const stored = getStoredThemePreference() || 'DARK';
+    applyThemePreference(stored as ThemePreference);
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -93,6 +99,10 @@ export function Login() {
       const persistence: AuthPersistence = isTrustedDevice ? 'persistent' : 'session';
       setToken(access_token, persistence);
       setUser(user, persistence);
+      if (user?.theme) {
+        setStoredThemePreference(user.theme as ThemePreference);
+        applyThemePreference(user.theme as ThemePreference);
+      }
 
       navigate('/');
     } catch (err: any) {
@@ -221,4 +231,3 @@ export function Login() {
     </div>
   );
 }
-

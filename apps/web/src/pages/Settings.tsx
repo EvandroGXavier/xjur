@@ -30,6 +30,8 @@ import { BackupTab } from "../components/settings/BackupTab";
 import { SkillsTab } from "../components/settings/SkillsTab";
 import { WorkflowsTab } from "../components/settings/WorkflowsTab";
 import { TabButton } from "../components/ui/TabButton";
+import { getAuthPersistence, getUser, setUser } from "../auth/authStorage";
+import { applyThemePreference, setStoredThemePreference, type ThemePreference } from "../utils/theme";
 
 // --- COMPONENTS ---
 
@@ -548,26 +550,19 @@ export function Settings() {
     soundEnabled: boolean;
   }>({ theme: "DARK", soundEnabled: true });
   const currentUser = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "{}");
-    } catch (error) {
-      return {};
-    }
+    return getUser() || {};
   }, []);
   const isSuperAdmin = currentUser?.email === "evandro@conectionmg.com.br";
 
   useEffect(() => {
-    // Carregar preferências iniciais do localStorage (para reflectir UI imediata)
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        setUserPrefs({
-          theme: user.theme || "DARK",
-          soundEnabled:
-            user.soundEnabled !== undefined ? user.soundEnabled : true,
-        });
-      } catch (e) {}
+    const user = getUser();
+    if (user) {
+      setUserPrefs({
+        theme: user.theme || "DARK",
+        soundEnabled: user.soundEnabled !== undefined ? user.soundEnabled : true,
+      });
+      setStoredThemePreference((user.theme || "DARK") as ThemePreference);
+      applyThemePreference((user.theme || "DARK") as ThemePreference);
     }
 
     if (activeTab === "tenants") {
@@ -812,9 +807,8 @@ export function Settings() {
 
   const handleTogglePreference = async (type: "theme" | "soundEnabled") => {
     try {
-      const userStr = localStorage.getItem("user");
-      if (!userStr) return;
-      const user = JSON.parse(userStr);
+      const user = getUser();
+      if (!user) return;
 
       let newPrefs = { ...userPrefs };
       if (type === "theme") {
@@ -832,17 +826,12 @@ export function Settings() {
         theme: newPrefs.theme,
         soundEnabled: newPrefs.soundEnabled,
       };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setUser(updatedUser, getAuthPersistence());
 
       // Aplica tema visual se houver wrapper no main index
       if (type === "theme") {
-        if (newPrefs.theme === "LIGHT") {
-          document.documentElement.classList.add("light");
-          document.documentElement.classList.remove("dark");
-        } else {
-          document.documentElement.classList.add("dark");
-          document.documentElement.classList.remove("light");
-        }
+        setStoredThemePreference(newPrefs.theme as ThemePreference);
+        applyThemePreference(newPrefs.theme as ThemePreference);
       }
 
       // Persiste na API

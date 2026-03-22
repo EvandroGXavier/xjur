@@ -63,3 +63,32 @@ html.light {
   width: 100%;
   min-height: 100vh;
 }
+
+@layer utilities {
+  /* Compat: vários módulos usam cores "fixas" (bg-white/text-slate-900 etc).
+     No tema claro, nosso mapeamento por variáveis inverte algumas cores; aqui garantimos legibilidade. */
+  html.light .bg-white {
+    background-color: rgb(var(--color-slate-900)) !important;
+  }
+
+  html.light .text-slate-900 {
+    color: rgb(var(--color-white)) !important;
+  }
+
+  html.light .text-gray-900 {
+    color: rgb(var(--color-white)) !important;
+  }
+
+  html.light .border-gray-200 {
+    border-color: rgb(var(--color-slate-700)) !important;
+  }
+
+  html.light .bg-\[\#f8f9fa\] {
+    background-color: rgb(var(--color-slate-800)) !important;
+  }
+
+  /* Inputs/controles nativos (date/time) */
+  html.light .\[color-scheme\:dark\] {
+    color-scheme: light !important;
+  }
+}

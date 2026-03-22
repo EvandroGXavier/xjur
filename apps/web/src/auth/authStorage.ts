@@ -8,6 +8,10 @@ export function getToken() {
   return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
 }
 
+export function getAuthPersistence(): AuthPersistence {
+  return localStorage.getItem(TOKEN_KEY) ? 'persistent' : 'session';
+}
+
 export function setToken(token: string, persistence: AuthPersistence) {
   if (persistence === 'persistent') {
     localStorage.setItem(TOKEN_KEY, token);
@@ -65,4 +69,3 @@ export function logoutLocal() {
   clearToken();
   clearUser();
 }
-

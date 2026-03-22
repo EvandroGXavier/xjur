@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { Building2, Clock, LogOut, Menu, User } from 'lucide-react';
 import { getUser, logoutLocal } from '../auth/authStorage';
 import { useIdleLogout } from '../hooks/useIdleLogout';
+import { applyThemePreference, getStoredThemePreference, type ThemePreference } from '../utils/theme';
 import { InventoryHelpModal } from './inventory/InventoryHelpModal';
 import { Sidebar } from './Sidebar';
 
@@ -94,12 +95,16 @@ export function Layout() {
   });
 
   useEffect(() => {
-    const isLight = localStorage.getItem('theme') === 'light';
-    if (isLight) {
-      document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
-    }
+    const apply = () => {
+      const stored = getUser();
+      const preference = ((stored?.theme as ThemePreference) || getStoredThemePreference() || 'DARK') as ThemePreference;
+      applyThemePreference(preference);
+    };
+
+    apply();
+    const onStorage = () => apply();
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   return (
@@ -124,4 +129,3 @@ export function Layout() {
     </div>
   );
 }
-
