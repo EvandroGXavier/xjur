@@ -118,6 +118,7 @@ export class BackupService {
       ],
       this.buildPgEnv(database),
       'gerar backup',
+      'pg_dump',
     );
 
     return {
@@ -161,6 +162,7 @@ export class BackupService {
         ],
         this.buildPgEnv(database),
         'restaurar backup SQL',
+        'psql',
       );
     } else {
       const pgRestore = this.resolveRequiredTool('pg_restore');
@@ -183,6 +185,7 @@ export class BackupService {
         ],
         this.buildPgEnv(database),
         'restaurar backup',
+        'pg_restore',
       );
     }
 
@@ -345,6 +348,10 @@ export class BackupService {
           ),
         );
       }
+      // Common path when pgAdmin 4 is installed
+      candidates.add(
+        path.join('C:\\Program Files\\pgAdmin 4\\runtime', `${toolName}.exe`),
+      );
     }
 
     return [...candidates];
@@ -355,6 +362,7 @@ export class BackupService {
     args: string[],
     extraEnv: Record<string, string | undefined>,
     actionLabel: string,
+    toolName?: string,
   ) {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(command, args, {
@@ -381,6 +389,19 @@ export class BackupService {
 
       child.on('close', (code) => {
         if (code === 0) {
+          resolve();
+          return;
+        }
+
+        // pg_restore often returns 1 for minor warnings/ignored errors (like version mismatches in parameters)
+        if (
+          code === 1 &&
+          (toolName === 'pg_restore' || actionLabel.includes('restaurar')) &&
+          (stderr.includes('errors ignored on restore') || stderr.includes('warnings ignored on restore'))
+        ) {
+          console.warn(
+            `[BACKUP] ${toolName || 'Comando'} finalizado com avisos (code 1), mas erros foram ignorados: ${stderr}`,
+          );
           resolve();
           return;
         }

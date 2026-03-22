@@ -200,10 +200,10 @@ export function BackupTab() {
           <div>
             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
               <Database size={20} className="text-indigo-400" />
-              BACK
+              BACKUP & RESTAURAÇÃO
             </h3>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">
-              Gere backups completos do PostgreSQL, baixe o arquivo para transporte seguro e restaure em outra instancia quando necessario.
+              Gere backups completos do PostgreSQL, baixe o arquivo para transporte seguro e restaure em outra instância quando necessário.
             </p>
           </div>
           <button
@@ -215,6 +215,30 @@ export function BackupTab() {
             Atualizar Status
           </button>
         </div>
+
+        {/* PROGRESS BAR */}
+        {busyAction && (
+          <div className="mt-6 space-y-2 animate-in fade-in transition-all duration-500">
+            <div className="flex justify-between text-xs font-semibold uppercase tracking-wider">
+              <span className="text-indigo-400 flex items-center gap-2">
+                <RefreshCw size={12} className="animate-spin" />
+                {busyAction.startsWith('restore') ? 'Restaurando Base de Dados...' : 
+                 busyAction.startsWith('create') ? 'Gerando Backup Completo...' :
+                 busyAction.startsWith('upload') ? 'Enviando Arquivo...' : 'Processando...'}
+              </span>
+              <span className="text-slate-500">Isso pode levar alguns minutos</span>
+            </div>
+            <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div 
+                className="h-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 animate-progress-stripes transition-all duration-[2000ms] ease-out"
+                style={{ width: '92%' }}
+              ></div>
+            </div>
+            <p className="text-[10px] text-slate-500 italic">
+              Não feche esta tela até a conclusão do processo.
+            </p>
+          </div>
+        )}
 
         <div className="mt-6 grid gap-4 lg:grid-cols-4">
           <div className={toolCardClass}>
