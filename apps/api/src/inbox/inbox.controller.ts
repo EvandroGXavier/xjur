@@ -24,13 +24,17 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { CreateInboxMessageDto } from './dto/create-inbox-message.dto';
 import { LinkMessageProcessDto } from './dto/link-message-process.dto';
+import { TrustedDeviceService } from '../auth/trusted-device.service';
 
 @Controller('inbox')
 @UseGuards(JwtAuthGuard)
 export class InboxController {
   private readonly logger = new Logger(InboxController.name);
 
-  constructor(private readonly inboxService: InboxService) {}
+  constructor(
+    private readonly inboxService: InboxService,
+    private readonly trustedDeviceService: TrustedDeviceService,
+  ) {}
 
   @Get('conversations')
   findAll(
@@ -100,7 +104,7 @@ export class InboxController {
       }),
     }),
   )
-  sendMessage(
+  async sendMessage(
     @Param('id') id: string,
     @Body() dto: CreateInboxMessageDto,
     @CurrentUser() user: CurrentUserData,
@@ -112,6 +116,16 @@ export class InboxController {
         Object.keys(dto || {}).join(',') || 'none'
       } contentLength=${(dto?.content || '').length} hasFile=${Boolean(file)}`,
     );
+    if (file) {
+      const header: any = req?.headers?.['x-device-token'];
+      const deviceToken = Array.isArray(header) ? header[0] : header;
+      await this.trustedDeviceService.assertTrustedDevice({
+        tenantId: user.tenantId,
+        userId: user.userId,
+        deviceToken,
+      });
+    }
+
     return this.inboxService.sendMessage(id, user.tenantId, user.userId, dto, file);
   }
 

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class SecurityService {
@@ -49,16 +50,84 @@ export class SecurityService {
     });
   }
 
-  // Helpers para "Hash/Ofuscação" reversível (para ser 'invisível' no banco mas visível na UI)
-  private encode(text: string) {
-    if (!text) return text;
-    return Buffer.from(text).toString('base64');
+  private getSecretsKey() {
+    const raw = (process.env.SECURITY_SECRETS_KEY || '').trim();
+    if (!raw) return null;
+
+    try {
+      // Accept base64 or hex.
+      if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
+      const buf = Buffer.from(raw, 'base64');
+      if (buf.length === 32) return buf;
+      return crypto.createHash('sha256').update(buf).digest();
+    } catch {
+      return null;
+    }
   }
 
-  private decode(text: string) {
-    if (!text) return text;
+  private encrypt(text: string) {
+    const key = this.getSecretsKey();
+    if (!key) {
+      // Backward-compatible fallback (not encryption).
+      return Buffer.from(text).toString('base64');
+    }
+
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ciphertext = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+
+    const b64u = (buf: Buffer) =>
+      buf
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+
+    return `enc_v1:${b64u(iv)}:${b64u(tag)}:${b64u(ciphertext)}`;
+  }
+
+  private decrypt(text: string) {
+    const key = this.getSecretsKey();
+    if (!key) return null;
+
+    const parts = text.split(':');
+    if (parts.length !== 4 || parts[0] !== 'enc_v1') return null;
+
+    const fromB64u = (value: string) => {
+      const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+      const pad = '='.repeat((4 - (normalized.length % 4)) % 4);
+      return Buffer.from(normalized + pad, 'base64');
+    };
+
+    const iv = fromB64u(parts[1]);
+    const tag = fromB64u(parts[2]);
+    const ciphertext = fromB64u(parts[3]);
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return plaintext.toString('utf8');
+  }
+
+  private encode(text?: string | null) {
+    if (!text) return text as any;
+    return this.encrypt(text);
+  }
+
+  private decode(text?: string | null) {
+    if (!text) return text as any;
+
+    // New format
+    const decrypted = this.decrypt(text);
+    if (typeof decrypted === 'string') return decrypted;
+
+    // Legacy base64 format (existing data)
     try {
-      return Buffer.from(text, 'base64').toString('utf8');
+      const decoded = Buffer.from(text, 'base64').toString('utf8');
+      // Heuristic: avoid returning garbage if it's not base64.
+      if (decoded && /[^\u0000-\u001F]/.test(decoded)) return decoded;
+      return decoded;
     } catch {
       return text;
     }
@@ -74,7 +143,7 @@ export class SecurityService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return secrets.map(s => ({
+    return secrets.map((s) => ({
       ...s,
       password: this.decode(s.password),
       privateKey: this.decode(s.privateKey),
@@ -100,8 +169,8 @@ export class SecurityService {
     if (!secret) throw new NotFoundException('Segredo não encontrado');
 
     const updateData = { ...data };
-    if (updateData.password) updateData.password = this.encode(updateData.password);
-    if (updateData.privateKey) updateData.privateKey = this.encode(updateData.privateKey);
+    if (typeof updateData.password === 'string') updateData.password = this.encode(updateData.password);
+    if (typeof updateData.privateKey === 'string') updateData.privateKey = this.encode(updateData.privateKey);
 
     return this.prisma.securitySecret.update({
       where: { id },
@@ -121,3 +190,4 @@ export class SecurityService {
     });
   }
 }
+

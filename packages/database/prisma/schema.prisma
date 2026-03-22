@@ -23,6 +23,7 @@ model Tenant {
 
   plan                Plan?               @relation(fields: [planId], references: [id])
   users               User[]
+  trustedDevices      TrustedDevice[]
   contacts            Contact[]
   processes           Process[]
   categories          DocumentCategory[]
@@ -111,11 +112,32 @@ model User {
   updatedAt    DateTime @updatedAt
 
   tenant                     Tenant              @relation(fields: [tenantId], references: [id])
+  trustedDevices             TrustedDevice[]
   assignedAgentConversations AgentConversation[] @relation("AssignedAgentConversations")
   agentParticipants          AgentParticipant[]  @relation("AgentParticipantUser")
   agentMessageLinks          AgentMessageLink[]  @relation("AgentMessageLinkedBy")
 
   @@map("users")
+}
+
+model TrustedDevice {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  name       String
+  tokenHash  String   @unique
+  userAgent  String?
+  ip         String?
+  lastSeenAt DateTime @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, revokedAt])
+  @@map("trusted_devices")
 }
 
 // 2.1 ENTIDADE ÂNCORA: CONTACT

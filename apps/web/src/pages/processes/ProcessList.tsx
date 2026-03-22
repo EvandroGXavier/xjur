@@ -21,7 +21,8 @@ import {
     ChevronRight,
     Activity,
     Calendar,
-    Users
+    Users,
+    CornerDownRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -62,6 +63,7 @@ interface Process {
     updatedAt: string;
     timeline?: { date: string; title?: string; description?: string }[];
     processParties?: {
+        id: string;
         isClient: boolean;
         isOpposing: boolean;
         contact: {
@@ -73,6 +75,20 @@ interface Process {
         }
         role?: { name: string; category?: string };
         qualification?: { name: string };
+        representativeLinks?: {
+            id: string;
+            representativeParty: {
+                id: string;
+                contact: {
+                    id: string;
+                    name: string;
+                    email?: string;
+                    phone?: string;
+                    whatsapp?: string;
+                }
+                role?: { name: string };
+            }
+        }[];
     }[];
 }
 
@@ -265,124 +281,131 @@ export function ProcessList() {
                         isLoading={loading}
                         onSort={(key, direction) => setSortConfig({ key: key as keyof Process, direction })}
                         onSelect={setSelectedIds}
-                        onRowClick={(process) => navigate(`/processes/${process.id}`)}
+                        onRowDoubleClick={(process) => navigate(`/processes/${process.id}`)}
                         columns={[
-                            {
-                                key: 'code',
-                                label: 'ID',
-                                render: (p) => (
-                                    <div className="flex flex-col min-w-[90px]">
-                                        <span className="font-mono font-bold text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20 whitespace-nowrap">
-                                            {p.code || 'NOVO'}
-                                        </span>
-                                    </div>
-                                )
-                            },
                             {
                                 key: 'title',
                                 label: 'Processo / Partes',
                                 sortable: true,
                                 render: (process) => {
-                                    const partiesSlice = process.processParties || [];
+                                    const parties = process.processParties || [];
                                     
-                                    const filterAndRender = (label: string, labelColor: string, typeFilter: (p: any) => boolean) => {
-                                        const filtered = partiesSlice.filter(typeFilter);
+                                    const normalizeText = (val?: string) => (val || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+                                    
+                                    const LAWYER_TERMS = ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'];
+                                    const ACTIVE_POLE_TERMS = ['AUTOR', 'AUTORA', 'REQUERENTE', 'EXEQUENTE', 'RECLAMANTE', 'IMPETRANTE', 'APELANTE', 'AGRAVANTE', 'EMBARGANTE'];
+                                    const PASSIVE_POLE_TERMS = ['REU', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'RECLAMADO', 'RECLAMADA', 'IMPETRADO', 'APELADO', 'AGRAVADO', 'EMBARGADO'];
+
+                                    const isLawyerParty = (p: any) => {
+                                        const rName = normalizeText(p.role?.name);
+                                        const qName = normalizeText(p.qualification?.name);
+                                        return LAWYER_TERMS.some(t => rName.includes(t) || qName.includes(t));
+                                    };
+
+                                    const getPole = (p: any) => {
+                                        const rCat = normalizeText(p.role?.category);
+                                        const rName = normalizeText(p.role?.name);
+                                        if (rCat === 'POLO_ATIVO' || ACTIVE_POLE_TERMS.some(t => rName.includes(t)) || p.isClient) return 'active';
+                                        if (rCat === 'POLO_PASSIVO' || PASSIVE_POLE_TERMS.some(t => rName.includes(t)) || p.isOpposing) return 'passive';
+                                        return null;
+                                    };
+
+                                    const linkedRepresentativeIds = new Set<string>();
+                                    parties.forEach(p => {
+                                        p.representativeLinks?.forEach(link => linkedRepresentativeIds.add(link.representativeParty.id));
+                                    });
+
+                                    // Top level só mostra quem não é exclusivamente um procurador de outra pessoa
+                                    const topLevelParties = parties.filter(p => !(linkedRepresentativeIds.has(p.id) && isLawyerParty(p)));
+
+                                    const filterAndRender = (label: string, labelColor: string, pole: 'active' | 'passive') => {
+                                        // Filtra partes que pertencem a este polo e evita duplicidade (prioridade para o polo definido)
+                                        const filtered = topLevelParties.filter(p => getPole(p) === pole);
+                                        
                                         if (filtered.length === 0) return null;
+                                        
                                         return (
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className={clsx("text-[8px] font-bold uppercase shrink-0", labelColor)}>{label}:</span>
-                                                <div className="flex flex-col gap-1.5 pl-1 mt-1">
-                                                    {filtered.map(p => (
-                                                        <div key={p.contact.id} className="flex flex-col gap-0.5">
-                                                            <span 
-                                                                className="text-white hover:text-indigo-400 cursor-pointer transition-colors font-bold text-[10px] truncate max-w-[200px]"
-                                                                onClick={(e) => { e.stopPropagation(); navigate(`/contacts/${p.contact.id}`); }}
-                                                            >
-                                                                {p.contact.name}
-                                                            </span>
-                                                            <div className="flex items-center gap-2 text-[9px]">
-                                                                {p.contact.whatsapp && (
-                                                                    <a 
-                                                                        href={`https://wa.me/55${p.contact.whatsapp.replace(/\D/g, '')}`} 
-                                                                        target="_blank" rel="noreferrer"
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className="flex items-center gap-0.5 text-emerald-500 hover:text-emerald-400"
-                                                                    >
-                                                                        <MessageCircle size={10} /> <span className="text-[8px] opacity-70">{p.contact.whatsapp}</span>
-                                                                    </a>
-                                                                )}
-                                                                {p.contact.phone && (
-                                                                    <a 
-                                                                        href={`tel:${p.contact.phone.replace(/\D/g, '')}`}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className="flex items-center gap-0.5 text-blue-500 hover:text-blue-400"
-                                                                    >
-                                                                        <PhoneIcon size={10} /> <span className="text-[8px] opacity-70">{p.contact.phone}</span>
-                                                                    </a>
-                                                                )}
-                                                                {p.contact.email && (
-                                                                    <a 
-                                                                        href={`mailto:${p.contact.email}`}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className="flex items-center gap-0.5 text-amber-500 hover:text-amber-400 truncate max-w-[140px]"
-                                                                        title={p.contact.email}
-                                                                    >
-                                                                        <Mail size={10} /> <span className="text-[8px] opacity-70 uppercase tracking-tighter truncate">{p.contact.email}</span>
-                                                                    </a>
-                                                                )}
+                                            <div className="flex flex-col gap-1.5">
+                                                {filtered.map((p, idx) => (
+                                                    <div key={p.id} className="flex flex-col gap-0.5">
+                                                        <div className="flex items-center gap-1.5">
+                                                            {idx === 0 && <span className={clsx("text-[8px] font-bold uppercase shrink-0 w-12", labelColor)}>{label}:</span>}
+                                                            <div className={clsx("flex items-center gap-2", idx > 0 && "ml-[54px]")}>
+                                                                <span 
+                                                                    className="text-white hover:text-indigo-400 cursor-pointer transition-colors font-bold text-[10px] truncate max-w-[200px]"
+                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/contacts/${p.contact.id}`); }}
+                                                                >
+                                                                    {p.contact.name}
+                                                                </span>
+                                                                <div className="flex items-center gap-1.5 text-[9px]">
+                                                                    {p.contact.whatsapp && (
+                                                                        <a href={`https://wa.me/55${p.contact.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-0.5 text-emerald-500 hover:text-emerald-400"><MessageCircle size={10} /></a>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                        
+                                                        {/* Procuradores vinculados a ESTA parte */}
+                                                        {p.representativeLinks?.map(link => (
+                                                            <div key={link.id} className="flex items-center gap-1.5 ml-[54px] opacity-70">
+                                                                <CornerDownRight size={10} className="text-slate-500 shrink-0" />
+                                                                <span 
+                                                                    className="text-slate-300 hover:text-indigo-400 cursor-pointer transition-colors font-medium text-[9px] truncate max-w-[180px]"
+                                                                    onClick={(e) => { e.stopPropagation(); navigate(`/contacts/${link.representativeParty.contact.id}`); }}
+                                                                >
+                                                                    {link.representativeParty.contact.name}
+                                                                </span>
+                                                                <span className="text-[8px] text-slate-500 uppercase">({link.representativeParty.role?.name || 'Procurador'})</span>
+                                                                <div className="flex items-center gap-1 text-[8px]">
+                                                                    {link.representativeParty.contact.whatsapp && (
+                                                                        <a href={`https://wa.me/55${link.representativeParty.contact.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-emerald-500/70 hover:text-emerald-400"><MessageCircle size={9} /></a>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ))}
                                             </div>
                                         );
                                     };
 
-                                    const isClient = (p: any) => {
-                                        const qName = p.qualification?.name?.toUpperCase();
-                                        const rCat = p.role?.category?.toUpperCase();
-                                        const rName = p.role?.name?.toUpperCase();
-                                        return p.isClient || qName === 'CLIENTE' || rCat === 'POLO_ATIVO' || (['AUTOR', 'RECLAMANTE', 'REQUERENTE'].some(n => rName?.includes(n)));
-                                    };
-
-                                    const isOpposing = (p: any) => {
-                                        const qName = p.qualification?.name?.toUpperCase();
-                                        const rCat = p.role?.category?.toUpperCase();
-                                        const rName = p.role?.name?.toUpperCase();
-                                        return p.isOpposing || qName === 'CONTRÁRIO' || rCat === 'POLO_PASSIVO' || (['RÉU', 'RECLAMADO', 'REQUERIDO'].some(n => rName?.includes(n)));
-                                    };
-
-                                    const respParty = partiesSlice.find(p => {
-                                        const qName = p.qualification?.name?.toUpperCase();
-                                        const rName = p.role?.name?.toUpperCase();
-                                        return qName === 'RESPONSAVEL' || rName?.includes('RESPONSAVEL');
+                                    const respParty = parties.find(p => {
+                                        const qName = normalizeText(p.qualification?.name);
+                                        const rName = normalizeText(p.role?.name);
+                                        return qName === 'RESPONSAVEL' || rName.includes('RESPONSAVEL');
                                     })?.contact.name;
                                     
                                     const responsible = process.responsibleLawyer || respParty || '-';
                                     
                                     return (
                                         <div className="flex flex-col gap-2 min-w-[280px] py-1">
-                                            <div className="flex items-center gap-2 cursor-pointer group/title" onClick={() => navigate(`/processes/${process.id}`)}>
-                                                <span className="font-bold text-indigo-400 group-hover/title:text-indigo-300 transition-colors text-sm">
-                                                    {process.cnj ? masks.cnj(process.cnj) : 'S/ NÚMERO'}
-                                                </span>
-                                                {process.category && (
-                                                    <span className={clsx("px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-transparent", process.category === 'JUDICIAL' ? 'text-indigo-400 bg-indigo-500/10' : 'text-amber-400 bg-amber-500/10')}>
-                                                        {process.category === 'JUDICIAL' ? 'JUD' : 'ADV'}
+                                            <div className="flex flex-col gap-1 group/title">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-indigo-400 group-hover/title:text-indigo-300 transition-colors text-sm">
+                                                        {process.cnj ? masks.cnj(process.cnj) : 'S/ NÚMERO'}
+                                                    </span>
+                                                    {process.category && (
+                                                        <span className={clsx("px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-transparent", process.category === 'JUDICIAL' ? 'text-indigo-400 bg-indigo-500/10' : 'text-amber-400 bg-amber-500/10')}>
+                                                            {process.category === 'JUDICIAL' ? 'JUD' : 'ADV'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {process.code && (
+                                                    <span className="font-mono font-bold text-[9px] text-indigo-300 opacity-60">
+                                                        {process.code}
                                                     </span>
                                                 )}
                                             </div>
                                             <div className="space-y-1.5">
                                                 <div 
-                                                    className="flex items-start gap-1.5 text-slate-300 text-[11px] cursor-pointer hover:bg-slate-800/50 p-0.5 -m-0.5 rounded transition"
-                                                    onClick={() => navigate(`/processes/${process.id}`)}
+                                                    className="flex items-start gap-1.5 text-slate-300 text-[11px] p-0.5 -m-0.5 rounded transition"
                                                 >
                                                     <span className="text-slate-500 font-bold uppercase w-14 shrink-0">Título:</span>
                                                     <span className="font-medium text-white">{process.title}</span>
                                                 </div>
                                                 
-                                                {filterAndRender('Cliente', 'text-emerald-500', isClient)}
-                                                {filterAndRender('Adverso', 'text-red-500', isOpposing)}
+                                                {filterAndRender('Cliente', 'text-emerald-500', 'active')}
+                                                {filterAndRender('Adverso', 'text-red-500', 'passive')}
 
                                                 <div className="flex items-start gap-1.5 text-slate-400 text-[11px]">
                                                     <span className="text-indigo-500/80 font-bold uppercase w-14 shrink-0">Resp.:</span>

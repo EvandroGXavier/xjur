@@ -6,9 +6,10 @@ import { InboxGateway } from './inbox.gateway';
 import { InboxService } from './inbox.service';
 import { TelegramModule } from '../telegram/telegram.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [ConfigModule, forwardRef(() => WhatsappModule), forwardRef(() => TelegramModule)],
+  imports: [ConfigModule, AuthModule, forwardRef(() => WhatsappModule), forwardRef(() => TelegramModule)],
   controllers: [InboxController],
   providers: [InboxService, InboxGateway, PrismaService],
   exports: [InboxService, InboxGateway],

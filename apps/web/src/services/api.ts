@@ -1,4 +1,5 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
+import { getDeviceToken, getToken, logoutLocal } from '../auth/authStorage';
 
 // Adicionamos o "export" aqui para que as outras telas possam ler esta função
 export const getApiUrl = () => {
@@ -17,9 +18,14 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  const deviceToken = getDeviceToken();
+  if (deviceToken) {
+    config.headers['X-Device-Token'] = deviceToken;
   }
   return config;
 });
@@ -38,7 +44,7 @@ api.interceptors.response.use(
       if (error.config?.url?.includes('/auth/login')) {
          return Promise.reject(error);
       }
-      localStorage.removeItem('token');
+      logoutLocal();
       window.location.href = '/login';
     }
     return Promise.reject(error);

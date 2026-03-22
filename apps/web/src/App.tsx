@@ -3,9 +3,10 @@ import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
 import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, ProcessTasks, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ProposalsPage, PurchasesPage, FiscalPage, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions, InventoryDashboard } from './pages';
 import { ProcessForm } from './pages/processes/ProcessForm';
+import { getToken } from './auth/authStorage';
 
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
-  const token = localStorage.getItem('token');
+  const token = getToken();
   return token ? children : <Navigate to="/login" replace />;
 };
 

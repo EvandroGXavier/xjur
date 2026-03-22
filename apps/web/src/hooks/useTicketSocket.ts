@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getToken } from '../auth/authStorage';
 
 /**
  * Hook reutilizável para conexão WebSocket com o backend.
@@ -7,15 +8,14 @@ import { io, Socket } from 'socket.io-client';
  *
  * Eventos disponíveis:
  *  - ticket:new      → novo ticket criado
- *  - ticket:updated   → ticket atualizado (status, etc)
- *  - ticket:message   → nova mensagem em um ticket
+ *  - ticket:updated  → ticket atualizado (status, etc)
+ *  - ticket:message  → nova mensagem em um ticket
  */
 export function useTicketSocket() {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const listenersRef = useRef<Map<string, Set<(...args: any[]) => void>>>(new Map());
 
-  // Build socket URL
   const getSocketUrl = () => {
     if (
       window.location.hostname === 'localhost' ||
@@ -27,9 +27,9 @@ export function useTicketSocket() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) {
-      console.warn('⚠️ useTicketSocket: No token found, skipping connection');
+      console.warn('useTicketSocket: No token found, skipping connection');
       return;
     }
 
@@ -44,22 +44,10 @@ export function useTicketSocket() {
 
     socketRef.current = socket;
 
-    socket.on('connect', () => {
-      console.log('🔌 [TicketSocket] Connected:', socket.id);
-      setIsConnected(true);
-    });
+    socket.on('connect', () => setIsConnected(true));
+    socket.on('disconnect', () => setIsConnected(false));
+    socket.on('connect_error', () => setIsConnected(false));
 
-    socket.on('disconnect', (reason) => {
-      console.log('🔌 [TicketSocket] Disconnected:', reason);
-      setIsConnected(false);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('❌ [TicketSocket] Connection error:', err.message);
-      setIsConnected(false);
-    });
-
-    // Re-attach any existing listeners (for hot-reload scenarios)
     listenersRef.current.forEach((callbacks, event) => {
       callbacks.forEach((cb) => socket.on(event, cb));
     });
@@ -71,32 +59,24 @@ export function useTicketSocket() {
     };
   }, []);
 
-  /**
-   * Subscribe to a socket event. Returns an unsubscribe function.
-   */
-  const on = useCallback(
-    (event: string, callback: (...args: any[]) => void) => {
-      // Track listener
-      if (!listenersRef.current.has(event)) {
-        listenersRef.current.set(event, new Set());
-      }
-      listenersRef.current.get(event)!.add(callback);
+  const on = useCallback((event: string, callback: (...args: any[]) => void) => {
+    if (!listenersRef.current.has(event)) {
+      listenersRef.current.set(event, new Set());
+    }
+    listenersRef.current.get(event)!.add(callback);
 
-      // If socket is already connected, attach now
+    if (socketRef.current) {
+      socketRef.current.on(event, callback);
+    }
+
+    return () => {
+      listenersRef.current.get(event)?.delete(callback);
       if (socketRef.current) {
-        socketRef.current.on(event, callback);
+        socketRef.current.off(event, callback);
       }
-
-      // Return unsubscribe
-      return () => {
-        listenersRef.current.get(event)?.delete(callback);
-        if (socketRef.current) {
-          socketRef.current.off(event, callback);
-        }
-      };
-    },
-    [],
-  );
+    };
+  }, []);
 
   return { isConnected, on, socket: socketRef };
 }
+

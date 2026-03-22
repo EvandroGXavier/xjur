@@ -43,6 +43,7 @@ import { api } from '../../services/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useTicketSocket } from '../../hooks/useTicketSocket';
+import { getUser } from '../../auth/authStorage';
 import { NewTicketModal } from './components/NewTicketModal';
 import { AudioRecorder } from './components/AudioRecorder';
 import { MessageBubble } from './components/MessageBubble';
@@ -596,12 +597,11 @@ export function AtendimentoPage() {
                        {(selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'CLOSED') && (
                            <button onClick={() => handleUpdateStatus(selectedTicket.id, 'WAITING')} className="bg-slate-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-slate-600 shadow-lg">Reabrir</button>
                        )}
-                       {(() => {
-                           const uStr = localStorage.getItem('user');
-                           const uObj = uStr ? JSON.parse(uStr) : null;
-                           if (uObj?.role === 'OWNER' || uObj?.role === 'ADMIN') {
-                               return (
-                                   <button 
+                      {(() => {
+                          const uObj = getUser();
+                          if (uObj?.role === 'OWNER' || uObj?.role === 'ADMIN') {
+                            return (
+                              <button
                                        onClick={() => handleDeleteTicket(selectedTicket.id)} 
                                        className="bg-red-500/10 text-red-500 text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-red-500 hover:text-white shadow-lg transition"
                                        title="Apagar Atendimento"

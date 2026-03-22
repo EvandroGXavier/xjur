@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
+import { getUser } from '../../../auth/authStorage';
+import { useProtectedMediaUrl } from '../../../hooks/useProtectedMediaUrl';
+import { openProtectedMedia } from '../../../services/protectedMedia';
 
 interface MessageBubbleProps {
   msg: any;
@@ -43,6 +46,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onLinkToProcess,
   quotedMsg
 }) => {
+  const protectedMediaUrl = useProtectedMediaUrl(msg?.mediaUrl);
+
   if (isSystem) {
     return (
       <div className="flex justify-center my-2">
@@ -56,8 +61,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   // Parse reactions if string
   const reactions = typeof msg.reactions === 'string' ? JSON.parse(msg.reactions) : (msg.reactions || []);
 
-  const userStr = localStorage.getItem('user');
-  const userObj = userStr ? JSON.parse(userStr) : null;
+  const userObj = getUser();
   const canDelete = userObj?.role === 'OWNER' || userObj?.role === 'ADMIN';
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -183,7 +187,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <audio 
                     controls 
                     preload="metadata"
-                    src={getMediaUrl(msg.mediaUrl)} 
+                    src={protectedMediaUrl || ''} 
                     className={clsx(
                         "w-full h-10 rounded-lg",
                         isMe ? "accent-white" : "accent-indigo-500"
@@ -201,13 +205,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             ) : msg.contentType === 'IMAGE' ? (
               <div className="space-y-2">
-                  {msg.mediaUrl && (
+                  {msg.mediaUrl && protectedMediaUrl && (
                     <div className="relative rounded-lg overflow-hidden border border-white/10 group/img">
                         <img 
-                          src={getMediaUrl(msg.mediaUrl)} 
+                          src={protectedMediaUrl} 
                           alt="Imagem" 
                           className="max-w-full cursor-pointer hover:opacity-95 transition"
-                          onClick={() => window.open(getMediaUrl(msg.mediaUrl), '_blank')} 
+                          onClick={() => openProtectedMedia(msg.mediaUrl).catch(() => toast.error('Sem permissão para baixar/abrir este arquivo.'))} 
                         />
                     </div>
                   )}
@@ -216,7 +220,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             ) : (msg.contentType === 'FILE' || msg.contentType === 'DOCUMENT') ? (
               <div 
                 className="flex items-center gap-3 bg-black/20 p-3 rounded-xl cursor-pointer hover:bg-black/30 transition border border-white/5" 
-                onClick={() => window.open(getMediaUrl(msg.mediaUrl), '_blank')}
+                onClick={() =>
+                  msg.mediaUrl
+                    ? openProtectedMedia(msg.mediaUrl).catch(() =>
+                        toast.error('Sem permissão para baixar/abrir este arquivo.'),
+                      )
+                    : undefined
+                }
               >
                 <div className="p-2 bg-indigo-500/20 rounded-lg">
                   <FileText size={24} className="text-indigo-300" />

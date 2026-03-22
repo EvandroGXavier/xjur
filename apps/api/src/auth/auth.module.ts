@@ -6,6 +6,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TrustedDeviceGuard } from './trusted-device.guard';
+import { TrustedDeviceService } from './trusted-device.service';
 
 @Module({
   imports: [
@@ -23,7 +25,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, TrustedDeviceGuard, TrustedDeviceService],
+  exports: [AuthService, TrustedDeviceGuard, TrustedDeviceService],
 })
 export class AuthModule {}

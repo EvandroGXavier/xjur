@@ -3,6 +3,7 @@ import { SYSTEM_MODULES } from '../config/modules';
 import { clsx } from 'clsx';
 import { X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { getUser } from '../auth/authStorage';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -41,9 +42,8 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
       <nav className="flex-1 p-3 lg:p-4 space-y-1.5 lg:space-y-2 overflow-y-auto custom-scrollbar">
         {SYSTEM_MODULES.filter(item => {
            try {
-             const userStr = localStorage.getItem('user');
-             if (!userStr) return false;
-             const user = JSON.parse(userStr);
+             const user = getUser();
+             if (!user) return false;
              if (user.role === 'OWNER') return true;
              
              const permissions = user.permissions || {};
@@ -119,22 +119,16 @@ export function Sidebar({ isOpen, closeSidebar }: SidebarProps) {
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-800">
           <div className="w-8 h-8 flex-shrink-0 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs uppercase">
             {(() => {
-                const uStr = localStorage.getItem('user');
-                if (uStr) {
-                    const u = JSON.parse(uStr);
-                    return u.name ? u.name.substring(0,2) : 'OP';
-                }
+                const u = getUser();
+                if (u) return u.name ? u.name.substring(0,2) : 'OP';
                 return 'OP';
             })()}
           </div>
           <div className="overflow-hidden">
             <p className="text-sm font-medium text-white truncate">
                 {(() => {
-                    const uStr = localStorage.getItem('user');
-                    if (uStr) {
-                        const u = JSON.parse(uStr);
-                        return u.name || 'Operador';
-                    }
+                    const u = getUser();
+                    if (u) return u.name || 'Operador';
                     return 'Operador';
                 })()}
             </p>

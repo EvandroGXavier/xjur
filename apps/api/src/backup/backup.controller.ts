@@ -20,9 +20,10 @@ import * as path from 'path';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 import { BackupService } from './backup.service';
+import { TrustedDeviceGuard } from '../auth/trusted-device.guard';
 
 @Controller('backup')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, TrustedDeviceGuard)
 export class BackupController {
   constructor(private readonly backupService: BackupService) {}
 

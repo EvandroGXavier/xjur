@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getToken } from '../auth/authStorage';
 
 export function useInboxSocket() {
   const socketRef = useRef<Socket | null>(null);
@@ -17,7 +18,7 @@ export function useInboxSocket() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
 
     const socket = io(getSocketUrl(), {

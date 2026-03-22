@@ -3,6 +3,7 @@ import { ArrowLeft, Upload, FileText, Lock, Unlock, Search, Eye, EyeOff, User as
 import { SecurityTab } from '../ui/SecurityTab';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
+import { getUser } from '../../auth/authStorage';
 
 interface BankAccountDetailsProps {
   account: any;
@@ -41,7 +42,7 @@ export function BankAccountDetails({ account, onBack }: BankAccountDetailsProps)
   const fetchAccountRecords = async () => {
     try {
       setLoading(true);
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const user = getUser() || {};
       const tenantId = user.tenantId || 'default-tenant-id';
       const res = await api.get(`/financial/records?tenantId=${tenantId}`);
       // Filtrar no frontend por enquanto (depois pode ser query backend)

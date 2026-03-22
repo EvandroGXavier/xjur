@@ -17,6 +17,9 @@ import { toast } from 'sonner';
 import { api, getApiUrl } from '../../services/api';
 import { useInboxSocket } from '../../hooks/useInboxSocket';
 import { Connections } from './components/Connections';
+import { getUser } from '../../auth/authStorage';
+import { useProtectedMediaUrl } from '../../hooks/useProtectedMediaUrl';
+import { openProtectedMedia } from '../../services/protectedMedia';
 
 interface ContactSummary {
   id: string;
@@ -32,6 +35,23 @@ interface ProcessSummary {
   code?: string;
   cnj?: string;
 }
+
+const ProtectedInlineImage = ({ mediaUrl }: { mediaUrl: string }) => {
+  const url = useProtectedMediaUrl(mediaUrl);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt="mídia"
+      className="mb-3 max-h-72 rounded-2xl object-cover"
+      onClick={() =>
+        openProtectedMedia(mediaUrl).catch(() =>
+          toast.error('Sem permissão para baixar/abrir este arquivo.'),
+        )
+      }
+    />
+  );
+};
 
 interface UserSummary {
   id: string;
@@ -160,19 +180,13 @@ const getConversationContext = (conversation?: Conversation | null) => {
 const getStoredUser = (): UserSummary | null => {
   if (typeof window === 'undefined') return null;
 
-  try {
-    const raw = localStorage.getItem('user');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.id || !parsed?.name) return null;
-    return {
-      id: parsed.id,
-      name: parsed.name,
-      email: parsed.email,
-    };
-  } catch {
-    return null;
-  }
+  const stored = getUser();
+  if (!stored?.id || !stored?.name) return null;
+  return {
+    id: stored.id,
+    name: stored.name,
+    email: stored.email,
+  };
 };
 
 const mergeAssignableUsers = (users: UserSummary[], assignee?: UserSummary | null) => {
@@ -830,8 +844,19 @@ export function AtendimentoPage() {
                         return (
                           <div key={message.id} className={clsx('flex', isMine ? 'justify-end' : 'justify-start')}>
                             <div className={clsx('max-w-[78%] rounded-3xl px-4 py-3', isMine ? 'bg-emerald-400 text-slate-950' : 'border border-white/10 bg-white/5')}>
-                              {message.mediaUrl && message.contentType === 'IMAGE' && <img src={getMediaUrl(message.mediaUrl)} alt="midia" className="mb-3 max-h-72 rounded-2xl object-cover" />}
-                              {message.mediaUrl && message.contentType !== 'IMAGE' && <a href={getMediaUrl(message.mediaUrl)} target="_blank" rel="noreferrer" className="mb-3 block rounded-2xl border border-black/10 bg-black/10 px-3 py-2 text-sm">Abrir anexo</a>}
+                              {message.mediaUrl && message.contentType === 'IMAGE' && <ProtectedInlineImage mediaUrl={message.mediaUrl} />}
+                              {message.mediaUrl && message.contentType !== 'IMAGE' && (
+                                <button
+                                  onClick={() =>
+                                    openProtectedMedia(message.mediaUrl).catch(() =>
+                                      toast.error('Sem permissão para baixar/abrir este arquivo.'),
+                                    )
+                                  }
+                                  className="mb-3 block w-full text-left rounded-2xl border border-black/10 bg-black/10 px-3 py-2 text-sm hover:bg-black/15"
+                                >
+                                  Abrir anexo
+                                </button>
+                              )}
                               <p className="whitespace-pre-wrap text-sm">{message.content || '[sem texto]'}</p>
                               <div className={clsx('mt-3 flex items-center justify-between gap-3 text-[11px]', isMine ? 'text-slate-800/80' : 'text-slate-400')}>
                                 <span>{message.senderName || (isMine ? 'Equipe DR.X' : 'Contato')}</span>

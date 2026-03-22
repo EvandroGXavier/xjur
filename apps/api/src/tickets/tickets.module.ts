@@ -9,9 +9,10 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { AgentModule } from '../agent/agent.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [ConfigModule, ContactsModule, AgentModule, forwardRef(() => WhatsappModule), forwardRef(() => TelegramModule)],
+  imports: [ConfigModule, AuthModule, ContactsModule, AgentModule, forwardRef(() => WhatsappModule), forwardRef(() => TelegramModule)],
   controllers: [TicketsController],
   providers: [TicketsService, TicketsGateway, PrismaService],
   exports: [TicketsService, TicketsGateway],
