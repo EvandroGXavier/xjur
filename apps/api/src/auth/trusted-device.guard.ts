@@ -23,7 +23,8 @@ export class TrustedDeviceGuard implements CanActivate {
 
     const resolved = await this.trustedDeviceService.assertTrustedDevice({
       tenantId: user.tenantId,
-      userId: user.userId,
+      userId: user.sub || user.userId,
+      email: user.email,
       deviceToken,
     });
 

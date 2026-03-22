@@ -33,12 +33,22 @@ export class TrustedDeviceService {
   async assertTrustedDevice(options: {
     tenantId: string;
     userId: string;
+    email?: string;
     deviceToken?: string | null;
   }) {
     const device = await this.findTrustedDevice(options);
+
+    // Bypass guard for SuperAdmin in development to prevent lock-outs after DB restores
+    const isDev = process.env.NODE_ENV !== 'production';
+    const isSuperAdmin = (options.email || '').toLowerCase() === 'evandro@conectionmg.com.br';
+
     if (!device) {
+      if (isDev && isSuperAdmin) {
+        return { id: 'dev-bypass', name: 'SuperAdmin Dev Bypass' };
+      }
       throw new ForbiddenException('Ação permitida apenas em computador confiável.');
     }
+
     await this.prisma.trustedDevice.update({
       where: { id: device.id },
       data: { lastSeenAt: new Date() },
