@@ -736,18 +736,30 @@ model DocumentCategory {
 
 model DocumentTemplate {
   id         String  @id @default(uuid())
-  tenantId   String
+  tenantId   String?
   title      String
   content    String  @db.Text
   categoryId String?
 
+  // Biblioteca Mestre do Sistema (global) vs Modelos do Escritório (por tenant)
+  isSystemTemplate  Boolean @default(false)
+  systemKey         String? @unique // Identificador estável para upsert de templates do sistema (ex: PETICAO_INICIAL_GENERIC)
+  sourceTemplateId  String? // ID do template de origem (ex: cópia de um System Template)
+
+  description       String?
+  tags              Json?   // ex: ["Cível","CPC","DrX"]
+  preferredStorage  String? // WORD_ONLINE | GOOGLE_DOCS
+  metadata          Json?   // Visual Law, seções, comentários internos (não impressos)
+
   category DocumentCategory? @relation(fields: [categoryId], references: [id])
-  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  tenant   Tenant?           @relation(fields: [tenantId], references: [id])
   history  DocumentHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tenantId, isSystemTemplate])
+  @@index([sourceTemplateId])
   @@map("document_templates")
 }
 
@@ -763,6 +775,10 @@ model DocumentHistory {
   // Microsoft 365 Integration
   msFileId  String? // ID do docx no OneDrive
   msFileUrl String? // Link de edição no Word Online
+
+  // Google Workspace (futuro)
+  gFileId  String?
+  gFileUrl String?
 
   template DocumentTemplate? @relation(fields: [templateId], references: [id])
   tenant   Tenant            @relation(fields: [tenantId], references: [id])

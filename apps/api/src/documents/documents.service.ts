@@ -1,18 +1,33 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { CreateTemplateDto } from './dto/create-template.dto';
-import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
+import { SYSTEM_TEMPLATE_SEEDS } from './system-templates.constants';
+
+type TemplateScope = 'system' | 'tenant' | 'all';
 
 @Injectable()
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
+  private systemLibrarySynced = false;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly msGraphService: MicrosoftGraphService
+    private readonly msGraphService: MicrosoftGraphService,
   ) {}
+
+  // =========================
+  // Document History
+  // =========================
 
   async create(createDocumentDto: CreateDocumentDto, tenantId: string) {
     return this.prisma.documentHistory.create({
@@ -20,7 +35,7 @@ export class DocumentsService {
         title: createDocumentDto.title,
         content: createDocumentDto.content,
         templateId: createDocumentDto.templateId,
-        tenantId, // Use trusted tenantId
+        tenantId,
         snapshot: createDocumentDto.snapshot,
         status: createDocumentDto.status || 'DRAFT',
       },
@@ -44,7 +59,7 @@ export class DocumentsService {
   }
 
   async update(id: string, updateDocumentDto: UpdateDocumentDto, tenantId: string) {
-    await this.findOne(id, tenantId); // Validate existence and access
+    await this.findOne(id, tenantId);
     return this.prisma.documentHistory.update({
       where: { id },
       data: updateDocumentDto,
@@ -52,13 +67,16 @@ export class DocumentsService {
   }
 
   async remove(id: string, tenantId: string) {
-    await this.findOne(id, tenantId); // Validate access
+    await this.findOne(id, tenantId);
     return this.prisma.documentHistory.delete({
       where: { id },
     });
   }
 
-  // Settings Management
+  // =========================
+  // Settings
+  // =========================
+
   async getSettings() {
     return this.prisma.documentSettings.findMany();
   }
@@ -71,85 +89,277 @@ export class DocumentsService {
     });
   }
 
-  // --- TEMPLATES / BIBLIOTECA ---
+  // =========================
+  // Categories (tenant)
+  // =========================
+
+  async listCategories(tenantId: string) {
+    return this.prisma.documentCategory.findMany({
+      where: { tenantId },
+      orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async createCategory(tenantId: string, input: { name: string; parentId?: string }) {
+    const name = (input.name || '').trim();
+    if (!name) throw new BadRequestException('Nome da categoria é obrigatório.');
+
+    return this.prisma.documentCategory.create({
+      data: {
+        tenantId,
+        name,
+        parentId: input.parentId || null,
+      },
+    });
+  }
+
+  // =========================
+  // Templates / Biblioteca
+  // =========================
+
+  private normalizeScope(scope?: string | null): TemplateScope {
+    const raw = String(scope || '').trim().toLowerCase();
+    if (raw === 'system') return 'system';
+    if (raw === 'tenant') return 'tenant';
+    return 'all';
+  }
+
+  private getSystemLibrarySeeds() {
+    return SYSTEM_TEMPLATE_SEEDS;
+  }
+
+  private async ensureSystemLibrarySeeded() {
+    if (this.systemLibrarySynced) return;
+    this.systemLibrarySynced = true;
+    await this.syncSystemLibrary();
+  }
+
+  async syncSystemLibrary(_tenantId?: string) {
+    const seeds = this.getSystemLibrarySeeds();
+    let upserted = 0;
+
+    for (const seed of seeds) {
+      await this.prisma.documentTemplate.upsert({
+        where: { systemKey: seed.systemKey },
+        update: {
+          tenantId: null,
+          isSystemTemplate: true,
+          title: seed.title,
+          content: seed.content,
+          description: seed.description || null,
+          tags: seed.tags || null,
+          preferredStorage: seed.preferredStorage || null,
+          metadata: seed.metadata || null,
+          categoryId: null,
+          sourceTemplateId: null,
+        },
+        create: {
+          tenantId: null,
+          isSystemTemplate: true,
+          systemKey: seed.systemKey,
+          title: seed.title,
+          content: seed.content,
+          description: seed.description || null,
+          tags: seed.tags || null,
+          preferredStorage: seed.preferredStorage || null,
+          metadata: seed.metadata || null,
+          categoryId: null,
+        },
+      });
+      upserted += 1;
+    }
+
+    return { upserted };
+  }
+
+  async customizeTemplate(templateId: string, tenantId: string) {
+    await this.ensureSystemLibrarySeeded();
+
+    const systemTemplate = await this.prisma.documentTemplate.findFirst({
+      where: { id: templateId, isSystemTemplate: true, tenantId: null },
+    });
+    if (!systemTemplate) {
+      throw new NotFoundException('Template do sistema não encontrado.');
+    }
+
+    const created = await this.prisma.documentTemplate.create({
+      data: {
+        tenantId,
+        title: systemTemplate.title,
+        content: systemTemplate.content,
+        categoryId: null,
+        isSystemTemplate: false,
+        systemKey: null,
+        sourceTemplateId: systemTemplate.id,
+        description: systemTemplate.description,
+        tags: systemTemplate.tags,
+        preferredStorage: systemTemplate.preferredStorage,
+        metadata: systemTemplate.metadata,
+      },
+    });
+
+    return created;
+  }
 
   async createTemplate(dto: CreateTemplateDto, tenantId: string) {
     return this.prisma.documentTemplate.create({
       data: {
+        tenantId,
         title: dto.title,
         content: dto.content,
         categoryId: dto.categoryId,
-        tenantId
-      }
+        isSystemTemplate: false,
+        description: dto.description || null,
+        tags: dto.tags || null,
+        preferredStorage: dto.preferredStorage || null,
+        metadata: dto.metadata || null,
+        systemKey: null,
+        sourceTemplateId: dto.sourceTemplateId || null,
+      },
     });
   }
 
-  async findAllTemplates(tenantId: string) {
-    const templates = await this.prisma.documentTemplate.findMany({
-      where: { tenantId },
-      orderBy: { title: 'asc' }
-    });
+  async findAllTemplates(
+    tenantId: string,
+    options?: { scope?: string; q?: string; tag?: string },
+  ) {
+    await this.ensureSystemLibrarySeeded();
 
-    if (templates.length === 0) {
-        await this.seedDefaults(tenantId);
-        return this.prisma.documentTemplate.findMany({
-            where: { tenantId },
-            orderBy: { title: 'asc' }
-        });
+    const scope = this.normalizeScope(options?.scope);
+    const q = (options?.q || '').trim();
+    const tag = (options?.tag || '').trim();
+
+    const commonSearch: Prisma.DocumentTemplateWhereInput | undefined = q
+      ? {
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { description: { contains: q, mode: 'insensitive' } },
+          ],
+        }
+      : undefined;
+
+    const buildWhere = (base: Prisma.DocumentTemplateWhereInput): Prisma.DocumentTemplateWhereInput => {
+      if (!commonSearch) return base;
+      return { AND: [base, commonSearch] };
+    };
+
+    const [systemTemplates, tenantTemplates] = await Promise.all([
+      scope === 'tenant'
+        ? Promise.resolve([])
+        : this.prisma.documentTemplate.findMany({
+            where: buildWhere({ isSystemTemplate: true, tenantId: null }),
+            orderBy: { title: 'asc' },
+          }),
+      scope === 'system'
+        ? Promise.resolve([])
+        : this.prisma.documentTemplate.findMany({
+            where: buildWhere({ tenantId }),
+            orderBy: { title: 'asc' },
+          }),
+    ]);
+
+    let merged = [...systemTemplates, ...tenantTemplates];
+
+    if (tag) {
+      const normalizedTag = tag.toLowerCase();
+      merged = merged.filter((t) => {
+        const tags = Array.isArray(t.tags) ? (t.tags as any[]) : [];
+        return tags.some((x) => String(x).toLowerCase() === normalizedTag);
+      });
     }
 
-    return templates;
+    // Ordena: sistema primeiro, depois tenant (mesmo que a query tenha vindo misturada).
+    merged.sort((a, b) => {
+      if (a.isSystemTemplate !== b.isSystemTemplate) return a.isSystemTemplate ? -1 : 1;
+      return a.title.localeCompare(b.title);
+    });
+
+    return merged;
   }
 
   async findTemplate(id: string, tenantId: string) {
-      const template = await this.prisma.documentTemplate.findFirst({
-          where: { id, tenantId }
-      });
-      if (!template) throw new NotFoundException('Template not found');
-      return template;
+    await this.ensureSystemLibrarySeeded();
+    const template = await this.prisma.documentTemplate.findFirst({
+      where: {
+        id,
+        OR: [{ tenantId }, { isSystemTemplate: true, tenantId: null }],
+      },
+    });
+    if (!template) throw new NotFoundException('Template not found');
+    return template;
   }
 
   async updateTemplate(id: string, dto: CreateTemplateDto, tenantId: string) {
-      await this.findTemplate(id, tenantId);
-      return this.prisma.documentTemplate.update({
-          where: { id },
-          data: {
-              title: dto.title,
-              content: dto.content,
-              categoryId: dto.categoryId
-          }
-      });
+    const template = await this.prisma.documentTemplate.findFirst({
+      where: { id, tenantId },
+    });
+    if (!template) throw new NotFoundException('Template not found');
+    if (template.isSystemTemplate) throw new ForbiddenException('Template do sistema não pode ser alterado.');
+
+    return this.prisma.documentTemplate.update({
+      where: { id },
+      data: {
+        title: dto.title,
+        content: dto.content,
+        categoryId: dto.categoryId,
+        description: dto.description || null,
+        tags: dto.tags || null,
+        preferredStorage: dto.preferredStorage || null,
+        metadata: dto.metadata || null,
+      },
+    });
   }
 
   async deleteTemplate(id: string, tenantId: string) {
-      await this.findTemplate(id, tenantId);
-      return this.prisma.documentTemplate.delete({ where: { id } });
+    const template = await this.prisma.documentTemplate.findFirst({
+      where: { id, tenantId },
+    });
+    if (!template) throw new NotFoundException('Template not found');
+    if (template.isSystemTemplate) throw new ForbiddenException('Template do sistema não pode ser excluído.');
+    return this.prisma.documentTemplate.delete({ where: { id } });
   }
 
-  async renderTemplate(id: string, tenantId: string, contactId: string, processId?: string) {
+  // =========================
+  // Rendering / Cloud
+  // =========================
+
+  private toStr(value: any) {
+    if (value === null || value === undefined) return '';
+    return String(value);
+  }
+
+  async renderTemplate(
+    id: string,
+    tenantId: string,
+    contactId: string,
+    processId?: string,
+    userId?: string,
+  ) {
     const template = await this.findTemplate(id, tenantId);
-    
-    // Fetch Contact with all details
-    const contact = await this.prisma.contact.findUnique({
-      where: { id: contactId },
-      include: { 
+
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: contactId, tenantId },
+      include: {
         addresses: true,
         pfDetails: true,
-        pjDetails: true
+        pjDetails: true,
       },
     });
+    if (!contact) throw new NotFoundException('Contact not found');
 
-    if (!contact) {
-      throw new NotFoundException('Contact not found');
-    }
+    const user = userId
+      ? await this.prisma.user.findFirst({
+          where: { id: userId, tenantId },
+          select: { id: true, name: true, email: true },
+        })
+      : null;
 
-    // Fetch Process if provided
-    let process = null;
-    let opposingParty = null;
+    let process: any = null;
+    let opposingParty: any = null;
 
     if (processId) {
-      process = await this.prisma.process.findUnique({
-        where: { id: processId },
+      process = await this.prisma.process.findFirst({
+        where: { id: processId, tenantId },
         include: {
           processParties: {
             where: { isOpposing: true },
@@ -158,12 +368,12 @@ export class DocumentsService {
                 include: {
                   addresses: true,
                   pfDetails: true,
-                  pjDetails: true
-                }
-              }
-            }
-          }
-        }
+                  pjDetails: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (process?.processParties?.length > 0) {
@@ -171,11 +381,13 @@ export class DocumentsService {
       }
     }
 
-    let content = template.content;
-
     const formatDate = (date: Date | null | undefined) => {
       if (!date) return '';
       return new Date(date).toLocaleDateString('pt-BR');
+    };
+
+    const formatFullDate = (date: Date) => {
+      return date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
     };
 
     const formatAddress = (addr: any) => {
@@ -183,54 +395,79 @@ export class DocumentsService {
       return `${addr.street}, ${addr.number}${addr.complement ? ` ${addr.complement}` : ''}, ${addr.district || ''}, ${addr.city}/${addr.state} - CEP: ${addr.zipCode}`;
     };
 
-    const replacements: Record<string, string> = {
-      // CLIENTE
-      'NOME_CLIENTE': contact.name,
-      'NACIONALIDADE_CLIENTE': contact.pfDetails?.nationality || '',
-      'ESTADO_CIVIL_CLIENTE': contact.pfDetails?.civilStatus || '',
-      'PROFISSAO_CLIENTE': contact.pfDetails?.profession || '',
-      'CPF_CLIENTE': contact.document || contact.pfDetails?.cpf || '',
-      'RG_CLIENTE': contact.pfDetails?.rg || '',
-      'EMAIL_CLIENTE': contact.email || '',
-      'NASCIMENTO_CLIENTE': formatDate(contact.pfDetails?.birthDate),
-      'PAI_CLIENTE': contact.pfDetails?.fatherName || '',
-      'MAE_CLIENTE': contact.pfDetails?.motherName || '',
-      'ENDERECO_CLIENTE': formatAddress(contact.addresses[0]),
-      'CLIENTE_ENDERECO': formatAddress(contact.addresses[0]),
-      'TELEFONE_CLIENTE': contact.phone || contact.whatsapp || '',
+    const primaryAddress = contact.addresses?.[0];
+    const opposingAddress = opposingParty?.addresses?.[0];
+    const now = new Date();
 
-      // PROCESSO
-      'NUMERO_PROCESSO': process?.cnj || '',
-      'COMARCA_PROCESSO': process?.district || '',
-      'VARA_PROCESSO': process?.vars || '',
-      'TRIBUNAL_PROCESSO': process?.court || '',
-      'UF_PROCESSO': 'MG',
-      'OBSERVACAO_PROCESSO': process?.description || '',
-
-      // ADVERSO
-      'NOME_ADVERSO': opposingParty?.name || '',
-      'CNPJ_ADVERSO': opposingParty?.pjDetails?.cnpj || opposingParty?.document || '',
-      'CPF_ADVERSO': opposingParty?.pfDetails?.cpf || opposingParty?.document || '',
-      'RG_ADVERSO': opposingParty?.pfDetails?.rg || opposingParty?.pjDetails?.stateRegistration || '',
-      'NACIONALIDADE_ADVERSO': opposingParty?.pfDetails?.nationality || '',
-      'ESTADO_CIVIL_ADVERSO': opposingParty?.pfDetails?.civilStatus || '',
-      'PROFISSAO_ADVERSO': opposingParty?.pfDetails?.profession || '',
-      'EMAIL_ADVERSO': opposingParty?.email || '',
-      'NASCIMENTO_ADVERSO': formatDate(opposingParty?.pfDetails?.birthDate),
-      'PAI_ADVERSO': opposingParty?.pfDetails?.fatherName || '',
-      'MAE_ADVERSO': opposingParty?.pfDetails?.motherName || '',
-      'ADVERSO_ENDERECO': formatAddress(opposingParty?.addresses[0]),
-      'DADOS_ADVERSO': opposingParty ? `${opposingParty.name}, inscrito no CPF/CNPJ sob o nº ${opposingParty.document || ''}` : '',
-
-      // GERAL
-      'DATA_ATUAL': new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }),
-      
-      // ALIASES (Compatibilidade com modelos manuais)
-      'dados_vara': process?.vars || '',
-      'numero_processo': process?.cnj || '',
-      'nome_cliente': contact.name,
+    const replacements: Record<string, string> = {};
+    const add = (key: string, value: any) => {
+      replacements[key] = this.toStr(value);
     };
 
+    // Dot-keys (compatíveis com editor moderno)
+    add('contact.name', contact.name);
+    add('contact.personType', contact.personType);
+    add('contact.document', contact.document || contact.pfDetails?.cpf || contact.pjDetails?.cnpj || '');
+    add('contact.email', contact.email || '');
+    add('contact.phone', contact.phone || contact.whatsapp || '');
+    add('contact.whatsapp', contact.whatsapp || '');
+    add('contact.address.full', formatAddress(primaryAddress));
+    add('contact.address.street', primaryAddress?.street || '');
+    add('contact.address.number', primaryAddress?.number || '');
+    add('contact.address.city', primaryAddress?.city || '');
+    add('contact.address.state', primaryAddress?.state || '');
+    add('contact.address.zipCode', primaryAddress?.zipCode || '');
+
+    add('contact.pf.nationality', contact.pfDetails?.nationality || '');
+    add('contact.pf.civilStatus', contact.pfDetails?.civilStatus || '');
+    add('contact.pf.profession', contact.pfDetails?.profession || '');
+    add('contact.pf.cpf', contact.pfDetails?.cpf || contact.document || '');
+    add('contact.pf.rg', contact.pfDetails?.rg || '');
+    add('contact.pf.rgIssuer', contact.pfDetails?.rgIssuer || '');
+    add('contact.pf.birthDate', formatDate(contact.pfDetails?.birthDate));
+    add('contact.pf.motherName', contact.pfDetails?.motherName || '');
+    add('contact.pf.fatherName', contact.pfDetails?.fatherName || '');
+
+    add('contact.pj.cnpj', contact.pjDetails?.cnpj || contact.document || '');
+    add('contact.pj.companyName', contact.pjDetails?.companyName || '');
+    add('contact.pj.stateRegistration', contact.pjDetails?.stateRegistration || '');
+
+    add('process.cnj', process?.cnj || process?.number || '');
+    add('process.vars', process?.vars || '');
+    add('process.district', process?.district || '');
+    add('process.court', process?.court || '');
+    add('process.uf', process?.uf || 'MG');
+    add('process.value', process?.value ? String(process.value) : '');
+
+    add('opposing.name', opposingParty?.name || '');
+    add('opposing.document', opposingParty?.document || opposingParty?.pfDetails?.cpf || opposingParty?.pjDetails?.cnpj || '');
+    add('opposing.address.full', formatAddress(opposingAddress));
+
+    add('today.date', formatDate(now));
+    add('today.fullDate', formatFullDate(now));
+    add('current.city', '');
+    add('current.state', '');
+    add('user.name', user?.name || '');
+    add('user.email', user?.email || '');
+    add('user.oab', '');
+
+    // Legacy keys (compatibilidade com modelos antigos)
+    add('NOME_CLIENTE', contact.name);
+    add('CPF_CLIENTE', contact.document || contact.pfDetails?.cpf || '');
+    add('EMAIL_CLIENTE', contact.email || '');
+    add('ENDERECO_CLIENTE', formatAddress(primaryAddress));
+    add('NUMERO_PROCESSO', process?.cnj || '');
+    add('COMARCA_PROCESSO', process?.district || '');
+    add('VARA_PROCESSO', process?.vars || '');
+    add('TRIBUNAL_PROCESSO', process?.court || '');
+    add('DATA_ATUAL', formatFullDate(now));
+
+    // Aliases usados em alguns modelos manuais
+    add('dados_vara', process?.vars || '');
+    add('numero_processo', process?.cnj || '');
+    add('nome_cliente', contact.name);
+
+    let content = template.content;
     for (const [key, value] of Object.entries(replacements)) {
       const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       content = content.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'gi'), value);
@@ -240,208 +477,139 @@ export class DocumentsService {
     return { content };
   }
 
-  async generateM365Document(id: string, tenantId: string, contactId: string, processId?: string) {
-    const { content: htmlContent } = await this.renderTemplate(id, tenantId, contactId, processId);
-    
-    // Create a temporary document history to get a unique document ID
+  async generateM365Document(
+    id: string,
+    tenantId: string,
+    contactId: string,
+    processId?: string,
+    userId?: string,
+  ) {
+    const { content: htmlContent } = await this.renderTemplate(id, tenantId, contactId, processId, userId);
+
     const template = await this.findTemplate(id, tenantId);
     const documentRecord = await this.prisma.documentHistory.create({
       data: {
         title: `${template.title} (Word Online)`,
-        content: htmlContent, // Save the generated HTML for record/fallback
+        content: htmlContent,
         templateId: id,
         tenantId,
-        status: 'DRAFT'
-      }
+        status: 'DRAFT',
+      },
     });
 
     if (!processId) {
-       this.logger.warn(`ProcessId não fornecido. Não é possível enviar para a pasta do processo no OneDrive.`);
-       return { success: false, error: 'Process ID is required for OneDrive upload', documentId: documentRecord.id };
+      this.logger.warn(
+        `ProcessId não fornecido. Não é possível enviar para a pasta do processo no OneDrive.`,
+      );
+      return {
+        success: false,
+        error: 'Process ID is required for OneDrive upload',
+        documentId: documentRecord.id,
+      };
     }
 
-    const success = await this.msGraphService.uploadToOneDrive(tenantId, processId, documentRecord.id, htmlContent);
+    const folderReady = await this.msGraphService.setupFolderStructure(tenantId, processId);
+    if (!folderReady) {
+      return {
+        success: false,
+        error:
+          'Pasta Microsoft 365 do processo nÃ£o estÃ¡ configurada. Verifique as credenciais e a pasta raiz.',
+        documentId: documentRecord.id,
+      };
+    }
+
+    const success = await this.msGraphService.uploadToOneDrive(
+      tenantId,
+      processId,
+      documentRecord.id,
+      htmlContent,
+    );
 
     if (success) {
-       // Fetch the updated document with msFileUrl
-       const updatedDoc = await this.findOne(documentRecord.id, tenantId);
-       return { success: true, msFileUrl: updatedDoc.msFileUrl, documentId: updatedDoc.id };
+      const updatedDoc = await this.findOne(documentRecord.id, tenantId);
+      return { success: true, msFileUrl: updatedDoc.msFileUrl, documentId: updatedDoc.id };
     }
 
     return { success: false, error: 'Falha ao enviar para o OneDrive', documentId: documentRecord.id };
   }
 
+  // =========================
+  // Variables / Seed antigo
+  // =========================
+
   getVariables() {
-      // Variables available for document generation
-      return {
-          contact: [
-              // Basic Info
-              { key: 'contact.name', label: 'Nome Completo' },
-              { key: 'contact.personType', label: 'Tipo (PF/PJ)' },
-              { key: 'contact.document', label: 'CPF / CNPJ (Genérico)' },
-              { key: 'contact.whatsapp', label: 'WhatsApp' },
-              { key: 'contact.email', label: 'E-mail' },
-              { key: 'contact.phone', label: 'Telefone' },
-              { key: 'contact.notes', label: 'Observações' },
-              { key: 'contact.category', label: 'Categoria' },
-              
-              // Address (Primary)
-              { key: 'contact.address.street', label: 'Logradouro' },
-              { key: 'contact.address.number', label: 'Número' },
-              { key: 'contact.address.city', label: 'Cidade' },
-              { key: 'contact.address.state', label: 'Estado' },
-              { key: 'contact.address.zipCode', label: 'CEP' },
+    return {
+      contact: [
+        { key: 'contact.name', label: 'Nome Completo' },
+        { key: 'contact.personType', label: 'Tipo (PF/PJ)' },
+        { key: 'contact.document', label: 'CPF / CNPJ (Genérico)' },
+        { key: 'contact.whatsapp', label: 'WhatsApp' },
+        { key: 'contact.email', label: 'E-mail' },
+        { key: 'contact.phone', label: 'Telefone' },
+        { key: 'contact.notes', label: 'Observações' },
+        { key: 'contact.category', label: 'Categoria' },
 
-              // Pessoa Física (PF)
-              { key: 'contact.pf.cpf', label: 'CPF' },
-              { key: 'contact.pf.rg', label: 'RG' },
-              { key: 'contact.pf.rgIssuer', label: 'Órgão Emissor RG' },
-              { key: 'contact.pf.rgIssueDate', label: 'Data Emissão RG' },
-              { key: 'contact.pf.birthDate', label: 'Data Nascimento' },
-              { key: 'contact.pf.nis', label: 'NIS' },
-              { key: 'contact.pf.pis', label: 'PIS' },
-              { key: 'contact.pf.ctps', label: 'CTPS' },
-              { key: 'contact.pf.motherName', label: 'Nome da Mãe' },
-              { key: 'contact.pf.fatherName', label: 'Nome do Pai' },
-              { key: 'contact.pf.profession', label: 'Profissão' },
-              { key: 'contact.pf.nationality', label: 'Nacionalidade' },
-              { key: 'contact.pf.naturality', label: 'Naturalidade' },
-              { key: 'contact.pf.gender', label: 'Gênero' },
-              { key: 'contact.pf.civilStatus', label: 'Estado Civil' },
-              { key: 'contact.pf.cnh', label: 'CNH' },
-              { key: 'contact.pf.cnhCategory', label: 'Categoria CNH' },
-              { key: 'contact.pf.fullName', label: 'Nome Completo (Legal)' },
+        { key: 'contact.address.street', label: 'Logradouro' },
+        { key: 'contact.address.number', label: 'Número' },
+        { key: 'contact.address.city', label: 'Cidade' },
+        { key: 'contact.address.state', label: 'Estado' },
+        { key: 'contact.address.zipCode', label: 'CEP' },
 
-              // Pessoa Jurídica (PJ)
-              { key: 'contact.pj.cnpj', label: 'CNPJ' },
-              { key: 'contact.pj.companyName', label: 'Razão Social' },
-              { key: 'contact.pj.stateRegistration', label: 'Inscrição Estadual' },
-              { key: 'contact.pj.openingDate', label: 'Data Abertura' },
-              { key: 'contact.pj.legalNature', label: 'Natureza Jurídica' },
-          ],
-          process: [
-              // Basic Info
-              { key: 'process.title', label: 'Título do Caso' },
-              { key: 'process.number', label: 'Número do Processo (CNJ)' },
-              { key: 'process.npu', label: 'Numeração Única (NPU)' },
-              { key: 'process.category', label: 'Categoria' },
-              { key: 'process.code', label: 'Código Interno' },
-              { key: 'process.folder', label: 'Pasta na Nuvem' },
-              
-              // Court Info
-              { key: 'process.court', label: 'Tribunal' },
-              { key: 'process.courtSystem', label: 'Sistema (PJe/Eproc)' },
-              { key: 'process.vars', label: 'Vara' },
-              { key: 'process.district', label: 'Comarca' },
-              { key: 'process.status', label: 'Status' },
-              
-              // Classification
-              { key: 'process.area', label: 'Área' },
-              { key: 'process.subject', label: 'Assunto' },
-              { key: 'process.class', label: 'Classe' },
-              { key: 'process.distributionDate', label: 'Data Distribuição' },
-              { key: 'process.judge', label: 'Magistrado' },
-              { key: 'process.value', label: 'Valor da Causa' },
-          ],
-          financial: [
-              { key: 'financial.totalFees', label: 'Valor Honorários' },
-              { key: 'financial.installmentCount', label: 'Qtd. Parcelas' },
-              { key: 'financial.dueDate', label: 'Data Vencimento' },
-          ],
-          system: [
-              { key: 'today.date', label: 'Data de Hoje' },
-              { key: 'today.fullDate', label: 'Data Extenso' },
-              { key: 'user.name', label: 'Advogado Responsável' },
-              { key: 'user.oab', label: 'OAB do Advogado' },
-              { key: 'current.city', label: 'Cidade do Escritório' },
-              { key: 'current.state', label: 'Estado do Escritório' },
-          ]
-      };
+        { key: 'contact.pf.cpf', label: 'CPF' },
+        { key: 'contact.pf.rg', label: 'RG' },
+        { key: 'contact.pf.rgIssuer', label: 'Órgão Emissor RG' },
+        { key: 'contact.pf.birthDate', label: 'Data Nascimento' },
+        { key: 'contact.pf.motherName', label: 'Nome da Mãe' },
+        { key: 'contact.pf.fatherName', label: 'Nome do Pai' },
+        { key: 'contact.pf.profession', label: 'Profissão' },
+        { key: 'contact.pf.nationality', label: 'Nacionalidade' },
+        { key: 'contact.pf.civilStatus', label: 'Estado Civil' },
+
+        { key: 'contact.pj.cnpj', label: 'CNPJ' },
+        { key: 'contact.pj.companyName', label: 'Razão Social' },
+        { key: 'contact.pj.stateRegistration', label: 'Inscrição Estadual' },
+      ],
+      process: [
+        { key: 'process.title', label: 'Título do Caso' },
+        { key: 'process.cnj', label: 'Número do Processo (CNJ)' },
+        { key: 'process.court', label: 'Tribunal' },
+        { key: 'process.vars', label: 'Vara' },
+        { key: 'process.district', label: 'Comarca' },
+        { key: 'process.status', label: 'Status' },
+        { key: 'process.value', label: 'Valor da Causa' },
+      ],
+      system: [
+        { key: 'today.date', label: 'Data de Hoje' },
+        { key: 'today.fullDate', label: 'Data Extenso' },
+        { key: 'user.name', label: 'Advogado Responsável' },
+        { key: 'user.oab', label: 'OAB do Advogado' },
+        { key: 'current.city', label: 'Cidade do Escritório' },
+        { key: 'current.state', label: 'Estado do Escritório' },
+      ],
+    };
   }
 
   async seedDefaults(tenantId: string) {
-      // 1. Create Default Categories
-      const procuracaoCat = await this.prisma.documentCategory.upsert({
-          where: { id: 'default-procuracao-' + tenantId }, // Mock ID strategy or use findFirst
-          update: {},
-          create: {
-             name: 'Procurações',
-             tenantId
-          }
-      }).catch(async () => {
-          // Fallback if ID strategy doesn't work with UUIDs, rely on name finding
-          const existing = await this.prisma.documentCategory.findFirst({
-             where: { tenantId, name: 'Procurações' }
-          });
-          if (existing) return existing;
-          return this.prisma.documentCategory.create({
-             data: { name: 'Procurações', tenantId }
-          });
-      });
+    // Mantido para compatibilidade com botão antigo "seed".
+    await this.ensureSystemLibrarySeeded();
 
-      // 2. Create Procuração Template
-      const templateTitle = 'Procuração Geral e Previdenciária';
-      const existingTemplate = await this.prisma.documentTemplate.findFirst({
-          where: { tenantId, title: templateTitle }
-      });
+    const title = 'Procuração (Geral)';
+    const existing = await this.prisma.documentTemplate.findFirst({
+      where: { tenantId, title },
+    });
+    if (existing) return { message: 'Template já existente.' };
 
-      if (!existingTemplate) {
-          const content = `
-<h1 style="text-align: center; text-decoration: underline; font-weight: bold; margin-bottom: 30px;">PROCURAÇÃO</h1>
+    const created = await this.prisma.documentTemplate.create({
+      data: {
+        tenantId,
+        title,
+        content: this.getSystemLibrarySeeds().find((s) => s.systemKey === 'PROCURACAO_GERAL')!.content,
+        isSystemTemplate: false,
+        sourceTemplateId: null,
+        description: 'Cópia inicial baseada no modelo do sistema.',
+      },
+    });
 
-<table style="width: 100%; border-collapse: collapse; border: 1px solid #000; margin-bottom: 20px;">
-    <tr>
-        <td style="width: 150px; border-right: 1px solid #000; padding: 10px; vertical-align: middle; font-weight: bold;">OUTORGANTE</td>
-        <td style="padding: 10px;">
-            <strong>{{contact.name}}</strong>, {{contact.pf.nationality}}, {{contact.pf.civilStatus}}, {{contact.pf.profession}}, 
-            inscrito no CPF sob o nº {{contact.pf.cpf}}, RG {{contact.pf.rg}} {{contact.pf.rgIssuer}}, 
-            residente e domiciliado à {{contact.address.street}}, {{contact.address.number}}, {{contact.address.city}}, {{contact.address.state}}, CEP {{contact.address.zipCode}}. 
-            Email: {{contact.email}}. Filiação: {{contact.pf.motherName}} e {{contact.pf.fatherName}}.
-        </td>
-    </tr>
-</table>
-
-<table style="width: 100%; border-collapse: collapse; border: 1px solid #000; margin-bottom: 20px;">
-    <tr>
-        <td style="width: 150px; border-right: 1px solid #000; padding: 10px; vertical-align: middle; font-weight: bold;">OUTORGADOS:</td>
-        <td style="padding: 10px;">
-            <strong>{{user.name}}</strong>, advogado, inscrito na OAB sob o nº {{user.oab}}, 
-            com escritório profissional em {{current.city}}/{{current.state}}.
-        </td>
-    </tr>
-</table>
-
-<p style="text-align: justify; margin-bottom: 15px;">
-    <strong>PODERES:</strong> O(s) outorgante(s) nomeia(m) os outorgados seus procuradores, conferindo-lhes os poderes da cláusula "ad judicia" e "ad extra", conjunta ou separadamente, para representá-lo(s) em juízo ou fora dele, outorgando-lhes ainda os especiais poderes para receber citação, de concordar, acordar, confessar, discordar, desistir, transigir, firmar compromissos, reconhecer a procedência do pedido, renunciar ao direito sobre o qual se funda a ação, receber, dar quitação, executar e fazer cumprir decisões e títulos judiciais e extrajudiciais, receber valores e levantar alvarás judiciais extraídos em nome do outorgante, requerer falências e concordatas, imputar a terceiros, em nome dos outorgantes, fatos descritos como crimes, arguir exceções de suspeição, firmar compromisso e declarar hipossuficiência econômica, constituir preposto, substabelecer com ou sem reserva os poderes conferidos pelo presente mandato. Declara ainda, que tem ciência que o levantamento de créditos decorrentes de precatório ou RPV somente poderá ser efetivado mediante alvará judicial.
-</p>
-
-<p style="text-align: justify; margin-bottom: 15px;">
-    INCLUSIVE: AO INSTITUTO NACIONAL DO SEGURO SOCIAL.
-</p>
-
-<p style="text-align: justify; margin-bottom: 40px;">
-    O outorgante nomeia e constitui o(a) outorgado(a) seu bastante procurador a quem confere poderes especiais para representá-lo perante o INSS, bem como usar de todos os meios legais para o fiel cumprimento do presente mandato com os fins específicos para cadastro de senhas para informações previdenciárias pela internet, comprovação de vida junto à rede bancária, receber mensalidades de benefícios, receber quantias atrasadas e firmar os respectivos recibos, devido possível incapacidade do outorgante em se locomover ou, se for o caso, em portar de moléstia contagiosa, também para o caso de ausência devida à viagem dentro do país pelo período a declarar, assim como por ausência devido à viagem ao exterior pelo período a e eventualmente por residir no exterior o qual informará o país, requerer benefícios, revisão e interpor recursos.
-</p>
-
-<p style="text-align: center; margin-bottom: 60px;">
-    {{current.city}}, {{today.fullDate}}.
-</p>
-
-<div style="text-align: center; border-top: 1px solid #000; width: 60%; margin: 0 auto; padding-top: 10px;">
-    <strong>{{contact.name}}</strong><br>
-    Outorgante
-</div>
-`;
-          await this.prisma.documentTemplate.create({
-              data: {
-                  title: templateTitle,
-                  content: content,
-                  categoryId: procuracaoCat.id,
-                  tenantId
-              }
-          });
-          return { message: 'Template de Procuração criado com sucesso.' };
-      }
-      return { message: 'Template já existente.' };
+    return { message: 'Template criado com sucesso.', id: created.id };
   }
 }

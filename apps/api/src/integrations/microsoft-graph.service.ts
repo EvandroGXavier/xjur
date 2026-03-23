@@ -346,7 +346,12 @@ export class MicrosoftGraphService {
         return false;
       }
 
-      const fileBuffer = await htmlToDocx(htmlContent, null, {
+      const normalizedHtml =
+        /<html[\s>]/i.test(htmlContent)
+          ? htmlContent
+          : `<html><head><meta charset="utf-8" /></head><body>${htmlContent}</body></html>`;
+
+      const fileBuffer = await htmlToDocx(normalizedHtml, null, {
         table: { row: { cantSplit: true } },
         footer: true,
         pageNumber: true,

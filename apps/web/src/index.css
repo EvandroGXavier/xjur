@@ -40,6 +40,9 @@ body {
 
 html.light {
   color-scheme: light;
+  /* Mantém textos nítidos/consistentes entre temas */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   
   --color-slate-950: 248 250 252; /* Slate 50 as backmost */
   --color-slate-900: 255 255 255; /* White as main panels */
@@ -87,9 +90,77 @@ html.light {
     background-color: rgb(var(--color-slate-800)) !important;
   }
 
+  /* Texto: em módulos "light-first" é comum usar text-slate-700/800/900.
+     Como nossa escala inverte no tema claro, garantimos contraste. */
+  html.light .text-slate-700 {
+    color: rgb(var(--color-slate-200)) !important;
+  }
+
+  html.light .text-slate-800 {
+    color: rgb(var(--color-slate-100)) !important;
+  }
+
+  html.light .text-slate-950 {
+    color: rgb(var(--color-slate-50)) !important;
+  }
+
+  html.light .text-slate-600 {
+    color: rgb(var(--color-slate-300)) !important;
+  }
+
+  html.light .stroke-slate-700,
+  html.light .fill-slate-700,
+  html.light .stroke-slate-800,
+  html.light .fill-slate-800 {
+    stroke: currentColor !important;
+    fill: currentColor !important;
+  }
+
+  /* Fundos/bordas claras (módulos que já nasceram "light") */
+  html.light .bg-slate-100 {
+    background-color: rgb(var(--color-slate-800)) !important;
+  }
+
+  html.light .bg-slate-200 {
+    background-color: rgb(var(--color-slate-700)) !important;
+  }
+
+  html.light .border-slate-100,
+  html.light .border-slate-200 {
+    border-color: rgb(var(--color-slate-700)) !important;
+  }
+
+  html.light ::placeholder {
+    color: rgb(var(--color-slate-400)) !important;
+    opacity: 1;
+  }
+
   /* Inputs/controles nativos (date/time) */
   html.light .\[color-scheme\:dark\] {
     color-scheme: light !important;
+  }
+
+  /* Overlays e textos "black": no tema claro, mantemos o preto real para sombras/modais
+     e forçamos texto preto a continuar escuro (vários módulos usam bg-black/50). */
+  html.light .bg-black {
+    background-color: rgb(0 0 0) !important;
+  }
+  html.light .bg-black\/10 { background-color: rgba(0,0,0,0.10) !important; }
+  html.light .bg-black\/20 { background-color: rgba(0,0,0,0.20) !important; }
+  html.light .bg-black\/30 { background-color: rgba(0,0,0,0.30) !important; }
+  html.light .bg-black\/40 { background-color: rgba(0,0,0,0.40) !important; }
+  html.light .bg-black\/50 { background-color: rgba(0,0,0,0.50) !important; }
+  html.light .bg-black\/60 { background-color: rgba(0,0,0,0.60) !important; }
+  html.light .bg-black\/70 { background-color: rgba(0,0,0,0.70) !important; }
+  html.light .bg-black\/80 { background-color: rgba(0,0,0,0.80) !important; }
+  html.light .bg-black\/90 { background-color: rgba(0,0,0,0.90) !important; }
+
+  html.light .text-black {
+    color: rgb(var(--color-white)) !important;
+  }
+
+  html.light .border-black {
+    border-color: rgb(var(--color-slate-700)) !important;
   }
 }
 

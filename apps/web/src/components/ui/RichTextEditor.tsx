@@ -19,9 +19,10 @@ interface RichTextEditorProps {
     placeholder?: string;
     showVariables?: boolean;
     className?: string;
+    readOnly?: boolean;
 }
 
-export function RichTextEditor({ value, onChange, placeholder, showVariables = true, className }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, showVariables = true, className, readOnly = false }: RichTextEditorProps) {
     const editorRef = useRef<HTMLDivElement>(null);
     const [variables, setVariables] = useState<any>(null);
 
@@ -46,17 +47,20 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
     }, [value]);
 
     const handleInput = () => {
+        if (readOnly) return;
         if (editorRef.current) {
             onChange(editorRef.current.innerHTML);
         }
     };
 
     const execCommand = (command: string, value: string | undefined = undefined) => {
+        if (readOnly) return;
         document.execCommand(command, false, value);
         if (editorRef.current) editorRef.current.focus();
     };
 
     const insertVariable = (key: string) => {
+        if (readOnly) return;
         if (!editorRef.current) return;
         editorRef.current.focus();
         
@@ -67,6 +71,7 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
     };
 
     const insertTable = () => {
+        if (readOnly) return;
         let rowsHtml = '';
         for (let r = 0; r < tableRows; r++) {
             let colsHtml = '';
@@ -90,6 +95,7 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
     };
 
     const insertShape = (type: 'rectangle' | 'circle' ) => {
+        if (readOnly) return;
         const borderRadius = type === 'circle' ? '50%' : '4px';
         const shapeHTML = `
             <span style="
@@ -114,6 +120,7 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
     };
 
     const transformText = (type: 'uppercase' | 'lowercase' | 'capitalize') => {
+        if (readOnly) return;
         const selection = window.getSelection();
         if (!selection || selection.rangeCount === 0) return;
 
@@ -132,6 +139,7 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
     };
 
     const transformNumberToExtenso = () => {
+         if (readOnly) return;
          const selection = window.getSelection();
         if (!selection || selection.rangeCount === 0) return;
 
@@ -164,7 +172,10 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
             {/* Main Editor Area */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Toolbar */}
-                <div className="flex items-center gap-1 p-2 border-b border-slate-700 bg-slate-950 flex-wrap">
+                <div className={clsx(
+                    "flex items-center gap-1 p-2 border-b border-slate-700 bg-slate-950 flex-wrap",
+                    readOnly && "opacity-60 pointer-events-none"
+                )}>
                     <ToolbarBtn icon={<Bold size={16} />} onClick={() => execCommand('bold')} title="Negrito" />
                     <ToolbarBtn icon={<Italic size={16} />} onClick={() => execCommand('italic')} title="Itálico" />
                     <ToolbarBtn icon={<Underline size={16} />} onClick={() => execCommand('underline')} title="Sublinhado" />
@@ -235,7 +246,7 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
                 {/* Content Area */}
                 <div 
                     ref={editorRef}
-                    contentEditable
+                    contentEditable={!readOnly}
                     onInput={handleInput}
                     className="flex-1 p-8 text-slate-300 focus:outline-none overflow-y-auto prose prose-invert max-w-none"
                     style={{ minHeight: '300px' }}
@@ -275,14 +286,15 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
     );
 }
 
-function ToolbarBtn({ icon, onClick, title, active = false }: any) {
+function ToolbarBtn({ icon, onClick, title, active = false, disabled = false }: any) {
     return (
         <button
             type="button"
             onClick={onClick}
             title={title}
+            disabled={disabled}
             className={clsx(
-                "p-2 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors",
+                "p-2 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed",
                 active && "bg-slate-800 text-indigo-400"
             )}
         >

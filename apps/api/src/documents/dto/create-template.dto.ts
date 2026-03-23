@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class CreateTemplateDto {
   @IsString()
@@ -10,4 +10,22 @@ export class CreateTemplateDto {
   @IsString()
   @IsOptional()
   categoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  tags?: any;
+
+  @IsOptional()
+  @IsString()
+  preferredStorage?: string;
+
+  @IsOptional()
+  metadata?: any;
+
+  @IsOptional()
+  @IsString()
+  sourceTemplateId?: string;
 }

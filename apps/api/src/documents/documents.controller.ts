@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Put, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Put, Query, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { DocumentsService } from './documents.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { CreateTemplateDto } from './dto/create-template.dto';
+import { CreateCategoryDto } from './dto/create-category.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
@@ -10,6 +11,21 @@ import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.
 @UseGuards(JwtAuthGuard)
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
+
+  private ensureSuperAdmin(user: CurrentUserData) {
+    const baseEmails = ['evandro@conectionmg.com.br'];
+    const envEmails = (process.env.SUPERADMIN_EMAILS || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+    const allowedEmails = new Set(
+      [...baseEmails, ...envEmails].map((email) => email.toLowerCase()),
+    );
+
+    if (!allowedEmails.has((user as any)?.email?.toLowerCase?.() || '')) {
+      throw new UnauthorizedException('Acesso restrito ao SuperAdmin');
+    }
+  }
 
   @Post()
   create(@Body() createDocumentDto: CreateDocumentDto, @CurrentUser() user: CurrentUserData) {
@@ -31,6 +47,18 @@ export class DocumentsController {
     return this.documentsService.updateSetting(key, value);
   }
 
+  // --- CATEGORIES ---
+
+  @Get('categories')
+  listCategories(@CurrentUser() user: CurrentUserData) {
+    return this.documentsService.listCategories(user.tenantId);
+  }
+
+  @Post('categories')
+  createCategory(@CurrentUser() user: CurrentUserData, @Body() dto: CreateCategoryDto) {
+    return this.documentsService.createCategory(user.tenantId, dto);
+  }
+
   // --- TEMPLATES / BIBLIOTECA ---
 
   @Get('variables')
@@ -49,8 +77,13 @@ export class DocumentsController {
   }
 
   @Get('templates')
-  findAllTemplates(@CurrentUser() user: CurrentUserData) {
-    return this.documentsService.findAllTemplates(user.tenantId);
+  findAllTemplates(
+    @CurrentUser() user: CurrentUserData,
+    @Query('scope') scope?: string,
+    @Query('q') q?: string,
+    @Query('tag') tag?: string,
+  ) {
+    return this.documentsService.findAllTemplates(user.tenantId, { scope, q, tag });
   }
 
   @Get('templates/:id')
@@ -75,7 +108,7 @@ export class DocumentsController {
     @Body('contactId') contactId: string,
     @Body('processId') processId?: string
   ) {
-    return this.documentsService.renderTemplate(id, user.tenantId, contactId, processId);
+    return this.documentsService.renderTemplate(id, user.tenantId, contactId, processId, user.userId);
   }
 
   @Post('templates/:id/m365')
@@ -85,7 +118,18 @@ export class DocumentsController {
     @Body('contactId') contactId: string,
     @Body('processId') processId?: string
   ) {
-    return this.documentsService.generateM365Document(id, user.tenantId, contactId, processId);
+    return this.documentsService.generateM365Document(id, user.tenantId, contactId, processId, user.userId);
+  }
+
+  @Post('templates/:id/customize')
+  customizeTemplate(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.documentsService.customizeTemplate(id, user.tenantId);
+  }
+
+  @Post('system/sync')
+  syncSystemLibrary(@CurrentUser() user: CurrentUserData) {
+    this.ensureSuperAdmin(user);
+    return this.documentsService.syncSystemLibrary(user.tenantId);
   }
 
   @Get(':id')
