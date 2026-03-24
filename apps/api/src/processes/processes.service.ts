@@ -8,6 +8,7 @@ import type { FullProcessPdfAnalysis, PdfProcessDocument } from './process-pdf.s
 import { DrxClawService } from '../drx-claw/drx-claw.service';
 import { PROCESS_PDF_SKILL_ID } from '../drx-claw/drx-skill.constants';
 import { ProcessTimelinesService } from './process-timelines.service';
+import { buildAdvancedProcessWhere } from './process-advanced-filter';
 
 interface CreateProcessDto {
     tenantId?: string;
@@ -286,7 +287,17 @@ export class ProcessesService {
 
     private buildProcessInclude() {
         return {
-            timeline: { orderBy: { date: 'desc' as const }, take: 200 },
+            timeline: { 
+                orderBy: { date: 'desc' as const }, 
+                take: 200,
+                include: {
+                    tags: {
+                        include: {
+                            tag: true
+                        }
+                    }
+                }
+            },
             appointments: { orderBy: { startAt: 'asc' as const }, take: 20 },
             contact: true,
             tags: {
@@ -2181,12 +2192,13 @@ export class ProcessesService {
         search?: string,
         includedTags?: string,
         excludedTags?: string,
-        status?: string
+        status?: string,
+        advancedFilter?: string
     }) {
         if (!params.tenantId) {
             throw new BadRequestException('Tenant ID is required');
         }
-        const { tenantId, search, includedTags, excludedTags, status } = params;
+        const { tenantId, search, includedTags, excludedTags, status, advancedFilter } = params;
 
         const where: any = { tenantId };
 
@@ -2196,7 +2208,15 @@ export class ProcessesService {
                 { title: { contains: search, mode: 'insensitive' } },
                 { code: { contains: search, mode: 'insensitive' } },
                 { court: { contains: search, mode: 'insensitive' } },
+                { courtSystem: { contains: search, mode: 'insensitive' } },
+                { vars: { contains: search, mode: 'insensitive' } },
                 { district: { contains: search, mode: 'insensitive' } },
+                { judge: { contains: search, mode: 'insensitive' } },
+                { responsibleLawyer: { contains: search, mode: 'insensitive' } },
+                { subject: { contains: search, mode: 'insensitive' } },
+                { area: { contains: search, mode: 'insensitive' } },
+                { folder: { contains: search, mode: 'insensitive' } },
+                { localFolder: { contains: search, mode: 'insensitive' } },
                 {
                     processParties: {
                         some: {
@@ -2244,6 +2264,14 @@ export class ProcessesService {
                         none: { tagId: { in: excArray } },
                     },
                 });
+            }
+        }
+
+        if (advancedFilter) {
+            const advancedWhere = buildAdvancedProcessWhere(advancedFilter);
+            if (advancedWhere) {
+                if (!where.AND) where.AND = [];
+                where.AND.push(advancedWhere);
             }
         }
 
@@ -2311,6 +2339,13 @@ export class ProcessesService {
                 },
                 timeline: {
                     orderBy: { date: 'desc' },
+                    include: {
+                        tags: {
+                            include: {
+                                tag: true
+                            }
+                        }
+                    }
                 },
                 workflow: {
                     include: {

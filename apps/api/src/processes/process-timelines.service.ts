@@ -427,7 +427,11 @@ export class ProcessTimelinesService {
                 status: data.status,
                 priority: data.priority,
                 responsibleName: data.responsibleName,
-                completedAt: (data.status === 'CONCLUIDO' && existing.status !== 'CONCLUIDO') ? new Date() : (data.status !== 'CONCLUIDO' ? null : existing.completedAt),
+                completedAt: (data.status === 'CONCLUIDO' && existing.status !== 'CONCLUIDO') 
+                    ? (data.completedAt ? new Date(data.completedAt) : new Date()) 
+                    : (data.status !== 'CONCLUIDO' ? null : existing.completedAt),
+                completedBy: (data.status === 'CONCLUIDO' && existing.status !== 'CONCLUIDO') ? data.completedBy : (data.status !== 'CONCLUIDO' ? null : existing.completedBy),
+                conclusionNotes: data.conclusionNotes,
                 responsibleHistory: (data.responsibleName && data.responsibleName !== existing.responsibleName) 
                     ? [...(Array.isArray(existing.responsibleHistory) ? existing.responsibleHistory : []), { name: data.responsibleName, date: new Date() }]
                     : existing.responsibleHistory

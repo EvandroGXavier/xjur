@@ -32,9 +32,19 @@ import { masks } from '../../utils/masks';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
+import {
+    AdvancedProcessFilterModal,
+    countActiveProcessAdvancedFilters,
+    EMPTY_PROCESS_ADVANCED_FILTER,
+    pruneProcessAdvancedFilter,
+    stripProcessAdvancedFilterIds,
+    type ProcessAdvancedFilterGroup,
+    type ProcessAdvancedFilterOptions,
+} from '../../components/processos/AdvancedProcessFilterModal';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpProcesses } from '../../data/helpManuals';
 import { useHotkeys } from '../../hooks/useHotkeys';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getOfficeFolderDisplayPath } from '../../utils/officePath';
@@ -98,10 +108,15 @@ export function ProcessList() {
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebouncedValue(searchTerm, 250);
     const [statusFilter, setStatusFilter] = useState<'ATIVO' | 'INATIVO' | 'ALL'>('ATIVO');
     const [includedTags, setIncludedTags] = useState<string[]>([]);
     const [excludedTags, setExcludedTags] = useState<string[]>([]);
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null); // For dropdown
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [advancedFilter, setAdvancedFilter] = useState<ProcessAdvancedFilterGroup>(EMPTY_PROCESS_ADVANCED_FILTER);
+    const [draftAdvancedFilter, setDraftAdvancedFilter] = useState<ProcessAdvancedFilterGroup>(EMPTY_PROCESS_ADVANCED_FILTER);
+    const [advancedFilterOptions, setAdvancedFilterOptions] = useState<ProcessAdvancedFilterOptions>({});
 
     // Click outside to close menu
     useEffect(() => {
@@ -116,6 +131,16 @@ export function ProcessList() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
+    const activeAdvancedFilterCount = useMemo(
+        () => countActiveProcessAdvancedFilters(advancedFilter),
+        [advancedFilter],
+    );
+
+    const advancedFilterPayload = useMemo(() => {
+        if (activeAdvancedFilterCount === 0) return '';
+        return JSON.stringify(stripProcessAdvancedFilterIds(advancedFilter));
+    }, [advancedFilter, activeAdvancedFilterCount]);
+
     useEffect(() => {
         const controller = new AbortController();
         fetchProcesses(controller.signal);
@@ -125,7 +150,26 @@ export function ProcessList() {
             controller.abort();
             window.removeEventListener('focus', handleFocus);
         };
-    }, [includedTags, excludedTags, statusFilter]);
+    }, [includedTags, excludedTags, statusFilter, debouncedSearchTerm, advancedFilterPayload]);
+
+    useEffect(() => {
+        if (!showAdvancedFilters) return;
+        setDraftAdvancedFilter(advancedFilter);
+
+        (async () => {
+            try {
+                const res = await api.get('/processes/filters/options');
+                const data = res.data && typeof res.data === 'object' ? res.data : {};
+                setAdvancedFilterOptions({
+                    statuses: Array.isArray((data as any).statuses) ? (data as any).statuses : [],
+                    categories: Array.isArray((data as any).categories) ? (data as any).categories : [],
+                    areas: Array.isArray((data as any).areas) ? (data as any).areas : [],
+                });
+            } catch (e) {
+                console.warn('Falha ao carregar opções de filtro:', e);
+            }
+        })();
+    }, [showAdvancedFilters, advancedFilter]);
 
     const fetchProcesses = async (signal?: AbortSignal) => {
         try {
@@ -134,6 +178,8 @@ export function ProcessList() {
             if (includedTags.length > 0) params.includedTags = includedTags.join(',');
             if (excludedTags.length > 0) params.excludedTags = excludedTags.join(',');
             if (statusFilter !== 'ALL') params.status = statusFilter;
+            if (debouncedSearchTerm?.trim()) params.search = debouncedSearchTerm.trim();
+            if (advancedFilterPayload) params.advancedFilter = advancedFilterPayload;
             
             const response = await api.get('/processes', { signal, params });
             console.log('Processos carregados:', response.data);
@@ -154,14 +200,6 @@ export function ProcessList() {
 
     const sortedProcesses = useMemo(() => {
         let sortableItems = [...processes];
-        if (searchTerm) {
-            const lowerTerm = searchTerm.toLowerCase();
-            sortableItems = sortableItems.filter(p => 
-                (p.title && p.title.toLowerCase().includes(lowerTerm)) ||
-                (p.cnj && p.cnj.toLowerCase().includes(lowerTerm)) ||
-                (p.client && p.client.toLowerCase().includes(lowerTerm))
-            );
-        }
         if (sortConfig.key && sortConfig.direction) {
             sortableItems.sort((a, b) => {
                 const aValue = a[sortConfig.key!] ?? '';
@@ -172,7 +210,7 @@ export function ProcessList() {
             });
         }
         return sortableItems;
-    }, [processes, sortConfig, searchTerm]);
+    }, [processes, sortConfig]);
 
     const formatCurrency = (val?: number) => val ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val) : '-';
     
@@ -253,7 +291,17 @@ export function ProcessList() {
                             <option value="ALL">Mostrar Todos</option>
                         </select>
                         <div className="hidden md:block h-6 w-px bg-slate-800"></div>
-                        <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-medium whitespace-nowrap"><Filter size={16} /> Filtros</button>
+                        <button
+                            onClick={() => setShowAdvancedFilters(true)}
+                            className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-2 hover:bg-slate-700 hover:text-white transition text-sm font-medium whitespace-nowrap"
+                        >
+                            <Filter size={16} /> Filtros
+                            {activeAdvancedFilterCount > 0 && (
+                                <span className="ml-1 px-2 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/25 text-indigo-200 text-[11px] font-bold">
+                                    {activeAdvancedFilterCount}
+                                </span>
+                            )}
+                        </button>
                         {selectedIds.length > 0 && (
                             <div className="flex items-center gap-2 ml-auto animate-in slide-in-from-right-5 fade-in">
                                 <span className="text-sm text-slate-400 hidden sm:inline">{selectedIds.length} selecionados</span>
@@ -272,6 +320,21 @@ export function ProcessList() {
                     />
                 </div>
             </div>
+
+            {showAdvancedFilters && (
+                <AdvancedProcessFilterModal
+                    open={showAdvancedFilters}
+                    value={draftAdvancedFilter}
+                    onChange={setDraftAdvancedFilter}
+                    onClose={() => setShowAdvancedFilters(false)}
+                    onClear={() => setDraftAdvancedFilter(EMPTY_PROCESS_ADVANCED_FILTER)}
+                    onApply={() => {
+                        setAdvancedFilter(pruneProcessAdvancedFilter(draftAdvancedFilter));
+                        setShowAdvancedFilters(false);
+                    }}
+                    options={advancedFilterOptions}
+                />
+            )}
 
             <div className="flex-1 flex flex-col min-h-[400px]">
                 {viewMode === 'LIST' ? (

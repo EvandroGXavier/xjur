@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Building2, Clock, LogOut, Menu, User } from 'lucide-react';
-import { getUser, logoutLocal } from '../auth/authStorage';
+import { Building2, Clock, LogOut, Menu, User, Sun, Moon, Monitor } from 'lucide-react';
+import { getAuthPersistence, getUser, logoutLocal, setUser as authSetUser } from '../auth/authStorage';
 import { useIdleLogout } from '../hooks/useIdleLogout';
-import { applyThemePreference, getStoredThemePreference, type ThemePreference } from '../utils/theme';
+import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, type ThemePreference } from '../utils/theme';
+import { api } from '../services/api';
 import { InventoryHelpModal } from './inventory/InventoryHelpModal';
 import { Sidebar } from './Sidebar';
 
@@ -26,6 +27,27 @@ const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const handleLogout = () => {
     logoutLocal();
     navigate('/login');
+  };
+
+  const handleThemeToggle = async () => {
+    if (!user) return;
+    
+    const currentTheme = user.theme || 'DARK';
+    const themes: ThemePreference[] = ['LIGHT', 'DARK', 'SYSTEM'];
+    const nextTheme = themes[(themes.indexOf(currentTheme as any) + 1) % themes.length];
+
+    // Optimistic Update
+    const updatedUser = { ...user, theme: nextTheme };
+    authSetUser(updatedUser, getAuthPersistence());
+    setStoredThemePreference(nextTheme);
+    applyThemePreference(nextTheme);
+    setUser(updatedUser); // Update local state (useState setter)
+
+    try {
+        await api.patch('/users/me/preferences', { theme: nextTheme });
+    } catch (err) {
+        console.error("Erro ao persistir tema:", err);
+    }
   };
 
   if (!user) return null;
@@ -65,6 +87,16 @@ const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
             {time.toLocaleDateString('pt-BR')} - {time.toLocaleTimeString('pt-BR')}
           </span>
         </div>
+        <div className="hidden md:block w-px h-3 bg-emerald-800/50"></div>
+        <button
+          onClick={handleThemeToggle}
+          className="flex items-center justify-center p-1.5 rounded-md hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+          title="Trocar tema"
+        >
+          {(!user.theme || user.theme === 'DARK') && <Moon size={14} />}
+          {user.theme === 'LIGHT' && <Sun size={14} />}
+          {user.theme === 'SYSTEM' && <Monitor size={14} />}
+        </button>
         <div className="w-px h-3 bg-emerald-800/50"></div>
         <button
           onClick={handleLogout}

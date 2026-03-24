@@ -517,6 +517,8 @@ model ProcessTimeline {
   requesterName      String? // Quem solicitou o andamento
   responsibleName    String? // Quem deve tratar a ação
   completedAt        DateTime? // Data de conclusão
+  completedBy        String? // Quem concluiu
+  conclusionNotes    String? // Observação da conclusão
   responsibleHistory Json? // Histórico de responsáveis [{name, date}]
   templateCode       String? // Identificador do Template que gerou este andamento
   parentTimelineId   String? // FK para o andamento "Pai"
@@ -529,6 +531,7 @@ model ProcessTimeline {
 
   workflowStepId    String?
   workflowStep      WorkflowStep?      @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
+  tags              ProcessTimelineTag[]
 
   @@index([processId, date])
   @@index([workflowStepId])
@@ -815,6 +818,7 @@ model Tag {
   contacts         ContactTag[]
   processes        ProcessTag[]
   financialRecords FinancialRecordTag[]
+  timelines        ProcessTimelineTag[]
 
   @@map("tags")
 }
@@ -853,6 +857,18 @@ model FinancialRecordTag {
 
   @@unique([tagId, financialRecordId])
   @@map("tags_on_financial_records")
+}
+
+model ProcessTimelineTag {
+  id         String @id @default(uuid())
+  tagId      String
+  timelineId String
+
+  tag      Tag             @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  timeline ProcessTimeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, timelineId])
+  @@map("tags_on_timelines")
 }
 
 // 6. MÓDULO AGENDA (COMPROMISSOS)

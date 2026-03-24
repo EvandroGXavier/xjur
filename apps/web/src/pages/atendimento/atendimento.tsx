@@ -36,7 +36,6 @@ import { Badge } from '../../components/ui/Badge';
 import { QuickReplies } from './components/QuickReplies';
 import { KanbanBoard } from './components/Kanban';
 import { Connections } from './components/Connections';
-import { TagsManager } from './components/Tags';
 import { AtendimentoSettings } from './components/Settings';
 import { ConfiguracoesWhatsapp } from './components/ConfiguracoesWhatsapp';
 import { api } from '../../services/api';
@@ -110,7 +109,7 @@ interface ContactProcess {
   category: string;
 }
 
-type Module = 'chats' | 'quick_replies' | 'kanban' | 'tags' | 'connections' | 'settings' | 'bot' | 'security';
+type Module = 'chats' | 'quick_replies' | 'kanban' | 'connections' | 'settings' | 'bot' | 'security';
 
 // =========================
 // UTILS
@@ -125,7 +124,7 @@ const getMediaUrl = (path: string | null) => {
   // Garantir que não comece com barra pois vamos concatenar com baseUrl que pode ou não ter slash
   const finalPath = cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath;
 
-  // Limpar prefixo api/ se existir na baseURL para pegar a raiz do server
+  // Limpar prefixo api/ se existir na baseURL para pegar a raiz deservar
   const baseUrl = (api.defaults.baseURL || '').replace(/\/api\/?$/, '') || 'http://localhost:3000';
   
   const fullUrl = `${baseUrl}/${finalPath}`;
@@ -601,17 +600,17 @@ export function AtendimentoPage() {
                           const uObj = getUser();
                           if (uObj?.role === 'OWNER' || uObj?.role === 'ADMIN') {
                             return (
-                              <button
-                                       onClick={() => handleDeleteTicket(selectedTicket.id)} 
-                                       className="bg-red-500/10 text-red-500 text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-red-500 hover:text-white shadow-lg transition"
-                                       title="Apagar Atendimento"
-                                   >
-                                       Apagar
-                                   </button>
-                               );
-                           }
-                           return null;
-                       })()}
+                               <button
+                                        onClick={() => handleDeleteTicket(selectedTicket.id)} 
+                                        className="bg-red-500/10 text-red-500 text-xs px-3 py-1.5 rounded-lg font-bold mr-2 hover:bg-red-500 hover:text-white shadow-lg transition"
+                                        title="Apagar Atendimento"
+                                    >
+                                        Apagar
+                                    </button>
+                                );
+                            }
+                            return null;
+                        })()}
                        <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"><Phone size={18} /></button>
                        <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"><Video size={18} /></button>
                        <div className="w-px h-6 bg-slate-800 mx-1" />
@@ -671,7 +670,7 @@ export function AtendimentoPage() {
       case 'quick_replies': return <QuickReplies />;
       case 'kanban': return <KanbanBoard />;
       case 'connections': return <Connections onOpenHelp={() => setIsHelpOpen(true)} />;
-      case 'tags': return <TagsManager />;
+      case 'tags': return <div>Gestão de Tags movida para Configurações</div>;
       case 'settings': return <AtendimentoSettings />;
       case 'security': return <ConfiguracoesWhatsapp />;
       case 'bot': return <div className="flex-1 flex items-center justify-center text-slate-500">Módulo Bot em breve</div>;
@@ -700,12 +699,6 @@ export function AtendimentoPage() {
           onClick={() => setActiveModule('quick_replies')} 
           icon={Zap} 
           label="Respostas Rápidas" 
-        />
-        <TabButton 
-          active={activeModule === 'tags'} 
-          onClick={() => setActiveModule('tags')} 
-          icon={Tags} 
-          label="Etiquetas" 
         />
         <TabButton 
           active={activeModule === 'bot'} 

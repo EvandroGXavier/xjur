@@ -26,6 +26,8 @@ import { AttachmentPreview } from '../ui/AttachmentPreview';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { ContactSelectInput } from '../contacts/ContactSelectInput';
+import { InlineTags } from '../ui/InlineTags';
+import { AdvancedTagFilter } from '../ui/AdvancedTagFilter';
 
 interface TimelineItem {
     id: string;
@@ -47,12 +49,14 @@ interface TimelineItem {
     parentTimelineId?: string;
     requesterName?: string;
     responsibleName?: string;
-    completedAt?: string;
     responsibleHistory?: { name: string; date: string }[];
-    // Legacy fields
     title: string;
     type: string;
     createdAt: string;
+    completedAt?: string | null;
+    completedBy?: string | null;
+    conclusionNotes?: string | null;
+    tags?: { tag: { id: string; name: string; color: string; textColor?: string } }[];
 }
 
 interface ProcessoAndamentosProps {
@@ -71,10 +75,17 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     // Workflow Tabs State
     const [activeTab, setActiveTab] = useState<'REGISTRO' | 'ACAO' | 'AGENDA'>('REGISTRO');
     const [searchTerm, setSearchTerm] = useState('');
+    const [includedTags, setIncludedTags] = useState<string[]>([]);
+    const [excludedTags, setExcludedTags] = useState<string[]>([]);
     
     // Conclude Modal State
     const [concludeItemId, setConcludeItemId] = useState<string | null>(null);
     const [concludeFiles, setConcludeFiles] = useState<FileList | null>(null);
+    const [concludeData, setConcludeData] = useState({
+        completedBy: '',
+        completedAt: new Date().toISOString().slice(0, 16),
+        conclusionNotes: ''
+    });
     const [isSaving, setIsSaving] = useState(false);
 
     // Document Generation State
@@ -138,6 +149,11 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             priority: 'MEDIA',
             templateCode: '',
             responsibleName: ''
+        });
+        setConcludeData({
+            completedBy: '',
+            completedAt: new Date().toISOString().slice(0, 16),
+            conclusionNotes: ''
         });
         setEditingItem(null);
         setSelectedFiles(null);
@@ -254,6 +270,10 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         try {
             const data = new FormData();
             data.append('status', 'CONCLUIDO');
+            data.append('completedBy', concludeData.completedBy);
+            data.append('completedAt', concludeData.completedAt);
+            data.append('conclusionNotes', concludeData.conclusionNotes);
+
             if (concludeFiles) {
                 Array.from(concludeFiles).forEach((file) => {
                     data.append('files', file);
@@ -385,7 +405,15 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
 
     const filteredTimelines = timelines.filter(t => {
         const matchesTab = (t.category || 'REGISTRO') === activeTab;
-        if (!searchTerm) return matchesTab;
+        
+        // Tag filtering
+        const itemTagIds = t.tags?.map(at => at.tag.id) || [];
+        const matchesIncludedTags = includedTags.length === 0 || includedTags.every(id => itemTagIds.includes(id));
+        const matchesExcludedTags = excludedTags.length === 0 || !excludedTags.some(id => itemTagIds.includes(id));
+
+        if (!matchesTab || !matchesIncludedTags || !matchesExcludedTags) return false;
+
+        if (!searchTerm) return true;
         
         const term = searchTerm.toLowerCase();
         const matchesSearch = 
@@ -394,7 +422,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             (t.responsibleName?.toLowerCase() || '').includes(term) ||
             (t.displayId?.toLowerCase() || '').includes(term);
             
-        return matchesTab && matchesSearch;
+        return matchesSearch;
     });
 
     return (
@@ -465,6 +493,16 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                         )}
                     </div>
                 </div>
+
+                <div className="pt-2 border-t border-slate-800/50">
+                    <AdvancedTagFilter 
+                        scope="PROCESS"
+                        onFilterChange={(inc, exc) => { 
+                            setIncludedTags(inc); 
+                            setExcludedTags(exc); 
+                        }} 
+                    />
+                </div>
             </div>
 
             {/* Table */}
@@ -477,7 +515,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                 <th className="px-2 py-2 w-40 border-r border-slate-200">Data/Hora (REIFC)</th>
                                 <th className="px-2 py-2 w-1/4 border-r border-slate-200">Evento / Responsável</th>
                                 <th className="px-2 py-2 border-r border-slate-200">Descrição</th>
-                                <th className="px-2 py-2 w-40 border-r border-slate-200">Rastreabilidade (CR)</th>
+                                <th className="px-2 py-2 w-48 border-r border-slate-200 text-center">Etiquetas</th>
+                                <th className="px-2 py-2 w-40 border-r border-slate-200">Rastreabilidade / Conclusão</th>
                                 <th className="px-2 py-2 w-24 text-center">Docs</th>
                             </tr>
                         </thead>
@@ -605,16 +644,43 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                 </div>
                                             </div>
                                         </td>
+                                        <td className="px-2 py-2 border-r border-slate-100 align-top min-w-[120px]">
+                                            <InlineTags 
+                                                tags={item.tags || []}
+                                                entityId={item.id}
+                                                entityType="timeline"
+                                                onRefresh={fetchTimelines}
+                                            />
+                                        </td>
                                         <td className="px-2 py-2 border-r border-slate-100 text-slate-600 text-[10px] align-top bg-slate-50/30">
                                             <div className="flex flex-col gap-2">
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className="text-slate-400 font-bold uppercase text-[8px] tracking-wider">Criado por:</span>
-                                                    <span className="truncate font-medium text-slate-700">{item.requesterName || 'sistema'}</span>
+                                                    <span className="text-slate-400 font-bold uppercase text-[8px] tracking-wider border-b border-slate-100 mb-1 pb-0.5">Criação</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="truncate font-medium text-slate-700">{item.requesterName || 'sistema'}</span>
+                                                        <span className="text-slate-400 font-mono text-[9px]">{formatDateDisplay(item.createdAt)}</span>
+                                                    </div>
                                                 </div>
+
+                                                {item.status === 'CONCLUIDO' && (
+                                                    <div className="flex flex-col gap-1 mt-1 bg-emerald-50/30 p-1.5 rounded border border-emerald-100/50">
+                                                        <span className="text-emerald-700 font-bold uppercase text-[8px] tracking-wider border-b border-emerald-200/50 mb-1 pb-0.5">Conclusão</span>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-emerald-800">{item.completedBy || item.responsibleName}</span>
+                                                            <span className="text-emerald-600 font-mono text-[9px]">{formatDateDisplay(item.completedAt)}</span>
+                                                            {item.conclusionNotes && (
+                                                                <div className="mt-1 bg-white/60 p-1 rounded text-[9px] text-emerald-900 italic break-words border border-emerald-100">
+                                                                    "{item.conclusionNotes}"
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 {item.responsibleHistory && item.responsibleHistory.length > 0 && (
                                                     <div className="flex flex-col gap-1 mt-1 border-t border-slate-200 pt-1.5">
-                                                        <span className="text-slate-400 font-bold uppercase text-[8px] tracking-wider">Histórico Responsável:</span>
-                                                        <div className="max-h-[80px] overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+                                                        <span className="text-slate-400 font-bold uppercase text-[8px] tracking-wider">Histórico Resp.</span>
+                                                        <div className="max-h-[80px] overflow-y-auto space-y-1.5 pr-1 no-scrollbar">
                                                             {item.responsibleHistory.map((h, i) => (
                                                                 <div key={i} className="flex flex-col border-b border-slate-100 last:border-0 pb-1">
                                                                     <span className={clsx("truncate text-[9px]", i === item.responsibleHistory!.length - 1 ? 'font-bold text-blue-600' : 'text-slate-400')}>

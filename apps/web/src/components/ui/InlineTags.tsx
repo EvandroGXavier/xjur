@@ -14,7 +14,7 @@ interface Tag {
 interface InlineTagsProps {
   tags: { tag: Tag }[];
   entityId: string;
-  entityType: 'contact' | 'process' | 'financial';
+  entityType: 'contact' | 'process' | 'financial' | 'timeline';
   onRefresh: () => void;
 }
 

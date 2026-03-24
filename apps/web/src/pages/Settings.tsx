@@ -29,6 +29,7 @@ import { DrxClawTab } from "../components/settings/DrxClawTab";
 import { BackupTab } from "../components/settings/BackupTab";
 import { SkillsTab } from "../components/settings/SkillsTab";
 import { WorkflowsTab } from "../components/settings/WorkflowsTab";
+import { TagsTab } from "../components/settings/TagsTab";
 import { TabButton } from "../components/ui/TabButton";
 import { getAuthPersistence, getUser, setUser } from "../auth/authStorage";
 import { applyThemePreference, setStoredThemePreference, type ThemePreference } from "../utils/theme";
@@ -805,14 +806,14 @@ export function Settings() {
     }
   };
 
-  const handleTogglePreference = async (type: "theme" | "soundEnabled") => {
+  const handleTogglePreference = async (type: "theme" | "soundEnabled", specificValue?: string) => {
     try {
       const user = getUser();
       if (!user) return;
 
       let newPrefs = { ...userPrefs };
       if (type === "theme") {
-        newPrefs.theme = userPrefs.theme === "DARK" ? "LIGHT" : "DARK";
+        newPrefs.theme = specificValue || (userPrefs.theme === "DARK" ? "LIGHT" : "DARK");
       } else {
         newPrefs.soundEnabled = !userPrefs.soundEnabled;
       }
@@ -828,14 +829,17 @@ export function Settings() {
       };
       setUser(updatedUser, getAuthPersistence());
 
-      // Aplica tema visual se houver wrapper no main index
+      // Aplica tema visual imediatamente
       if (type === "theme") {
         setStoredThemePreference(newPrefs.theme as ThemePreference);
         applyThemePreference(newPrefs.theme as ThemePreference);
       }
 
       // Persiste na API
-      await api.patch("/users/me/preferences", newPrefs);
+      await api.patch("/users/me/preferences", {
+        theme: newPrefs.theme,
+        soundEnabled: newPrefs.soundEnabled
+      });
     } catch (error) {
       console.error("Erro ao salvar preferencia:", error);
     }
@@ -911,6 +915,12 @@ export function Settings() {
           icon={SettingsIcon}
           label="Esteiras de Trabalho"
         />
+        <TabButton
+           active={activeTab === "tags"}
+           onClick={() => setActiveTab("tags")}
+           icon={Tags}
+           label="Etiquetas"
+         />
 
         {/* SAAS TABS - SUPER ADMIN ONLY */}
         {isSuperAdmin && (
@@ -980,33 +990,55 @@ export function Settings() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
-                  <span className="text-slate-300 text-sm">
-                    Modo Escuro (Dark Mode)
-                  </span>
-                  <div
-                    onClick={() => handleTogglePreference("theme")}
-                    className={clsx(
-                      "w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200",
-                      userPrefs.theme === "DARK"
-                        ? "bg-indigo-600"
-                        : "bg-slate-700",
-                    )}
-                  >
-                    <div
-                      className={clsx(
-                        "absolute top-1 w-3 h-3 bg-white rounded-full transition-transform duration-200",
-                        userPrefs.theme === "DARK"
-                          ? "translate-x-6"
-                          : "translate-x-1",
-                      )}
-                    ></div>
+                <div className="p-4 bg-slate-800/40 rounded-xl border border-slate-800">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-500/10 rounded-lg">
+                            <Palette size={18} className="text-indigo-400" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold text-white">Interface Visual</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Customize sua experiência</p>
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: "LIGHT", label: "Claro" },
+                      { id: "DARK", label: "Escuro" },
+                      { id: "SYSTEM", label: "Sistema" }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        onClick={() => handleTogglePreference("theme", opt.id)}
+                        className={clsx(
+                          "flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all duration-300",
+                          userPrefs.theme === opt.id
+                            ? "bg-indigo-600/10 border-indigo-500 text-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.1)]"
+                            : "bg-slate-950/50 border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300"
+                        )}
+                      >
+                        <div className={clsx(
+                           "p-2 rounded-lg transition-colors",
+                           userPrefs.theme === opt.id ? "bg-indigo-600 text-white" : "bg-slate-900"
+                        )}>
+                            {opt.id === "LIGHT" && <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>}
+                            {opt.id === "DARK" && <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>}
+                            {opt.id === "SYSTEM" && <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>}
+                        </div>
+                        <span className="text-[11px] font-bold uppercase tracking-wider">{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
             </div>
           </div>
         )}
+
+        {/* === TAGS TAB === */}
+        {activeTab === "tags" && <TagsTab />}
 
         {/* === MY TENANT TAB === */}
         {activeTab === "my-tenant" && (

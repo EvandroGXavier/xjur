@@ -63,4 +63,15 @@ export class TagsController {
   detachFromFinancialRecord(@Param('recordId') recordId: string, @Param('tagId') tagId: string) {
     return this.tagsService.detachFromFinancialRecord(recordId, tagId);
   }
+
+  // Vinculação em Timelines
+  @Post('timeline/:timelineId/:tagId')
+  attachToTimeline(@Param('timelineId') timelineId: string, @Param('tagId') tagId: string) {
+    return this.tagsService.attachToTimeline(timelineId, tagId);
+  }
+
+  @Delete('timeline/:timelineId/:tagId')
+  detachFromTimeline(@Param('timelineId') timelineId: string, @Param('tagId') tagId: string) {
+    return this.tagsService.detachFromTimeline(timelineId, tagId);
+  }
 }
