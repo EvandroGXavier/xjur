@@ -411,6 +411,8 @@ export class DocumentsService {
     add('contact.email', contact.email || '');
     add('contact.phone', contact.phone || contact.whatsapp || '');
     add('contact.whatsapp', contact.whatsapp || '');
+    add('contact.notes', contact.notes || '');
+    add('contact.category', contact.category || '');
     add('contact.address.full', formatAddress(primaryAddress));
     add('contact.address.street', primaryAddress?.street || '');
     add('contact.address.number', primaryAddress?.number || '');
@@ -433,15 +435,28 @@ export class DocumentsService {
     add('contact.pj.stateRegistration', contact.pjDetails?.stateRegistration || '');
 
     add('process.cnj', process?.cnj || process?.number || '');
+    add('process.title', process?.title || '');
     add('process.vars', process?.vars || '');
     add('process.district', process?.district || '');
     add('process.court', process?.court || '');
+    add('process.courtSystem', process?.courtSystem || '');
+    add('process.status', process?.status || '');
+    add('process.category', process?.category || '');
+    add('process.area', process?.area || '');
+    add('process.subject', process?.subject || '');
+    add('process.class', process?.class || '');
+    add('process.distributionDate', formatDate(process?.distributionDate));
+    add('process.judge', process?.judge || '');
+    add('process.responsibleLawyer', process?.responsibleLawyer || '');
     add('process.uf', process?.uf || 'MG');
     add('process.value', process?.value ? String(process.value) : '');
 
     add('opposing.name', opposingParty?.name || '');
     add('opposing.document', opposingParty?.document || opposingParty?.pfDetails?.cpf || opposingParty?.pjDetails?.cnpj || '');
     add('opposing.address.full', formatAddress(opposingAddress));
+    add('opposing.email', opposingParty?.email || '');
+    add('opposing.phone', opposingParty?.phone || opposingParty?.whatsapp || '');
+    add('opposing.whatsapp', opposingParty?.whatsapp || '');
 
     add('today.date', formatDate(now));
     add('today.fullDate', formatFullDate(now));
@@ -549,6 +564,7 @@ export class DocumentsService {
         { key: 'contact.notes', label: 'Observações' },
         { key: 'contact.category', label: 'Categoria' },
 
+        { key: 'contact.address.full', label: 'Endereço Completo' },
         { key: 'contact.address.street', label: 'Logradouro' },
         { key: 'contact.address.number', label: 'Número' },
         { key: 'contact.address.city', label: 'Cidade' },
@@ -573,15 +589,32 @@ export class DocumentsService {
         { key: 'process.title', label: 'Título do Caso' },
         { key: 'process.cnj', label: 'Número do Processo (CNJ)' },
         { key: 'process.court', label: 'Tribunal' },
+        { key: 'process.courtSystem', label: 'Sistema' },
         { key: 'process.vars', label: 'Vara' },
         { key: 'process.district', label: 'Comarca' },
         { key: 'process.status', label: 'Status' },
+        { key: 'process.category', label: 'Categoria' },
+        { key: 'process.area', label: 'Área' },
+        { key: 'process.subject', label: 'Assunto' },
+        { key: 'process.class', label: 'Classe Processual' },
+        { key: 'process.distributionDate', label: 'Data de Distribuição' },
+        { key: 'process.judge', label: 'Magistrado' },
+        { key: 'process.responsibleLawyer', label: 'Responsável (Processo)' },
         { key: 'process.value', label: 'Valor da Causa' },
+      ],
+      opposing: [
+        { key: 'opposing.name', label: 'Nome (Parte contrária)' },
+        { key: 'opposing.document', label: 'CPF/CNPJ (Parte contrária)' },
+        { key: 'opposing.email', label: 'E-mail (Parte contrária)' },
+        { key: 'opposing.phone', label: 'Telefone (Parte contrária)' },
+        { key: 'opposing.whatsapp', label: 'WhatsApp (Parte contrária)' },
+        { key: 'opposing.address.full', label: 'Endereço (Parte contrária)' },
       ],
       system: [
         { key: 'today.date', label: 'Data de Hoje' },
         { key: 'today.fullDate', label: 'Data Extenso' },
         { key: 'user.name', label: 'Advogado Responsável' },
+        { key: 'user.email', label: 'E-mail do Advogado' },
         { key: 'user.oab', label: 'OAB do Advogado' },
         { key: 'current.city', label: 'Cidade do Escritório' },
         { key: 'current.state', label: 'Estado do Escritório' },
