@@ -8,12 +8,14 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
+import { DrxClawService } from '../drx-claw/drx-claw.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { CreateTemplateDto } from './dto/create-template.dto';
 import { SYSTEM_TEMPLATE_SEEDS } from './system-templates.constants';
 
 type TemplateScope = 'system' | 'tenant' | 'all';
+type TagScope = 'CONTACT' | 'PROCESS' | 'FINANCE' | 'TASK' | 'TICKET' | 'LIBRARY';
 
 @Injectable()
 export class DocumentsService {
@@ -23,6 +25,7 @@ export class DocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly msGraphService: MicrosoftGraphService,
+    private readonly drxClawService: DrxClawService,
   ) {}
 
   // =========================
@@ -30,29 +33,80 @@ export class DocumentsService {
   // =========================
 
   async create(createDocumentDto: CreateDocumentDto, tenantId: string) {
-    return this.prisma.documentHistory.create({
+    const requestedProcessId = createDocumentDto.processId || null;
+    const requestedTimelineId = createDocumentDto.timelineId || null;
+
+    let resolvedProcessId: string | null = requestedProcessId;
+    let timeline: any = null;
+
+    if (requestedTimelineId) {
+      timeline = await this.prisma.processTimeline.findFirst({
+        where: {
+          id: requestedTimelineId,
+          process: { tenantId },
+        },
+        select: { id: true, processId: true, metadata: true },
+      });
+      if (!timeline) {
+        throw new NotFoundException('Timeline not found');
+      }
+      if (resolvedProcessId && resolvedProcessId !== timeline.processId) {
+        throw new BadRequestException('timelineId nÃ£o pertence ao processId informado');
+      }
+      resolvedProcessId = timeline.processId;
+    }
+
+    if (resolvedProcessId) {
+      const processExists = await this.prisma.process.findFirst({
+        where: { id: resolvedProcessId, tenantId },
+        select: { id: true },
+      });
+      if (!processExists) {
+        throw new NotFoundException('Process not found');
+      }
+    }
+
+    const created = await this.prisma.documentHistory.create({
       data: {
         title: createDocumentDto.title,
         content: createDocumentDto.content,
         templateId: createDocumentDto.templateId,
         tenantId,
+        processId: resolvedProcessId,
+        timelineId: requestedTimelineId,
         snapshot: createDocumentDto.snapshot,
         status: createDocumentDto.status || 'DRAFT',
       },
     });
+
+    if (timeline) {
+      const base = (timeline.metadata && typeof timeline.metadata === 'object') ? timeline.metadata : {};
+      const nextMetadata = {
+        ...base,
+        documentId: created.id,
+        documentTitle: created.title,
+      };
+      await this.prisma.processTimeline.update({
+        where: { id: timeline.id },
+        data: { metadata: nextMetadata },
+      });
+    }
+
+    return created;
   }
 
-  findAll(tenantId: string) {
+  findAll(tenantId: string, processId?: string) {
     return this.prisma.documentHistory.findMany({
-      where: { tenantId },
+      where: processId ? { tenantId, processId } : { tenantId },
       orderBy: { updatedAt: 'desc' },
-      include: { template: true },
+      include: { template: true, process: true, timeline: true },
     });
   }
 
   async findOne(id: string, tenantId: string) {
     const document = await this.prisma.documentHistory.findFirst({
       where: { id, tenantId },
+      include: { template: true, process: true, timeline: true },
     });
     if (!document) throw new NotFoundException('Document not found');
     return document;
@@ -116,6 +170,173 @@ export class DocumentsService {
   // =========================
   // Templates / Biblioteca
   // =========================
+
+  private readonly libraryScope: TagScope = 'LIBRARY';
+
+  private normalizeScopeList(input: any): string[] {
+    const list = Array.isArray(input) ? input : input ? [input] : [];
+    const normalized = list
+      .map((s) => String(s || '').trim().toUpperCase())
+      .filter(Boolean);
+    return Array.from(new Set(normalized)).slice(0, 20);
+  }
+
+  private normalizeTagNames(input: any): string[] {
+    const list = Array.isArray(input) ? input : input ? [input] : [];
+    const normalized = list
+      .map((t) => String(t || '').trim().replace(/^#/, ''))
+      .map((t) => t.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    return Array.from(new Set(normalized)).slice(0, 30);
+  }
+
+  private hashToColor(name: string) {
+    const palette = [
+      '#6366f1',
+      '#8b5cf6',
+      '#ec4899',
+      '#ef4444',
+      '#f97316',
+      '#eab308',
+      '#22c55e',
+      '#14b8a6',
+      '#06b6d4',
+      '#3b82f6',
+      '#64748b',
+      '#d946ef',
+      '#f43f5e',
+      '#0ea5e9',
+      '#a855f7',
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return palette[hash % palette.length];
+  }
+
+  private async ensureLibraryTagsByNames(tenantId: string, rawNames: any): Promise<string[]> {
+    const names = this.normalizeTagNames(rawNames);
+    if (names.length === 0) return [];
+
+    const ids: string[] = [];
+
+    for (const name of names) {
+      const existing = await this.prisma.tag.findFirst({
+        where: {
+          tenantId,
+          active: true,
+          name: { equals: name, mode: 'insensitive' },
+        },
+      });
+
+      if (!existing) {
+        const color = this.hashToColor(name);
+        const created = await this.prisma.tag.create({
+          data: {
+            tenantId,
+            name,
+            color,
+            textColor: '#ffffff',
+            scope: [this.libraryScope],
+          },
+        });
+        ids.push(created.id);
+        continue;
+      }
+
+      const scopes = this.normalizeScopeList((existing as any).scope);
+      if (!scopes.includes(this.libraryScope)) {
+        const nextScopes = Array.from(new Set([...scopes, this.libraryScope]));
+        await this.prisma.tag.update({
+          where: { id: existing.id },
+          data: { scope: nextScopes },
+        });
+      }
+
+      ids.push(existing.id);
+    }
+
+    return ids;
+  }
+
+  private async resolveLibraryTagIds(
+    tenantId: string,
+    input?: { tagIds?: any; tags?: any },
+  ): Promise<string[]> {
+    const rawIds = Array.isArray(input?.tagIds) ? input?.tagIds : [];
+    const tagIds = rawIds.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 30);
+    if (tagIds.length > 0) {
+      const found = await this.prisma.tag.findMany({
+        where: { tenantId, active: true, id: { in: tagIds } },
+      });
+      const allowed = found
+        .filter((t) => this.normalizeScopeList((t as any).scope).includes(this.libraryScope))
+        .map((t) => t.id);
+
+      const missing = tagIds.filter((id) => !allowed.includes(id));
+      if (missing.length) {
+        throw new BadRequestException(
+          `Uma ou mais tags nÃ£o estÃ£o disponÃ­veis para a Biblioteca (LIBRARY): ${missing.join(', ')}`,
+        );
+      }
+      return allowed;
+    }
+
+    if (input?.tags) {
+      return this.ensureLibraryTagsByNames(tenantId, input.tags);
+    }
+
+    return [];
+  }
+
+  private serializeTemplate(tpl: any) {
+    const tagLinks = Array.isArray(tpl?.tagLinks) ? tpl.tagLinks : [];
+    const globalTags = tagLinks.map((x: any) => x?.tag).filter(Boolean);
+    const tagIds = globalTags.map((t: any) => t.id);
+    const tagNames = globalTags.map((t: any) => t.name);
+    const legacyTags = Array.isArray(tpl?.tags) ? tpl.tags : [];
+
+    const result: any = { ...tpl };
+    delete result.tagLinks;
+
+    result.globalTags = globalTags;
+    result.tagIds = tagIds;
+    // MantÃ©m `tags` como lista de nomes para compatibilidade visual/legacy.
+    result.tags = tpl?.tenantId ? (tagNames.length ? tagNames : legacyTags) : legacyTags;
+    return result;
+  }
+
+  private async migrateLegacyTagsToGlobal(template: any, tenantId: string) {
+    const isTenantTemplate = !!template?.tenantId && template.tenantId === tenantId && !template?.isSystemTemplate;
+    if (!isTenantTemplate) return template;
+
+    const hasLinks = Array.isArray(template?.tagLinks) && template.tagLinks.length > 0;
+    if (hasLinks) return template;
+
+    const legacyTags = Array.isArray(template?.tags) ? template.tags : [];
+    if (!legacyTags.length) return template;
+
+    const tagIds = await this.ensureLibraryTagsByNames(tenantId, legacyTags);
+    if (!tagIds.length) return template;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentTemplate.update({
+        where: { id: template.id },
+        data: { tags: null },
+      });
+
+      await (tx as any).documentTemplateTag?.createMany?.({
+        data: tagIds.map((tagId) => ({ templateId: template.id, tagId })),
+        skipDuplicates: true,
+      });
+    });
+
+    const updated = await this.prisma.documentTemplate.findFirst({
+      where: { id: template.id },
+      include: { tagLinks: { include: { tag: true } } },
+    });
+
+    return updated || template;
+  }
 
   private normalizeScope(scope?: string | null): TemplateScope {
     const raw = String(scope || '').trim().toLowerCase();
@@ -182,6 +403,8 @@ export class DocumentsService {
       throw new NotFoundException('Template do sistema não encontrado.');
     }
 
+    const tagIds = await this.ensureLibraryTagsByNames(tenantId, systemTemplate.tags);
+
     const created = await this.prisma.documentTemplate.create({
       data: {
         tenantId,
@@ -192,17 +415,22 @@ export class DocumentsService {
         systemKey: null,
         sourceTemplateId: systemTemplate.id,
         description: systemTemplate.description,
-        tags: systemTemplate.tags,
+        // Tags globais (relaÃ§Ã£o). MantÃ©m campo legacy apenas no System Template.
+        tags: null,
         preferredStorage: systemTemplate.preferredStorage,
         metadata: systemTemplate.metadata,
+        tagLinks: tagIds.length ? { create: tagIds.map((tagId) => ({ tagId })) } : undefined,
       },
+      include: { tagLinks: { include: { tag: true } } },
     });
 
-    return created;
+    return this.serializeTemplate(created);
   }
 
   async createTemplate(dto: CreateTemplateDto, tenantId: string) {
-    return this.prisma.documentTemplate.create({
+    const tagIds = await this.resolveLibraryTagIds(tenantId, dto);
+
+    const created = await this.prisma.documentTemplate.create({
       data: {
         tenantId,
         title: dto.title,
@@ -210,13 +438,17 @@ export class DocumentsService {
         categoryId: dto.categoryId,
         isSystemTemplate: false,
         description: dto.description || null,
-        tags: dto.tags || null,
+        tags: null,
         preferredStorage: dto.preferredStorage || null,
         metadata: dto.metadata || null,
         systemKey: null,
         sourceTemplateId: dto.sourceTemplateId || null,
+        tagLinks: tagIds.length ? { create: tagIds.map((tagId) => ({ tagId })) } : undefined,
       },
+      include: { tagLinks: { include: { tag: true } } },
     });
+
+    return this.serializeTemplate(created);
   }
 
   async findAllTemplates(
@@ -249,22 +481,33 @@ export class DocumentsService {
         : this.prisma.documentTemplate.findMany({
             where: buildWhere({ isSystemTemplate: true, tenantId: null }),
             orderBy: { title: 'asc' },
+            include: { tagLinks: { include: { tag: true } } },
           }),
       scope === 'system'
         ? Promise.resolve([])
         : this.prisma.documentTemplate.findMany({
             where: buildWhere({ tenantId }),
             orderBy: { title: 'asc' },
+            include: { tagLinks: { include: { tag: true } } },
           }),
     ]);
 
-    let merged = [...systemTemplates, ...tenantTemplates];
+    const migratedTenantTemplates = await Promise.all(
+      tenantTemplates.map((t) => this.migrateLegacyTagsToGlobal(t, tenantId)),
+    );
+
+    let merged = [...systemTemplates, ...migratedTenantTemplates].map((t) => this.serializeTemplate(t));
 
     if (tag) {
-      const normalizedTag = tag.toLowerCase();
-      merged = merged.filter((t) => {
-        const tags = Array.isArray(t.tags) ? (t.tags as any[]) : [];
-        return tags.some((x) => String(x).toLowerCase() === normalizedTag);
+      const raw = tag.trim();
+      const normalizedTag = raw.toLowerCase();
+      const looksLikeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+
+      merged = merged.filter((t: any) => {
+        const tagIds = Array.isArray(t.tagIds) ? (t.tagIds as string[]) : [];
+        if (looksLikeId) return tagIds.includes(raw);
+        const tagNames = Array.isArray(t.tags) ? (t.tags as any[]) : [];
+        return tagNames.some((x) => String(x).toLowerCase() === normalizedTag);
       });
     }
 
@@ -279,14 +522,17 @@ export class DocumentsService {
 
   async findTemplate(id: string, tenantId: string) {
     await this.ensureSystemLibrarySeeded();
-    const template = await this.prisma.documentTemplate.findFirst({
+    let template = await this.prisma.documentTemplate.findFirst({
       where: {
         id,
         OR: [{ tenantId }, { isSystemTemplate: true, tenantId: null }],
       },
+      include: { tagLinks: { include: { tag: true } } },
     });
     if (!template) throw new NotFoundException('Template not found');
-    return template;
+
+    template = await this.migrateLegacyTagsToGlobal(template, tenantId);
+    return this.serializeTemplate(template);
   }
 
   async updateTemplate(id: string, dto: CreateTemplateDto, tenantId: string) {
@@ -296,18 +542,27 @@ export class DocumentsService {
     if (!template) throw new NotFoundException('Template not found');
     if (template.isSystemTemplate) throw new ForbiddenException('Template do sistema não pode ser alterado.');
 
-    return this.prisma.documentTemplate.update({
+    const tagIds = await this.resolveLibraryTagIds(tenantId, dto);
+
+    const updated = await this.prisma.documentTemplate.update({
       where: { id },
       data: {
         title: dto.title,
         content: dto.content,
         categoryId: dto.categoryId,
         description: dto.description || null,
-        tags: dto.tags || null,
+        tags: null,
         preferredStorage: dto.preferredStorage || null,
         metadata: dto.metadata || null,
+        tagLinks: {
+          deleteMany: {},
+          create: tagIds.map((tagId) => ({ tagId })),
+        },
       },
+      include: { tagLinks: { include: { tag: true } } },
     });
+
+    return this.serializeTemplate(updated);
   }
 
   async deleteTemplate(id: string, tenantId: string) {
@@ -498,8 +753,27 @@ export class DocumentsService {
     contactId: string,
     processId?: string,
     userId?: string,
+    options?: { timelineId?: string; content?: string },
   ) {
-    const { content: htmlContent } = await this.renderTemplate(id, tenantId, contactId, processId, userId);
+    const overrideContent = String(options?.content || '').trim();
+    const htmlContent = overrideContent
+      ? overrideContent
+      : (await this.renderTemplate(id, tenantId, contactId, processId, userId)).content;
+
+    const requestedTimelineId = options?.timelineId ? String(options.timelineId) : null;
+    let timeline: any = null;
+
+    if (requestedTimelineId) {
+      timeline = await this.prisma.processTimeline.findFirst({
+        where: { id: requestedTimelineId, process: { tenantId } },
+        select: { id: true, processId: true, metadata: true },
+      });
+      if (!timeline) throw new NotFoundException('Timeline not found');
+      if (processId && processId !== timeline.processId) {
+        throw new BadRequestException('timelineId nÃ£o pertence ao processId informado');
+      }
+      processId = timeline.processId;
+    }
 
     const template = await this.findTemplate(id, tenantId);
     const documentRecord = await this.prisma.documentHistory.create({
@@ -509,8 +783,30 @@ export class DocumentsService {
         templateId: id,
         tenantId,
         status: 'DRAFT',
+        processId: processId || null,
+        timelineId: requestedTimelineId,
+        snapshot: {
+          contactId,
+          processId: processId || null,
+          generatedAt: new Date().toISOString(),
+          source: 'M365',
+        },
       },
     });
+
+    if (timeline) {
+      const base = timeline.metadata && typeof timeline.metadata === 'object' ? timeline.metadata : {};
+      await this.prisma.processTimeline.update({
+        where: { id: timeline.id },
+        data: {
+          metadata: {
+            ...base,
+            documentId: documentRecord.id,
+            documentTitle: documentRecord.title,
+          },
+        },
+      });
+    }
 
     if (!processId) {
       this.logger.warn(
@@ -542,10 +838,131 @@ export class DocumentsService {
 
     if (success) {
       const updatedDoc = await this.findOne(documentRecord.id, tenantId);
+      if (timeline && updatedDoc?.msFileUrl) {
+        const base = timeline.metadata && typeof timeline.metadata === 'object' ? timeline.metadata : {};
+        await this.prisma.processTimeline.update({
+          where: { id: timeline.id },
+          data: {
+            metadata: {
+              ...base,
+              documentId: updatedDoc.id,
+              documentTitle: updatedDoc.title,
+              msFileUrl: updatedDoc.msFileUrl,
+            },
+          },
+        });
+      }
       return { success: true, msFileUrl: updatedDoc.msFileUrl, documentId: updatedDoc.id };
     }
 
     return { success: false, error: 'Falha ao enviar para o OneDrive', documentId: documentRecord.id };
+  }
+
+  // =========================
+  // AI - Aprimorar Documento
+  // =========================
+
+  async improveHtml(
+    tenantId: string,
+    input: { html: string; instruction?: string; mode?: 'FULL' | 'SELECTION'; processId?: string },
+  ) {
+    const html = String(input?.html || '').trim();
+    if (!html) throw new BadRequestException('html Ã© obrigatÃ³rio.');
+
+    const instruction = String(input?.instruction || '').trim();
+    const mode = String(input?.mode || 'FULL').toUpperCase() as 'FULL' | 'SELECTION';
+    const processId = input?.processId ? String(input.processId).trim() : '';
+
+    let processContext = '';
+    if (processId) {
+      const process = await this.prisma.process.findFirst({
+        where: { id: processId, tenantId },
+        select: {
+          cnj: true,
+          title: true,
+          district: true,
+          vars: true,
+          court: true,
+          courtSystem: true,
+          area: true,
+          subject: true,
+          class: true,
+          value: true,
+          processParties: {
+            select: {
+              isClient: true,
+              isOpposing: true,
+              role: { select: { name: true } },
+              contact: { select: { name: true, document: true } },
+            },
+          },
+        },
+      });
+
+      if (process) {
+        const parties = Array.isArray(process.processParties) ? process.processParties : [];
+        const client = parties.find((p) => p.isClient) || parties[0];
+        const opposing = parties.find((p) => p.isOpposing);
+        processContext = [
+          `CNJ: ${process.cnj || '-'}`,
+          `Caso: ${process.title || '-'}`,
+          `Comarca: ${process.district || '-'}`,
+          `Vara: ${process.vars || '-'}`,
+          `Tribunal: ${process.court || '-'}`,
+          `Sistema: ${process.courtSystem || '-'}`,
+          `Ãrea: ${process.area || '-'}`,
+          `Assunto: ${process.subject || '-'}`,
+          `Classe: ${process.class || '-'}`,
+          `Valor: ${process.value ? String(process.value) : '-'}`,
+          client?.contact?.name ? `Cliente: ${client.contact.name} (${client.contact.document || '-'})` : '',
+          opposing?.contact?.name ? `Parte contrÃ¡ria: ${opposing.contact.name} (${opposing.contact.document || '-'})` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+      }
+    }
+
+    const baseInstruction =
+      instruction ||
+      'Aprimore a redaÃ§Ã£o jurÃ­dica (clareza, coesÃ£o, persuasÃ£o) e corrija portuguÃªs. Mantenha a estrutura e o sentido. Retorne apenas HTML pronto para Word Online.';
+
+    const prompt = [
+      'VocÃª Ã© um advogado brasileiro sÃªnior especializado em petiÃ§Ãµes cÃ­veis.',
+      'Tarefa: aprimorar um texto jurÃ­dico mantendo formataÃ§Ã£o HTML (Word Online).',
+      'Regras:',
+      '- NÃ£o use Markdown, nem blocos de cÃ³digo. Retorne apenas HTML puro.',
+      '- Preserve nomes, valores e dados jÃ¡ presentes; nÃ£o invente fatos.',
+      '- Se houver trechos com pedidos/fundamentos, melhore tecnicamente sem alterar o pedido principal.',
+      '- Mantenha tÃ­tulos, listas e caixas (Visual Law) quando existirem.',
+      '',
+      processContext ? `Contexto do Processo:\n${processContext}\n` : '',
+      `Modo: ${mode === 'SELECTION' ? 'Trecho selecionado' : 'Documento inteiro'}`,
+      `InstruÃ§Ãµes do usuÃ¡rio:\n${baseInstruction}`,
+      '',
+      'HTML de entrada:',
+      html,
+    ].join('\n');
+
+    const result = await this.drxClawService.runPlayground(tenantId, {
+      scenario: 'Aprimorar PeÃ§a (HTML/Word Online)',
+      prompt,
+    });
+
+    let answer = String(result?.answer || '').trim();
+    answer = answer.replace(/^```(?:html)?/i, '').replace(/```$/i, '').trim();
+
+    if (!answer) throw new BadRequestException('IA nÃ£o retornou conteÃºdo.');
+
+    // Se o provedor devolver texto puro, embrulha em HTML bÃ¡sico para compatibilidade com Word Online.
+    if (!/[<][a-z][\s\S]*[>]/i.test(answer)) {
+      const safe = answer
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\r?\n/g, '<br/>');
+      answer = `<p>${safe}</p>`;
+    }
+    return { html: answer };
   }
 
   // =========================

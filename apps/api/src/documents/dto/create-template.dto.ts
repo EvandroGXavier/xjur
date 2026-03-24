@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 
 export class CreateTemplateDto {
   @IsString()
@@ -17,6 +17,10 @@ export class CreateTemplateDto {
 
   @IsOptional()
   tags?: any;
+
+  @IsOptional()
+  @IsArray()
+  tagIds?: string[];
 
   @IsOptional()
   @IsString()

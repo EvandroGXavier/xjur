@@ -25,11 +25,20 @@ interface Template {
     updatedAt: string;
     description?: string | null;
     tags?: any;
+    globalTags?: any;
+    tagIds?: any;
     preferredStorage?: string | null;
     metadata?: any;
     isSystemTemplate?: boolean;
     systemKey?: string | null;
     sourceTemplateId?: string | null;
+}
+
+interface GlobalTag {
+    id: string;
+    name: string;
+    color: string;
+    textColor?: string;
 }
 
 interface DocumentHistory {
@@ -55,8 +64,11 @@ export function Library() {
     const [editorDescription, setEditorDescription] = useState('');
     const [editorCategoryId, setEditorCategoryId] = useState('');
     const [editorPreferredStorage, setEditorPreferredStorage] = useState<'WORD_ONLINE' | 'GOOGLE_DOCS' | ''>('WORD_ONLINE');
-    const [editorTags, setEditorTags] = useState<string[]>([]);
+    const [editorTags, setEditorTags] = useState<GlobalTag[]>([]);
+    const [editorLegacyTags, setEditorLegacyTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
+    const [availableLibraryTags, setAvailableLibraryTags] = useState<GlobalTag[]>([]);
+    const [loadingLibraryTags, setLoadingLibraryTags] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [editorMetadataText, setEditorMetadataText] = useState('');
     const [editorReadOnly, setEditorReadOnly] = useState(false);
@@ -112,6 +124,38 @@ export function Library() {
             .slice(0, 30);
     };
 
+    const normalizeGlobalTags = (tags: any): GlobalTag[] => {
+        const list = Array.isArray(tags) ? tags : [];
+        return list
+            .map((t) => ({
+                id: String(t?.id || '').trim(),
+                name: String(t?.name || '').trim(),
+                color: String(t?.color || '#6366f1').trim(),
+                textColor: t?.textColor ? String(t.textColor) : undefined,
+            }))
+            .filter((t) => t.id && t.name)
+            .slice(0, 30);
+    };
+
+    const fetchLibraryTags = async (signal?: AbortSignal) => {
+        try {
+            setLoadingLibraryTags(true);
+            const res = await api.get('/tags?scope=LIBRARY', { signal });
+            setAvailableLibraryTags(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoadingLibraryTags(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!isEditorOpen) return;
+        const controller = new AbortController();
+        fetchLibraryTags(controller.signal);
+        return () => controller.abort();
+    }, [isEditorOpen]);
+
     const setEditorFromTemplate = (tpl: Template | null) => {
         setEditingTemplate(tpl);
         setEditorReadOnly(!!tpl?.isSystemTemplate);
@@ -120,7 +164,8 @@ export function Library() {
         setEditorDescription(tpl?.description || '');
         setEditorCategoryId(tpl?.categoryId || '');
         setEditorPreferredStorage((tpl?.preferredStorage as any) || 'WORD_ONLINE');
-        setEditorTags(normalizeTags(tpl?.tags));
+        setEditorLegacyTags(normalizeTags(tpl?.tags));
+        setEditorTags(normalizeGlobalTags((tpl as any)?.globalTags));
         setTagInput('');
         setShowAdvanced(false);
         setEditorMetadataText(tpl?.metadata ? JSON.stringify(tpl.metadata, null, 2) : '');
@@ -137,15 +182,43 @@ export function Library() {
         setIsEditorOpen(true);
     };
 
-    const handleAddTag = (raw: string) => {
-        const cleaned = raw.trim().replace(/^#/, '');
-        if (!cleaned) return;
-        const next = Array.from(new Set([...editorTags, cleaned])).slice(0, 30);
-        setEditorTags(next);
+    const isTagSelected = (id: string) => editorTags.some((t) => t.id === id);
+
+    const handleToggleTag = (tag: GlobalTag) => {
+        setEditorTags((prev) => {
+            if (prev.some((t) => t.id === tag.id)) {
+                return prev.filter((t) => t.id !== tag.id);
+            }
+            return [...prev, tag].slice(0, 30);
+        });
     };
 
-    const handleRemoveTag = (tag: string) => {
-        setEditorTags((prev) => prev.filter((t) => t !== tag));
+    const handleRemoveTag = (tagId: string) => {
+        setEditorTags((prev) => prev.filter((t) => t.id !== tagId));
+    };
+
+    const handleAddOrCreateTag = async (raw: string) => {
+        const cleaned = raw.trim().replace(/^#/, '');
+        if (!cleaned) return;
+
+        const existing = availableLibraryTags.find((t) => t.name.toLowerCase() === cleaned.toLowerCase());
+        if (existing) {
+            handleToggleTag(existing);
+            return;
+        }
+
+        try {
+            const res = await api.post('/tags', {
+                name: cleaned,
+                scope: ['LIBRARY'],
+            });
+            const created: GlobalTag = res.data;
+            setAvailableLibraryTags((prev) => [created, ...prev]);
+            handleToggleTag(created);
+        } catch (err) {
+            console.error(err);
+            toast.error('Erro ao criar tag global');
+        }
     };
 
     const handleCreateCategory = async () => {
@@ -213,7 +286,7 @@ export function Library() {
                 content: editorContent,
                 categoryId: editorCategoryId || undefined,
                 description: editorDescription || undefined,
-                tags: editorTags.length ? editorTags : undefined,
+                tagIds: editorTags.length ? editorTags.map((t) => t.id) : undefined,
                 preferredStorage: editorPreferredStorage || undefined,
                 metadata: parsedMetadata,
             };
@@ -252,7 +325,9 @@ export function Library() {
     const filteredTemplates = templates.filter((tpl) => {
         const q = searchTerm.trim().toLowerCase();
         if (!q) return true;
-        const hay = `${tpl.title || ''} ${tpl.description || ''} ${(Array.isArray(tpl.tags) ? tpl.tags.join(' ') : '')}`.toLowerCase();
+        const legacy = Array.isArray(tpl.tags) ? tpl.tags.join(' ') : '';
+        const globals = Array.isArray((tpl as any).globalTags) ? (tpl as any).globalTags.map((t: any) => t?.name).join(' ') : '';
+        const hay = `${tpl.title || ''} ${tpl.description || ''} ${legacy} ${globals}`.toLowerCase();
         return hay.includes(q);
     });
 
@@ -438,8 +513,10 @@ export function Library() {
                                         if (e.key === 'Enter' || e.key === ',') {
                                             e.preventDefault();
                                             const parts = tagInput.split(',').map((x) => x.trim()).filter(Boolean);
-                                            parts.forEach(handleAddTag);
                                             setTagInput('');
+                                            for (const part of parts) {
+                                                void handleAddOrCreateTag(part);
+                                            }
                                         }
                                     }}
                                     disabled={isSystem}
@@ -451,8 +528,10 @@ export function Library() {
                                     onClick={() => {
                                         if (isSystem) return;
                                         const parts = tagInput.split(',').map((x) => x.trim()).filter(Boolean);
-                                        parts.forEach(handleAddTag);
                                         setTagInput('');
+                                        for (const part of parts) {
+                                            void handleAddOrCreateTag(part);
+                                        }
                                     }}
                                     disabled={isSystem}
                                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 text-sm"
@@ -460,23 +539,79 @@ export function Library() {
                                     Adicionar
                                 </button>
                             </div>
+                            {!isSystem && (
+                                <div className="flex flex-wrap gap-2">
+                                    {(availableLibraryTags || [])
+                                        .filter((t) => {
+                                            const q = tagInput.trim().toLowerCase();
+                                            if (!q) return true;
+                                            return (t.name || '').toLowerCase().includes(q);
+                                        })
+                                        .slice(0, 14)
+                                        .map((tag) => (
+                                            <button
+                                                key={tag.id}
+                                                type="button"
+                                                onClick={() => handleToggleTag(tag)}
+                                                className={clsx(
+                                                    "px-2 py-1 rounded-full text-xs font-bold border transition",
+                                                    isTagSelected(tag.id)
+                                                        ? "bg-slate-800 border-slate-600"
+                                                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700",
+                                                )}
+                                                style={{
+                                                    borderColor: `${tag.color}80`,
+                                                    color: isTagSelected(tag.id) ? tag.color : undefined,
+                                                }}
+                                                title={isTagSelected(tag.id) ? 'Remover tag' : 'Adicionar tag'}
+                                            >
+                                                <span className="inline-flex items-center gap-2">
+                                                    <span
+                                                        className="w-2 h-2 rounded-full"
+                                                        style={{ backgroundColor: tag.color }}
+                                                    />
+                                                    {tag.name}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    {loadingLibraryTags && (
+                                        <span className="text-xs text-slate-500">Carregando tags...</span>
+                                    )}
+                                </div>
+                            )}
                             <div className="flex flex-wrap gap-2">
-                                {editorTags.map((t) => (
-                                    <span key={t} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-xs">
-                                        #{t}
-                                        {!isSystem && (
+                                {isSystem &&
+                                    editorLegacyTags.map((t) => (
+                                        <span
+                                            key={t}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-950 text-slate-300 border border-slate-700 text-xs"
+                                        >
+                                            #{t}
+                                        </span>
+                                    ))}
+                                {!isSystem &&
+                                    editorTags.map((t) => (
+                                        <span
+                                            key={t.id}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-xs"
+                                            style={{
+                                                backgroundColor: `${t.color}20`,
+                                                borderColor: `${t.color}55`,
+                                                color: t.color,
+                                            }}
+                                        >
+                                            {t.name}
                                             <button
                                                 type="button"
-                                                onClick={() => handleRemoveTag(t)}
-                                                className="ml-1 p-0.5 rounded hover:bg-indigo-500/20"
+                                                onClick={() => handleRemoveTag(t.id)}
+                                                className="ml-1 p-0.5 rounded hover:bg-white/10"
                                                 title="Remover"
                                             >
                                                 <X size={12} />
                                             </button>
-                                        )}
-                                    </span>
-                                ))}
-                                {editorTags.length === 0 && (
+                                        </span>
+                                    ))}
+                                {!isSystem && editorTags.length === 0 && (
                                     <span className="text-xs text-slate-500">Sem tags.</span>
                                 )}
                             </div>
@@ -603,10 +738,34 @@ export function Library() {
                                  {!!tpl.description && (
                                     <p className="text-slate-400 text-sm line-clamp-2 mb-2">{tpl.description}</p>
                                  )}
-                                 {Array.isArray(tpl.tags) && (tpl.tags as any[]).length > 0 && (
+                                 {Array.isArray((tpl as any).globalTags) && ((tpl as any).globalTags as any[]).length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                        {((tpl as any).globalTags as any[]).slice(0, 3).map((t) => (
+                                            <span
+                                                key={String(t?.id || t?.name)}
+                                                className="text-[11px] px-2 py-0.5 rounded-full border"
+                                                style={{
+                                                    backgroundColor: `${String(t?.color || '#6366f1')}20`,
+                                                    borderColor: `${String(t?.color || '#6366f1')}55`,
+                                                    color: String(t?.color || '#6366f1'),
+                                                }}
+                                            >
+                                                {String(t?.name || '')}
+                                            </span>
+                                        ))}
+                                        {((tpl as any).globalTags as any[]).length > 3 && (
+                                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                                                +{((tpl as any).globalTags as any[]).length - 3}
+                                            </span>
+                                        )}
+                                    </div>
+                                 ) : Array.isArray(tpl.tags) && (tpl.tags as any[]).length > 0 ? (
                                     <div className="flex flex-wrap gap-1 mb-2">
                                         {(tpl.tags as any[]).slice(0, 3).map((t) => (
-                                            <span key={String(t)} className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                            <span
+                                                key={String(t)}
+                                                className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                                            >
                                                 #{String(t)}
                                             </span>
                                         ))}
@@ -616,7 +775,7 @@ export function Library() {
                                             </span>
                                         )}
                                     </div>
-                                 )}
+                                 ) : null}
                                  {!!tpl.categoryId && (
                                     <p className="text-slate-500 text-xs mb-1">Categoria: {categoryNameById(tpl.categoryId) || '—'}</p>
                                  )}

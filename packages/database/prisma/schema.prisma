@@ -404,6 +404,7 @@ model Process {
   tags                        ProcessTag[]
   agentConversations          AgentConversation[]
   agentMessageLinks           AgentMessageLink[]
+  documents                   DocumentHistory[]
 
   workflowId                  String?
   workflow                    Workflow? @relation(fields: [workflowId], references: [id])
@@ -528,6 +529,7 @@ model ProcessTimeline {
 
   process           Process            @relation(fields: [processId], references: [id], onDelete: Cascade)
   agentMessageLinks AgentMessageLink[]
+  documents        DocumentHistory[]
 
   workflowStepId    String?
   workflowStep      WorkflowStep?      @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
@@ -757,6 +759,7 @@ model DocumentTemplate {
   category DocumentCategory? @relation(fields: [categoryId], references: [id])
   tenant   Tenant?           @relation(fields: [tenantId], references: [id])
   history  DocumentHistory[]
+  tagLinks DocumentTemplateTag[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -770,6 +773,8 @@ model DocumentHistory {
   id         String  @id @default(uuid())
   tenantId   String
   templateId String?
+  processId  String?
+  timelineId String?
   title      String
   content    String  @db.Text
   snapshot   Json? // Stores the variables values at time of creation
@@ -784,11 +789,15 @@ model DocumentHistory {
   gFileUrl String?
 
   template DocumentTemplate? @relation(fields: [templateId], references: [id])
+  process  Process?          @relation(fields: [processId], references: [id], onDelete: SetNull)
+  timeline ProcessTimeline?  @relation(fields: [timelineId], references: [id], onDelete: SetNull)
   tenant   Tenant            @relation(fields: [tenantId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tenantId, processId])
+  @@index([timelineId])
   @@map("document_history")
 }
 
@@ -819,8 +828,21 @@ model Tag {
   processes        ProcessTag[]
   financialRecords FinancialRecordTag[]
   timelines        ProcessTimelineTag[]
+  documentTemplates DocumentTemplateTag[]
 
   @@map("tags")
+}
+
+model DocumentTemplateTag {
+  id         String @id @default(uuid())
+  templateId String
+  tagId      String
+
+  template DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  tag      Tag              @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, tagId])
+  @@map("tags_on_document_templates")
 }
 
 model ContactTag {

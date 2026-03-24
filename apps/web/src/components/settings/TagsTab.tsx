@@ -27,6 +27,7 @@ const SCOPE_OPTIONS = [
     { value: 'FINANCE', label: 'Financeiro', color: 'text-emerald-400' },
     { value: 'TASK', label: 'Tarefa', color: 'text-pink-400' },
     { value: 'TICKET', label: 'Atendimento', color: 'text-indigo-400' },
+    { value: 'LIBRARY', label: 'Biblioteca', color: 'text-violet-400' },
 ];
 
 export function TagsTab() {
@@ -296,4 +297,3 @@ export function TagsTab() {
         </div>
     );
 }
-

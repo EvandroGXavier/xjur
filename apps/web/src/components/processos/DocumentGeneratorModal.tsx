@@ -17,9 +17,12 @@ interface DocumentGeneratorModalProps {
     onClose: () => void;
     onSuccess: (file?: File) => void;
     mode?: 'LOCAL' | 'M365';
+    timelineId?: string | null;
+    generatePdf?: boolean;
+    onDocumentSaved?: (documentId: string) => void;
 }
 
-export function DocumentGeneratorModal({ processId, contactId, onClose, onSuccess, mode = 'LOCAL' }: DocumentGeneratorModalProps) {
+export function DocumentGeneratorModal({ processId, contactId, onClose, onSuccess, mode = 'LOCAL', timelineId = null, generatePdf = true, onDocumentSaved }: DocumentGeneratorModalProps) {
     const [templates, setTemplates] = useState<Template[]>([]);
     const [loading, setLoading] = useState(true);
     const [rendering, setRendering] = useState(false);
@@ -82,12 +85,15 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                 // Generate and upload directly to OneDrive
                 const res = await api.post(`/documents/templates/${selectedTemplateId}/m365`, {
                     contactId,
-                    processId
+                    processId,
+                    timelineId,
+                    content: generatedContent,
                 });
 
                 if (res.data.success && res.data.msFileUrl) {
                     toast.success('Documento gerado com sucesso no OneDrive!');
                     window.open(res.data.msFileUrl, '_blank');
+                    if (res.data.documentId) onDocumentSaved?.(res.data.documentId);
                     onSuccess();
                 } else {
                     toast.error(res.data.error || 'Erro ao enviar o documento para o OneDrive');
@@ -99,8 +105,31 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                 setRendering(false);
             }
         } else {
-            // Local fallback (PDF Generation)
             try {
+                // 1) Salva como documento editável do processo (aba Documentos)
+                const saved = await api.post('/documents', {
+                    title: docTitle || 'Documento',
+                    content: generatedContent,
+                    templateId: selectedTemplateId || undefined,
+                    processId,
+                    timelineId: timelineId || undefined,
+                    snapshot: {
+                        contactId,
+                        processId,
+                        templateId: selectedTemplateId || null,
+                        generatedAt: new Date().toISOString(),
+                        source: 'LOCAL_EDITOR',
+                    },
+                });
+                if (saved?.data?.id) onDocumentSaved?.(saved.data.id);
+
+                // 2) Se não for para anexar PDF, encerra aqui
+                if (!generatePdf) {
+                    toast.success('Documento salvo no processo!');
+                    onSuccess();
+                    return;
+                }
+
                 // Create a temporary container for rendering
                 const element = document.createElement('div');
                 element.innerHTML = generatedContent;
@@ -128,7 +157,7 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                 onSuccess(file);
             } catch (error) {
                 console.error(error);
-                toast.error('Erro ao gerar arquivo PDF local');
+                toast.error('Erro ao salvar/gerar documento');
             } finally {
                 setRendering(false);
             }
@@ -146,7 +175,7 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-white">
-                                {mode === 'M365' ? 'Gerar via Template M365' : 'Gerar PDF Local'}
+                                {mode === 'M365' ? 'Gerar via Template M365' : (generatePdf ? 'Gerar PDF Local' : 'Salvar Documento do Processo')}
                             </h3>
                             {step === 'EDIT' && (
                                 <input 
@@ -248,8 +277,8 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                             >
                                 {rendering ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                                 {rendering 
-                                    ? (mode === 'M365' ? 'Gerando M365...' : 'Gerando PDF...') 
-                                    : (mode === 'M365' ? 'Gerar M365 e Abrir Online' : 'Confirmar & Anexar PDF')}
+                                    ? (mode === 'M365' ? 'Gerando M365...' : (generatePdf ? 'Gerando PDF...' : 'Salvando...')) 
+                                    : (mode === 'M365' ? 'Gerar M365 e Abrir Online' : (generatePdf ? 'Confirmar & Anexar PDF' : 'Salvar no Processo'))}
                             </button>
                         </div>
                     </div>

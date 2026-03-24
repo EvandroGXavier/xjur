@@ -33,8 +33,8 @@ export class DocumentsController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: CurrentUserData) {
-    return this.documentsService.findAll(user.tenantId);
+  findAll(@CurrentUser() user: CurrentUserData, @Query('processId') processId?: string) {
+    return this.documentsService.findAll(user.tenantId, processId);
   }
 
   @Get('settings')
@@ -116,9 +116,14 @@ export class DocumentsController {
     @Param('id') id: string, 
     @CurrentUser() user: CurrentUserData,
     @Body('contactId') contactId: string,
-    @Body('processId') processId?: string
+    @Body('processId') processId?: string,
+    @Body('timelineId') timelineId?: string,
+    @Body('content') content?: string,
   ) {
-    return this.documentsService.generateM365Document(id, user.tenantId, contactId, processId, user.userId);
+    return this.documentsService.generateM365Document(id, user.tenantId, contactId, processId, user.userId, {
+      timelineId,
+      content,
+    });
   }
 
   @Post('templates/:id/customize')
@@ -130,6 +135,13 @@ export class DocumentsController {
   syncSystemLibrary(@CurrentUser() user: CurrentUserData) {
     this.ensureSuperAdmin(user);
     return this.documentsService.syncSystemLibrary(user.tenantId);
+  }
+
+  // --- IA (Aprimorar Documento/SeleÃ§Ã£o) ---
+
+  @Post('ai/improve')
+  improveDocument(@CurrentUser() user: CurrentUserData, @Body() body: any) {
+    return this.documentsService.improveHtml(user.tenantId, body);
   }
 
   @Get(':id')

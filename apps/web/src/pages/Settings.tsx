@@ -180,15 +180,27 @@ const BulkActionsTab = () => {
     fetchData();
   }, []);
 
+  const fetchTagsForActiveSubTab = async () => {
+    try {
+      const scope = activeSubTab === "contacts" ? "CONTACT" : "PROCESS";
+      const tagsRes = await api.get(`/tags?scope=${scope}`);
+      setTags(Array.isArray(tagsRes.data) ? tagsRes.data : []);
+    } catch (err) {
+      console.error("Erro ao carregar tags para aÃ§Ãµes em massa", err);
+      setTags([]);
+    }
+  };
+
+  useEffect(() => {
+    void fetchTagsForActiveSubTab();
+  }, [activeSubTab]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [tagsRes, usersRes] = await Promise.all([
-        api.get("/tags"),
-        api.get("/users"),
-      ]);
-      setTags(tagsRes.data);
+      const usersRes = await api.get("/users");
       setUsers(usersRes.data);
+      await fetchTagsForActiveSubTab();
     } catch (err) {
       console.error("Erro ao carregar dados para ações em massa", err);
     } finally {

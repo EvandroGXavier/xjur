@@ -1,5 +1,5 @@
 
-import { useState, useRef, useEffect } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { 
     Bold, Italic, Underline, 
     AlignLeft, AlignCenter, AlignRight, 
@@ -22,7 +22,18 @@ interface RichTextEditorProps {
     readOnly?: boolean;
 }
 
-export function RichTextEditor({ value, onChange, placeholder, showVariables = true, className, readOnly = false }: RichTextEditorProps) {
+export interface RichTextEditorHandle {
+    focus: () => void;
+    getHtml: () => string;
+    setHtml: (html: string) => void;
+    getSelectionHtml: () => string;
+    replaceSelectionHtml: (html: string) => void;
+}
+
+export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
+    { value, onChange, placeholder, showVariables = true, className, readOnly = false }: RichTextEditorProps,
+    ref,
+) {
     const editorRef = useRef<HTMLDivElement>(null);
     const [variables, setVariables] = useState<any>(null);
 
@@ -52,6 +63,39 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
             onChange(editorRef.current.innerHTML);
         }
     };
+
+    const getSelectionHtml = () => {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return '';
+        const range = selection.getRangeAt(0);
+        if (range.collapsed) return '';
+        const container = document.createElement('div');
+        container.appendChild(range.cloneContents());
+        return container.innerHTML;
+    };
+
+    const replaceSelectionHtml = (html: string) => {
+        if (readOnly) return;
+        if (!editorRef.current) return;
+        editorRef.current.focus();
+        document.execCommand('insertHTML', false, html);
+        handleInput();
+    };
+
+    const setHtml = (html: string) => {
+        if (readOnly) return;
+        if (!editorRef.current) return;
+        editorRef.current.innerHTML = html;
+        onChange(editorRef.current.innerHTML);
+    };
+
+    useImperativeHandle(ref, () => ({
+        focus: () => editorRef.current?.focus(),
+        getHtml: () => editorRef.current?.innerHTML || value || '',
+        setHtml,
+        getSelectionHtml,
+        replaceSelectionHtml,
+    }), [value]);
 
     const execCommand = (command: string, value: string | undefined = undefined) => {
         if (readOnly) return;
@@ -284,7 +328,7 @@ export function RichTextEditor({ value, onChange, placeholder, showVariables = t
             )}
         </div>
     );
-}
+});
 
 function ToolbarBtn({ icon, onClick, title, active = false, disabled = false }: any) {
     return (

@@ -173,11 +173,10 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                     return new Date(b.date).getTime() - new Date(a.date).getTime();
                 });
                 setTimelines(sorted);
-                if (res.data.contactId) {
-                    setProcessContactId(res.data.contactId);
-                } else if (res.data.contact?.id) {
-                    setProcessContactId(res.data.contact.id);
-                }
+                const parties = Array.isArray(res.data.processParties) ? res.data.processParties : [];
+                const clientParty = parties.find((p: any) => p?.isClient) || parties[0];
+                const derivedContactId = clientParty?.contactId || clientParty?.contact?.id || res.data.contactId || res.data.contact?.id || null;
+                if (derivedContactId) setProcessContactId(String(derivedContactId));
             }
         } catch (error) {
             console.error('Error fetching timelines:', error);
@@ -983,6 +982,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                     processId={processId}
                     contactId={processContactId}
                     mode="LOCAL"
+                    timelineId={targetTimelineId}
                     onClose={() => { setIsDocGenOpen(false); setTargetTimelineId(null); }}
                     onSuccess={handleGenerateDocSuccess}
                 />
@@ -992,6 +992,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                     processId={processId}
                     contactId={processContactId}
                     mode="M365"
+                    timelineId={targetTimelineId}
                     onClose={() => { setIsDocGenM365Open(false); setTargetTimelineId(null); }}
                     onSuccess={() => { setIsDocGenM365Open(false); setTargetTimelineId(null); fetchTimelines(); }}
                 />

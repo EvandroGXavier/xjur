@@ -29,6 +29,7 @@ import { ContactPickerGlobal } from '../../components/contacts/ContactPickerGlob
 import { masks } from '../../utils/masks';
 import { ProcessParties } from './ProcessParties';
 import { ProcessoAndamentos } from '../../components/processos/ProcessoAndamentos';
+import { ProcessDocumentsTab } from '../../components/processos/ProcessDocumentsTab';
 import { ProcessAgenda } from '../../components/processos/ProcessAgenda';
 import { CreatableSelect } from '../../components/ui/CreatableSelect';
 import { useHotkeys } from '../../hooks/useHotkeys';
@@ -797,6 +798,7 @@ export function ProcessForm() {
                     <TabButton tabId="TJ" label="TJ" icon={Gavel} />
                     {(isEditing || importedParties.length > 0) && <TabButton tabId="PARTIES" label="PARTES" icon={Users} />}
                     {(isEditing || importedMovements.length > 0) && <TabButton tabId="TIMELINE" label="ANDAMENTOS" icon={Activity} />}
+                    {isEditing && <TabButton tabId="DOCUMENTS" label="DOCUMENTOS" icon={FolderOpen} />}
                     {isEditing && <TabButton tabId="AGENDA" label="AGENDA" icon={Calendar} />}
                     {isEditing && <TabButton tabId="FINANCIAL" label="FINANCEIRO" icon={DollarSign} />}
                 </div>
@@ -1329,6 +1331,12 @@ export function ProcessForm() {
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {isEditing && activeTab === 'DOCUMENTS' && (
+                    <div className="animate-in fade-in">
+                        <ProcessDocumentsTab processId={id!} />
                     </div>
                 )}
                 
