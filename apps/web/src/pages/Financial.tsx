@@ -62,6 +62,7 @@ import { AdvancedTagFilter } from "../components/ui/AdvancedTagFilter";
 import { BankAccountDetails } from "../components/financial/BankAccountDetails";
 import { FinancialParties } from "../components/financial/FinancialParties";
 import { AttachmentPreview } from "../components/ui/AttachmentPreview";
+import { DateRangePicker } from "../components/ui/DateRangePicker";
 import { useNavigate } from "react-router-dom";
 import { useHotkeys } from "../hooks/useHotkeys";
 
@@ -2912,40 +2913,20 @@ export function Financial(props: FinancialProps = {}) {
                           Ex.: tudo que foi lançado entre X e Y.
                         </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="space-y-2">
-                          <span className="text-xs uppercase tracking-wider text-slate-400">
-                            De
-                          </span>
-                          <input
-                            type="date"
-                            value={advancedFilters.createdFrom}
-                            onChange={(e) =>
-                              setAdvancedFilters((current) => ({
-                                ...current,
-                                createdFrom: e.target.value,
-                              }))
-                            }
-                            className="w-full px-3 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </label>
-                        <label className="space-y-2">
-                          <span className="text-xs uppercase tracking-wider text-slate-400">
-                            Até
-                          </span>
-                          <input
-                            type="date"
-                            value={advancedFilters.createdTo}
-                            onChange={(e) =>
-                              setAdvancedFilters((current) => ({
-                                ...current,
-                                createdTo: e.target.value,
-                              }))
-                            }
-                            className="w-full px-3 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </label>
-                      </div>
+                      <DateRangePicker
+                        value={{
+                          from: advancedFilters.createdFrom,
+                          to: advancedFilters.createdTo,
+                        }}
+                        onChange={(next) =>
+                          setAdvancedFilters((current) => ({
+                            ...current,
+                            createdFrom: String(next.from || ""),
+                            createdTo: String(next.to || ""),
+                          }))
+                        }
+                        placeholder="Selecionar período"
+                      />
                     </div>
 
                     <div className="space-y-3 p-4 bg-slate-950/80 border border-slate-800 rounded-xl">
@@ -2957,40 +2938,17 @@ export function Financial(props: FinancialProps = {}) {
                           Ideal para cobranças vencidas na semana ou mês.
                         </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="space-y-2">
-                          <span className="text-xs uppercase tracking-wider text-slate-400">
-                            De
-                          </span>
-                          <input
-                            type="date"
-                            value={advancedFilters.dueFrom}
-                            onChange={(e) =>
-                              setAdvancedFilters((current) => ({
-                                ...current,
-                                dueFrom: e.target.value,
-                              }))
-                            }
-                            className="w-full px-3 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </label>
-                        <label className="space-y-2">
-                          <span className="text-xs uppercase tracking-wider text-slate-400">
-                            Até
-                          </span>
-                          <input
-                            type="date"
-                            value={advancedFilters.dueTo}
-                            onChange={(e) =>
-                              setAdvancedFilters((current) => ({
-                                ...current,
-                                dueTo: e.target.value,
-                              }))
-                            }
-                            className="w-full px-3 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </label>
-                      </div>
+                      <DateRangePicker
+                        value={{ from: advancedFilters.dueFrom, to: advancedFilters.dueTo }}
+                        onChange={(next) =>
+                          setAdvancedFilters((current) => ({
+                            ...current,
+                            dueFrom: String(next.from || ""),
+                            dueTo: String(next.to || ""),
+                          }))
+                        }
+                        placeholder="Selecionar período"
+                      />
                     </div>
 
                     <div className="space-y-3 p-4 bg-slate-950/80 border border-slate-800 rounded-xl">
@@ -3002,40 +2960,20 @@ export function Financial(props: FinancialProps = {}) {
                           Use para conciliação e auditoria de liquidações.
                         </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="space-y-2">
-                          <span className="text-xs uppercase tracking-wider text-slate-400">
-                            De
-                          </span>
-                          <input
-                            type="date"
-                            value={advancedFilters.paymentFrom}
-                            onChange={(e) =>
-                              setAdvancedFilters((current) => ({
-                                ...current,
-                                paymentFrom: e.target.value,
-                              }))
-                            }
-                            className="w-full px-3 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </label>
-                        <label className="space-y-2">
-                          <span className="text-xs uppercase tracking-wider text-slate-400">
-                            Até
-                          </span>
-                          <input
-                            type="date"
-                            value={advancedFilters.paymentTo}
-                            onChange={(e) =>
-                              setAdvancedFilters((current) => ({
-                                ...current,
-                                paymentTo: e.target.value,
-                              }))
-                            }
-                            className="w-full px-3 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </label>
-                      </div>
+                      <DateRangePicker
+                        value={{
+                          from: advancedFilters.paymentFrom,
+                          to: advancedFilters.paymentTo,
+                        }}
+                        onChange={(next) =>
+                          setAdvancedFilters((current) => ({
+                            ...current,
+                            paymentFrom: String(next.from || ""),
+                            paymentTo: String(next.to || ""),
+                          }))
+                        }
+                        placeholder="Selecionar período"
+                      />
                     </div>
                   </div>
                 </div>

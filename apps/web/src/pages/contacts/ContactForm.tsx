@@ -1737,7 +1737,7 @@ export function ContactForm() {
             <button 
                 onClick={() => setIsHelpOpen(true)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition border border-slate-700 text-sm"
-                title="Ajuda (CTRL + F1)"
+                title="Ajuda (F1)"
             >
                 <HelpCircle size={14} /> Ajuda
             </button>

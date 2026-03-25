@@ -2216,14 +2216,30 @@ export class ProcessesService {
         includedTags?: string,
         excludedTags?: string,
         status?: string,
-        advancedFilter?: string
+        advancedFilter?: string,
+        updatedFrom?: string,
+        updatedTo?: string,
     }) {
         if (!params.tenantId) {
             throw new BadRequestException('Tenant ID is required');
         }
-        const { tenantId, search, includedTags, excludedTags, status, advancedFilter } = params;
+        const { tenantId, search, includedTags, excludedTags, status, advancedFilter, updatedFrom, updatedTo } = params;
 
         const where: any = { tenantId };
+
+        const parseDateEdge = (raw?: string, edge: 'start' | 'end' = 'start') => {
+            const value = String(raw || '').trim();
+            if (!value) return null;
+            let dt: Date;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                dt = edge === 'start'
+                    ? new Date(`${value}T00:00:00.000Z`)
+                    : new Date(`${value}T23:59:59.999Z`);
+            } else {
+                dt = new Date(value);
+            }
+            return Number.isFinite(dt.getTime()) ? dt : null;
+        };
 
         if (search) {
             where.OR = [
@@ -2295,6 +2311,20 @@ export class ProcessesService {
             if (advancedWhere) {
                 if (!where.AND) where.AND = [];
                 where.AND.push(advancedWhere);
+            }
+        }
+
+        if (updatedFrom || updatedTo) {
+            const from = parseDateEdge(updatedFrom, 'start');
+            const to = parseDateEdge(updatedTo, 'end');
+            if (from || to) {
+                if (!where.AND) where.AND = [];
+                where.AND.push({
+                    updatedAt: {
+                        ...(from ? { gte: from } : {}),
+                        ...(to ? { lte: to } : {}),
+                    },
+                });
             }
         }
 

@@ -48,6 +48,18 @@ export class DocumentsController {
     return this.documentsService.updateSetting(key, value);
   }
 
+  // --- TENANT HEADER/FOOTER (por empresa) ---
+
+  @Get('tenant-settings')
+  getTenantSettings(@CurrentUser() user: CurrentUserData) {
+    return this.documentsService.getTenantDocumentLayout(user.tenantId);
+  }
+
+  @Put('tenant-settings')
+  updateTenantSettings(@CurrentUser() user: CurrentUserData, @Body() body: { headerHtml?: string; footerHtml?: string }) {
+    return this.documentsService.updateTenantDocumentLayout(user.tenantId, body);
+  }
+
   // --- CATEGORIES ---
 
   @Get('categories')

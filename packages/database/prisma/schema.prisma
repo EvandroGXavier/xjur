@@ -79,6 +79,7 @@ model Tenant {
   agentMessageEvents          AgentMessageEvent[]
   agentMessageLinks           AgentMessageLink[]
   workflows                   Workflow[]
+  tenantDocumentSettings      TenantDocumentSetting[]
 
   // Preferences
   contactRequireOneInfo Boolean @default(true) // Se false, celular/telefone/email ficam não-obrigatórios
@@ -810,6 +811,20 @@ model DocumentSettings {
   updatedAt DateTime @updatedAt
 
   @@map("document_settings")
+}
+
+model TenantDocumentSetting {
+  id        String   @id @default(uuid())
+  tenantId  String
+  key       String
+  value     String?  @db.Text
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("tenant_document_settings")
 }
 
 // 5. MÓDULO DE ETIQUETAS (TAGS TRANSVERSAIS)

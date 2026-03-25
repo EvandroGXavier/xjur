@@ -8,8 +8,8 @@ export function InventoryHelpModal() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl + F1
-      if (e.ctrlKey && e.key === "F1") {
+      // F1
+      if (e.key === "F1") {
         e.preventDefault();
         // Apenas mostrar se estiver no módulo de estoque
         if (location.pathname.startsWith("/inventory")) {
@@ -115,7 +115,7 @@ export function InventoryHelpModal() {
                   <span className="text-slate-300">Impressão Rápida (Abre e já seleciona a janela de impressão aplicável).</span>
                 </li>
                 <li className="flex items-center gap-4">
-                  <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300">Ctrl + F1</kbd>
+                  <kbd className="bg-slate-800 border border-slate-700 px-2 py-1 rounded text-teal-300">F1</kbd>
                   <span className="text-slate-300">Abre esta Central de Ajuda.</span>
                 </li>
               </ul>

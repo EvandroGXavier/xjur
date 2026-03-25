@@ -11,6 +11,8 @@ import { RichTextEditor } from '../components/ui/RichTextEditor';
 import { useHotkeys } from '../hooks/useHotkeys';
 import { clsx } from 'clsx';
 import { getUser } from '../auth/authStorage';
+import { HelpModal, useHelpModal } from '../components/HelpModal';
+import { helpLibrary } from '../data/helpManuals';
 
 interface Category {
     id: string;
@@ -87,6 +89,8 @@ export function Library() {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [editorMetadataText, setEditorMetadataText] = useState('');
     const [editorReadOnly, setEditorReadOnly] = useState(false);
+
+    const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
     useHotkeys({
         onNew: () => handleNewTemplate(),
@@ -451,6 +455,7 @@ export function Library() {
             ? (metadataPreview.sections as any[]).slice(0, 20)
             : [];
         return (
+            <>
             <div className="h-full flex flex-col bg-slate-950 animate-in fade-in slide-in-from-bottom-4">
                 <div className="border-b border-slate-800 p-4 flex justify-between items-center bg-slate-900 gap-4">
                     <div className="flex items-center gap-4">
@@ -803,10 +808,13 @@ export function Library() {
                     </div>
                 </div>
             </div>
+            <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Biblioteca" sections={helpLibrary} />
+            </>
         );
     }
 
     return (
+        <>
         <div className="p-8 space-y-6 h-full flex flex-col bg-slate-950">
             {/* Header */}
             <div className="flex justify-between items-end">
@@ -997,6 +1005,8 @@ export function Library() {
                      </div>
                  )}
              </div>
-         </div>
+        </div>
+        <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Biblioteca" sections={helpLibrary} />
+        </>
     );
 }

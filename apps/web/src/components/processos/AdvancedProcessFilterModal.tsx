@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Filter, Plus, Trash2, X } from 'lucide-react';
 import { clsx } from 'clsx';
+import { DateRangePicker } from '../ui/DateRangePicker';
 
 export type ProcessAdvancedFilterCombinator = 'AND' | 'OR';
 
@@ -456,51 +457,68 @@ export function AdvancedProcessFilterModal({
         <div className={clsx('md:col-span-4', !showValue && 'hidden md:block')}>
           <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Valor</label>
           <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-            {showValue && def.kind === 'enum' ? (
+            {showValue && def.kind === 'date' && showBetween ? (
+              <div className="md:col-span-2">
+                <DateRangePicker
+                  value={{ from: String(rule.value || ''), to: String(rule.value2 || '') }}
+                  onChange={(next) =>
+                    updateRule(rule.id, {
+                      value: String(next.from || ''),
+                      value2: String(next.to || ''),
+                    })
+                  }
+                  placeholder="Selecionar período"
+                />
+              </div>
+            ) : (
               <>
-                <select
-                  value={rule.value || ''}
-                  onChange={(e) => updateRule(rule.id, { value: e.target.value })}
-                  className={clsx(
-                    'w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500',
-                    showBetween && 'md:col-span-1',
-                  )}
-                >
-                  <option value="">Selecione...</option>
-                  {enumOptions.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : showValue ? (
-              <input
-                type={def.kind === 'number' ? 'number' : def.kind === 'date' ? 'date' : 'text'}
-                value={rule.value || ''}
-                onChange={(e) => updateRule(rule.id, { value: e.target.value })}
-                placeholder={
-                  rule.operator === 'in' || rule.operator === 'not_in'
-                    ? 'Separe por vírgula'
-                    : def.placeholder || 'Digite...'
-                }
-                step={def.kind === 'number' ? '0.01' : undefined}
-                className={clsx(
-                  'w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500',
-                  showBetween && 'md:col-span-1',
-                )}
-              />
-            ) : null}
+                {showValue && def.kind === 'enum' ? (
+                  <>
+                    <select
+                      value={rule.value || ''}
+                      onChange={(e) => updateRule(rule.id, { value: e.target.value })}
+                      className={clsx(
+                        'w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500',
+                        showBetween && 'md:col-span-1',
+                      )}
+                    >
+                      <option value="">Selecione...</option>
+                      {enumOptions.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : showValue ? (
+                  <input
+                    type={def.kind === 'number' ? 'number' : def.kind === 'date' ? 'date' : 'text'}
+                    value={rule.value || ''}
+                    onChange={(e) => updateRule(rule.id, { value: e.target.value })}
+                    placeholder={
+                      rule.operator === 'in' || rule.operator === 'not_in'
+                        ? 'Separe por vírgula'
+                        : def.placeholder || 'Digite...'
+                    }
+                    step={def.kind === 'number' ? '0.01' : undefined}
+                    className={clsx(
+                      'w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500',
+                      showBetween && 'md:col-span-1',
+                    )}
+                  />
+                ) : null}
 
-            {showBetween && (
-              <input
-                type={def.kind === 'number' ? 'number' : def.kind === 'date' ? 'date' : 'text'}
-                value={rule.value2 || ''}
-                onChange={(e) => updateRule(rule.id, { value2: e.target.value })}
-                placeholder="até"
-                step={def.kind === 'number' ? '0.01' : undefined}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+                {showBetween && (
+                  <input
+                    type={def.kind === 'number' ? 'number' : def.kind === 'date' ? 'date' : 'text'}
+                    value={rule.value2 || ''}
+                    onChange={(e) => updateRule(rule.id, { value2: e.target.value })}
+                    placeholder="até"
+                    step={def.kind === 'number' ? '0.01' : undefined}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                )}
+              </>
             )}
           </div>
         </div>

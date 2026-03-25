@@ -73,6 +73,22 @@ function parseDate(value: unknown) {
     return date;
 }
 
+function parseDateEdge(value: unknown, edge: 'start' | 'end') {
+    const raw = asString(value).trim();
+    if (!raw) return null;
+
+    // Prefer yyyy-mm-dd coming from <input type="date">
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const dt =
+            edge === 'start'
+                ? new Date(`${raw}T00:00:00.000Z`)
+                : new Date(`${raw}T23:59:59.999Z`);
+        return Number.isFinite(dt.getTime()) ? dt : null;
+    }
+
+    return parseDate(raw);
+}
+
 function buildStringFilter(operator: Operator, value: string) {
     const v = value.trim();
     if (!v && operator !== 'is_empty' && operator !== 'is_not_empty') return null;
@@ -122,8 +138,8 @@ function buildDateFilter(operator: Operator, value: unknown, value2: unknown) {
     if (operator === 'is_not_empty') return { not: null };
 
     if (operator === 'between') {
-        const from = parseDate(value);
-        const to = parseDate(value2);
+        const from = parseDateEdge(value, 'start');
+        const to = parseDateEdge(value2, 'end');
         if (!from || !to) return null;
         return { gte: from, lte: to };
     }
@@ -142,15 +158,16 @@ function buildDateFilter(operator: Operator, value: unknown, value2: unknown) {
         return { equals: date };
     }
 
-    const date = parseDate(value);
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(asString(value).trim());
+    const date = isDateOnly ? parseDateEdge(value, operator === 'after' ? 'end' : 'start') : parseDate(value);
     if (!date) return null;
 
     if (operator === 'before') return { lt: date };
     if (operator === 'after') return { gt: date };
     if (operator === 'eq') return { equals: date };
     if (operator === 'neq') return { not: date };
-    if (operator === 'gte') return { gte: date };
-    if (operator === 'lte') return { lte: date };
+    if (operator === 'gte') return { gte: isDateOnly ? parseDateEdge(value, 'start')! : date };
+    if (operator === 'lte') return { lte: isDateOnly ? parseDateEdge(value, 'end')! : date };
 
     return null;
 }

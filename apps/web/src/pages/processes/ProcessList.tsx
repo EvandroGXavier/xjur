@@ -32,6 +32,7 @@ import { masks } from '../../utils/masks';
 import { DataGrid } from '../../components/ui/DataGrid';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
+import { DateRangePicker } from '../../components/ui/DateRangePicker';
 import {
     AdvancedProcessFilterModal,
     countActiveProcessAdvancedFilters,
@@ -110,6 +111,7 @@ export function ProcessList() {
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearchTerm = useDebouncedValue(searchTerm, 250);
     const [statusFilter, setStatusFilter] = useState<'ATIVO' | 'INATIVO' | 'ALL'>('ATIVO');
+    const [updatedRange, setUpdatedRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
     const [includedTags, setIncludedTags] = useState<string[]>([]);
     const [excludedTags, setExcludedTags] = useState<string[]>([]);
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null); // For dropdown
@@ -150,7 +152,7 @@ export function ProcessList() {
             controller.abort();
             window.removeEventListener('focus', handleFocus);
         };
-    }, [includedTags, excludedTags, statusFilter, debouncedSearchTerm, advancedFilterPayload]);
+    }, [includedTags, excludedTags, statusFilter, debouncedSearchTerm, advancedFilterPayload, updatedRange.from, updatedRange.to]);
 
     useEffect(() => {
         if (!showAdvancedFilters) return;
@@ -180,6 +182,10 @@ export function ProcessList() {
             if (statusFilter !== 'ALL') params.status = statusFilter;
             if (debouncedSearchTerm?.trim()) params.search = debouncedSearchTerm.trim();
             if (advancedFilterPayload) params.advancedFilter = advancedFilterPayload;
+            if (updatedRange.from && updatedRange.to) {
+                params.updatedFrom = updatedRange.from;
+                params.updatedTo = updatedRange.to;
+            }
             
             const response = await api.get('/processes', { signal, params });
             console.log('Processos carregados:', response.data);
@@ -290,6 +296,17 @@ export function ProcessList() {
                             <option value="INATIVO">Somente Inativos</option>
                             <option value="ALL">Mostrar Todos</option>
                         </select>
+                        <DateRangePicker
+                            value={updatedRange}
+                            onChange={(next) =>
+                                setUpdatedRange({
+                                    from: String(next.from || ''),
+                                    to: String(next.to || ''),
+                                })
+                            }
+                            placeholder="Atualizados (período)"
+                            className="w-full md:w-[280px]"
+                        />
                         <div className="hidden md:block h-6 w-px bg-slate-800"></div>
                         <button
                             onClick={() => setShowAdvancedFilters(true)}

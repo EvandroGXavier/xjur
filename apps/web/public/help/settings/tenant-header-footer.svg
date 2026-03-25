@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="420" rx="22" fill="url(#bg)"/>
+
+  <text x="44" y="56" fill="#e2e8f0" font-family="Inter, Arial" font-size="26" font-weight="700">
+    Cabecalho e Rodape (por tenant)
+  </text>
+  <text x="44" y="86" fill="#94a3b8" font-family="Inter, Arial" font-size="16">
+    Configure uma vez e o sistema aplica automaticamente ao gerar documentos.
+  </text>
+
+  <g filter="url(#shadow)">
+    <rect x="44" y="120" width="520" height="250" rx="18" fill="url(#card)" stroke="#334155"/>
+    <text x="76" y="160" fill="#cbd5e1" font-family="Inter, Arial" font-size="16" font-weight="700">
+      1) Configurar em Configuracoes &gt; Minha Empresa
+    </text>
+    <rect x="76" y="182" width="456" height="74" rx="14" fill="#0f172a" stroke="#334155"/>
+    <text x="96" y="212" fill="#c7d2fe" font-family="Inter, Arial" font-size="14" font-weight="700">
+      Cabecalho
+    </text>
+    <text x="96" y="236" fill="#94a3b8" font-family="Inter, Arial" font-size="13">
+      {{tenant.name}}  |  Processo: {{process.cnj}}
+    </text>
+
+    <rect x="76" y="270" width="456" height="74" rx="14" fill="#0f172a" stroke="#334155"/>
+    <text x="96" y="300" fill="#c7d2fe" font-family="Inter, Arial" font-size="14" font-weight="700">
+      Rodape
+    </text>
+    <text x="96" y="324" fill="#94a3b8" font-family="Inter, Arial" font-size="13">
+      Contato / Data / Assinatura  ({{today.fullDate}})
+    </text>
+  </g>
+
+  <g>
+    <path d="M600 250 C 650 250 650 250 700 250" fill="none" stroke="#6366f1" stroke-width="6" stroke-linecap="round"/>
+    <path d="M700 250 L 684 238 L 684 262 Z" fill="#6366f1"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="716" y="120" width="440" height="250" rx="18" fill="url(#card)" stroke="#334155"/>
+    <text x="748" y="160" fill="#cbd5e1" font-family="Inter, Arial" font-size="16" font-weight="700">
+      2) Gerar documento pela Biblioteca
+    </text>
+    <text x="748" y="188" fill="#94a3b8" font-family="Inter, Arial" font-size="14">
+      Ao gerar, o sistema injeta cabecalho e rodape no HTML final.
+    </text>
+
+    <rect x="748" y="214" width="376" height="34" rx="10" fill="#4f46e5" opacity="0.16" stroke="#6366f1"/>
+    <text x="770" y="237" fill="#c7d2fe" font-family="Inter, Arial" font-size="13" font-weight="700">
+      Resultado: Documento (Word Online / Visual Law)
+    </text>
+
+    <rect x="748" y="264" width="376" height="88" rx="14" fill="#0f172a" stroke="#334155"/>
+    <text x="770" y="292" fill="#94a3b8" font-family="Inter, Arial" font-size="13">
+      [Cabecalho do tenant]
+    </text>
+    <text x="770" y="318" fill="#94a3b8" font-family="Inter, Arial" font-size="13">
+      [Conteudo do modelo + variaveis]
+    </text>
+    <text x="770" y="344" fill="#94a3b8" font-family="Inter, Arial" font-size="13">
+      [Rodape do tenant]
+    </text>
+  </g>
+</svg>
+

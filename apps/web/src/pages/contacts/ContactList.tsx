@@ -287,7 +287,7 @@ export function ContactList() {
             <button 
                 onClick={() => setIsHelpOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition border border-slate-700"
-                title="Ajuda (CTRL + F1)"
+                title="Ajuda (F1)"
             >
                 <HelpCircle size={20} /> Ajuda
             </button>

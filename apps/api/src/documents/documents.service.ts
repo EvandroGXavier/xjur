@@ -144,6 +144,49 @@ export class DocumentsService {
   }
 
   // =========================
+  // Tenant Header/Footer (por empresa)
+  // =========================
+
+  private readonly tenantHeaderKey = 'HEADER_HTML';
+  private readonly tenantFooterKey = 'FOOTER_HTML';
+
+  async getTenantDocumentLayout(tenantId: string) {
+    const list = await this.prisma.tenantDocumentSetting.findMany({
+      where: { tenantId, key: { in: [this.tenantHeaderKey, this.tenantFooterKey] } },
+      select: { key: true, value: true },
+    });
+
+    const byKey = new Map(list.map((x: any) => [String(x.key), String(x.value || '')]));
+    return {
+      headerHtml: byKey.get(this.tenantHeaderKey) || '',
+      footerHtml: byKey.get(this.tenantFooterKey) || '',
+    };
+  }
+
+  async updateTenantDocumentLayout(tenantId: string, body: { headerHtml?: string; footerHtml?: string }) {
+    const headerHtml = body.headerHtml !== undefined ? String(body.headerHtml || '') : undefined;
+    const footerHtml = body.footerHtml !== undefined ? String(body.footerHtml || '') : undefined;
+
+    if (headerHtml !== undefined) {
+      await this.prisma.tenantDocumentSetting.upsert({
+        where: { tenantId_key: { tenantId, key: this.tenantHeaderKey } },
+        update: { value: headerHtml },
+        create: { tenantId, key: this.tenantHeaderKey, value: headerHtml },
+      });
+    }
+
+    if (footerHtml !== undefined) {
+      await this.prisma.tenantDocumentSetting.upsert({
+        where: { tenantId_key: { tenantId, key: this.tenantFooterKey } },
+        update: { value: footerHtml },
+        create: { tenantId, key: this.tenantFooterKey, value: footerHtml },
+      });
+    }
+
+    return this.getTenantDocumentLayout(tenantId);
+  }
+
+  // =========================
   // Categories (tenant)
   // =========================
 
@@ -742,14 +785,55 @@ export class DocumentsService {
     return String(value);
   }
 
-  async renderTemplate(
-    id: string,
+  private applyReplacementsToHtml(html: string, replacements: Record<string, string>) {
+    let content = html;
+    for (const [key, value] of Object.entries(replacements)) {
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      content = content.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'gi'), value);
+      content = content.replace(new RegExp(`\\[${escapedKey}\\]`, 'gi'), value);
+    }
+    return content;
+  }
+
+  private async injectTenantHeaderFooterHtml(tenantId: string, html: string) {
+    const raw = String(html || '');
+    if (!raw.trim()) return raw;
+    if (raw.includes('data-tenant-header="1"') || raw.includes('data-tenant-footer="1"')) return raw;
+
+    const { headerHtml, footerHtml } = await this.getTenantDocumentLayout(tenantId);
+    const header = String(headerHtml || '').trim();
+    const footer = String(footerHtml || '').trim();
+    if (!header && !footer) return raw;
+
+    const headerBlock = header
+      ? `
+<div data-tenant-header="1" style="font-family: Calibri, Arial, sans-serif; font-size: 10.5pt; color: #0f172a; border: 1px solid #e2e8f0; background: #f8fafc; padding: 10px 12px; border-radius: 10px; margin: 0 0 14px 0;">
+${header}
+</div>
+`.trim()
+      : '';
+
+    const footerBlock = footer
+      ? `
+<div data-tenant-footer="1" style="font-family: Calibri, Arial, sans-serif; font-size: 10pt; color: #334155; border-top: 1px solid #e2e8f0; margin: 18px 0 0 0; padding: 10px 0 0 0;">
+${footer}
+</div>
+`.trim()
+      : '';
+
+    return [headerBlock, raw, footerBlock].filter(Boolean).join('\n');
+  }
+
+  private async buildTemplateReplacements(
     tenantId: string,
     contactId: string,
     processId?: string,
     userId?: string,
   ) {
-    const template = await this.findTemplate(id, tenantId);
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId },
+      select: { id: true, name: true, document: true },
+    });
 
     const contact = await this.prisma.contact.findFirst({
       where: { id: contactId, tenantId },
@@ -817,6 +901,10 @@ export class DocumentsService {
     const add = (key: string, value: any) => {
       replacements[key] = this.toStr(value);
     };
+
+    // Tenant
+    add('tenant.name', tenant?.name || '');
+    add('tenant.document', tenant?.document || '');
 
     // Dot-keys (compatíveis com editor moderno)
     add('contact.name', contact.name);
@@ -896,14 +984,24 @@ export class DocumentsService {
     add('numero_processo', process?.cnj || '');
     add('nome_cliente', contact.name);
 
-    let content = template.content;
-    for (const [key, value] of Object.entries(replacements)) {
-      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      content = content.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, 'gi'), value);
-      content = content.replace(new RegExp(`\\[${escapedKey}\\]`, 'gi'), value);
-    }
+    return { replacements };
+  }
 
-    return { content };
+  async renderTemplate(
+    id: string,
+    tenantId: string,
+    contactId: string,
+    processId?: string,
+    userId?: string,
+  ) {
+    const template = await this.findTemplate(id, tenantId);
+    const { replacements } = await this.buildTemplateReplacements(tenantId, contactId, processId, userId);
+
+    let html = template.content;
+    html = await this.injectTenantHeaderFooterHtml(tenantId, html);
+    html = this.applyReplacementsToHtml(html, replacements);
+
+    return { content: html };
   }
 
   async generateM365Document(
@@ -914,11 +1012,6 @@ export class DocumentsService {
     userId?: string,
     options?: { timelineId?: string; content?: string },
   ) {
-    const overrideContent = String(options?.content || '').trim();
-    const htmlContent = overrideContent
-      ? overrideContent
-      : (await this.renderTemplate(id, tenantId, contactId, processId, userId)).content;
-
     const requestedTimelineId = options?.timelineId ? String(options.timelineId) : null;
     let timeline: any = null;
 
@@ -935,6 +1028,13 @@ export class DocumentsService {
     }
 
     const template = await this.findTemplate(id, tenantId);
+    const overrideContent = String(options?.content || '').trim();
+    const { replacements } = await this.buildTemplateReplacements(tenantId, contactId, processId, userId);
+
+    let htmlContent = overrideContent ? overrideContent : template.content;
+    htmlContent = await this.injectTenantHeaderFooterHtml(tenantId, htmlContent);
+    htmlContent = this.applyReplacementsToHtml(htmlContent, replacements);
+
     const documentRecord = await this.prisma.documentHistory.create({
       data: {
         title: `${template.title} (Word Online)`,

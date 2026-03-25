@@ -100,6 +100,8 @@ export class ProcessesController {
         @Query('excludedTags') excludedTags?: string,
         @Query('status') status?: string,
         @Query('advancedFilter') advancedFilter?: string,
+        @Query('updatedFrom') updatedFrom?: string,
+        @Query('updatedTo') updatedTo?: string,
     ) {
         return this.processesService.findAll({ 
             tenantId: user.tenantId, 
@@ -108,6 +110,8 @@ export class ProcessesController {
             excludedTags, 
             status,
             advancedFilter,
+            updatedFrom,
+            updatedTo,
         });
     }
 

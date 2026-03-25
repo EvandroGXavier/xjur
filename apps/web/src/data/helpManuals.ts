@@ -57,6 +57,13 @@ export const helpProcesses: HelpSection[] = [
     content: 'Sempre que houver movimentações, você pode atualizar a etapa no sistema para <i>Ativo</i>, <i>Arquivado</i>, <i>Suspenso</i>, etc. Na listagem de processos, clique no ícone de lápis para atualizar ou adicionar andamentos.',
   },
   {
+    title: 'Filtro por Período (Calendário Duplo)',
+    content:
+      'Na listagem de processos, você pode filtrar por um <b>período</b> usando o campo <b>"Atualizados (período)"</b> (calendário duplo).<br/><br/>' +
+      '<b>Presets rápidos:</b> Hoje, Esta semana, Semana passada, Este mês, Mês passado, Este ano, Ano passado, etc.<br/><br/>' +
+      '<b>Filtro Avançado:</b> no botão <b>Filtros</b>, campos de data como <b>Distribuição</b>, <b>Criado em</b> e <b>Atualizado em</b> suportam o operador <b>entre</b> com o mesmo calendário de período.',
+  },
+  {
     title: 'Atalhos Rápidos',
     content: '<ul><li><b>F2 ou +</b>: Adicionar Novo Processo / Novo Andamento.</li><li><b>ESC</b>: Fechar/Cancelar a ação atual.</li><li><b>Duplo Clique</b>: Ao aplicar um clique duplo na tabela, o processo se abrirá instantaneamente.</li></ul>',
   }
@@ -118,6 +125,16 @@ export const helpFinancial: HelpSection[] = [
     content: 'Acesse a visão "Contas Bancárias" para cadastrar caixas, cofre e contas reais. Ao liquidar uma transação, o valor entra ou sai diretamente do saldo dessa conta.',
   },
   {
+    title: 'Filtro por Período (Calendário Duplo)',
+    content:
+      'Em <b>Transações</b>, abra <b>Filtros</b> e use os períodos:<ul>' +
+      '<li><b>Período de lançamento</b> (quando o registro foi criado)</li>' +
+      '<li><b>Período de vencimento</b> (quando deveria vencer)</li>' +
+      '<li><b>Período de pagamento</b> (quando foi liquidado)</li>' +
+      '</ul>' +
+      'O seletor usa <b>calendário duplo</b> e <b>presets</b> (Hoje, Esta semana, Este mês, Este ano, etc.). Você pode combinar com filtros de valor, categoria, tags e status.',
+  },
+  {
     title: 'Agilidade Financeira',
     content: '<ul><li><b>F2 ou +</b>: Cria rapidamente uma Nova Transação / Contas a Pagar ou Receber.</li><li><b>ESC</b>: Fecha modais e cancela lançamentos.</li><li><b>Duplo Clique</b>: Dois cliques na listagem abre diretamente a janela da transação para edição e foca o Valor.</li><li><b>Salvar vs Salvar e Sair</b>: Você pode apenas "Salvar" para aplicar uma regra e manter a janela aberta lançando subitens.</li></ul>',
   }
@@ -155,6 +172,180 @@ export const helpMicrosoft365: HelpSection[] = [
   {
     title: 'Problemas Comuns e Solucao Rapida',
     content: '<ul><li><b>Falha ao autenticar:</b> revise Tenant ID, Client ID, Client Secret e validade do segredo.</li><li><b>Pasta nao localizada:</b> preencha tambem o <b>Drive ID</b> da biblioteca.</li><li><b>Sem permissao para criar:</b> confirme <code>Files.ReadWrite.All</code> e <code>Sites.ReadWrite.All</code> com consentimento do admin.</li><li><b>Teste descobre o Drive automaticamente:</b> salve o valor retornado para evitar novas buscas.</li><li><b>Diferenca entre OneDrive e SharePoint:</b> ambos funcionam, desde que a biblioteca e a pasta raiz estejam corretas.</li></ul>'
+  },
+];
+
+const helpVideoEmbed = (envKey: string, title: string) => {
+  const raw = String((import.meta as any)?.env?.[envKey] || '').trim();
+  if (!raw) {
+    return `<div style="border:1px dashed #475569; border-radius: 12px; padding: 12px; background: rgba(15, 23, 42, 0.55); color:#cbd5e1;">
+      <b>Vídeo:</b> ${title}<br/>
+      <span style="color:#94a3b8;">(Configure <code>${envKey}</code> com um link de embed ou MP4 para aparecer aqui.)</span>
+    </div>`;
+  }
+
+  const isMp4 = raw.toLowerCase().endsWith('.mp4');
+  if (isMp4) {
+    return `<video controls style="width:100%; border-radius:12px; border:1px solid #334155; margin-top: 8px;" src="${raw}"></video>`;
+  }
+
+  return `<div style="position:relative; width:100%; padding-top:56.25%; border-radius:12px; overflow:hidden; border:1px solid #334155; margin-top: 8px;">
+    <iframe src="${raw}" title="${title}" style="position:absolute; inset:0; width:100%; height:100%; border:0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+  </div>`;
+};
+
+export const helpSettingsMyTenant: HelpSection[] = [
+  {
+    title: 'Visão Geral (Minha Empresa)',
+    content:
+      'A aba <b>Minha Empresa</b> centraliza as configurações que valem para todo o seu escritório (tenant), como informações cadastrais e padrões usados na geração de documentos.',
+  },
+  {
+    title: 'Cabeçalho e Rodapé das Peças (por tenant)',
+    content:
+      'Você pode definir um <b>cabeçalho</b> e um <b>rodapé</b> padrão para serem inseridos automaticamente em <b>todas as peças</b> geradas a partir de modelos (do sistema ou do escritório).<br/><br/>' +
+      '<b>Onde fica:</b> <b>Configurações</b> → <b>Minha Empresa</b> → <b>Cabeçalho e Rodapé das Peças</b>.<br/><br/>' +
+      '<b>Como usar:</b><ol>' +
+      '<li>Preencha o editor do <b>Cabeçalho</b> com identificação do escritório e dados essenciais.</li>' +
+      '<li>Preencha o editor do <b>Rodapé</b> com contato, data e assinatura.</li>' +
+      '<li>Clique em <b>Salvar</b> para aplicar ao seu tenant.</li>' +
+      '<li>Gere um documento pela Biblioteca: o cabeçalho/rodapé será inserido automaticamente.</li>' +
+      '</ol><br/>' +
+      '<b>Variáveis úteis:</b> <code>{{tenant.name}}</code>, <code>{{tenant.document}}</code>, <code>{{process.cnj}}</code>, <code>{{process.district}}</code>, <code>{{process.uf}}</code>, <code>{{contact.name}}</code>, <code>{{today.fullDate}}</code>.<br/><br/>' +
+      '<img src="/help/settings/tenant-header-footer.svg" alt="Cabeçalho e rodapé por tenant" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+  },
+  {
+    title: 'Exemplo pronto (copiar e ajustar)',
+    content:
+      '<pre><code>&lt;p&gt;&lt;strong&gt;{{tenant.name}}&lt;/strong&gt; — CNPJ/CPF {{tenant.document}}&lt;/p&gt;\\n' +
+      '&lt;p&gt;Processo: {{process.cnj}} — {{process.district}}/{{process.uf}}&lt;/p&gt;\\n' +
+      '\\n' +
+      '&lt;p&gt;Cliente: {{contact.name}} — CPF/CNPJ {{contact.document}}&lt;/p&gt;\\n' +
+      '&lt;p&gt;Data: {{today.fullDate}}&lt;/p&gt;</code></pre>',
+  },
+  {
+    title: 'Vídeo rápido (configuração)',
+    content: helpVideoEmbed('VITE_HELP_VIDEO_SETTINGS_HEADERFOOTER', 'Cabeçalho e Rodapé por tenant'),
+  },
+];
+
+export const helpSettingsTags: HelpSection[] = [
+  {
+    title: 'Visão Geral (Etiquetas / Tags)',
+    content:
+      'As <b>Tags globais</b> permitem padronizar marcações no sistema inteiro. Você cria a tag uma vez e define em quais módulos ela pode aparecer.<br/><br/>' +
+      '<b>Regra principal:</b> cada módulo só enxerga tags que estiverem marcadas para ele (ex.: tags com escopo <b>Biblioteca</b> só aparecem na Biblioteca).',
+  },
+  {
+    title: 'Como criar/editar uma Tag',
+    content:
+      '<ol>' +
+      '<li>Clique em <b>Nova Tag</b>.</li>' +
+      '<li>Defina <b>Nome</b> (ex.: Cível, CPC, Contrato, Imóvel).</li>' +
+      '<li>Escolha uma <b>cor</b> (identificação visual).</li>' +
+      '<li>Em <b>Permitir uso em</b>, marque os módulos (Contato, Processo, Financeiro, Tarefa, Atendimento, Biblioteca).</li>' +
+      '<li>Salve e teste no módulo escolhido.</li>' +
+      '</ol><br/>' +
+      '<b>Dica de padronização:</b> prefira nomes curtos e consistentes. Na interface, o sistema pode exibir com <code>#</code> automaticamente (ex.: <code>#Cível</code>).',
+  },
+  {
+    title: 'Exemplo prático (Biblioteca)',
+    content:
+      'Para organizar modelos na Biblioteca, crie tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b> e marque o escopo <b>Biblioteca</b>. Assim, ao editar um modelo, você verá apenas as tags permitidas para a Biblioteca.<br/><br/>' +
+      '<img src="/help/library/library-tags.svg" alt="Exemplo de tags na Biblioteca" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+  },
+  {
+    title: 'Vídeo rápido (tags por módulo)',
+    content: helpVideoEmbed('VITE_HELP_VIDEO_SETTINGS_TAGS', 'Tags globais por módulo'),
+  },
+];
+
+export const helpLibrary: HelpSection[] = [
+  {
+    title: 'Visão Geral (Biblioteca de Modelos)',
+    content:
+      'A <b>Biblioteca</b> centraliza suas <b>minutas</b>, <b>contratos</b> e <b>peças</b> para reutilização. Você pode manter modelos do <b>Escritório</b> (editáveis) e também usar modelos do <b>Sistema</b> (base/Visual Law).<br/><br/><b>Objetivo:</b> reduzir retrabalho e padronizar a redação, mantendo variáveis e estrutura prontas para o Word Online.<br/><br/>' +
+      '<img src="/help/library/library-overview.svg" alt="Visão rápida da Biblioteca" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+  },
+  {
+    title: 'Buscar e Abrir Modelos',
+    content:
+      'Use a barra <b>"Buscar modelos…"</b> para filtrar por <b>título</b>, <b>descrição</b> e <b>tags</b>. Clique no card do modelo para abrir o editor e visualizar/editar (quando permitido).',
+  },
+  {
+    title: 'Modelos do Sistema x Modelos do Escritório',
+    content:
+      '<b>Modelo do Sistema</b> aparece com selo <b>Sistema</b> e serve como base. Normalmente ele não é editável pelo usuário.<br/><br/>Para adaptar ao seu escritório, clique em <b>"Personalizar"</b>. Isso cria uma <b>cópia editável</b> (selo <b>Escritório</b>) mantendo a estrutura original.<br/><br/>' +
+      '<img src="/help/library/library-personalizar.svg" alt="Como personalizar um modelo do Sistema" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+  },
+  {
+    title: 'Criar um Novo Modelo (Escritório)',
+    content:
+      'Clique em <b>"Novo Modelo"</b> e preencha:<ul><li><b>Título</b> e <b>Descrição</b> (orientações jurídicas internas)</li><li><b>Tags</b> para facilitar busca e padronização</li><li><b>Conteúdo</b> no editor (Visual Law/Word Online)</li></ul><br/>Ao final, clique em <b>"Salvar Modelo"</b>.',
+  },
+  {
+    title: 'Tags (Pesquisa rápida)',
+    content:
+      'As <b>Tags</b> servem para organizar e encontrar modelos rapidamente. Você pode:<ul><li>Digitar a tag e pressionar <b>Enter</b> para adicionar</li><li>Usar tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b>, <b>Execução</b>, <b>Consumidor</b></li></ul><br/><b>Dica:</b> mantenha poucas tags bem consistentes (padronização) em vez de muitas variações.<br/><br/>' +
+      '<img src="/help/library/library-tags.svg" alt="Exemplo de padronização de tags" style="width:100%; border-radius:12px; border:1px solid #334155;" />' +
+      '<br/><br/><b>Exemplo pronto:</b><br/><code>#Cível #CPC #Contestação</code> (peças)<br/><code>#Contrato #Imóvel #CompraEVenda</code> (contratos)',
+  },
+  {
+    title: 'Variáveis Dinâmicas (Automação)',
+    content:
+      'No editor, use as <b>Variáveis Dinâmicas</b> para automatizar preenchimentos (ex.: <code>{{contact.name}}</code>, <code>{{process.cnj}}</code>, <code>{{today.fullDate}}</code>).<br/><br/>Quando o modelo for usado para gerar documento, o sistema substitui automaticamente as variáveis com dados reais.<br/><br/>' +
+      '<img src="/help/library/library-variaveis.svg" alt="Exemplo de variáveis dinâmicas" style="width:100%; border-radius:12px; border:1px solid #334155;" />' +
+      '<br/><br/><b>Exemplo pronto (copiar e colar):</b><pre><code>&lt;p&gt;Cliente: {{contact.name}} — CPF/CNPJ {{contact.document}}&lt;/p&gt;\n&lt;p&gt;Processo: {{process.cnj}} — {{process.district}}/{{process.uf}}&lt;/p&gt;\n&lt;p&gt;Data: {{today.fullDate}}&lt;/p&gt;</code></pre>',
+  },
+  {
+    title: 'Vídeos rápidos (práticos)',
+    content:
+      '<b>Personalizar modelo do Sistema</b>' +
+      helpVideoEmbed('VITE_HELP_VIDEO_LIBRARY_PERSONALIZAR', 'Personalizar modelo do Sistema') +
+      '<br/><br/><b>Criar e salvar modelo (Escritório)</b>' +
+      helpVideoEmbed('VITE_HELP_VIDEO_LIBRARY_CRIAR', 'Criar e salvar modelo (Escritório)') +
+      '<br/><br/><b>Usar variáveis dinâmicas</b>' +
+      helpVideoEmbed('VITE_HELP_VIDEO_LIBRARY_VARIAVEIS', 'Usar variáveis dinâmicas'),
+  },
+  {
+    title: 'Avançado (Metadata / Visual Law)',
+    content:
+      'Em <b>"Mostrar avançado"</b>, você pode manter uma <b>metadata em JSON</b> com seções, ajudas e comentários internos (não impressos). Isso ajuda o time a preencher corretamente e mantém um padrão de qualidade nas peças.',
+  },
+  {
+    title: 'Cabeçalho e Rodapé (Padrão do Escritório)',
+    content:
+      'Você pode definir um <b>cabeçalho</b> e um <b>rodapé</b> padrão por empresa (tenant). Esse conteúdo é inserido automaticamente quando você gera um documento usando qualquer modelo (do Sistema ou do Escritório).<br/><br/>' +
+      '<b>Onde configurar:</b> <b>Configurações</b> → <b>Minha Empresa</b> → <b>Cabeçalho e Rodapé das Peças</b>.<br/><br/>' +
+      '<b>Variáveis úteis:</b> <code>{{tenant.name}}</code>, <code>{{tenant.document}}</code>, <code>{{process.cnj}}</code>, <code>{{process.district}}</code>, <code>{{contact.name}}</code>, <code>{{today.fullDate}}</code>.<br/><br/>' +
+      '<b>Dica:</b> mantenha o cabeçalho enxuto (identificação + dados do processo) e o rodapé com contato/data/assinatura.',
+  },
+  {
+    title: 'Histórico Gerado',
+    content:
+      'Na aba <b>"Histórico Gerado"</b> você acompanha documentos já criados a partir dos modelos (rascunho/finalizado), com data de criação e status.<br/><br/>' +
+      '<img src="/help/library/library-historico.svg" alt="Histórico gerado" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+  },
+  {
+    title: 'Atalhos',
+    content:
+      '<ul><li><b>F2</b> (ou <b>+</b> no teclado numérico): Novo Modelo</li><li><b>ESC</b>: Fechar/cancelar editor</li><li><b>F1</b>: Abrir este manual</li></ul>',
+  },
+  {
+    title: 'SuperAdmin (opcional)',
+    content:
+      'Se você for <b>SuperAdmin</b>, a Biblioteca também permite um <b>CRUD completo</b> dos <b>Modelos do Sistema</b> (templates globais). Usuários comuns não veem nem editam esses recursos.<br/><br/>' +
+      '<b>Recursos disponíveis:</b><ul>' +
+      '<li><b>Novo Sistema</b>: cria um modelo global do sistema (exige <b>System Key</b> única e estável).</li>' +
+      '<li><b>Salvar (Sistema)</b>: atualiza o modelo do sistema diretamente.</li>' +
+      '<li><b>Excluir (Sistema)</b>: remove um modelo global do sistema.</li>' +
+      '<li><b>Personalizar</b>: cria uma cópia editável do sistema para o seu escritório (modelo do tenant).</li>' +
+      '<li><b>Sync Sistema</b>: força sincronização a partir do código (atenção: pode sobrescrever alterações manuais no modelo do sistema).</li>' +
+      '</ul><br/>' +
+      '<b>Boas práticas:</b><ul>' +
+      '<li>Defina o <b>System Key</b> com padrão (ex.: <code>CHA_CONTRATO_HONORARIOS</code>) e evite nomes ambíguos.</li>' +
+      '<li>Use <b>Personalizar</b> quando a mudança for específica do escritório; reserve <b>Salvar (Sistema)</b> para ajustes globais.</li>' +
+      '</ul>',
   },
 ];
 
@@ -247,6 +438,6 @@ export const helpTelegram: HelpSection[] = [
   },
   {
     title: 'Atalhos e Facilidades',
-    content: '<ul><li><b>CTRL + F1</b>: Abre este manual de ajuda em qualquer tela.</li><li><b>Botão de "Connect"</b>: Força a reinicialização do Webhook caso o bot pare de responder.</li><li><b>Whitelisting</b>: Você pode configurar no DrX-Claw quais usuários ou grupos de chat o bot tem permissão para responder.</li></ul>',
+    content: '<ul><li><b>F1</b>: Abre este manual de ajuda em qualquer tela.</li><li><b>Botão de "Connect"</b>: Força a reinicialização do Webhook caso o bot pare de responder.</li><li><b>Whitelisting</b>: Você pode configurar no DrX-Claw quais usuários ou grupos de chat o bot tem permissão para responder.</li></ul>',
   }
 ];

@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { HelpModal, useHelpModal } from "../components/HelpModal";
-import { helpMicrosoft365 } from "../data/helpManuals";
+import { helpMicrosoft365, helpSettingsMyTenant, helpSettingsTags } from "../data/helpManuals";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { DrxClawTab } from "../components/settings/DrxClawTab";
 import { BackupTab } from "../components/settings/BackupTab";
@@ -33,6 +33,7 @@ import { TagsTab } from "../components/settings/TagsTab";
 import { TabButton } from "../components/ui/TabButton";
 import { getAuthPersistence, getUser, setUser } from "../auth/authStorage";
 import { applyThemePreference, setStoredThemePreference, type ThemePreference } from "../utils/theme";
+import { TenantDocumentLayoutSettings } from "../components/documents/TenantDocumentLayoutSettings";
 
 // --- COMPONENTS ---
 
@@ -545,6 +546,20 @@ export function Settings() {
   const [testingMicrosoft365, setTestingMicrosoft365] = useState(false);
   const [microsoft365TestResult, setMicrosoft365TestResult] = useState<any>(null);
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+
+  const settingsHelp = useMemo(() => {
+    switch (activeTab) {
+      case "my-tenant":
+        return { title: "Minha Empresa", sections: helpSettingsMyTenant };
+      case "tags":
+        return { title: "Etiquetas (Tags)", sections: helpSettingsTags };
+      case "help":
+      case "options":
+        return { title: "Integração Microsoft 365", sections: helpMicrosoft365 };
+      default:
+        return { title: "Configurações", sections: helpMicrosoft365 };
+    }
+  }, [activeTab]);
 
   // DATA
   const [tenants, setTenants] = useState<any[]>([]);
@@ -1096,6 +1111,8 @@ export function Settings() {
                     </p>
                   </div>
                 </div>
+
+                <TenantDocumentLayoutSettings />
 
                 <div className="mt-8 pt-6 border-t border-slate-800 space-y-6">
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -2025,8 +2042,8 @@ export function Settings() {
       <HelpModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
-        title="Integração Microsoft 365"
-        sections={helpMicrosoft365}
+        title={settingsHelp.title}
+        sections={settingsHelp.sections}
       />
     </div>
   );

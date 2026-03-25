@@ -640,7 +640,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                     {onOpenHelp && (
                         <button
                             onClick={onOpenHelp}
-                            title="Ajuda (CTRL + F1)"
+                            title="Ajuda (F1)"
                             className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border border-slate-700"
                         >
                             <HelpCircle size={16} /> Ajuda

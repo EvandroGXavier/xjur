@@ -16,6 +16,22 @@ interface HelpModalProps {
 export function HelpModal({ isOpen, onClose, title, sections }: HelpModalProps) {
   if (!isOpen) return null;
 
+  const globalSections: HelpSection[] = [
+    {
+      title: 'Atalhos e Navegação (Global)',
+      content:
+        '<ul>' +
+        '<li><b>F1</b>: abre o manual da tela atual.</li>' +
+        '<li><b>ESC</b>: fecha janelas/modais e cancela a ação atual.</li>' +
+        '<li><b>Menu lateral recolhível</b>: no topo (barra superior), use o botão de <b>recolher/expandir</b> o menu.</li>' +
+        '<li>Quando o menu estiver <b>recolhido</b>, aparecem apenas os <b>ícones</b>; ao passar o mouse, você vê o <b>nome/função</b> do item.</li>' +
+        '<li>A preferência de menu <b>aberto/fechado</b> fica salva no seu usuário e você pode alternar quando quiser.</li>' +
+        '</ul>',
+    },
+  ];
+
+  const allSections = [...globalSections, ...(sections || [])];
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
       <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl relative animate-in fade-in zoom-in duration-200">
@@ -38,7 +54,7 @@ export function HelpModal({ isOpen, onClose, title, sections }: HelpModalProps) 
         </div>
         
         <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-8">
-          {sections.map((section, idx) => (
+          {allSections.map((section, idx) => (
             <div key={idx} className="space-y-3 bg-slate-700/30 p-5 rounded-lg border border-slate-700/50">
               <h3 className="text-lg font-semibold text-indigo-300 flex items-center gap-2 mb-4">
                 <Info size={18} />
@@ -54,7 +70,7 @@ export function HelpModal({ isOpen, onClose, title, sections }: HelpModalProps) 
           <div className="mt-8 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-start gap-3">
             <AlertCircle className="text-blue-400 shrink-0 mt-0.5" size={18} />
             <p className="text-sm text-blue-200">
-              <strong>Dica de Atalho:</strong> Você pode pressionar <kbd className="bg-slate-700 px-1.5 py-0.5 rounded text-xs text-white border border-slate-600">Ctrl</kbd> + <kbd className="bg-slate-700 px-1.5 py-0.5 rounded text-xs text-white border border-slate-600">F1</kbd> em qualquer tela para abrir o manual correspondente a ela.
+              <strong>Dica de Atalho:</strong> Pressione <kbd className="bg-slate-700 px-1.5 py-0.5 rounded text-xs text-white border border-slate-600">F1</kbd> em qualquer tela para abrir o manual correspondente a ela.
             </p>
           </div>
         </div>
@@ -63,7 +79,7 @@ export function HelpModal({ isOpen, onClose, title, sections }: HelpModalProps) 
   );
 }
 
-// Hook Reutilizável para interceptar o CTRL + F1
+// Hook Reutilizável para interceptar o F1
 export function useHelpModal() {
   const [isHelpOpen, setIsHelpOpen] = React.useState(false);
 
@@ -71,11 +87,9 @@ export function useHelpModal() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Previne que o F1 padrão do browser abra
       if (e.key === 'F1') {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsHelpOpen(true);
-        }
+        e.preventDefault();
+        e.stopPropagation();
+        setIsHelpOpen(true);
       }
     };
 
