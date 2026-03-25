@@ -1744,6 +1744,29 @@ export class ProcessesService {
                 : null;
 
         if (existingSamePole) {
+            // Verificar se já existe outro registro com exatamente a mesma tríade (processo, contato, role alvo)
+            // para evitar colisão na constraint única durante a alteração de papel (role)
+            const targetExisting = await this.prisma.processParty.findUnique({
+                where: {
+                    processId_contactId_roleId: {
+                        processId,
+                        contactId,
+                        roleId: role.id,
+                    },
+                },
+            });
+
+            if (targetExisting && targetExisting.id !== existingSamePole.id) {
+                // Se o alvo já existe, removemos o registro redundante do mesmo polo
+                // e atualizamos o registro do alvo com os novos dados
+                console.log(`Resolving collision for party update: deleting ${existingSamePole.id}, updating ${targetExisting.id}`);
+                await this.prisma.processParty.delete({ where: { id: existingSamePole.id } });
+                return this.prisma.processParty.update({
+                    where: { id: targetExisting.id },
+                    data,
+                });
+            }
+
             return this.prisma.processParty.update({
                 where: { id: existingSamePole.id },
                 data: {

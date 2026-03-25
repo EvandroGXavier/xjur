@@ -352,12 +352,55 @@ export class DocumentsService {
   private async ensureSystemLibrarySeeded() {
     if (this.systemLibrarySynced) return;
     this.systemLibrarySynced = true;
-    await this.syncSystemLibrary();
+    await this.syncSystemLibrary(undefined, { force: false });
   }
 
-  async syncSystemLibrary(_tenantId?: string) {
+  private normalizeLegacyTagNames(tags: any): string[] {
+    const list = Array.isArray(tags) ? tags : [];
+    return list
+      .map((t) => String(t || '').trim().replace(/^#/, ''))
+      .filter(Boolean)
+      .slice(0, 30);
+  }
+
+  async syncSystemLibrary(_tenantId?: string, options?: { force?: boolean }) {
     const seeds = this.getSystemLibrarySeeds();
+
+    const force = Boolean(options?.force);
     let upserted = 0;
+    let skipped = 0;
+
+    if (!force) {
+      const existing = await this.prisma.documentTemplate.findMany({
+        where: { tenantId: null, isSystemTemplate: true, systemKey: { in: seeds.map((s) => s.systemKey) } },
+        select: { systemKey: true },
+      });
+      const existingKeys = new Set(existing.map((x) => String(x.systemKey || '')));
+
+      for (const seed of seeds) {
+        if (existingKeys.has(seed.systemKey)) {
+          skipped += 1;
+          continue;
+        }
+        await this.prisma.documentTemplate.create({
+          data: {
+            tenantId: null,
+            isSystemTemplate: true,
+            systemKey: seed.systemKey,
+            title: seed.title,
+            content: seed.content,
+            description: seed.description || null,
+            tags: seed.tags || null,
+            preferredStorage: seed.preferredStorage || null,
+            metadata: seed.metadata || null,
+            categoryId: null,
+          },
+        });
+        upserted += 1;
+      }
+
+      return { upserted, skipped, mode: 'create-only' as const };
+    }
 
     for (const seed of seeds) {
       await this.prisma.documentTemplate.upsert({
@@ -390,7 +433,123 @@ export class DocumentsService {
       upserted += 1;
     }
 
-    return { upserted };
+    return { upserted, skipped, mode: 'force-upsert' as const };
+  }
+
+  async listSystemTemplates(q?: string) {
+    await this.ensureSystemLibrarySeeded();
+    const query = String(q || '').trim();
+
+    const where: Prisma.DocumentTemplateWhereInput = {
+      tenantId: null,
+      isSystemTemplate: true,
+      ...(query
+        ? {
+            OR: [
+              { title: { contains: query, mode: 'insensitive' } },
+              { description: { contains: query, mode: 'insensitive' } },
+              { systemKey: { contains: query, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const list = await this.prisma.documentTemplate.findMany({
+      where,
+      orderBy: [{ updatedAt: 'desc' }],
+    });
+
+    return list.map((x) => this.serializeTemplate(x as any));
+  }
+
+  async findSystemTemplate(id: string) {
+    await this.ensureSystemLibrarySeeded();
+    const template = await this.prisma.documentTemplate.findFirst({
+      where: { id, tenantId: null, isSystemTemplate: true },
+    });
+    if (!template) throw new NotFoundException('Template do sistema não encontrado.');
+    return this.serializeTemplate(template as any);
+  }
+
+  async createSystemTemplate(dto: {
+    systemKey: string;
+    title: string;
+    content: string;
+    description?: string;
+    tags?: string[];
+    preferredStorage?: string;
+    metadata?: any;
+  }) {
+    await this.ensureSystemLibrarySeeded();
+    const systemKey = String(dto.systemKey || '').trim();
+    if (!systemKey) throw new BadRequestException('systemKey é obrigatório.');
+
+    const created = await this.prisma.documentTemplate.create({
+      data: {
+        tenantId: null,
+        isSystemTemplate: true,
+        systemKey,
+        title: String(dto.title || '').trim(),
+        content: String(dto.content || ''),
+        description: dto.description ? String(dto.description) : null,
+        tags: this.normalizeLegacyTagNames(dto.tags),
+        preferredStorage: dto.preferredStorage ? String(dto.preferredStorage) : null,
+        metadata: dto.metadata ?? null,
+        categoryId: null,
+        sourceTemplateId: null,
+      },
+    });
+
+    return this.serializeTemplate(created as any);
+  }
+
+  async updateSystemTemplate(
+    id: string,
+    dto: {
+      title?: string;
+      content?: string;
+      description?: string;
+      tags?: string[];
+      preferredStorage?: string;
+      metadata?: any;
+    },
+  ) {
+    const existing = await this.prisma.documentTemplate.findFirst({
+      where: { id, tenantId: null, isSystemTemplate: true },
+    });
+    if (!existing) throw new NotFoundException('Template do sistema não encontrado.');
+
+    const updated = await this.prisma.documentTemplate.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined ? { title: String(dto.title || '').trim() } : {}),
+        ...(dto.content !== undefined ? { content: String(dto.content || '') } : {}),
+        ...(dto.description !== undefined ? { description: dto.description ? String(dto.description) : null } : {}),
+        ...(dto.tags !== undefined ? { tags: this.normalizeLegacyTagNames(dto.tags) } : {}),
+        ...(dto.preferredStorage !== undefined ? { preferredStorage: dto.preferredStorage ? String(dto.preferredStorage) : null } : {}),
+        ...(dto.metadata !== undefined ? { metadata: dto.metadata ?? null } : {}),
+      },
+    });
+
+    return this.serializeTemplate(updated as any);
+  }
+
+  async deleteSystemTemplate(id: string) {
+    const existing = await this.prisma.documentTemplate.findFirst({
+      where: { id, tenantId: null, isSystemTemplate: true },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Template do sistema não encontrado.');
+
+    const dependents = await this.prisma.documentTemplate.count({
+      where: { sourceTemplateId: id },
+    });
+    if (dependents > 0) {
+      throw new BadRequestException('Não é possível excluir: existem modelos copiados a partir deste template.');
+    }
+
+    await this.prisma.documentTemplate.delete({ where: { id } });
+    return { ok: true };
   }
 
   async customizeTemplate(templateId: string, tenantId: string) {

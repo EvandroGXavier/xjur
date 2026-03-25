@@ -3,13 +3,14 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
     FileText, Plus, Search, Trash2, 
-    BookOpen, Archive, Save, ArrowLeft, Tag as TagIcon, X, Settings2, Sparkles
+    BookOpen, Archive, Save, ArrowLeft, Tag as TagIcon, X, Settings2, Sparkles, RefreshCw, Shield
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { RichTextEditor } from '../components/ui/RichTextEditor';
 import { useHotkeys } from '../hooks/useHotkeys';
 import { clsx } from 'clsx';
+import { getUser } from '../auth/authStorage';
 
 interface Category {
     id: string;
@@ -49,6 +50,18 @@ interface DocumentHistory {
 }
 
 export function Library() {
+    const isSuperAdmin = (() => {
+        const baseEmails = ['evandro@conectionmg.com.br'];
+        const envEmails = String((import.meta as any)?.env?.VITE_SUPERADMIN_EMAILS || '')
+            .split(',')
+            .map((x: string) => x.trim().toLowerCase())
+            .filter(Boolean);
+        const allowed = new Set([...baseEmails, ...envEmails].map((x) => x.toLowerCase()));
+        const u = getUser();
+        const email = String(u?.email || '').trim().toLowerCase();
+        return Boolean(email && allowed.has(email));
+    })();
+
     const [activeTab, setActiveTab] = useState<'TEMPLATES' | 'HISTORY'>('TEMPLATES');
     const [templates, setTemplates] = useState<Template[]>([]);
     const [history, setHistory] = useState<DocumentHistory[]>([]);
@@ -67,6 +80,8 @@ export function Library() {
     const [editorTags, setEditorTags] = useState<GlobalTag[]>([]);
     const [editorLegacyTags, setEditorLegacyTags] = useState<string[]>([]);
     const [tagInput, setTagInput] = useState('');
+    const [editorMode, setEditorMode] = useState<'TENANT' | 'SYSTEM'>('TENANT');
+    const [editorSystemKey, setEditorSystemKey] = useState('');
     const [availableLibraryTags, setAvailableLibraryTags] = useState<GlobalTag[]>([]);
     const [loadingLibraryTags, setLoadingLibraryTags] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -158,7 +173,10 @@ export function Library() {
 
     const setEditorFromTemplate = (tpl: Template | null) => {
         setEditingTemplate(tpl);
-        setEditorReadOnly(!!tpl?.isSystemTemplate);
+        const isSystemTpl = Boolean(tpl?.isSystemTemplate);
+        setEditorMode(isSystemTpl ? 'SYSTEM' : 'TENANT');
+        setEditorSystemKey(tpl?.systemKey || '');
+        setEditorReadOnly(isSystemTpl && !isSuperAdmin);
         setEditorTitle(tpl?.title || '');
         setEditorContent(tpl?.content || '');
         setEditorDescription(tpl?.description || '');
@@ -173,7 +191,20 @@ export function Library() {
 
     const handleNewTemplate = () => {
         setEditorFromTemplate(null);
+        setEditorMode('TENANT');
+        setEditorSystemKey('');
         setEditorPreferredStorage('WORD_ONLINE');
+        setIsEditorOpen(true);
+    };
+
+    const handleNewSystemTemplate = () => {
+        setEditorFromTemplate(null);
+        setEditorMode('SYSTEM');
+        setEditorSystemKey('');
+        setEditorPreferredStorage('WORD_ONLINE');
+        setEditorLegacyTags([]);
+        setEditorTags([]);
+        setEditorReadOnly(!isSuperAdmin);
         setIsEditorOpen(true);
     };
 
@@ -281,6 +312,43 @@ export function Library() {
                 }
             }
 
+            const isSystemMode = editorMode === 'SYSTEM';
+
+            if (isSystemMode) {
+                if (!isSuperAdmin) {
+                    toast.error('Acesso restrito ao SuperAdmin');
+                    return;
+                }
+                if (!editingTemplate && !editorSystemKey.trim()) {
+                    toast.warning('O System Key é obrigatório para criar um modelo do sistema');
+                    return;
+                }
+
+                const payload: any = {
+                    title: editorTitle,
+                    content: editorContent,
+                    description: editorDescription || undefined,
+                    tags: normalizeTags(editorLegacyTags),
+                    preferredStorage: editorPreferredStorage || undefined,
+                    metadata: parsedMetadata,
+                };
+
+                if (editingTemplate?.id) {
+                    await api.put(`/documents/system/templates/${editingTemplate.id}`, payload);
+                    toast.success('Modelo do sistema atualizado!');
+                } else {
+                    await api.post('/documents/system/templates', {
+                        ...payload,
+                        systemKey: editorSystemKey.trim(),
+                    });
+                    toast.success('Modelo do sistema criado!');
+                }
+
+                setIsEditorOpen(false);
+                fetchData();
+                return;
+            }
+
             const payload: any = {
                 title: editorTitle,
                 content: editorContent,
@@ -290,6 +358,7 @@ export function Library() {
                 preferredStorage: editorPreferredStorage || undefined,
                 metadata: parsedMetadata,
             };
+
             if (editingTemplate) {
                 await api.put(`/documents/templates/${editingTemplate.id}`, payload);
                 toast.success('Modelo atualizado!');
@@ -316,6 +385,32 @@ export function Library() {
         }
     };
 
+    const handleDeleteSystemTemplate = async (id: string) => {
+        if (!isSuperAdmin) return toast.error('Acesso restrito ao SuperAdmin');
+        if (!confirm('Excluir modelo do sistema? Isso pode impactar outras empresas.')) return;
+        try {
+            await api.delete(`/documents/system/templates/${id}`);
+            toast.success('Modelo do sistema excluído');
+            fetchData();
+        } catch (err: any) {
+            console.error(err);
+            toast.error(err?.response?.data?.message || 'Erro ao excluir modelo do sistema');
+        }
+    };
+
+    const handleForceSyncSystemLibrary = async () => {
+        if (!isSuperAdmin) return toast.error('Acesso restrito ao SuperAdmin');
+        if (!confirm('Forçar sincronização do sistema irá SOBRESCREVER os modelos do sistema pelo código. Continuar?')) return;
+        try {
+            await api.post('/documents/system/sync?force=true');
+            toast.success('Modelos do sistema sincronizados (force)');
+            fetchData();
+        } catch (err) {
+            console.error(err);
+            toast.error('Erro ao sincronizar modelos do sistema');
+        }
+    };
+
     const categoryNameById = (id?: string | null) => {
         if (!id) return '';
         const c = categories.find((x) => x.id === id);
@@ -338,7 +433,8 @@ export function Library() {
     });
 
     if (isEditorOpen) {
-        const isSystem = !!editingTemplate?.isSystemTemplate;
+        const isSystem = editorMode === 'SYSTEM';
+        const canEditSystem = isSystem && isSuperAdmin;
         let metadataPreview: any = null;
         let metadataPreviewError = false;
         if (editorMetadataText.trim()) {
@@ -368,10 +464,10 @@ export function Library() {
                                 placeholder="Título do Modelo (Ex: Procuração Ad Judicia)"
                                 className={clsx(
                                     "bg-transparent text-xl font-bold text-white focus:outline-none placeholder-slate-600 w-96",
-                                    isSystem && "opacity-80"
+                                    editorReadOnly && "opacity-80"
                                 )}
                                 autoFocus
-                                disabled={isSystem}
+                                disabled={editorReadOnly}
                             />
                             <div className="flex items-center gap-2 mt-1">
                                 {isSystem && (
@@ -389,15 +485,37 @@ export function Library() {
                     </div>
                     <div className="flex items-center gap-2">
                         {isSystem ? (
-                            <button
-                                onClick={handleCustomizeSystemTemplate}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
-                                title="Cria uma cópia editável para seu escritório"
-                            >
-                                <Sparkles size={18} /> Personalizar
-                            </button>
+                            <>
+                                {canEditSystem && (
+                                    <>
+                                        {!!editingTemplate?.id && (
+                                            <button
+                                                onClick={() => handleDeleteSystemTemplate(editingTemplate.id)}
+                                                className="px-4 py-2 bg-red-500/15 hover:bg-red-500/25 text-red-300 rounded-lg font-bold flex items-center gap-2 transition border border-red-500/20"
+                                                title="Excluir modelo do sistema"
+                                            >
+                                                <Trash2 size={18} /> Excluir
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={handleSaveTemplate}
+                                            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
+                                            title="Salvar alterações no modelo do sistema"
+                                        >
+                                            <Save size={18} /> Salvar (Sistema)
+                                        </button>
+                                    </>
+                                )}
+                                <button
+                                    onClick={handleCustomizeSystemTemplate}
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold flex items-center gap-2 transition border border-slate-700"
+                                    title="Cria uma cópia editável para seu escritório"
+                                >
+                                    <Sparkles size={18} /> Personalizar
+                                </button>
+                            </>
                         ) : (
-                            <button 
+                            <button
                                 onClick={handleSaveTemplate}
                                 className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
                             >
@@ -413,13 +531,28 @@ export function Library() {
                                 <Settings2 size={16} /> Informações
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {isSystem && (
+                                    <div className="md:col-span-2">
+                                        <label className="text-xs text-slate-400">System Key (identificador do modelo do sistema)</label>
+                                        <input
+                                            value={editorSystemKey}
+                                            onChange={(e) => setEditorSystemKey(e.target.value)}
+                                            disabled={Boolean(editingTemplate?.id) || !canEditSystem}
+                                            placeholder="Ex: CHA_CONTRATO_HONORARIOS"
+                                            className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500 disabled:opacity-70"
+                                        />
+                                        <p className="text-[11px] text-slate-500 mt-1">
+                                            Use um identificador único e estável. Depois de criado, não pode ser alterado aqui.
+                                        </p>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="text-xs text-slate-400">Categoria</label>
                                     <div className="flex gap-2 mt-1">
                                         <select
                                             value={editorCategoryId}
                                             onChange={(e) => setEditorCategoryId(e.target.value)}
-                                            disabled={isSystem}
+                                            disabled={editorReadOnly}
                                             className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                         >
                                             <option value="">Sem categoria</option>
@@ -432,7 +565,7 @@ export function Library() {
                                         <button
                                             type="button"
                                             onClick={handleCreateCategory}
-                                            disabled={isSystem}
+                                            disabled={editorReadOnly}
                                             className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 text-sm"
                                             title="Criar categoria"
                                         >
@@ -448,7 +581,7 @@ export function Library() {
                                     <select
                                         value={editorPreferredStorage}
                                         onChange={(e) => setEditorPreferredStorage(e.target.value as any)}
-                                        disabled={isSystem}
+                                        disabled={editorReadOnly}
                                         className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                     >
                                         <option value="WORD_ONLINE">Word Online (Microsoft 365)</option>
@@ -461,7 +594,7 @@ export function Library() {
                                 <textarea
                                     value={editorDescription}
                                     onChange={(e) => setEditorDescription(e.target.value)}
-                                    disabled={isSystem}
+                                    disabled={editorReadOnly}
                                     rows={3}
                                     placeholder="Ex: Baseado no Art. 319 do CPC..."
                                     className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500"
@@ -509,31 +642,43 @@ export function Library() {
                                     value={tagInput}
                                     onChange={(e) => setTagInput(e.target.value)}
                                     onKeyDown={(e) => {
-                                        if (isSystem) return;
-                                        if (e.key === 'Enter' || e.key === ',') {
-                                            e.preventDefault();
-                                            const parts = tagInput.split(',').map((x) => x.trim()).filter(Boolean);
-                                            setTagInput('');
-                                            for (const part of parts) {
-                                                void handleAddOrCreateTag(part);
-                                            }
+                                        if (e.key !== 'Enter' && e.key !== ',') return;
+                                        e.preventDefault();
+
+                                        const parts = tagInput.split(',').map((x) => x.trim()).filter(Boolean);
+                                        setTagInput('');
+                                        if (!parts.length) return;
+
+                                        if (isSystem) {
+                                            if (!canEditSystem) return;
+                                            setEditorLegacyTags((prev) => normalizeTags([...prev, ...parts]));
+                                            return;
+                                        }
+
+                                        for (const part of parts) {
+                                            void handleAddOrCreateTag(part);
                                         }
                                     }}
-                                    disabled={isSystem}
-                                    placeholder="Digite e pressione Enter (ex: Cível, CPC, Contrato)"
+                                    disabled={isSystem ? !canEditSystem : false}
+                                    placeholder={isSystem ? "Digite e pressione Enter (ex: Cível, CPC, Sistema)" : "Digite e pressione Enter (ex: Cível, CPC, Contrato)"}
                                     className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        if (isSystem) return;
                                         const parts = tagInput.split(',').map((x) => x.trim()).filter(Boolean);
                                         setTagInput('');
-                                        for (const part of parts) {
-                                            void handleAddOrCreateTag(part);
+                                        if (!parts.length) return;
+
+                                        if (isSystem) {
+                                            if (!canEditSystem) return;
+                                            setEditorLegacyTags((prev) => normalizeTags([...prev, ...parts]));
+                                            return;
                                         }
+
+                                        for (const part of parts) void handleAddOrCreateTag(part);
                                     }}
-                                    disabled={isSystem}
+                                    disabled={isSystem ? !canEditSystem : false}
                                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 text-sm"
                                 >
                                     Adicionar
@@ -587,6 +732,16 @@ export function Library() {
                                             className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-950 text-slate-300 border border-slate-700 text-xs"
                                         >
                                             #{t}
+                                            {canEditSystem && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditorLegacyTags((prev) => prev.filter((x) => x !== t))}
+                                                    className="ml-1 p-0.5 rounded hover:bg-white/10"
+                                                    title="Remover"
+                                                >
+                                                    <X size={12} />
+                                                </button>
+                                            )}
                                         </span>
                                     ))}
                                 {!isSystem &&
@@ -628,7 +783,7 @@ export function Library() {
                                     <textarea
                                         value={editorMetadataText}
                                         onChange={(e) => setEditorMetadataText(e.target.value)}
-                                        disabled={isSystem}
+                                        disabled={editorReadOnly}
                                         rows={7}
                                         placeholder='{\n  \"sections\": [{\"title\": \"Dos Fatos\", \"help\": \"Descreva o ocorrido.\"}],\n  \"internalComments\": [\"Verificar pedido de Justiça Gratuita\"]\n}'
                                         className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500"
@@ -690,9 +845,32 @@ export function Library() {
                      />
                  </div>
                  {activeTab === 'TEMPLATES' && (
-                     <button onClick={handleNewTemplate} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg flex items-center gap-2 transition shadow-lg shadow-indigo-500/20">
-                         <Plus size={20} /> Novo Modelo
-                     </button>
+                     <div className="flex gap-2">
+                        {isSuperAdmin && (
+                            <>
+                                <button
+                                    onClick={handleForceSyncSystemLibrary}
+                                    className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg flex items-center gap-2 transition border border-slate-700"
+                                    title="Sincroniza (force) os modelos do sistema a partir do código"
+                                >
+                                    <RefreshCw size={18} /> Sync Sistema
+                                </button>
+                                <button
+                                    onClick={handleNewSystemTemplate}
+                                    className="px-5 py-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 font-medium rounded-lg flex items-center gap-2 transition border border-amber-500/20"
+                                    title="Criar novo modelo do sistema (SuperAdmin)"
+                                >
+                                    <Shield size={18} /> Novo Sistema
+                                </button>
+                            </>
+                        )}
+                        <button
+                            onClick={handleNewTemplate}
+                            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg flex items-center gap-2 transition shadow-lg shadow-indigo-500/20"
+                        >
+                            <Plus size={20} /> Novo Modelo
+                        </button>
+                     </div>
                  )}
              </div>
 
@@ -708,13 +886,24 @@ export function Library() {
                                      </div>
                                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                                         {tpl.isSystemTemplate ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleCustomizeFromCard(tpl); }}
-                                                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 transition"
-                                                title="Criar uma cópia editável para seu escritório"
-                                            >
-                                                <Sparkles size={14} /> Personalizar
-                                            </button>
+                                            <>
+                                                {isSuperAdmin && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteSystemTemplate(tpl.id); }}
+                                                        className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg"
+                                                        title="Excluir (Sistema)"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleCustomizeFromCard(tpl); }}
+                                                    className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 transition"
+                                                    title="Criar uma cópia editável para seu escritório"
+                                                >
+                                                    <Sparkles size={14} /> Personalizar
+                                                </button>
+                                            </>
                                         ) : (
                                             <button onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(tpl.id); }} className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg" title="Excluir"><Trash2 size={16} /></button>
                                         )}

@@ -108,6 +108,7 @@ model User {
   permissions  Json?
   theme        String   @default("SYSTEM") // SYSTEM, LIGHT, DARK
   soundEnabled Boolean  @default(true)
+  sidebarCollapsed Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

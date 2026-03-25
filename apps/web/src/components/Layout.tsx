@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Building2, Clock, LogOut, Menu, User, Sun, Moon, Monitor } from 'lucide-react';
+import { Building2, Clock, LogOut, Menu, User, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { clsx } from 'clsx';
 import { getAuthPersistence, getUser, logoutLocal, setUser as authSetUser } from '../auth/authStorage';
 import { useIdleLogout } from '../hooks/useIdleLogout';
 import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, type ThemePreference } from '../utils/theme';
@@ -10,7 +11,15 @@ import { Sidebar } from './Sidebar';
 
 declare const __APP_VERSION__: string;
 
-const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
+const StatusBar = ({
+  toggleSidebar,
+  isSidebarCollapsed,
+  toggleSidebarCollapsed,
+}: {
+  toggleSidebar: () => void;
+  isSidebarCollapsed: boolean;
+  toggleSidebarCollapsed: () => void;
+}) => {
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
   const [user, setUser] = useState<any>(null);
@@ -53,12 +62,26 @@ const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   if (!user) return null;
 
   return (
-    <div className="h-10 lg:h-8 bg-emerald-950/30 border-b border-emerald-500/30 flex items-center justify-between lg:justify-end px-4 lg:px-6 text-xs text-emerald-100/80 gap-3 lg:gap-6 fixed top-0 right-0 left-0 lg:left-64 z-10 shadow-sm backdrop-blur-sm">
+    <div
+      className={clsx(
+        'h-10 lg:h-8 bg-emerald-950/30 border-b border-emerald-500/30 flex items-center justify-between lg:justify-end px-4 lg:px-6 text-xs text-emerald-100/80 gap-3 lg:gap-6 fixed top-0 right-0 left-0 z-10 shadow-sm backdrop-blur-sm',
+        isSidebarCollapsed ? 'lg:left-16' : 'lg:left-64',
+      )}
+    >
       <button
         onClick={toggleSidebar}
         className="lg:hidden p-1.5 -ml-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-colors"
       >
         <Menu size={18} />
+      </button>
+
+      <button
+        onClick={toggleSidebarCollapsed}
+        className="hidden lg:flex items-center justify-center p-1.5 -ml-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-md transition-colors"
+        title={isSidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+        aria-label={isSidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+      >
+        {isSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
       </button>
 
       <div className="hidden md:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium tracking-wide text-emerald-200">
@@ -113,6 +136,10 @@ const StatusBar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
 
 export function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    const stored = getUser();
+    return Boolean(stored?.sidebarCollapsed);
+  });
   const navigate = useNavigate();
 
   useIdleLogout({
@@ -131,6 +158,7 @@ export function Layout() {
       const stored = getUser();
       const preference = ((stored?.theme as ThemePreference) || getStoredThemePreference() || 'DARK') as ThemePreference;
       applyThemePreference(preference);
+      setIsSidebarCollapsed(Boolean(stored?.sidebarCollapsed));
     };
 
     apply();
@@ -139,9 +167,31 @@ export function Layout() {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  const toggleSidebarCollapsed = async () => {
+    const stored = getUser();
+    if (!stored) return;
+
+    const nextCollapsed = !Boolean(stored.sidebarCollapsed);
+
+    const updatedUser = { ...stored, sidebarCollapsed: nextCollapsed };
+    authSetUser(updatedUser, getAuthPersistence());
+    setIsSidebarCollapsed(nextCollapsed);
+
+    try {
+      await api.patch('/users/me/preferences', { sidebarCollapsed: nextCollapsed });
+    } catch (err) {
+      console.error('Erro ao persistir sidebarCollapsed:', err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-[Inter] overflow-x-hidden transition-colors duration-300">
-      <Sidebar isOpen={isSidebarOpen} closeSidebar={() => setIsSidebarOpen(false)} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        closeSidebar={() => setIsSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        toggleCollapsed={toggleSidebarCollapsed}
+      />
 
       {isSidebarOpen && (
         <div
@@ -150,8 +200,17 @@ export function Layout() {
         />
       )}
 
-      <main className="lg:pl-64 min-h-screen transition-all duration-300 pt-10 lg:pt-8 w-full flex flex-col">
-        <StatusBar toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+      <main
+        className={clsx(
+          'min-h-screen transition-all duration-300 pt-10 lg:pt-8 w-full flex flex-col',
+          isSidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64',
+        )}
+      >
+        <StatusBar
+          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          toggleSidebarCollapsed={toggleSidebarCollapsed}
+        />
         <div className="p-3 sm:p-4 lg:p-8 max-w-7xl mx-auto w-full flex-1">
           <Outlet />
         </div>

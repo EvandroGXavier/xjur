@@ -4,6 +4,7 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { CreateTemplateDto } from './dto/create-template.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { CreateSystemTemplateDto, UpdateSystemTemplateDto } from './dto/system-template.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
@@ -132,9 +133,48 @@ export class DocumentsController {
   }
 
   @Post('system/sync')
-  syncSystemLibrary(@CurrentUser() user: CurrentUserData) {
+  syncSystemLibrary(@CurrentUser() user: CurrentUserData, @Query('force') force?: string) {
     this.ensureSuperAdmin(user);
-    return this.documentsService.syncSystemLibrary(user.tenantId);
+    const shouldForce = String(force || '').toLowerCase();
+    return this.documentsService.syncSystemLibrary(user.tenantId, {
+      force: shouldForce === '1' || shouldForce === 'true' || shouldForce === 'yes',
+    });
+  }
+
+  // --- SYSTEM TEMPLATES (CRUD SuperAdmin) ---
+
+  @Get('system/templates')
+  listSystemTemplates(@CurrentUser() user: CurrentUserData, @Query('q') q?: string) {
+    this.ensureSuperAdmin(user);
+    return this.documentsService.listSystemTemplates(q);
+  }
+
+  @Post('system/templates')
+  createSystemTemplate(@CurrentUser() user: CurrentUserData, @Body() dto: CreateSystemTemplateDto) {
+    this.ensureSuperAdmin(user);
+    return this.documentsService.createSystemTemplate(dto);
+  }
+
+  @Get('system/templates/:id')
+  findSystemTemplate(@CurrentUser() user: CurrentUserData, @Param('id') id: string) {
+    this.ensureSuperAdmin(user);
+    return this.documentsService.findSystemTemplate(id);
+  }
+
+  @Put('system/templates/:id')
+  updateSystemTemplate(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id') id: string,
+    @Body() dto: UpdateSystemTemplateDto,
+  ) {
+    this.ensureSuperAdmin(user);
+    return this.documentsService.updateSystemTemplate(id, dto);
+  }
+
+  @Delete('system/templates/:id')
+  deleteSystemTemplate(@CurrentUser() user: CurrentUserData, @Param('id') id: string) {
+    this.ensureSuperAdmin(user);
+    return this.documentsService.deleteSystemTemplate(id);
   }
 
   // --- IA (Aprimorar Documento/SeleÃ§Ã£o) ---

@@ -23,7 +23,10 @@ export class UsersController {
   }
 
   @Patch('me/preferences')
-  updatePreferences(@Body() updateDto: { theme?: string; soundEnabled?: boolean }, @Request() req) {
+  updatePreferences(
+    @Body() updateDto: { theme?: string; soundEnabled?: boolean; sidebarCollapsed?: boolean },
+    @Request() req,
+  ) {
       return this.usersService.updatePreferences(req.user.id, updateDto);
   }
 
