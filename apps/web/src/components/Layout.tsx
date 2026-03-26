@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Building2, Clock, LogOut, Menu, User, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getAuthPersistence, getUser, logoutLocal, setUser as authSetUser } from '../auth/authStorage';
@@ -8,6 +8,7 @@ import { applyThemePreference, getStoredThemePreference, setStoredThemePreferenc
 import { api } from '../services/api';
 import { InventoryHelpModal } from './inventory/InventoryHelpModal';
 import { Sidebar } from './Sidebar';
+import { getModuleIdFromPath } from '../utils/userPreferences';
 
 declare const __APP_VERSION__: string;
 
@@ -141,6 +142,8 @@ export function Layout() {
     return Boolean(stored?.sidebarCollapsed);
   });
   const navigate = useNavigate();
+  const location = useLocation();
+  const lastModulePersistedRef = useRef<string | null>(null);
 
   useIdleLogout({
     timeoutMs: 5 * 60 * 1000,
@@ -166,6 +169,26 @@ export function Layout() {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
+
+  useEffect(() => {
+    const stored = getUser();
+    if (!stored) return;
+
+    const moduleId = getModuleIdFromPath(location.pathname);
+    if (!moduleId) return;
+
+    if (lastModulePersistedRef.current === moduleId) return;
+    lastModulePersistedRef.current = moduleId;
+
+    if (stored.lastModuleId === moduleId) return;
+
+    const updatedUser = { ...stored, lastModuleId: moduleId };
+    authSetUser(updatedUser, getAuthPersistence());
+
+    api.patch('/users/me/preferences', { lastModuleId: moduleId }).catch((err) => {
+      console.error('Erro ao persistir lastModuleId:', err);
+    });
+  }, [location.pathname]);
 
   const toggleSidebarCollapsed = async () => {
     const stored = getUser();

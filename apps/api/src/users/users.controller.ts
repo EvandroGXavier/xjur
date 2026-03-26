@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UpdateUserPreferencesDto } from './dto/update-user-preferences.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -24,10 +25,10 @@ export class UsersController {
 
   @Patch('me/preferences')
   updatePreferences(
-    @Body() updateDto: { theme?: string; soundEnabled?: boolean; sidebarCollapsed?: boolean },
+    @Body() updateDto: UpdateUserPreferencesDto,
     @Request() req,
   ) {
-      return this.usersService.updatePreferences(req.user.id, updateDto);
+      return this.usersService.updatePreferences(req.user.userId, updateDto);
   }
 
   @Delete(':id')

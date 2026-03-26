@@ -110,6 +110,12 @@ model User {
   theme        String   @default("SYSTEM") // SYSTEM, LIGHT, DARK
   soundEnabled Boolean  @default(true)
   sidebarCollapsed Boolean @default(false)
+
+  // Preferences (centralizadas por usuÃ¡rio)
+  startupModuleMode String @default("LAST") // LAST ou HOME
+  homeModuleId      String @default("dashboard")
+  lastModuleId      String @default("dashboard")
+  preferences       Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

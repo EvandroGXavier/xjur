@@ -146,10 +146,14 @@ export function DataGrid<T extends { id: string }>({
                 </td>
               </tr>
             ) : (
-              displayedData.map((item) => (
+              displayedData.map((item, rowIndex) => (
                 <tr 
                   key={item.id} 
-                  className={`hover:bg-slate-800/30 transition-colors group ${selectedIds.includes(item.id) ? 'bg-indigo-500/5' : ''} ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''}`}
+                  className={`${
+                    rowIndex % 2 === 0 ? 'bg-slate-900' : 'bg-slate-800'
+                  } hover:bg-slate-800/30 transition-colors group ${
+                    selectedIds.includes(item.id) ? '!bg-indigo-500/5' : ''
+                  } ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''}`}
                   onClick={() => onRowClick && onRowClick(item)}
                   onDoubleClick={() => onRowDoubleClick && onRowDoubleClick(item)}
                 >

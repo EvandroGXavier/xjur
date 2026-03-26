@@ -18,6 +18,15 @@ import { clsx } from 'clsx';
 import { SYSTEM_MODULES } from '../config/modules';
 import { useHotkeys } from '../hooks/useHotkeys';
 
+const DEFAULT_USER_PREFERENCES = {
+  theme: 'SYSTEM',
+  soundEnabled: true,
+  sidebarCollapsed: false,
+  startupModuleMode: 'LAST',
+  homeModuleId: 'dashboard',
+  lastModuleId: 'dashboard',
+};
+
 const Modal = ({ isOpen, onClose, title, children }: any) => {
     if (!isOpen) return null;
     return (
@@ -41,7 +50,14 @@ export function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [formData, setFormData] = useState<any>({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
+  const [formData, setFormData] = useState<any>({
+    name: '',
+    email: '',
+    password: '',
+    role: 'MEMBER',
+    permissions: {},
+    ...DEFAULT_USER_PREFERENCES,
+  });
 
   const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
   const [search, setSearch] = useState('');
@@ -77,11 +93,18 @@ export function UsersPage() {
         email: user.email,
         password: '', // Senha opcional na edição
         role: user.role,
-        permissions: user.permissions || {}
+        permissions: user.permissions || {},
+        theme: user.theme || DEFAULT_USER_PREFERENCES.theme,
+        soundEnabled: user.soundEnabled ?? DEFAULT_USER_PREFERENCES.soundEnabled,
+        sidebarCollapsed: user.sidebarCollapsed ?? DEFAULT_USER_PREFERENCES.sidebarCollapsed,
+        startupModuleMode: user.startupModuleMode || DEFAULT_USER_PREFERENCES.startupModuleMode,
+        homeModuleId: user.homeModuleId || DEFAULT_USER_PREFERENCES.homeModuleId,
+        lastModuleId: user.lastModuleId || DEFAULT_USER_PREFERENCES.lastModuleId,
+        preferences: user.preferences || undefined,
       });
     } else {
       setEditingId(null);
-      setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
+      setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {}, ...DEFAULT_USER_PREFERENCES });
     }
     setModalOpen(true);
   };
@@ -132,7 +155,7 @@ export function UsersPage() {
           fetchUsers();
           if (shouldClose) {
               setModalOpen(false);
-              setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {} });
+              setFormData({ name: '', email: '', password: '', role: 'MEMBER', permissions: {}, ...DEFAULT_USER_PREFERENCES });
               setEditingId(null);
           }
       } catch (error: any) {
@@ -333,6 +356,120 @@ export function UsersPage() {
                         <option value={formData.role}>{formData.role}</option>
                       )}
                   </select>
+              </div>
+
+              <div className="mt-6 border-t border-slate-800 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-bold text-white">PreferÃªncias do UsuÃ¡rio</h4>
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({ ...prev, ...DEFAULT_USER_PREFERENCES }))}
+                        className="text-[10px] text-slate-400 hover:text-white font-bold uppercase"
+                      >
+                        Restaurar padrÃ£o
+                      </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                          <label className="block text-sm font-medium text-slate-400 mb-1">Tema</label>
+                          <select
+                            value={formData.theme || 'SYSTEM'}
+                            onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                          >
+                              <option value="SYSTEM">Sistema</option>
+                              <option value="DARK">Escuro</option>
+                              <option value="LIGHT">Claro</option>
+                          </select>
+                      </div>
+
+                      <div className="flex items-center justify-between bg-slate-950/40 border border-slate-800 rounded-lg px-4 py-2">
+                          <div>
+                              <div className="text-sm font-medium text-slate-200">Sons</div>
+                              <div className="text-[11px] text-slate-500">NotificaÃ§Ãµes/efeitos do sistema</div>
+                          </div>
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(formData.soundEnabled)}
+                                onChange={(e) => setFormData({ ...formData, soundEnabled: e.target.checked })}
+                                className="accent-indigo-600"
+                              />
+                              <span className="text-xs text-slate-300">{formData.soundEnabled ? 'On' : 'Off'}</span>
+                          </label>
+                      </div>
+
+                      <div className="flex items-center justify-between bg-slate-950/40 border border-slate-800 rounded-lg px-4 py-2">
+                          <div>
+                              <div className="text-sm font-medium text-slate-200">Sidebar</div>
+                              <div className="text-[11px] text-slate-500">Iniciar recolhida (desktop)</div>
+                          </div>
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(formData.sidebarCollapsed)}
+                                onChange={(e) => setFormData({ ...formData, sidebarCollapsed: e.target.checked })}
+                                className="accent-indigo-600"
+                              />
+                              <span className="text-xs text-slate-300">{formData.sidebarCollapsed ? 'Recolhida' : 'Expandida'}</span>
+                          </label>
+                      </div>
+
+                      <div>
+                          <label className="block text-sm font-medium text-slate-400 mb-1">Ao entrar no sistema</label>
+                          <select
+                            value={formData.startupModuleMode || 'LAST'}
+                            onChange={(e) => setFormData({ ...formData, startupModuleMode: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                          >
+                              <option value="LAST">Abrir no Ãºltimo mÃ³dulo usado</option>
+                              <option value="HOME">Abrir em um mÃ³dulo fixo</option>
+                          </select>
+                      </div>
+
+                      <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-slate-400 mb-1">MÃ³dulo padrÃ£o (fallback)</label>
+                          <select
+                            value={formData.homeModuleId || 'dashboard'}
+                            onChange={(e) => setFormData({ ...formData, homeModuleId: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                          >
+                              {SYSTEM_MODULES.map((m) => (
+                                <option
+                                  key={m.id}
+                                  value={m.id}
+                                  disabled={
+                                    formData.role !== 'OWNER' &&
+                                    formData.role !== 'ADMIN' &&
+                                    formData.permissions?.[m.id] &&
+                                    formData.permissions[m.id].access === false
+                                  }
+                                >
+                                  {m.label}
+                                </option>
+                              ))}
+                          </select>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Usado quando o mÃ³dulo preferido nÃ£o estiver disponÃ­vel (ex: permissÃµes).
+                          </p>
+                      </div>
+                  </div>
+
+                  {(() => {
+                    const isAdminLike = formData.role === 'OWNER' || formData.role === 'ADMIN';
+                    const homeBlocked =
+                      !isAdminLike && formData.homeModuleId && formData.permissions?.[formData.homeModuleId]?.access === false;
+                    const lastBlocked =
+                      !isAdminLike && formData.lastModuleId && formData.permissions?.[formData.lastModuleId]?.access === false;
+
+                    if (!homeBlocked && !(formData.startupModuleMode === 'LAST' && lastBlocked)) return null;
+                    return (
+                      <div className="mt-3 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                        O mÃ³dulo escolhido nÃ£o estÃ¡ com permissÃ£o de acesso. No login, o sistema vai usar o fallback.
+                      </div>
+                    );
+                  })()}
               </div>
 
               {formData.role !== 'OWNER' && formData.role !== 'ADMIN' && (

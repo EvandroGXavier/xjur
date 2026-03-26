@@ -10,6 +10,7 @@ import {
   type AuthPersistence,
 } from '../auth/authStorage';
 import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, type ThemePreference } from '../utils/theme';
+import { resolveStartupPath } from '../utils/userPreferences';
 
 function guessDeviceName() {
   const ua = navigator.userAgent || '';
@@ -104,7 +105,7 @@ export function Login() {
         applyThemePreference(user.theme as ThemePreference);
       }
 
-      navigate('/');
+      navigate(resolveStartupPath(user));
     } catch (err: any) {
       const apiMessage = err.response?.data?.message;
       if (Array.isArray(apiMessage)) {
