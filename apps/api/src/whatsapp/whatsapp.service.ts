@@ -7,6 +7,7 @@ import { WhatsappGateway } from './whatsapp.gateway';
 import { EvolutionService, EvolutionConfig } from '../evolution/evolution.service';
 import { FileLogger } from '../common/file-logger';
 import { InboxService } from '../inbox/inbox.service';
+import { DrxClawService } from '../drx-claw/drx-claw.service';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -30,6 +31,8 @@ export class WhatsappService implements OnModuleInit {
     private readonly whatsappGateway: WhatsappGateway,
     @Inject(forwardRef(() => InboxService))
     private readonly inboxService: InboxService,
+    @Inject(forwardRef(() => DrxClawService))
+    private readonly drxClawService: DrxClawService,
   ) {}
 
   async onModuleInit() {
@@ -43,7 +46,7 @@ export class WhatsappService implements OnModuleInit {
   }
 
   // ==========================================
-  // CONFIGURA�!ÒO DIN�MICA POR CONEXÒO
+  // CONFIGURAÇÃO DINÂMICA POR CONEXÃO
   // ==========================================
 
   /**
@@ -395,7 +398,7 @@ export class WhatsappService implements OnModuleInit {
         const state = status.instance?.state;
         
         if (state === 'open') {
-          // Instância conectada � atualizar webhook
+          // Instância conectada -> atualizar webhook
           this.logger.log(`Instance ${connection.id} is OPEN. Refreshing webhook...`);
           const apiUrl = process.env.APP_URL || 'http://host.docker.internal:3000';
           const webhookUrl = `${apiUrl}/api/evolution/webhook`;
@@ -433,7 +436,7 @@ export class WhatsappService implements OnModuleInit {
 
   /**
    * Cria uma nova sessão WhatsApp via Evolution API.
-   * Fluxo: Delete antiga (se existir) �  Create �  Set Webhook �  Connect �  QR Code
+   * Fluxo: Delete antiga (se existir) -> Create -> Set Webhook -> Connect -> QR Code
    */
   async createSession(connectionId: string): Promise<any> {
     this.logger.log(`Creating Evolution session for ${connectionId}`);
@@ -449,7 +452,7 @@ export class WhatsappService implements OnModuleInit {
         await this.evolutionService.deleteInstance(connectionId, evolutionConfig);
         this.logger.log(`Cleaned up old instance for ${connectionId}`);
       } catch (e) {
-        // Ignorar � pode não existir
+        // Ignorar – pode não existir
       }
 
       // Pequeno delay para a Evolution processar a deleção
@@ -571,34 +574,34 @@ export class WhatsappService implements OnModuleInit {
     const state = data.state;
     const reason = data.statusReason;
 
-    // ���� COOLDOWN CHECK ����
+    // ● ▬ ● COOLDOWN CHECK ● ▬ ●
     // Se esta instância foi "killed" recentemente, ignorar TODOS os webhooks
     const killedAt = this.killedInstances.get(connectionId);
     if (killedAt) {
       if (Date.now() - killedAt < this.KILL_COOLDOWN_MS) {
-        // Ainda no cooldown � ignora silenciosamente
+        // Ainda no cooldown -> ignora silenciosamente
         return;
       }
-      // Cooldown expirou � limpar
+      // Cooldown expirou -> limpar
       this.killedInstances.delete(connectionId);
     }
     
     this.logger.log(`Connection ${connectionId}: state=${state}, reason=${reason}`);
     
-    // ���� 405/401: SESSÒO EXPIROU ����
+    // ● ▬ ● 405/401: SESSÃO EXPIROU ● ▬ ●
     // Deletar instância na Evolution para PARAR o loop de reconexão
-    // MAS: NÒO deletar se a connection está em PAIRING (criação nova, estado transitório)
+    // MAS: NÃO deletar se a connection está em PAIRING (criação nova, estado transitório)
     if (reason === 405 || reason === 401) {
-      // Verificar se está em fase de criação (PAIRING) � se sim, ignorar o 405/401
+      // Verificar se está em fase de criação (PAIRING) -> se sim, ignorar o 405/401
       // pois é um estado transitório normal da Evolution antes do QR code
       try {
         const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
         if (conn?.status === 'PAIRING') {
-          this.logger.warn(`Connection ${connectionId} got ${reason} but is PAIRING � ignoring (transient state)`);
+          this.logger.warn(`Connection ${connectionId} got ${reason} but is PAIRING -> ignoring (transient state)`);
           return;
         }
       } catch (e) {
-        // Se não conseguir verificar, prosseguir com kill
+        // Se não conseguir verificar, prosseguir with kill
       }
 
       // Adicionar ao cooldown IMEDIATAMENTE para bloquear webhooks subsequentes
@@ -627,14 +630,14 @@ export class WhatsappService implements OnModuleInit {
       return;
     }
 
-    // ���� 408: TIMEOUT ����
+    // ● ▬ ● 408: TIMEOUT ● ▬ ●
     // Ignorar silenciosamente
     if (reason === 408 && state === 'close') {
-      this.logger.debug(`Connection ${connectionId} timeout � ignoring`);
+      this.logger.debug(`Connection ${connectionId} timeout -> ignoring`);
       return;
     }
 
-    // ���� MAPEAR ESTADO ����
+    // ● ▬ ● MAPEAR ESTADO ● ▬ ●
     let status = 'DISCONNECTED';
     if (state === 'open') status = 'CONNECTED';
     else if (state === 'connecting' || state === 'qrCode') status = 'PAIRING';
@@ -671,7 +674,7 @@ export class WhatsappService implements OnModuleInit {
       return;
     }
 
-    this.logger.log(`�x� QR Code received via webhook for ${connectionId}`);
+    this.logger.log(`📲  QR Code received via webhook for ${connectionId}`);
 
     try {
       await this.prisma.connection.update({
@@ -956,6 +959,29 @@ export class WhatsappService implements OnModuleInit {
         ),
       });
 
+      // --- DR.X CLAW INTEGRATION ---
+      if (!isFromMe && !isGroup && text && text.length > 0) {
+        try {
+          const drxResult = await this.drxClawService.handleWhatsappInbound(
+            tenantId,
+            connectionId,
+            capture.conversation.id,
+            phoneClean || fullJid,
+            text,
+            mediaPath
+          );
+
+          if (drxResult?.reply) {
+            await this.sendText(connectionId, fullJid, drxResult.reply, {
+              quoted: message.key.id,
+              delay: 1500, // Simulando digitação
+            });
+          }
+        } catch (drxError) {
+          this.logger.error(`DrX-Claw failed to handle WhatsApp message: ${drxError.message}`);
+        }
+      }
+
       const refreshedConversation = await this.prisma.agentConversation.findUnique({
         where: { id: capture.conversation.id },
       });
@@ -984,6 +1010,7 @@ export class WhatsappService implements OnModuleInit {
       this.logger.error(`Error processing Evolution message: ${error.message}`);
     }
   }
+
   /**
    * Processa atualizações de status de mensagem (sent, delivered, read).
    */
@@ -1107,13 +1134,14 @@ export class WhatsappService implements OnModuleInit {
       this.logger.error(`Error processing presence update: ${e.message}`);
     }
   }
+
   // ==========================================
   // OUTGOING METHODS
   // ==========================================
 
-  async sendText(connectionId: string, to: string, text: string) {
+  async sendText(connectionId: string, to: string, text: string, options: any = {}) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
-    const response = await this.evolutionService.sendText(connectionId, to, text, {}, evolutionConfig);
+    const response = await this.evolutionService.sendText(connectionId, to, text, options, evolutionConfig);
     // Para v2.1.1, a resposta inclui a chave da mensagem
     return response?.key?.id || response?.message?.key?.id;
   }

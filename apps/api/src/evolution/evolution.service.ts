@@ -105,7 +105,7 @@ export class EvolutionService {
       const errorData = error.response?.data;
       const errorStr = JSON.stringify(errorData || '').toLowerCase();
 
-      // 403 = "already in use", 409 = "already exists" � ambos significam que a instância já existe
+      // 403 = "already in use", 409 = "already exists" – ambos significam que a instância já existe
       if (status === 403 || status === 409 || status === 400) {
         if (errorStr.includes('already') || errorStr.includes('in use') || errorStr.includes('existe')) {
           this.logger.log(`Instance "${instanceName}" already exists. Continuing...`);
@@ -187,7 +187,7 @@ export class EvolutionService {
    */
   async setWebhook(instanceName: string, webhookUrl: string, config?: EvolutionConfig) {
     try {
-      this.logger.log(`Setting webhook for "${instanceName}" �  ${webhookUrl}`);
+      this.logger.log(`Setting webhook for "${instanceName}" -> ${webhookUrl}`);
       const client = this.getClient(config);
 
       // Formato correto para Evolution v2.1.1:
@@ -261,16 +261,17 @@ export class EvolutionService {
         number: formattedNumber,
         text: text,
         options: {
-          delay: 1000,
-          presence: 'composing'
+          delay: options?.delay || 1000,
+          presence: options?.presence || 'composing'
         }
       };
 
       // Support for Quoted Message (Replying to a specific message)
-      if (options?.quoted?.key?.id || options?.quotedId) {
+      const quotedId = options?.quotedId || (typeof options?.quoted === 'string' ? options.quoted : options?.quoted?.key?.id);
+      if (quotedId) {
         payload.options.quoted = {
           key: {
-            id: options?.quotedId || options?.quoted?.key?.id
+            id: quotedId
           }
         };
       }
@@ -448,7 +449,3 @@ export class EvolutionService {
     }
   }
 }
-
-
-
-

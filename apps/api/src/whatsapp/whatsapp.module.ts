@@ -8,6 +8,7 @@ import { TicketsModule } from '../tickets/tickets.module';
 import { EvolutionModule } from '../evolution/evolution.module';
 import { AgentModule } from '../agent/agent.module';
 import { InboxModule } from '../inbox/inbox.module';
+import { DrxClawModule } from '../drx-claw/drx-claw.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { InboxModule } from '../inbox/inbox.module';
     forwardRef(() => EvolutionModule),
     AgentModule,
     forwardRef(() => InboxModule),
+    forwardRef(() => DrxClawModule),
   ],
   controllers: [WhatsappController],
   providers: [WhatsappService, WhatsappGateway, PrismaService],

@@ -18,6 +18,8 @@ import * as fs from 'fs';
 import { WhisperTranscription } from '../telegram/utils/whisper.util';
 import { PdfExtractor } from '../telegram/utils/pdf.util';
 import { TelegramService } from '../telegram/telegram.service';
+import { TriagemService } from "./triagem.service";
+import { WhatsappService } from "../whatsapp/whatsapp.service";
 
 type ProviderCatalogEntry = {
   provider: ProviderId;
@@ -161,8 +163,11 @@ export class DrxClawService {
     private readonly prisma: PrismaService,
     private readonly communicationsService: CommunicationsService,
     private readonly ticketsService: TicketsService,
+    private readonly triagemService: TriagemService,
     @Inject(forwardRef(() => TelegramService))
     private readonly telegramService: TelegramService,
+    @Inject(forwardRef(() => WhatsappService))
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   private normalizeProvider(providerInput?: string): ProviderId {
@@ -1321,6 +1326,123 @@ export class DrxClawService {
     );
 
     return this.sanitizeTelegramText(result.answer) || input.baseReply;
+  }
+
+  private async buildWhatsappActionPlan(input: {
+    config: DrxClawConfig;
+    runtime: ReturnType<typeof this.resolveRuntime>;
+    prompt: string;
+    context: Record<string, any>;
+    allowActions: boolean;
+  }) {
+    const systemPrompt = [
+      `Assistente: ${input.config.assistantName}`,
+      input.config.systemPrompt,
+      'Canal: WhatsApp.',
+      'Retorne APENAS JSON valido.',
+      'Formato: {"reply":"texto","actions":[{"type":"SEARCH_CONTACT","query":"..." }]}',
+      input.allowActions
+        ? 'Acoes permitidas: SEARCH_CONTACT(query), LIST_OPEN_TICKETS(limit,status), GET_PROCESS_SUMMARY(query), UPDATE_TICKET_STATUS(ticketCodeOrId,status), ADD_TICKET_NOTE(content).'
+        : 'Acoes desabilitadas. Responda apenas com "reply".',
+      'A resposta em "reply" deve ser curta, clara e em portugues do Brasil.',
+    ].join('\n\n');
+
+    const result = await this.executeRuntimeRequest(
+      input.runtime,
+      systemPrompt,
+      JSON.stringify({
+        prompt: input.prompt,
+        context: input.context,
+      }),
+      input.config,
+    );
+
+    const parsed = this.extractJsonObject(result.answer);
+    return {
+      reply: parsed?.reply || result.answer,
+      actions: Array.isArray(parsed?.actions) ? parsed.actions : [],
+    };
+  }
+
+  private async synthesizeWhatsappReply(input: {
+    config: DrxClawConfig;
+    runtime: ReturnType<typeof this.resolveRuntime>;
+    prompt: string;
+    baseReply: string;
+    actionResults: any[];
+  }) {
+    if (input.actionResults.length === 0) return input.baseReply;
+
+    const result = await this.executeRuntimeRequest(
+      input.runtime,
+      [
+        `Assistente: ${input.config.assistantName}`,
+        input.config.systemPrompt,
+        'Canal: WhatsApp.',
+        'Resuma os resultados das acoes e responda ao cliente.',
+      ].join('\n\n'),
+      JSON.stringify({
+        prompt: input.prompt,
+        respostaBase: input.baseReply,
+        resultadosDasAcoes: input.actionResults,
+      }),
+      input.config,
+    );
+
+    return result.answer || input.baseReply;
+  }
+
+  async handleWhatsappInbound(tenantId: string, connectionId: string, conversationId: string, phone: string, prompt: string, mediaUrl?: string) {
+    const { config } = await this.ensureConfigRecord(tenantId);
+    if (!config.enabled) return { ignored: true, reason: 'DRX_DISABLED' };
+
+    const triage = await this.triagemService.triageMessage(tenantId, phone, prompt, mediaUrl);
+    
+    if (triage.action === 'ONBOARDING') {
+      return { reply: triage.reply, ticketId: null };
+    }
+
+    // Busca o TicketId vinculado à conversa para permitir ações (notas, status)
+    const conversation = await this.prisma.agentConversation.findUnique({
+      where: { id: conversationId },
+      select: { ticketId: true }
+    });
+
+    const runtime = this.resolveRuntime(config);
+    const context = {
+      tenantId,
+      phone,
+      triage: {
+        category: triage.category,
+        suggestion: triage.suggestion,
+      },
+      skills: this.matchSkills(prompt, config.skills),
+    };
+
+    const plan = await this.buildWhatsappActionPlan({
+      config,
+      runtime,
+      prompt,
+      context,
+      allowActions: true,
+    });
+
+    const actionResults = await this.executeTelegramActions({
+      tenantId,
+      currentTicketId: conversation?.ticketId || '', 
+      allowActions: true,
+      actions: plan.actions,
+    });
+
+    const finalReply = await this.synthesizeWhatsappReply({
+      config,
+      runtime,
+      prompt,
+      baseReply: plan.reply,
+      actionResults,
+    });
+
+    return { reply: finalReply, contactId: triage.contact?.id, ticketId: conversation?.ticketId };
   }
 
   async handleTelegramInbound(connectionId: string, update: any) {

@@ -66,7 +66,7 @@ export const DEFAULT_SKILLS: DrxSkill[] = [
     description:
       "Analisa PDF de autos do PJe ou eproc, identifica partes, procuradores, pecas, fase, prazos e pendencias.",
     instructions:
-      "Ao receber texto ou PDF de processo eletronico, primeiro detecte o sistema e extraia os fatos. Depois organize processo, polos, clientes, contrarios, procuradores, pecas, eventos e prazos. Separe claramente o que veio do documento do que e inferencia. Nunca trate peticao como decisao judicial, nao invente dados ausentes e destaque pendencias, riscos e proximos passos com alerta de validacao humana.",
+      "Aja como um Especialista em Direito Processual Civil e Digital. Ao receber o texto de um PDF ou andamento processual: 1. CLASSIFIQUE a peca (Sentenca, Despacho, Inicial, etc). 2. EXTRAIA dados estruturados: CNJ, Partes, Valor da Causa/Condenacao e Prazos. 3. DETECTE URGENCIA e RISCOS: Liminares, Audencias, Bloqueios (SisbaJud) e Prazos Fatais. 4. RESUMA em linguagem clara para o cliente em ate 3 paragrafos. 5. SUGIRA a proxima acao do advogado. Use a tag [Sugestao IA - Validar] para interpretacoes de prazos. Nunca invente dados e mantenha o rigor tecnico.",
     triggerKeywords: [
       "pdf do processo",
       "autos",
