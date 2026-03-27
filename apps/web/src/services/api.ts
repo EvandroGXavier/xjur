@@ -2,12 +2,13 @@ import axios, { AxiosResponse, AxiosError } from 'axios';
 import { getDeviceToken, getToken, logoutLocal } from '../auth/authStorage';
 
 // Adicionamos o "export" aqui para que as outras telas possam ler esta função
-export const getApiUrl = () => {
-  if (window.location.hostname === 'localhost' || window.location.hostname.includes('idx.google.com')) {
-    return `http://${window.location.hostname}:3000/api`;
-  }
-  // Em produção, usa caminho relativo (Proxy Reverso cuida do resto)
-  return '/api';
+export const getApiUrl = (path?: string) => {
+  const base = (window.location.hostname === 'localhost' || window.location.hostname.includes('idx.google.com'))
+    ? `http://${window.location.hostname}:3000/api`
+    : '/api';
+  
+  if (!path) return base;
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 };
 
 export const api = axios.create({
@@ -40,7 +41,7 @@ api.interceptors.response.use(
       data: error.response?.data,
     });
     if (error.response?.status === 401) {
-      // Evitar redirect infinito se o erro 401 vier do prprio login (credenciais invlidas)
+      // Evitar redirect infinito se o erro 401 vier do proprio login (credenciais invalidas)
       if (error.config?.url?.includes('/auth/login')) {
          return Promise.reject(error);
       }

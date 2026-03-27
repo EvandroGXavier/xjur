@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { api, getApiUrl } from '../../services/api';
+import { openProtectedMedia } from '../../services/protectedMedia';
 import { isValidCnpj, isValidCpf, masks } from '../../utils/masks';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
 import { helpContacts } from '../../data/helpManuals';
@@ -1042,35 +1043,32 @@ export function ContactForm() {
 
   const handleAttachmentSelection = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setPendingAttachments(prev => [...prev, ...Array.from(files)]);
-  };
-
-  const handleRemovePendingAttachment = (index: number) => {
-    setPendingAttachments(prev => prev.filter((_, currentIndex) => currentIndex !== index));
-  };
-
-  const handlePrintAttachment = (attachment: ContactAttachment) => {
-    const printWindow = window.open(getAttachmentUrl(attachment), '_blank', 'noopener,noreferrer');
-    if (!printWindow) {
-      toast.error('Nao foi possivel abrir o anexo para impressao');
-      return;
+    
+    const filesArray: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+        const f = files.item(i);
+        if (f) filesArray.push(f);
     }
-    setTimeout(() => {
-      try {
-        printWindow.print();
-      } catch (error) {
-        console.error(error);
-      }
-    }, 800);
+    
+    if (filesArray.length > 0) {
+        // Atualiza a fila e inicia o upload automático
+        setPendingAttachments(filesArray); 
+        // Pequeno delay para garantir que o state foi atualizado antes de ler a fila no upload
+        setTimeout(() => {
+            handleUploadAttachments(filesArray);
+        }, 100);
+    }
   };
 
-  const handleUploadAttachments = async () => {
+  const handleUploadAttachments = async (filesOverride?: File[]) => {
     if (!id || id === 'new') {
       toast.warning('Salve o contato antes de anexar arquivos');
       return;
     }
 
-    if (pendingAttachments.length === 0) {
+    const filesToUpload = filesOverride || pendingAttachments;
+
+    if (filesToUpload.length === 0) {
       toast.warning('Selecione pelo menos um arquivo');
       return;
     }
@@ -1079,7 +1077,8 @@ export function ContactForm() {
       setUploadingAttachments(true);
       setAttachmentUploadProgress(0);
       const data = new FormData();
-      pendingAttachments.forEach(file => data.append('attachments', file));
+      filesToUpload.forEach(file => data.append('attachments', file));
+      
       const response = await api.post(`/contacts/${id}/attachments`, data, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -1092,7 +1091,7 @@ export function ContactForm() {
       setFormData(response.data);
       setPendingAttachments([]);
       setAttachmentUploadProgress(100);
-      toast.success('Anexos enviados com sucesso!');
+      toast.success(`${filesToUpload.length} anexo(s) enviado(s) com sucesso!`);
     } catch (error) {
       console.error(error);
       toast.error('Erro ao enviar anexos do contato');
@@ -1100,6 +1099,39 @@ export function ContactForm() {
       setUploadingAttachments(false);
       setTimeout(() => setAttachmentUploadProgress(0), 1200);
     }
+  };
+
+  const handlePrintAttachment = async (attachment: ContactAttachment) => {
+    const safeFileName = encodeURIComponent(attachment.fileName);
+    const mediaUrl = `/contacts/${id}/attachments/${safeFileName}`;
+    
+    try {
+        const { fetchProtectedMediaBlob } = await import('../../services/protectedMedia');
+        const blob = await fetchProtectedMediaBlob(mediaUrl);
+        const objectUrl = URL.createObjectURL(blob);
+        const printWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+        
+        if (!printWindow) {
+          toast.error('Nao foi possivel abrir o anexo para impressao');
+          return;
+        }
+
+        setTimeout(() => {
+          try {
+            printWindow.print();
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+          } catch (error) {
+            console.error(error);
+          }
+        }, 800);
+    } catch (err) {
+        console.error(err);
+        toast.error('Falha ao autenticar para abrir o documento.');
+    }
+  };
+
+  const handleRemovePendingAttachment = (index: number) => {
+    setPendingAttachments(prev => prev.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const handleDeleteAttachment = async (fileName: string) => {
@@ -2836,20 +2868,28 @@ export function ContactForm() {
                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                                     <div>
                                         <p className="text-white font-medium">Upload multiplo</p>
-                                        <p className="text-sm text-slate-400">
-                                            Aceita PDF, imagens, Word, Excel e outros arquivos para consulta rapida, download e impressao.
+                                        <p className="text-sm text-slate-400 mt-1">
+                                            Aceita PDF, imagens, Word, Excel e outros arquivos. 
+                                            <strong> O salvamento é automático ao selecionar.</strong>
                                         </p>
                                     </div>
-                                    <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium cursor-pointer transition">
-                                        <Upload size={16} />
+                                    <label 
+                                        htmlFor="contact-attachments-upload"
+                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium cursor-pointer transition group"
+                                    >
+                                        <Upload size={16} className="group-hover:scale-110 transition-transform" />
                                         Selecionar arquivos
                                         <input
+                                            id="contact-attachments-upload"
                                             type="file"
                                             multiple
-                                            className="hidden"
-                                            onChange={event => {
-                                                handleAttachmentSelection(event.target.files);
-                                                event.currentTarget.value = '';
+                                            className="sr-only"
+                                            onChange={(event) => {
+                                                if (event.target.files) {
+                                                    handleAttachmentSelection(event.target.files);
+                                                    // Limpa o valor para permitir selecionar o mesmo arquivo novamente
+                                                    event.target.value = ''; 
+                                                }
                                             }}
                                         />
                                     </label>
@@ -2899,7 +2939,12 @@ export function ContactForm() {
                                 )}
                             </div>
 
-                            <div className="space-y-3">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 text-slate-400 px-1">
+                                    <CheckCircle2 size={16} className="text-emerald-500" />
+                                    <span className="text-sm font-medium uppercase tracking-wider">Arquivos Salvos no Sistema</span>
+                                </div>
+                                
                                 {contactAttachments.length > 0 ? (
                                     contactAttachments.map((attachment) => {
                                         const attachmentUrl = getAttachmentUrl(attachment);
@@ -2933,16 +2978,30 @@ export function ContactForm() {
                                                                 Abrir
                                                             </button>
                                                         </AttachmentPreview>
-                                                        <a
-                                                            href={attachmentUrl}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            download={attachment.originalName}
+                                                        <button
+                                                            onClick={async () => {
+                                                                try {
+                                                                    const { fetchProtectedMediaBlob } = await import('../../services/protectedMedia');
+                                                                    const safeFileName = encodeURIComponent(attachment.fileName);
+                                                                    const blob = await fetchProtectedMediaBlob(`/contacts/${id}/attachments/${safeFileName}`);
+                                                                    const objectUrl = URL.createObjectURL(blob);
+                                                                    const link = document.createElement('a');
+                                                                    link.href = objectUrl;
+                                                                    link.download = attachment.originalName || attachment.fileName;
+                                                                    document.body.appendChild(link);
+                                                                    link.click();
+                                                                    document.body.removeChild(link);
+                                                                    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+                                                                } catch (err) {
+                                                                    console.error(err);
+                                                                    toast.error('Erro ao baixar arquivo');
+                                                                }
+                                                            }}
                                                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
                                                         >
                                                             <Download size={14} />
                                                             Baixar
-                                                        </a>
+                                                        </button>
                                                         <button
                                                             onClick={() => handlePrintAttachment(attachment)}
                                                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"

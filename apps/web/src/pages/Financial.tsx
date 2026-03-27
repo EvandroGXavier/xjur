@@ -1,4 +1,4 @@
-﻿import {
+import {
   useState,
   useEffect,
   useCallback,
@@ -15,6 +15,7 @@ import {
   parseISO,
   startOfMonth,
   startOfWeek,
+  isPast,
 } from "date-fns";
 import {
   DollarSign,
@@ -33,8 +34,10 @@ import {
   User,
   Percent,
   Calculator,
+  ChevronUp,
   ChevronDown,
   ChevronRight,
+  Scale,
   Tag,
   Split,
   AlertTriangle,
@@ -50,6 +53,7 @@ import {
   FileText,
   Upload,
   Globe,
+  Bookmark,
 } from "lucide-react";
 import { api } from "../services/api";
 import { toast } from "sonner";
@@ -417,6 +421,7 @@ type FinancialProps = {
 export function Financial(props: FinancialProps = {}) {
   const navigate = useNavigate();
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+  const containerRef = useRef<HTMLDivElement>(null);
   const lockedProcessId = props.processContext?.id;
   const isEmbeddedInProcess = Boolean(lockedProcessId);
   const [records, setRecords] = useState<FinancialRecord[]>([]);
@@ -452,6 +457,24 @@ export function Financial(props: FinancialProps = {}) {
   );
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const parseAmountPtBr = (raw: string) => {
+    const normalized = String(raw || "")
+      .trim()
+      .replace(/\s/g, "")
+      .replace(/\./g, "")
+      .replace(",", ".");
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+
+  const formatAmountPtBr = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [processOptions, setProcessOptions] = useState<ProcessOption[]>([]);
@@ -672,7 +695,7 @@ export function Financial(props: FinancialProps = {}) {
   const splitsTotal = formData.splits.reduce((sum, s) => sum + s.amount, 0);
 
   const calculatePreviewFinal = () => {
-    let total = parseFloat(formData.amount) || 0;
+    let total = parseAmountPtBr(formData.amount) || 0;
     if (formData.fine) total += parseFloat(formData.fine) || 0;
     if (formData.interest) total += parseFloat(formData.interest) || 0;
     if (formData.monetaryCorrection)
@@ -760,7 +783,7 @@ export function Financial(props: FinancialProps = {}) {
     if (formData.paymentConditionId && formData.amount && formData.dueDate) {
       generateInstallments(
         formData.paymentConditionId,
-        parseFloat(formData.amount),
+        parseAmountPtBr(formData.amount),
         formData.dueDate,
       );
     } else {
@@ -780,7 +803,7 @@ export function Financial(props: FinancialProps = {}) {
     if (match && formData.amount && formData.dueDate) {
       const n = parseInt(match[1]);
       if (n >= 2 && n <= 120) {
-        const totalAmount = parseFloat(formData.amount);
+        const totalAmount = parseAmountPtBr(formData.amount);
         const instAmount = Math.floor((totalAmount / n) * 100) / 100;
         const remainder =
           Math.round((totalAmount - instAmount * n) * 100) / 100;
@@ -1331,8 +1354,12 @@ export function Financial(props: FinancialProps = {}) {
     setShowBankModal(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.SyntheticEvent,
+    opts?: { closeAfterSave?: boolean },
+  ) => {
     e.preventDefault();
+    const closeAfterSave = opts?.closeAfterSave ?? true;
 
     // Validações
     if (!formData.description.trim()) {
@@ -1346,7 +1373,7 @@ export function Financial(props: FinancialProps = {}) {
     }
 
     // Validação do amount
-    const amount = parseFloat(formData.amount);
+    const amount = parseAmountPtBr(formData.amount);
     if (isNaN(amount) || amount <= 0) {
       toast.error("Valor inválido. Digite um valor maior que zero");
       return;
@@ -1455,8 +1482,8 @@ export function Financial(props: FinancialProps = {}) {
       // limpar state de anexos novos
       setAttachments([]);
 
-      setShowModal(false);
       await fetchData();
+      if (closeAfterSave) setShowModal(false);
     } catch (error: any) {
       console.error("Erro completo:", error);
       const backendMessage = error.response?.data?.message;
@@ -1648,57 +1675,7 @@ export function Financial(props: FinancialProps = {}) {
     );
   };
 
-  const legacyFilteredRecords = records.filter((record) => {
-    let matches = record.description
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
 
-    // Filtro via cards
-    if (activeCardFilter === "INCOME_ALL") {
-      if (record.type !== "INCOME") matches = false;
-    } else if (activeCardFilter === "INCOME_PENDING") {
-      if (record.type !== "INCOME" || record.status !== "PENDING")
-        matches = false;
-    } else if (activeCardFilter === "INCOME_OVERDUE") {
-      if (record.type !== "INCOME" || record.status !== "OVERDUE")
-        matches = false;
-    } else if (activeCardFilter === "EXPENSE_ALL") {
-      if (record.type !== "EXPENSE") matches = false;
-    } else if (activeCardFilter === "EXPENSE_PENDING") {
-      if (record.type !== "EXPENSE" || record.status !== "PENDING")
-        matches = false;
-    } else if (activeCardFilter === "EXPENSE_OVERDUE") {
-      if (record.type !== "EXPENSE" || record.status !== "OVERDUE")
-        matches = false;
-    }
-
-    // Filtros manuais (selects) - se o usuário mudar o select, ele sobrescreve o card?
-    // Vamos fazer os selects serem filtros adicionais.
-    if (filters.type && record.type !== filters.type) matches = false;
-    if (filters.status && record.status !== filters.status) matches = false;
-    if (filters.category) {
-      const catId = record.financialCategory?.id || record.categoryId;
-      if (catId !== filters.category) matches = false;
-    }
-
-    if (matches && tagFilters.included.length > 0) {
-      const recordTagIds = record.tags?.map((t) => t.tag.id) || [];
-      const hasAllIncluded = tagFilters.included.every((id) =>
-        recordTagIds.includes(id),
-      );
-      if (!hasAllIncluded) matches = false;
-    }
-
-    if (matches && tagFilters.excluded.length > 0) {
-      const recordTagIds = record.tags?.map((t) => t.tag.id) || [];
-      const hasAnyExcluded = tagFilters.excluded.some((id) =>
-        recordTagIds.includes(id),
-      );
-      if (hasAnyExcluded) matches = false;
-    }
-
-    return matches;
-  });
 
   const paymentMethods = useMemo(
     () =>
@@ -1778,7 +1755,7 @@ export function Financial(props: FinancialProps = {}) {
 
     return records.filter((record) => {
       const effectiveStatus = getEffectiveRecordStatus(record);
-      const recordTagIds = record.tags?.map((tag) => tag.tag.id) || [];
+      const recordTagIds = record.tags?.map((tag) => tag.tag?.id) || [];
       const categoryId =
         record.financialCategory?.id || record.categoryId || "";
       const amount = getRecordAmount(record);
@@ -2151,12 +2128,12 @@ export function Financial(props: FinancialProps = {}) {
   }
 
   return (
-    <div className={isEmbeddedInProcess ? "space-y-6" : "p-8 space-y-6"}>
+    <div className={isEmbeddedInProcess ? "space-y-6 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30" : "p-4 sm:p-6 lg:p-8 space-y-6 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30"}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <DollarSign className="text-indigo-400" size={32} />
+          <h1 className="text-3xl font-bold text-white flex items-center gap-3 tracking-tight">
+            <DollarSign className="text-emerald-500" size={32} />
             {isEmbeddedInProcess ? "Financeiro do Processo" : "Módulo Financeiro"}
           </h1>
           {isEmbeddedInProcess ? (
@@ -2172,134 +2149,141 @@ export function Financial(props: FinancialProps = {}) {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          {view === "records" && (
+        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+          <button
+            onClick={() => setView("dashboard")}
+            className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+              view === "dashboard"
+                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <TrendingUp size={16} />
+            Dashboard
+          </button>
+          <button
+            onClick={() => setView("records")}
+            className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+              view === "records"
+                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            <FileText size={16} />
+            Transações
+          </button>
+          {!isEmbeddedInProcess && (
             <>
               <button
-                onClick={() => handleOpenModal()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+                onClick={() => setView("accounts")}
+                className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+                  view === "accounts"
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
               >
-                <Plus size={20} />
-                Nova Transação
+                <Building2 size={16} />
+                Contas Bancárias
+              </button>
+              <button
+                onClick={() => setView("conditions")}
+                className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+                  view === "conditions"
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <CreditCard size={16} />
+                Cond. Pagamento
               </button>
             </>
           )}
-          {!isEmbeddedInProcess && view === "accounts" && (
-            <button
-              onClick={() => handleOpenBankModal()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
-            >
-              <Plus size={20} />
-              Nova Conta
-            </button>
-          )}
+          <div className="w-px h-6 bg-slate-800 mx-1 hidden sm:block" />
+          <button
+            onClick={() => (view === "accounts" ? handleOpenBankModal() : handleOpenModal())}
+            className="min-h-[44px] px-4 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-base sm:text-sm font-bold transition-colors flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+          >
+            <Plus size={20} />
+            <span>Novo</span>
+          </button>
         </div>
-      </div>
-
-      {/* View Tabs */}
-      <div className="flex gap-2 border-b border-slate-700">
-        <button
-          onClick={() => setView("dashboard")}
-          className={`px-4 py-2 font-medium transition-colors ${
-            view === "dashboard"
-              ? "text-indigo-400 border-b-2 border-indigo-400"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          Dashboard
-        </button>
-        <button
-          onClick={() => setView("records")}
-          className={`px-4 py-2 font-medium transition-colors ${
-            view === "records"
-              ? "text-indigo-400 border-b-2 border-indigo-400"
-              : "text-slate-400 hover:text-white"
-          }`}
-        >
-          Transações
-        </button>
-        {!isEmbeddedInProcess && (
-          <>
-            <button
-              onClick={() => setView("accounts")}
-              className={`px-4 py-2 font-medium transition-colors ${
-                view === "accounts"
-                  ? "text-indigo-400 border-b-2 border-indigo-400"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              Contas Bancárias
-            </button>
-            <button
-              onClick={() => setView("conditions")}
-              className={`px-4 py-2 font-medium transition-colors ${
-                view === "conditions"
-                  ? "text-indigo-400 border-b-2 border-indigo-400"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              Cond. Pagamento
-            </button>
-          </>
-        )}
       </div>
 
       {/* Dashboard View */}
       {view === "dashboard" && dashboard && (
         <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-400 text-sm">Receitas</span>
-                <TrendingUp className="text-green-400" size={20} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-emerald-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Receitas</span>
+                <div className="p-2 bg-emerald-500/10 rounded-lg group-hover:bg-emerald-500/20 transition-colors">
+                  <TrendingUp className="text-emerald-400" size={20} />
+                </div>
               </div>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
                 {formatCurrency(dashboard.summary.totalIncome)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Pendente: {formatCurrency(dashboard.summary.pendingIncome)}
-              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase">Pendente</span>
+                <span className="text-sm font-medium text-slate-400">
+                  {formatCurrency(dashboard.summary.pendingIncome)}
+                </span>
+              </div>
             </div>
 
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-400 text-sm">Despesas</span>
-                <TrendingDown className="text-red-400" size={20} />
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-red-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Despesas</span>
+                <div className="p-2 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors">
+                  <TrendingDown className="text-red-400" size={20} />
+                </div>
               </div>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
                 {formatCurrency(dashboard.summary.totalExpense)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Pendente: {formatCurrency(dashboard.summary.pendingExpense)}
-              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 uppercase">Pendente</span>
+                <span className="text-sm font-medium text-slate-400">
+                  {formatCurrency(dashboard.summary.pendingExpense)}
+                </span>
+              </div>
             </div>
 
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-400 text-sm">Saldo</span>
-                <DollarSign className="text-indigo-400" size={20} />
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-indigo-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Fluxo</span>
+                <div className="p-2 bg-indigo-500/10 rounded-lg group-hover:bg-indigo-500/20 transition-colors">
+                  <DollarSign className="text-indigo-400" size={20} />
+                </div>
               </div>
               <p
-                className={`text-2xl font-bold ${dashboard.summary.balance >= 0 ? "text-green-400" : "text-red-400"}`}
+                className={`text-2xl sm:text-3xl font-bold tracking-tight tabular-nums break-words ${dashboard.summary.balance >= 0 ? "text-white" : "text-red-400"}`}
               >
                 {formatCurrency(dashboard.summary.balance)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Saldo em contas:{" "}
-                {formatCurrency(dashboard.summary.totalBalance)}
-              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 uppercase">Contas</span>
+                <span className="text-sm font-medium text-slate-400">
+                  {formatCurrency(dashboard.summary.totalBalance)}
+                </span>
+              </div>
             </div>
 
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-400 text-sm">Vencidos</span>
-                <Calendar className="text-orange-400" size={20} />
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-orange-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Alertas</span>
+                <div className="p-2 bg-orange-500/10 rounded-lg group-hover:bg-orange-500/20 transition-colors">
+                  <Calendar className="text-orange-400" size={20} />
+                </div>
               </div>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
                 {dashboard.summary.overdueCount}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Registros em atraso</p>
+              <div className="flex items-center gap-2 mt-2 font-medium text-slate-400 text-sm">
+                <AlertTriangle size={14} className="text-orange-400" />
+                Registros Vencidos
+              </div>
             </div>
           </div>
 
@@ -2341,12 +2325,12 @@ export function Financial(props: FinancialProps = {}) {
 
       {/* Records View */}
       {view === "records" && (
-        <div className="space-y-4">
-          <div className="space-y-4">
-            <div className="flex flex-col xl:flex-row gap-4">
-              <div className="relative flex-1">
+        <div className="space-y-6">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl shadow-black/5 flex flex-col gap-6 antialiased">
+            <div className="flex flex-col lg:flex-row gap-4 items-center">
+              <div className="relative flex-1 w-full">
                 <Search
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"
+                  className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"
                   size={20}
                 />
                 <input
@@ -2354,10 +2338,10 @@ export function Financial(props: FinancialProps = {}) {
                   placeholder="Buscar por descrição, contato, conta, categoria ou etiqueta..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-base sm:text-sm"
                 />
               </div>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
                 <select
                   value={filters.type}
                   onChange={(e) =>
@@ -2366,7 +2350,7 @@ export function Financial(props: FinancialProps = {}) {
                       type: e.target.value,
                     }))
                   }
-                  className="px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="min-h-[44px] px-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-base sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[140px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
                 >
                   <option value="">Todos os tipos</option>
                   <option value="INCOME">Receitas</option>
@@ -2380,7 +2364,7 @@ export function Financial(props: FinancialProps = {}) {
                       status: e.target.value,
                     }))
                   }
-                  className="px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="min-h-[44px] px-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-base sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[140px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
                 >
                   <option value="">Todos os status</option>
                   <option value="PENDING">Pendente</option>
@@ -2391,12 +2375,12 @@ export function Financial(props: FinancialProps = {}) {
                 </select>
                 <button
                   onClick={openAdvancedFilterModal}
-                  className="px-4 py-3 bg-slate-900 border border-indigo-500/40 text-indigo-200 rounded-lg font-medium flex items-center gap-2 hover:bg-slate-800 transition-colors"
+                  className="min-h-[44px] px-5 py-3.5 bg-slate-900 border border-indigo-500/30 text-indigo-300 rounded-xl font-bold text-base sm:text-sm flex items-center justify-center gap-2 hover:bg-slate-800 hover:border-indigo-500 transition-all shadow-lg shadow-indigo-500/5 group"
                 >
-                  <Filter size={18} />
-                  Filtros Avançados
+                  <Filter size={20} className="group-hover:scale-110 transition-transform" />
+                  <span>Filtros Avançados</span>
                   {activeAdvancedFilterCount > 0 && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">
+                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-black rounded-full bg-indigo-500 text-white shadow-sm">
                       {activeAdvancedFilterCount}
                     </span>
                   )}
@@ -2404,53 +2388,56 @@ export function Financial(props: FinancialProps = {}) {
                 {totalActiveFilterCount > 0 && (
                   <button
                     onClick={resetAllFilters}
-                    className="px-4 py-3 bg-slate-900 border border-slate-700 text-slate-300 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+                    className="min-h-[44px] min-w-[44px] grid place-items-center bg-slate-900 border border-slate-800 text-slate-400 rounded-xl font-bold hover:bg-slate-800 hover:text-white transition-all"
+                    title="Limpar filtros"
                   >
-                    Limpar filtros
+                    <RefreshCw size={20} />
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-2">
-                  Resultados
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">
+                  Resultados Filtro
                 </p>
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-2xl font-semibold text-white">
+                  <span className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
                     {filteredRecords.length}
                   </span>
-                  <span className="text-sm text-slate-400">
-                    registros encontrados
+                  <span className="text-xs font-bold text-slate-500 uppercase">
+                    registros
                   </span>
                 </div>
               </div>
-              <div className="bg-slate-900/80 border border-emerald-500/20 rounded-xl p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-2">
-                  Receitas filtradas
+              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-5 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500/70 mb-2">
+                  Receitas Filtradas
                 </p>
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-2xl font-semibold text-emerald-400">
+                  <span className="text-2xl sm:text-3xl font-bold text-emerald-400 tracking-tight tabular-nums break-words">
                     {formatCurrency(filteredSummary.income)}
                   </span>
-                  <span className="text-sm text-slate-400">saldo parcial</span>
+                  <span className="text-[10px] font-bold text-emerald-500/50 uppercase">parcial</span>
                 </div>
               </div>
-              <div className="bg-slate-900/80 border border-red-500/20 rounded-xl p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-2">
-                  Despesas filtradas
+              <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-5 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500/70 mb-2">
+                  Despesas Filtradas
                 </p>
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-2xl font-semibold text-red-400">
+                  <span className="text-2xl sm:text-3xl font-bold text-red-400 tracking-tight tabular-nums break-words">
                     {formatCurrency(filteredSummary.expense)}
                   </span>
-                  <span className="text-sm text-slate-400">
-                    {filteredSummary.overdueCount} vencidas
+                  <span className="text-[10px] font-bold text-red-500/50 uppercase">
+                    {filteredSummary.overdueCount} atrasadas
                   </span>
                 </div>
               </div>
             </div>
+          </div>
+          
 
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
               <button
@@ -2652,7 +2639,8 @@ export function Financial(props: FinancialProps = {}) {
                 )}
               </div>
             )}
-          </div>
+
+          
 
           <AdvancedTagFilter
             scope="FINANCE"
@@ -3006,67 +2994,64 @@ export function Financial(props: FinancialProps = {}) {
           )}
 
           {/* Records Table */}
-          <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-slate-700/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Contatos
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl antialiased">
+            <div className="overflow-x-auto overflow-y-hidden">
+              <table className="min-w-[1100px] w-full border-collapse">
+              <thead>
+                <tr className="bg-slate-950/50 border-b border-slate-800">
+                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                    Contatos & Contas
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
                     Etiquetas
                   </th>
                   <th
                     onClick={() => handleSort("description")}
-                    className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white"
+                    className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] cursor-pointer hover:text-indigo-400 transition-colors group"
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
                       Descrição
-                      {sortConfig.key === "description" &&
-                        (sortConfig.direction === "asc" ? (
-                          <ArrowUp size={12} />
-                        ) : (
-                          <ArrowDown size={12} />
-                        ))}
+                      <div className="flex flex-col opacity-20 group-hover:opacity-100 transition-opacity">
+                        <ChevronUp size={10} className={sortConfig.key === "description" && sortConfig.direction === "asc" ? "text-indigo-400 opacity-100" : ""} />
+                        <ChevronDown size={10} className={sortConfig.key === "description" && sortConfig.direction === "desc" ? "text-indigo-400 opacity-100" : ""} />
+                      </div>
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                    Datas
+                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                    Datas Cronograma
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
                     Status
                   </th>
                   <th
                     onClick={() => handleSort("amount")}
-                    className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider cursor-pointer hover:text-white"
+                    className="px-6 py-4 text-right text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] cursor-pointer hover:text-indigo-400 transition-colors group"
                   >
-                    <div className="flex items-center gap-1">
-                      Valor
-                      {sortConfig.key === "amount" &&
-                        (sortConfig.direction === "asc" ? (
-                          <ArrowUp size={12} />
-                        ) : (
-                          <ArrowDown size={12} />
-                        ))}
+                    <div className="flex items-center justify-end gap-2">
+                      Valor Final
+                      <div className="flex flex-col opacity-20 group-hover:opacity-100 transition-opacity text-left">
+                        <ChevronUp size={10} className={sortConfig.key === "amount" && sortConfig.direction === "asc" ? "text-indigo-400 opacity-100" : ""} />
+                        <ChevronDown size={10} className={sortConfig.key === "amount" && sortConfig.direction === "desc" ? "text-indigo-400 opacity-100" : ""} />
+                      </div>
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider text-right">
+                  <th className="px-6 py-4 text-right text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700">
+              <tbody className="divide-y divide-slate-800 bg-slate-900/10">
                 {sortedRecords.map((record) => (
                   <Fragment key={record.id}>
                     <tr
-                      className="hover:bg-slate-700/30 transition-colors cursor-pointer"
+                      className="hover:bg-indigo-500/[0.03] transition-colors cursor-pointer group/row"
                       onDoubleClick={() => handleOpenModal(record)}
                     >
                       <td
-                        className="px-5 py-3 whitespace-nowrap"
+                        className="px-6 py-5 align-top"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-2">
                           {record.parties
                             ?.filter((party) => party.contact)
                             .sort(
@@ -3080,24 +3065,24 @@ export function Financial(props: FinancialProps = {}) {
                               return (
                                 <div
                                   key={`${record.id}-${party.contactId}-${party.role}`}
-                                  className="flex items-center gap-1.5"
+                                  className="flex items-center justify-between gap-2 p-1.5 bg-slate-950/40 border border-slate-800/50 rounded-lg group/party hover:border-indigo-500/30 transition-all mb-1"
                                 >
-                                  <span
-                                    className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${roleMeta.className}`}
-                                  >
-                                    {roleMeta.short}
-                                  </span>
-                                  <span
-                                    className="text-xs text-slate-200 hover:text-indigo-400 cursor-pointer transition-colors truncate max-w-[140px]"
-                                    onClick={() =>
-                                      navigate(`/contacts/${party.contact!.id}`)
-                                    }
-                                    title={`${roleMeta.label}: ${party.contact!.name}`}
-                                  >
-                                    {party.contact!.name}
-                                  </span>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm shrink-0 ${roleMeta.className.replace('text-', 'bg-').replace('vibrant-', 'vibrant-bg-')} ${roleMeta.className}`}>
+                                      {roleMeta.short}
+                                    </span>
+                                    <span
+                                      className="text-[10px] text-slate-300 truncate font-black uppercase tracking-widest cursor-pointer hover:text-indigo-400"
+                                      onClick={() =>
+                                        navigate(`/contacts/${party.contact!.id}`)
+                                      }
+                                      title={`${roleMeta.label}: ${party.contact!.name}`}
+                                    >
+                                      {party.contact!.name}
+                                    </span>
+                                  </div>
                                   {party.amount && (
-                                    <span className="text-[10px] text-slate-500 shrink-0">
+                                    <span className="text-[9px] font-black text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded shadow-sm shrink-0">
                                       {formatCurrency(Number(party.amount))}
                                     </span>
                                   )}
@@ -3106,31 +3091,33 @@ export function Financial(props: FinancialProps = {}) {
                             })}
 
                           {record.bankAccount && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 shrink-0">
-                                BC
-                              </span>
+                            <div className="flex items-center gap-2 mt-1 opacity-70 hover:opacity-100 transition-opacity">
+                              <div className="p-1 bg-blue-500/10 rounded text-blue-400 shrink-0">
+                                <Building2 size={10} />
+                              </div>
                               <span
-                                className="text-[10px] text-slate-400 truncate max-w-[140px] flex items-center gap-1"
+                                className="text-[11px] text-slate-400 truncate max-w-[140px] font-medium"
                                 title={record.bankAccount.bankName}
                               >
-                                <Building2 size={10} />
                                 {record.bankAccount.bankName}
                               </span>
                             </div>
                           )}
 
-                          {(!record.parties || record.parties.length === 0) &&
-                            !record.bankAccount && (
-                              <span className="text-[10px] text-slate-600 italic">
-                                Sem partes
-                              </span>
-                            )}
+                            {(!record.parties || record.parties.length === 0) &&
+                              !record.bankAccount && (
+                                <div className="px-1 py-1 flex items-center gap-2 opacity-30">
+                                  <div className="w-1 h-1 rounded-full bg-slate-600" />
+                                  <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">
+                                    Sem Vínculos
+                                  </span>
+                                </div>
+                              )}
                         </div>
                       </td>
 
                       <td
-                        className="px-6 py-4"
+                        className="px-6 py-5 align-top"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <InlineTags
@@ -3138,40 +3125,41 @@ export function Financial(props: FinancialProps = {}) {
                           entityId={record.id}
                           entityType="financial"
                           onRefresh={fetchData}
+                          className="scale-90 origin-top-left"
                         />
                       </td>
 
-                      <td className="px-6 py-4 min-w-[200px]">
-                        <div className="flex items-center gap-2">
+                      <td className="px-6 py-5 align-top min-w-[280px]">
+                        <div className="flex items-start gap-3">
                           {record.children && record.children.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toggleRowExpand(record.id);
                               }}
-                              className="text-slate-400 hover:text-white shrink-0"
+                              className="mt-1 p-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-500 hover:text-white hover:border-indigo-500 transition-all shadow-lg active:scale-95"
                             >
                               {expandedRows.has(record.id) ? (
-                                <ChevronDown size={16} />
+                                <ChevronDown size={14} />
                               ) : (
-                                <ChevronRight size={16} />
+                                <ChevronRight size={14} />
                               )}
                             </button>
                           )}
-                          <div className="flex flex-col">
-                            <p className="text-sm font-medium text-white line-clamp-3 leading-tight mb-1">
+                          <div className="flex flex-col gap-2 flex-1">
+                            <p className="text-sm font-black text-white leading-tight tracking-tight group-hover/row:text-indigo-300 transition-colors">
                               {record.description}
                             </p>
-                            <div className="flex gap-1 items-center">
+                            <div className="flex flex-wrap gap-1.5 mt-1">
                               {record.financialCategory && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 bg-slate-800 text-slate-400">
+                                <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border border-slate-800 bg-slate-950 text-slate-500 group-hover/row:border-slate-700 transition-colors">
                                   {record.financialCategory.name}
                                 </span>
                               )}
                               {record.totalInstallments &&
                                 record.totalInstallments > 1 && (
-                                  <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded border border-purple-500/20">
-                                    {record.totalInstallments}x
+                                  <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded-md border border-indigo-500/20 shadow-sm">
+                                    {record.totalInstallments} parcelas
                                   </span>
                                 )}
                             </div>
@@ -3179,47 +3167,41 @@ export function Financial(props: FinancialProps = {}) {
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0 uppercase">
-                              Lanç:
-                            </span>
-                            <span className="text-[11px] text-slate-400 font-medium">
-                              {record.createdAt
-                                ? formatDate(record.createdAt)
-                                : "-"}
+                      <td className="px-6 py-5 align-top whitespace-nowrap">
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex items-center gap-2 px-2 py-1 bg-slate-950/50 rounded-lg border border-slate-800/40">
+                            <Calendar size={11} className="text-slate-600" />
+                            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-tighter">
+                              {record.createdAt ? formatDate(record.createdAt) : "-"}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0 uppercase">
-                              Venc:
-                            </span>
-                            <span className="text-[11px] text-orange-400 font-bold">
-                              {formatDate(record.dueDate)}
+                          <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-950 rounded-lg border border-slate-800 shadow-inner group/venc">
+                            <div className={`w-1.5 h-1.5 rounded-full ${isPast(new Date(record.dueDate)) && !record.paymentDate ? "bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" : "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.3)]"}`} />
+                            <span className="text-[12px] text-white font-black tracking-tight">
+                              VENC: {formatDate(record.dueDate)}
                             </span>
                           </div>
                           {record.paymentDate && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0 uppercase">
-                                Pagto:
-                              </span>
-                              <span className="text-[11px] text-green-400 font-bold">
-                                {formatDate(record.paymentDate)}
+                            <div className="flex items-center gap-2 px-2 py-1 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+                              <CheckCircle2 size={11} className="text-emerald-500" />
+                              <span className="text-[11px] text-emerald-500 font-black uppercase tracking-tighter">
+                                PAGO: {formatDate(record.paymentDate)}
                               </span>
                             </div>
                           )}
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(getEffectiveRecordStatus(record))}
+                       <td className="px-6 py-5 align-top whitespace-nowrap">
+                        <div className="inline-block scale-110 origin-top-left drop-shadow-md">
+                          {getStatusBadge(getEffectiveRecordStatus(record))}
+                        </div>
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-right">
+                      <td className="px-6 py-5 align-top whitespace-nowrap text-right">
+                        <div className="flex flex-col items-end gap-1">
                           <span
-                            className={`text-sm font-bold ${record.type === "INCOME" ? "text-green-400" : "text-red-400"}`}
+                            className={`text-lg font-black tracking-tighter drop-shadow-sm ${record.type === "INCOME" ? "text-emerald-400" : "text-red-400"}`}
                           >
                             {record.type === "INCOME" ? "+" : "-"}
                             {formatCurrency(
@@ -3230,51 +3212,53 @@ export function Financial(props: FinancialProps = {}) {
                           </span>
                           {record.amountFinal &&
                             Number(record.amountFinal) !== record.amount && (
-                              <p className="text-[10px] text-slate-500 line-through">
-                                {formatCurrency(record.amount)}
-                              </p>
+                              <div className="px-2 py-0.5 bg-slate-950 rounded border border-slate-800">
+                                <p className="text-[10px] text-slate-600 line-through font-black italic tracking-tighter">
+                                  {formatCurrency(record.amount)}
+                                </p>
+                              </div>
                             )}
                         </div>
                       </td>
-                      <td
-                        className="px-6 py-4 whitespace-nowrap text-right"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex gap-1 justify-end">
-                          {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
+                        <td
+                          className="px-6 py-5 whitespace-nowrap text-right align-top"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex gap-1.5 justify-end">
+                            {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
+                              <button
+                                onClick={() => handleOpenSettleModal(record)}
+                                disabled={!hasPartiesToSettle(record)}
+                                className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
+                                  hasPartiesToSettle(record)
+                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white"
+                                    : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
+                                }`}
+                                title={
+                                  hasPartiesToSettle(record)
+                                    ? "Liquidar Lançamento"
+                                    : "Defina Credor e Devedor para liquidar"
+                                }
+                              >
+                                <Calculator size={14} />
+                              </button>
+                            )}
                             <button
-                              onClick={() => handleOpenSettleModal(record)}
-                              disabled={!hasPartiesToSettle(record)}
-                              className={`p-2 rounded transition-colors ${
-                                hasPartiesToSettle(record)
-                                  ? "text-green-400 hover:bg-green-500/10"
-                                  : "text-slate-600 cursor-not-allowed opacity-50"
-                              }`}
-                              title={
-                                hasPartiesToSettle(record)
-                                  ? "Liquidar"
-                                  : "Defina Credor e Devedor para liquidar"
-                              }
+                              onClick={() => handleOpenModal(record)}
+                              className="p-2.5 bg-slate-950 border border-slate-800 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-xl transition-all active:scale-90 shadow-sm"
+                              title="Editar Detalhes"
                             >
-                              <Calculator size={16} />
+                              <Edit size={14} />
                             </button>
-                          )}
-                          <button
-                            onClick={() => handleOpenModal(record)}
-                            className="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded transition-colors"
-                            title="Editar"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(record.id)}
-                            className="p-2 text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
+                            <button
+                              onClick={() => handleDelete(record.id)}
+                              className="p-2.5 bg-slate-950 border border-slate-800 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all active:scale-90 shadow-sm"
+                              title="Excluir Registro"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
                     </tr>
                     {/* Parcelas expandidas */}
                     {expandedRows.has(record.id) &&
@@ -3317,6 +3301,17 @@ export function Financial(props: FinancialProps = {}) {
                                 </span>
                               )}
                             </div>
+                          </td>
+                          <td
+                            className="px-6 py-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <InlineTags
+                              tags={child.tags || []}
+                              entityId={child.id}
+                              entityType="financial"
+                              onRefresh={fetchData}
+                            />
                           </td>
                           <td className="px-6 py-2 whitespace-nowrap text-xs">
                             {getStatusBadge(
@@ -3369,7 +3364,8 @@ export function Financial(props: FinancialProps = {}) {
                   </Fragment>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
 
           {/* AI & Open Finance Preview */}
@@ -3524,60 +3520,68 @@ export function Financial(props: FinancialProps = {}) {
       {/* Conditions View */}
       {view === "conditions" && <PaymentConditions />}
 
-      {/* Modal de Transação */}
+      {/* Modal de Transação - REDESENHADO PREMIUM */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-700 sticky top-0 bg-slate-800 z-10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white">
-                  {editingRecord ? "Editar Transação" : "Nova Transação"}
-                </h2>
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all animate-in fade-in duration-300">
+          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] flex flex-col antialiased">
+            {/* Header */}
+            <div className="px-8 py-6 border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-20">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                    <div className={`w-2 h-6 rounded-full ${formData.type === "INCOME" ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]"}`} />
+                    {editingRecord ? "Editar Transação" : "Nova Transação"}
+                  </h2>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+                    Módulo Financeiro & Fluxo de Caixa
+                  </p>
+                </div>
                 <button
                   onClick={() => {
                     setShowModal(false);
                     setModalTab("dados");
                   }}
-                  className="text-slate-400 hover:text-white transition-colors"
+                  className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
                 >
-                  <X size={24} />
+                  <X size={20} />
                 </button>
               </div>
 
-              {/* Tabs */}
-              <div className="flex gap-1 bg-slate-900 rounded-lg p-1">
+              {/* Tabs Premium */}
+              <div className="flex p-1.5 bg-slate-950 border border-slate-800 rounded-2xl gap-2">
                 <button
                   type="button"
                   onClick={() => setModalTab("dados")}
-                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${
                     modalTab === "dados"
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800"
+                      ? "bg-slate-800 text-white shadow-xl ring-1 ring-slate-700"
+                      : "text-slate-500 hover:text-slate-300 hover:bg-slate-900"
                   }`}
                 >
-                  <DollarSign size={14} className="inline mr-1.5" />
+                  <DollarSign size={14} className={modalTab === "dados" ? "text-indigo-400" : ""} />
                   Dados Gerais
                 </button>
                 <button
                   type="button"
                   onClick={() => setModalTab("partes")}
-                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${
                     modalTab === "partes"
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800"
+                      ? "bg-slate-800 text-white shadow-xl ring-1 ring-slate-700"
+                      : "text-slate-500 hover:text-slate-300 hover:bg-slate-900"
                   }`}
                 >
-                  <User size={14} className="inline mr-1.5" />
-                  Partes da Transação
-                  {editingRecord?.parties &&
-                    editingRecord.parties.length > 0 && (
-                      <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-500/30 rounded text-[10px] font-bold">
-                        {editingRecord.parties.length}
-                      </span>
-                    )}
+                  <User size={14} className={modalTab === "partes" ? "text-indigo-400" : ""} />
+                  Partes
+                  {editingRecord?.parties && editingRecord.parties.length > 0 && (
+                    <span className="ml-1 w-5 h-5 flex items-center justify-center bg-indigo-500 text-white rounded-full text-[9px] font-black">
+                      {editingRecord.parties.length}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
+
+            <div className="flex-1 overflow-y-auto bg-slate-900/30">
 
             {/* Tab: Partes da Transação */}
             {modalTab === "partes" && (
@@ -3594,24 +3598,24 @@ export function Financial(props: FinancialProps = {}) {
                     onUpdate={fetchData}
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-12 px-6 text-center space-y-4 bg-slate-900/30 rounded-xl border border-slate-700/50">
-                    <div className="w-16 h-16 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 flex-none">
-                      <User size={32} />
+                  <div className="flex flex-col items-center justify-center py-20 px-8 text-center space-y-6 bg-slate-950/20 rounded-3xl border border-slate-800/50 border-dashed">
+                    <div className="w-20 h-20 rounded-3xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 rotate-3 border border-indigo-500/20 shadow-xl shadow-indigo-500/5 ring-1 ring-indigo-500/10">
+                      <User size={40} className="-rotate-3" />
                     </div>
                     <div className="space-y-2">
-                      <h3 className="text-lg font-semibold text-white">
-                        Gerenciamento de Partes
+                      <h3 className="text-xl font-black text-white tracking-tight">
+                        Configuração de Partes & Divisões
                       </h3>
-                      <p className="text-sm text-slate-400 max-w-sm">
+                      <p className="text-xs text-slate-500 max-w-sm font-medium leading-relaxed uppercase tracking-wider">
                         Para gerenciar detalhadamente os credores, devedores e
                         pagadores desta transação, primeiro você precisa
-                        **salvar** os dados básicos.
+                        <b> salvar</b> os dados básicos.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setModalTab("dados")}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+                      className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
                     >
                       Voltar para Dados Gerais e Salvar
                     </button>
@@ -3622,31 +3626,34 @@ export function Financial(props: FinancialProps = {}) {
 
             {/* Tab: Dados Gerais (formulário refatorado) */}
             {modalTab === "dados" && (
-              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <form onSubmit={handleSubmit} className="px-8 py-8 space-y-8">
                 {/* LINHA 1: Tipo | Categoria | Status */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Tipo *
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Fluxo de Lançamento *
                     </label>
                     <select
                       value={formData.type}
                       onChange={(e) =>
                         setFormData({ ...formData, type: e.target.value })
                       }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full h-12 px-4 bg-slate-950 border border-slate-800 rounded-2xl text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none transition-all shadow-inner"
                       required
                     >
-                      <option value="INCOME">Receita</option>
-                      <option value="EXPENSE">Despesa</option>
+                      <option value="INCOME">⬆️ Receita (Entrada)</option>
+                      <option value="EXPENSE">⬇️ Despesa (Saída)</option>
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Categoria
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Classificação / Categoria
                     </label>
-                    <div className="flex gap-1">
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none opacity-40 group-focus-within:opacity-100 transition-opacity">
+                        <Bookmark size={14} className="text-indigo-400" />
+                      </div>
                       <input
                         type="text"
                         list="category-list-modal"
@@ -3654,8 +3661,8 @@ export function Financial(props: FinancialProps = {}) {
                         onChange={(e) =>
                           setFormData({ ...formData, category: e.target.value })
                         }
-                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Honorários..."
+                        className="w-full h-12 pl-11 pr-4 bg-slate-950 border border-slate-800 rounded-2xl text-white text-sm font-bold placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-inner"
+                        placeholder="Ex: Honorários, Aluguel..."
                       />
                       <datalist id="category-list-modal">
                         {categories.map((c) => (
@@ -3665,57 +3672,79 @@ export function Financial(props: FinancialProps = {}) {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Status *
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Estado da Operação *
                     </label>
                     <select
                       value={formData.status}
                       onChange={(e) =>
                         setFormData({ ...formData, status: e.target.value })
                       }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full h-12 px-4 bg-slate-950 border border-slate-800 rounded-2xl text-indigo-100 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none transition-all shadow-inner"
                       required
                     >
-                      <option value="PENDING">Pendente</option>
-                      <option value="PAID">Pago / Recebido</option>
-                      <option value="CANCELLED">Cancelado</option>
-                      <option value="OVERDUE">Vencido</option>
+                      <option value="PENDING">🕒 Pendente / Em Aberto</option>
+                      <option value="PAID">✅ Liquidado / Pago / Recebido</option>
+                      <option value="CANCELLED">🚫 Cancelado / Estornado</option>
+                      <option value="OVERDUE">⚠️ Vencido / Inadimplente</option>
                     </select>
                   </div>
                 </div>
 
                 {/* LINHA 2: Valor | Parcelas (Select + Nx) | Vencimento */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Valor *
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 bg-slate-950/20 rounded-3xl border border-white/[0.03] shadow-inner relative overflow-hidden group/valor">
+                  <div className="absolute top-0 right-0 p-8 opacity-5 group-hover/valor:opacity-10 transition-opacity">
+                    <DollarSign size={100} className="text-indigo-500" />
+                  </div>
+                  
+                  <div className="md:col-span-4 space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Valor da Transação (R$) *
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2 text-slate-500 text-sm">
-                        R$
-                      </span>
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <span className="text-emerald-500 font-black text-base drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]">
+                          $
+                        </span>
+                      </div>
                       <input
                         ref={amountInputRef}
                         autoFocus
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={formData.amount}
-                        onChange={(e) =>
-                          setFormData({ ...formData, amount: e.target.value })
-                        }
-                        className="w-full pl-9 pr-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-lg"
-                        placeholder="0.00"
+                        onChange={(e) => {
+                          let next = e.target.value.replace(/[^\d.,]/g, "");
+                          const commaIndex = next.indexOf(",");
+                          if (commaIndex !== -1) {
+                            next =
+                              next.slice(0, commaIndex + 1) +
+                              next.slice(commaIndex + 1).replace(/,/g, "");
+                          }
+                          setFormData({ ...formData, amount: next });
+                        }}
+                        onBlur={() => {
+                          const parsed = parseAmountPtBr(formData.amount);
+                          if (!Number.isFinite(parsed)) return;
+                          setFormData({
+                            ...formData,
+                            amount: formatAmountPtBr(parsed),
+                          });
+                        }}
+                        className="w-full h-14 pl-12 pr-4 bg-slate-950 border border-slate-800 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-black text-2xl md:text-xl shadow-lg ring-1 ring-white/5 transition-all tabular-nums"
+                        placeholder="0,00"
                         required
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-indigo-400 mb-1 uppercase tracking-wider">
-                      Parcelas
+                  <div className="md:col-span-5 space-y-2">
+                    <label className="block text-[10px] font-black text-indigo-400 mb-1 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
+                      Plano de Pagamento / Parcelas
+                      <span className="text-[8px] animate-pulse bg-indigo-500/20 px-1.5 py-0.5 rounded-full ring-1 ring-indigo-500/50 text-indigo-400">Novo</span>
                     </label>
-                    <div className="flex gap-1">
+                    <div className="flex gap-2">
                       <select
                         value={formData.paymentConditionId}
                         onChange={(e) => {
@@ -3725,82 +3754,89 @@ export function Financial(props: FinancialProps = {}) {
                           });
                           if (e.target.value) setNxInput("");
                         }}
-                        className="flex-1 px-2 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-0"
+                        className="flex-1 h-14 px-4 bg-slate-950 border border-slate-800 rounded-2xl text-indigo-100 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none transition-all shadow-inner"
                       >
-                        <option value="">À Vista</option>
+                        <option value="">⚡ À Vista (Uma vez)</option>
                         {paymentConditions.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.name}
+                            🗓️ {c.name}
                           </option>
                         ))}
                       </select>
-                      <input
-                        type="text"
-                        value={nxInput}
-                        onChange={(e) => handleNxInput(e.target.value)}
-                        className="w-14 px-2 py-2 bg-slate-700 border border-indigo-500/30 rounded-lg text-indigo-300 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-slate-500"
-                        placeholder="Nx"
-                        title="Digite ex: 3x para dividir em 3 parcelas"
-                      />
+                      <div className="relative group/nx">
+                        <input
+                          type="text"
+                          value={nxInput}
+                          onChange={(e) => handleNxInput(e.target.value)}
+                          className="w-16 h-14 px-2 bg-slate-950 border border-indigo-500/30 rounded-2xl text-indigo-400 text-base text-center font-black focus:outline-none focus:ring-2 focus:ring-indigo-500/50 placeholder-slate-700 transition-all group-hover/nx:border-indigo-500/60"
+                          placeholder="Nx"
+                          title="Digite ex: 3x para dividir em 3 parcelas"
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => setShowConditionSubModal(true)}
-                        className="p-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 transition-colors shrink-0"
+                        className="w-14 h-14 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-2xl hover:bg-indigo-500/20 hover:scale-105 transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-lg group/plus"
                         title="Criar nova Condição de Pagamento"
                       >
-                        <Plus size={16} />
+                        <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
                       </button>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Vencimento *
+                  <div className="md:col-span-3 space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Data Vencimento *
                     </label>
-                    <input
-                      type="date"
-                      value={formData.dueDate}
-                      onChange={(e) =>
-                        setFormData({ ...formData, dueDate: e.target.value })
-                      }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
+                    <div className="relative group/date">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none opacity-40 group-focus-within/date:opacity-100 transition-opacity">
+                        <Calendar size={14} className="text-indigo-400" />
+                      </div>
+                      <input
+                        type="date"
+                        value={formData.dueDate}
+                        onChange={(e) =>
+                          setFormData({ ...formData, dueDate: e.target.value })
+                        }
+                        className="w-full h-14 pl-11 pr-4 bg-slate-950 border border-slate-800 rounded-2xl text-white font-black text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-inner hover:border-slate-700"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Grid de Parcelas Geradas */}
+                {/* Grid de Parcelas Geradas - DESIGN PREMIUM */}
                 {installments.length > 0 && (
-                  <div className="bg-slate-900/50 rounded-xl border border-indigo-500/20 p-4 space-y-3">
-                    <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-                      <Calendar size={14} />
-                      Parcelas Geradas (Confira e Ajuste se necessário)
-                    </h3>
-                    <div className="max-h-[200px] overflow-y-auto rounded-lg border border-slate-700">
+                  <div className="bg-slate-950/40 rounded-3xl border border-indigo-500/20 p-6 space-y-4 shadow-inner">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Calendar size={14} className="opacity-70" />
+                        Cronograma de Parcelamento
+                      </h3>
+                      <span className="text-[9px] font-black bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full ring-1 ring-indigo-500/30 uppercase">
+                        {installments.length} Parcelas
+                      </span>
+                    </div>
+                    
+                    <div className="max-h-[200px] overflow-y-auto rounded-2xl border border-slate-800/50 bg-slate-900/30">
                       <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="bg-slate-800 text-[10px] text-slate-400 font-bold uppercase">
-                            <th className="px-3 py-2 border-b border-slate-700">
-                              Parcela
-                            </th>
-                            <th className="px-3 py-2 border-b border-slate-700">
-                              Vencimento
-                            </th>
-                            <th className="px-3 py-2 border-b border-slate-700 text-right">
-                              Valor
-                            </th>
+                          <tr className="bg-slate-950/50 text-[9px] text-slate-500 font-black uppercase tracking-widest">
+                            <th className="px-4 py-3 border-b border-slate-800/50">#</th>
+                            <th className="px-4 py-3 border-b border-slate-800/50">Vencimento</th>
+                            <th className="px-4 py-3 border-b border-slate-800/50 text-right">Valor Parcela</th>
                           </tr>
                         </thead>
-                        <tbody className="text-xs">
+                        <tbody className="text-sm">
                           {installments.map((inst, idx) => (
                             <tr
                               key={idx}
-                              className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
+                              className="border-b border-slate-800/30 hover:bg-white/[0.02] transition-colors group/inst"
                             >
-                              <td className="px-3 py-2 text-slate-300 font-medium">
-                                {inst.installmentNumber}ª
+                              <td className="px-4 py-2.5 text-slate-500 font-black text-[10px]">
+                                {inst.installmentNumber.toString().padStart(2, '0')}
                               </td>
-                              <td className="px-3 py-2">
+                              <td className="px-4 py-2.5">
                                 <input
                                   type="date"
                                   value={inst.dueDate}
@@ -3809,14 +3845,12 @@ export function Financial(props: FinancialProps = {}) {
                                     newInsts[idx].dueDate = e.target.value;
                                     setInstallments(newInsts);
                                   }}
-                                  className="bg-transparent border-none p-0 text-white focus:ring-0 w-full"
+                                  className="bg-transparent border-none p-0 text-slate-200 focus:text-white focus:ring-0 w-full text-xs font-bold"
                                 />
                               </td>
-                              <td className="px-3 py-2 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-slate-500 text-[10px]">
-                                    R$
-                                  </span>
+                              <td className="px-4 py-2.5 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="text-slate-600 text-[10px] font-black">$</span>
                                   <input
                                     type="number"
                                     step="0.01"
@@ -3827,22 +3861,22 @@ export function Financial(props: FinancialProps = {}) {
                                         parseFloat(e.target.value) || 0;
                                       setInstallments(newInsts);
                                     }}
-                                    className="bg-transparent border-none p-0 text-white text-right focus:ring-0 w-20 font-bold"
+                                    className="bg-transparent border-none p-0 text-slate-200 focus:text-white text-right focus:ring-0 w-24 font-black text-sm"
                                   />
                                 </div>
                               </td>
                             </tr>
                           ))}
                         </tbody>
-                        <tfoot className="bg-slate-800/50">
+                        <tfoot className="bg-slate-950/50">
                           <tr>
                             <td
                               colSpan={2}
-                              className="px-3 py-2 text-[11px] font-bold text-slate-400"
+                              className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider"
                             >
-                              TOTAL CONFERIDO:
+                              Total Conferido
                             </td>
-                            <td className="px-3 py-2 text-right text-white font-bold">
+                            <td className="px-4 py-3 text-right text-emerald-400 font-black text-base tracking-tighter shadow-sm">
                               {formatCurrency(
                                 installments.reduce(
                                   (sum, i) => sum + i.amount,
@@ -3858,110 +3892,120 @@ export function Financial(props: FinancialProps = {}) {
                 )}
 
                 {/* LINHA 3: Descrição */}
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                    Descrição *
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                    Descrição Detalhada do Lançamento *
                   </label>
-                  <input
-                    type="text"
-                    value={formData.description}
-                    onChange={(e) =>
-                      setFormData({ ...formData, description: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Ex: Honorários processo X"
-                    required
-                  />
+                  <div className="relative group">
+                    <div className="absolute top-3.5 left-4 opacity-40 group-focus-within:opacity-100 transition-opacity">
+                      <FileText size={16} className="text-indigo-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({ ...formData, description: e.target.value })
+                      }
+                      className="w-full h-14 pl-12 pr-4 bg-slate-950 border border-slate-800 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-bold text-sm shadow-inner transition-all"
+                      placeholder="Ex: Pagamento de Honorários Contratuais - Processo 0001..."
+                      required
+                    />
+                  </div>
                 </div>
 
                 {/* Processo (opcional) */}
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                    Processo (opcional)
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                    Vínculo com Processo Jurídico (Opcional)
                   </label>
                   {isEmbeddedInProcess ? (
-                    <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Processo em tela
-                      </p>
-                      <p className="text-sm font-medium text-white mt-0.5">
-                        {props.processContext?.title || "Processo vinculado"}
-                      </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {props.processContext?.cnj ||
-                          props.processContext?.code ||
-                          lockedProcessId}
-                      </p>
+                    <div className="bg-indigo-500/[0.03] border border-indigo-500/20 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-inner">
+                      <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
+                        <Scale size={20} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black text-indigo-400/70 uppercase tracking-widest leading-none mb-1">
+                          Processo Vinculado Ativo
+                        </p>
+                        <p className="text-sm font-black text-white leading-tight">
+                          {props.processContext?.title || "Processo em Tela"}
+                        </p>
+                        <p className="text-[11px] text-slate-500 font-bold mt-1 tracking-tight">
+                          {props.processContext?.cnj || props.processContext?.code || lockedProcessId}
+                        </p>
+                      </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      <input
-                        type="text"
-                        value={processSearch}
-                        onChange={(e) => setProcessSearch(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Buscar por CNJ, código ou título..."
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="relative group/search">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none opacity-40 group-focus-within/search:opacity-100 transition-opacity">
+                          <Search size={16} className="text-indigo-400" />
+                        </div>
+                        <input
+                          type="text"
+                          value={processSearch}
+                          onChange={(e) => setProcessSearch(e.target.value)}
+                          className="w-full h-12 pl-11 pr-4 bg-slate-950 border border-slate-800 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-bold transition-all shadow-inner"
+                          placeholder="CNJ, Código ou Título..."
+                        />
+                      </div>
                       <select
                         value={formData.processId}
                         onChange={(e) =>
                           setFormData({ ...formData, processId: e.target.value })
                         }
-                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full h-12 px-4 bg-slate-950 border border-slate-800 rounded-2xl text-indigo-100 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none transition-all shadow-inner"
                       >
-                        <option value="">Sem processo</option>
+                        <option value="">🚫 Nenhum Processo</option>
                         {formData.processId &&
                           !processOptions.some(
                             (p) => p.id === formData.processId,
                           ) && (
                             <option value={formData.processId}>
-                              Processo atual (
-                              {editingRecord?.process?.cnj || formData.processId}
-                              )
+                              ✓ Selecionado ({editingRecord?.process?.cnj || formData.processId})
                             </option>
                           )}
-                        {loadingProcesses && (
-                          <option value="" disabled>
-                            Carregando...
-                          </option>
-                        )}
-                        {!loadingProcesses &&
+                        {loadingProcesses ? (
+                          <option value="" disabled>⌛ Carregando processos...</option>
+                        ) : (
                           processOptions.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {(p.code ? `${p.code} - ` : "") +
-                                (p.title || p.cnj || p.id)}
-                              {p.cnj ? ` (${p.cnj})` : ""}
+                              ⚖️ {(p.code ? `${p.code} - ` : "") + (p.title || p.cnj || p.id).slice(0, 40)}
                             </option>
-                          ))}
+                          ))
+                        )}
                       </select>
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Use para vincular honorários, despesas e pagamentos ao processo correspondente.
-                  </p>
                 </div>
 
                 {/* LINHA 4: Data Pagamento | Forma Pagamento | Conta Bancária */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Data Pagamento
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Data da Liquidação
                     </label>
-                    <input
-                      type="date"
-                      value={formData.paymentDate}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          paymentDate: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+                    <div className="relative group/date2">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none opacity-40 group-focus-within/date2:opacity-100 transition-opacity">
+                        <CheckCircle2 size={14} className="text-emerald-400" />
+                      </div>
+                      <input
+                        type="date"
+                        value={formData.paymentDate}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            paymentDate: e.target.value,
+                          })
+                        }
+                        className="w-full h-12 pl-11 pr-4 bg-slate-950 border border-slate-800 rounded-2xl text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-inner"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Forma Pagamento
+
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Método de Pagamento
                     </label>
                     <select
                       value={formData.paymentMethod}
@@ -3971,19 +4015,20 @@ export function Financial(props: FinancialProps = {}) {
                           paymentMethod: e.target.value,
                         })
                       }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full h-12 px-4 bg-slate-950 border border-slate-800 rounded-2xl text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none transition-all shadow-inner"
                     >
-                      <option value="">Selecione...</option>
-                      <option value="PIX">PIX</option>
-                      <option value="BOLETO">Boleto</option>
-                      <option value="TED">TED</option>
-                      <option value="DINHEIRO">Dinheiro</option>
-                      <option value="CARTAO">Cartão</option>
+                      <option value="">💳 Selecionar Método...</option>
+                      <option value="PIX">💎 PIX (Instantâneo)</option>
+                      <option value="BOLETO">📄 Boleto Bancário</option>
+                      <option value="TED">🏦 Transf. Bancária (TED/DOC)</option>
+                      <option value="DINHEIRO">💵 Dinheiro (Espécie)</option>
+                      <option value="CARTAO">💳 Cartão de Crédito/Débito</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      Conta Bancária
+
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Conta Destino/Origem
                     </label>
                     <select
                       value={formData.bankAccountId}
@@ -3993,12 +4038,12 @@ export function Financial(props: FinancialProps = {}) {
                           bankAccountId: e.target.value,
                         })
                       }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full h-12 px-4 bg-slate-950 border border-slate-800 rounded-2xl text-indigo-400 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none transition-all shadow-inner"
                     >
-                      <option value="">Selecione...</option>
+                      <option value="">🏦 Selecionar Conta...</option>
                       {bankAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.bankName || account.title}
+                          🏦 {account.bankName || account.title}
                         </option>
                       ))}
                     </select>
@@ -4006,52 +4051,54 @@ export function Financial(props: FinancialProps = {}) {
                 </div>
 
                 {/* LINHA 5: Origem | Tags */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      <Globe size={10} className="inline mr-1" />
-                      Origem
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Fonte de Registro (Origem)
                     </label>
-                    <select
-                      value={formData.origin}
-                      onChange={(e) =>
-                        setFormData({ ...formData, origin: e.target.value })
-                      }
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="MANUAL">✏️ Manual</option>
-                      <option value="NF">📄 Nota Fiscal</option>
-                      <option value="COMPRA">🛒 Compra</option>
-                      <option value="PROPOSTA">📋 Proposta</option>
-                      <option value="JUDICIAL">⚖️ Judicial</option>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={formData.origin}
+                        onChange={(e) =>
+                          setFormData({ ...formData, origin: e.target.value })
+                        }
+                        className="w-full h-12 px-4 bg-slate-950 border border-slate-800 rounded-2xl text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none transition-all shadow-inner"
+                      >
+                        <option value="MANUAL">✏️ Lançamento Manual</option>
+                        <option value="NF">📄 Nota Fiscal Eletrônica</option>
+                        <option value="COMPRA">🛒 Ordem de Compra</option>
+                        <option value="PROPOSTA">📋 Proposta Comercial</option>
+                        <option value="JUDICIAL">⚖️ Mandado Judicial</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      <Tag size={10} className="inline mr-1" />
-                      Tags
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1">
+                      Etiquetas de Identificação
                     </label>
-                    {editingRecord ? (
-                      <InlineTags
-                        tags={editingRecord.tags || []}
-                        entityId={editingRecord.id}
-                        entityType="financial"
-                        onRefresh={fetchData}
-                      />
-                    ) : (
-                      <p className="text-[10px] text-slate-500 italic py-2">
-                        Tags disponíveis após salvar
-                      </p>
-                    )}
+                    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-2 min-h-[48px] shadow-inner flex items-center">
+                      {editingRecord ? (
+                        <InlineTags
+                          tags={editingRecord.tags || []}
+                          entityId={editingRecord.id}
+                          entityType="financial"
+                          onRefresh={fetchData}
+                        />
+                      ) : (
+                        <p className="text-[10px] text-slate-600 italic px-2 font-bold uppercase tracking-wider">
+                          Auto-atribuição disponível após salvar
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* LINHA 6: Observações (com paste de imagens) */}
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                    Observações
-                    <span className="text-slate-600 font-normal ml-2">
-                      (Cole imagens com Ctrl+V)
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-[0.2em] px-1 flex items-center justify-between">
+                    <span>Anotações & Observações</span>
+                    <span className="text-[9px] font-bold text-slate-600 bg-slate-950 px-2 py-0.5 rounded-full lowercase">
+                      Ctrl+V para colar imagens
                     </span>
                   </label>
                   <textarea
@@ -4060,18 +4107,19 @@ export function Financial(props: FinancialProps = {}) {
                       setFormData({ ...formData, notes: e.target.value })
                     }
                     onPaste={handleNotesPaste}
-                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[80px] text-sm"
-                    placeholder="Observações adicionais..."
+                    className="w-full h-32 p-4 bg-slate-950 border border-slate-800 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-medium transition-all shadow-inner resize-none"
+                    placeholder="Notas internas, instruções de conciliação ou detalhes adicionais..."
                   />
-                  {/* Preview de imagens coladas */}
+                  
+                  {/* Preview de imagens coladas PREMIUM */}
                   {pastedImages.length > 0 && (
-                    <div className="flex gap-2 mt-2 flex-wrap">
+                    <div className="flex gap-3 mt-4 flex-wrap p-2 bg-slate-950/50 rounded-2xl border border-slate-800/50">
                       {pastedImages.map((img, idx) => (
-                        <div key={idx} className="relative group">
+                        <div key={idx} className="relative group/img aspect-square w-20">
                           <img
                             src={img.url}
                             alt={`Colada ${idx + 1}`}
-                            className="w-20 h-20 object-cover rounded-lg border border-slate-600"
+                            className="w-full h-full object-cover rounded-xl border border-slate-700 shadow-lg group-hover/img:border-indigo-500/50 transition-all"
                           />
                           <button
                             type="button"
@@ -4081,9 +4129,9 @@ export function Financial(props: FinancialProps = {}) {
                                 prev.filter((_, i) => i !== idx),
                               );
                             }}
-                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all shadow-xl hover:scale-110 active:scale-95 z-10"
                           >
-                            <X size={10} className="text-white" />
+                            <X size={12} />
                           </button>
                         </div>
                       ))}
@@ -4091,200 +4139,191 @@ export function Financial(props: FinancialProps = {}) {
                   )}
                 </div>
 
-                {/* Anexos */}
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                    <Paperclip size={10} className="inline mr-1" />
-                    Anexos
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={attachmentInputRef}
-                      type="file"
-                      multiple
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                      onChange={(e) => {
-                        if (e.target.files) {
-                          setAttachments((prev) => [
-                            ...prev,
-                            ...Array.from(e.target.files!),
-                          ]);
-                        }
-                      }}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => attachmentInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-slate-700 border border-dashed border-slate-500 rounded-lg text-xs text-slate-400 hover:text-white hover:border-indigo-500 transition-colors flex items-center gap-1.5"
-                    >
-                      <Upload size={12} />
-                      Adicionar Arquivo
-                    </button>
-                    {attachments.length > 0 && (
-                      <span className="text-[10px] text-indigo-400 font-bold">
-                        {attachments.length} novo(s) arquivo(s) para salvar
-                      </span>
-                    )}
+                {/* Anexos PREMIUM */}
+                <div className="space-y-4 pt-4 pb-8">
+                  <div className="flex items-center justify-between px-1">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                      Documentação & Comprovantes
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                        onChange={(e) => {
+                          if (e.target.files) {
+                            setAttachments((prev) => [
+                              ...prev,
+                              ...Array.from(e.target.files!),
+                            ]);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => attachmentInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-all active:scale-95"
+                      >
+                        <Upload size={12} />
+                        Anexar Arquivos
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Anexos já salvos */}
-                  {editingRecord?.metadata?.attachments?.length > 0 && (
-                    <div className="mt-4 border-t border-slate-800 pt-3">
-                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Anexos Salvos
-                      </h4>
-                      <div className="flex flex-col gap-1.5">
-                        {editingRecord!.metadata.attachments.map(
-                          (att: any, attIdx: number) => {
-                            const docUrl = savedAttachmentUrls[att.fileName];
-
-                            return (
-                              <div
-                                key={"saved-" + attIdx}
-                                className="relative group/doc flex bg-slate-800/50 hover:bg-slate-800 rounded p-1.5 transition-colors"
-                              >
-                                {docUrl ? (
-                                  <AttachmentPreview
-                                    url={docUrl}
-                                    title={att.originalName}
-                                  >
-                                    <a
-                                      href={docUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 hover:underline group/link py-0.5"
-                                      title={att.originalName}
-                                    >
-                                      <FileText
-                                        size={14}
-                                        className="text-blue-500 group-hover/link:text-blue-400"
-                                      />
-                                      <span className="truncate max-w-[300px]">
-                                        {att.originalName}
-                                      </span>
-                                    </a>
-                                  </AttachmentPreview>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 py-0.5 text-xs text-slate-500">
-                                    <FileText
-                                      size={14}
-                                      className="text-slate-600"
-                                    />
-                                    <span className="truncate max-w-[300px]">
-                                      Carregando {att.originalName}...
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          },
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Novos Anexos */}
-                  {attachments.length > 0 && (
-                    <div className="mt-4 border-t border-slate-800 pt-3">
-                      <h4 className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-2">
-                        Novos Anexos
-                      </h4>
-                      <div className="space-y-1">
-                        {attachments.map((file, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 text-xs text-slate-300 bg-slate-900/30 px-2 py-1 rounded"
-                          >
-                            <FileText size={12} className="text-slate-500" />
-                            <span className="flex-1 truncate">{file.name}</span>
-                            <span className="text-slate-600">
-                              {(file.size / 1024).toFixed(0)} KB
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setAttachments((prev) =>
-                                  prev.filter((_, i) => i !== idx),
-                                )
-                              }
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              <X size={12} />
-                            </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Anexos já salvos */}
+                    {editingRecord?.metadata?.attachments?.map((att: any, attIdx: number) => {
+                      const docUrl = savedAttachmentUrls[att.fileName];
+                      return (
+                        <div
+                          key={"saved-" + attIdx}
+                          className="group/saved flex items-center gap-3 bg-slate-950/50 border border-slate-800 rounded-2xl p-3 hover:border-indigo-500/30 transition-all"
+                        >
+                          <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400 shrink-0">
+                            <FileText size={20} />
                           </div>
-                        ))}
+                          <div className="flex-1 min-w-0">
+                            <AttachmentPreview url={docUrl} title={att.originalName}>
+                              <a
+                                href={docUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-xs font-black text-white hover:text-indigo-400 truncate"
+                              >
+                                {att.originalName}
+                              </a>
+                            </AttachmentPreview>
+                            <p className="text-[9px] text-slate-600 font-bold uppercase tracking-widest mt-0.5">Arquivo Salvo</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Novos Anexos */}
+                    {attachments.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-3 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-3 animate-in slide-in-from-right-4 duration-300"
+                      >
+                        <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 shrink-0">
+                          <CheckCircle2 size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black text-white truncate">{file.name}</p>
+                          <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-widest mt-0.5">
+                            Ready • {(file.size / 1024).toFixed(0)} KB
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                          className="p-2 text-slate-600 hover:text-red-400 transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
+                    ))}
+                  </div>
+
+                  {attachments.length === 0 && (!editingRecord?.metadata?.attachments || editingRecord.metadata.attachments.length === 0) && (
+                    <div className="py-8 text-center bg-slate-950/20 rounded-3xl border border-slate-800/50 border-dashed">
+                      <Paperclip size={24} className="mx-auto text-slate-700 mb-2 opacity-30" />
+                      <p className="text-[10px] text-slate-600 font-black uppercase tracking-[0.2em]">Nenhum documento vinculado</p>
                     </div>
                   )}
-                </div>
-
-                {/* Botões */}
-                <div className="flex gap-3 pt-6 border-t border-slate-700 mt-6 bg-slate-900 -mx-6 -mb-6 p-6 rounded-b-lg">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition-colors"
-                  >
-                    Cancelar (ESC)
-                  </button>
-                  <div className="flex-1 flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleSubmit(e);
-                      }}
-                      disabled={submitting}
-                      className={`px-6 py-2 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors shadow-lg shadow-indigo-500/20 ${
-                        submitting ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                    >
-                      {submitting ? "Salvando..." : "Salvar"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleSubmit(e);
-                      }}
-                      disabled={submitting}
-                      className={`px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors shadow-lg shadow-emerald-500/20 ${
-                        submitting ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                    >
-                      {submitting ? "Salvando..." : "Salvar e Sair"}
-                    </button>
-                  </div>
                 </div>
               </form>
             )}
 
-            {/* Sub-Modal: Criar Condição de Pagamento */}
+            {/* Footer Fixo Premium */}
+            <div className="px-8 py-6 border-t border-slate-800 bg-slate-950/50 backdrop-blur-md flex items-center justify-between gap-4 sticky bottom-0 z-20 mt-auto">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-slate-500 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
+              >
+                Cancelar
+              </button>
+              
+              <div className="flex items-center gap-3">
+                {editingRecord &&
+                  isOpenRecord(editingRecord) &&
+                  !(editingRecord.children && editingRecord.children.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSettleModal(editingRecord)}
+                      disabled={!hasPartiesToSettle(editingRecord)}
+                      className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 border ${
+                        hasPartiesToSettle(editingRecord)
+                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300 hover:bg-emerald-500 hover:text-white"
+                          : "bg-slate-950 border-slate-800 text-slate-600 cursor-not-allowed"
+                      }`}
+                      title={
+                        hasPartiesToSettle(editingRecord)
+                          ? "Liquidar Lançamento"
+                          : "Defina Credor e Devedor para liquidar"
+                      }
+                    >
+                      Liquidar
+                    </button>
+                  )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSubmit(e, { closeAfterSave: false });
+                  }}
+                  disabled={submitting}
+                  className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {submitting ? "Salvando..." : "Salvar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSubmit(e, { closeAfterSave: true });
+                  }}
+                  disabled={submitting}
+                  className="group relative overflow-hidden px-10 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-600/20 active:scale-95 disabled:opacity-50"
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    {submitting ? "Salvando..." : "Salvar e Sair"}
+                    {!submitting && <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Sub-Modal: Condições de Pagamento */}
             {showConditionSubModal && (
-              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
-                <div className="bg-slate-800 rounded-lg w-full max-w-3xl max-h-[85vh] overflow-y-auto border border-slate-700 shadow-2xl">
-                  <div className="p-4 border-b border-slate-700 flex items-center justify-between sticky top-0 bg-slate-800 z-10">
-                    <h3 className="text-lg font-bold text-white">
-                      Condições de Pagamento
-                    </h3>
+              <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4 transition-all animate-in fade-in zoom-in duration-300">
+                <div className="bg-slate-900 rounded-3xl w-full max-w-4xl max-h-[85vh] overflow-hidden border border-slate-700 shadow-[0_0_100px_rgba(0,0,0,0.8)] flex flex-col">
+                  <div className="px-8 py-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50 sticky top-0 z-10 backdrop-blur">
+                    <div>
+                      <h3 className="text-xl font-black text-white tracking-tight">Condições de Pagamento</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Gestão de Prazos e Parcelamento</p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
                         setShowConditionSubModal(false);
                         fetchPaymentConditions();
                       }}
-                      className="text-slate-400 hover:text-white transition-colors"
+                      className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
                     >
                       <X size={20} />
                     </button>
                   </div>
-                  <div className="p-2">
+                  <div className="flex-1 overflow-y-auto p-4 bg-slate-900/30">
                     <PaymentConditions />
                   </div>
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}

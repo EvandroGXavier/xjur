@@ -1043,6 +1043,7 @@ export class ContactsService {
   }
 
   async uploadAttachments(contactId: string, tenantId: string, files: Array<any>) {
+    console.log(`[ATTACHMENT] Recebendo ${files?.length || 0} arquivos para contato ${contactId}`);
     if (!files || files.length === 0) {
       throw new BadRequestException('Nenhum arquivo enviado');
     }
