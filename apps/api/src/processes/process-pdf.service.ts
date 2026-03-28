@@ -76,7 +76,7 @@ export type FullProcessPdfAnalysis = {
     pageCount: number;
     textLength: number;
     hasSelectableText: boolean;
-    ocrStatus: 'NOT_NEEDED' | 'REQUIRED_NOT_IMPLEMENTED';
+    ocrStatus: 'NOT_NEEDED' | 'REQUIRED_NOT_IMPLEMENTED' | 'SUCCESS' | 'FAILED_LOW_QUALITY' | 'ERROR';
     rawTextExcerpt: string;
     documents: PdfProcessDocument[];
     proceduralActs: PdfProcessDocument[];
@@ -194,8 +194,8 @@ export class ProcessPdfService {
             parts,
             pageCount: parsed.pageCount,
             textLength: parsed.textLength,
-            hasSelectableText: parsed.textLength > 0,
-            ocrStatus: parsed.textLength > 0 ? 'NOT_NEEDED' : 'REQUIRED_NOT_IMPLEMENTED',
+            hasSelectableText: parsed.textLength > 100,
+            ocrStatus: parsed.ocrStatus,
             rawTextExcerpt: normalizedText.slice(0, 4000),
             documents,
             proceduralActs,
@@ -206,34 +206,70 @@ export class ProcessPdfService {
         };
     }
 
-    private async extractPdfText(fileBuffer: Buffer): Promise<{ text: string; pageCount: number; textLength: number }> {
-        const { PDFParse } = require('pdf-parse');
-        const parser = new PDFParse({ data: new Uint8Array(fileBuffer) });
+    private async extractPdfText(fileBuffer: Buffer): Promise<{ text: string; pageCount: number; textLength: number; ocrStatus: FullProcessPdfAnalysis['ocrStatus'] }> {
+        const pdf = require('pdf-parse');
+        let ocrStatus: FullProcessPdfAnalysis['ocrStatus'] = 'NOT_NEEDED';
 
         try {
-            const textResult = await parser.getText();
-            const infoResult = await parser.getInfo({ parsePageInfo: true });
+            const data = await pdf(fileBuffer);
+            let text = data.text || '';
+            const pageCount = data.numpages || 0;
 
-            const text = this.coercePdfText(textResult);
-            const pageCount = this.coercePageCount(infoResult);
+            if (text.trim().length < 100 && pageCount > 0) {
+                try {
+                    // Tenta OCR nos primeiros 3 páginas (onde geralmente está a capa/partes)
+                    const ocrText = await this.performOcr(fileBuffer, Math.min(pageCount, 3));
+                    if (ocrText.trim().length > 50) {
+                        text = ocrText;
+                        ocrStatus = 'SUCCESS';
+                    } else {
+                        ocrStatus = 'FAILED_LOW_QUALITY';
+                    }
+                } catch (ocrErr) {
+                    console.error('[ProcessPdfService] OCR Error:', ocrErr);
+                    ocrStatus = 'ERROR';
+                }
+            }
 
             return {
                 text,
                 pageCount,
                 textLength: text.length,
+                ocrStatus,
             };
-        } finally {
-            if (typeof parser.destroy === 'function') {
-                try {
-                    const destroyResult = parser.destroy();
-                    if (destroyResult && typeof destroyResult.then === 'function') {
-                        await destroyResult;
-                    }
-                } catch (_error) {
-                    // Best-effort cleanup for the parser instance.
-                }
-            }
+        } catch (err) {
+            console.error('[ProcessPdfService] PDF Parse Error:', err);
+            return {
+                text: '',
+                pageCount: 0,
+                textLength: 0,
+                ocrStatus: 'ERROR',
+            };
         }
+    }
+
+    private async performOcr(buffer: Buffer, limitPages: number): Promise<string> {
+        const pdfImgConvert = require('pdf-img-convert');
+        const { createWorker } = require('tesseract.js');
+
+        // Converter PDF para imagens (array de Buffers)
+        const images = await pdfImgConvert.convert(buffer, {
+            width: 1200,
+            page_numbers: Array.from({ length: limitPages }, (_, i) => i + 1),
+        });
+
+        let fullText = '';
+        const worker = await createWorker('por'); // Português Brasil
+
+        for (const image of images) {
+            const {
+                data: { text },
+            } = await worker.recognize(image);
+            fullText += text + '\n';
+        }
+
+        await worker.terminate();
+        return fullText;
     }
 
     private coercePdfText(result: any) {

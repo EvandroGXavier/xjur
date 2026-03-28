@@ -413,17 +413,37 @@ export class InboxService {
       const resolvedPhone = this.extractResolvedWhatsappPhone(conversation);
       const candidates = [
         resolvedPhone,
+        contact?.whatsappFullId,
+        contact?.whatsappE164,
         contact?.whatsapp,
         contact?.phone,
         conversation?.externalParticipantId,
         conversation?.externalThreadId,
       ].filter(Boolean);
 
-      const preferred = candidates.find(
-        (candidate) => typeof candidate === 'string' && !candidate.includes('@lid'),
-      );
+      const normalizeWhatsappThreadId = (value: unknown) => {
+        if (typeof value !== 'string') return null;
+        const trimmed = value.trim();
+        if (!trimmed) return null;
 
-      return preferred || candidates[0] || null;
+        // Keep groups and explicit JIDs intact (important for Evolution webhooks).
+        if (trimmed.includes('@g.us') || trimmed.includes('@lid') || trimmed.includes('@s.whatsapp.net')) {
+          return trimmed.replace(/:[0-9]+(?=@)/, '');
+        }
+
+        // Otherwise treat as phone-ish and canonicalize to the same shape used by inbound webhooks.
+        const digits = trimmed.replace(/\D/g, '');
+        if (!digits) return null;
+        return `${digits}@s.whatsapp.net`;
+      };
+
+      // Prefer a canonical non-LID thread id when available, but always normalize.
+      const normalizedCandidates = candidates
+        .map(normalizeWhatsappThreadId)
+        .filter((candidate): candidate is string => Boolean(candidate));
+
+      const preferred = normalizedCandidates.find((candidate) => !candidate.includes('@lid'));
+      return preferred || normalizedCandidates[0] || null;
     }
 
     if (conversation?.externalThreadId) return conversation.externalThreadId;
@@ -585,11 +605,48 @@ export class InboxService {
       : {};
 
     if (input.externalThreadId?.trim()) {
+      const rawThreadId = input.externalThreadId.trim();
+      const isWhatsapp = channel === 'WHATSAPP';
+
+      const buildWhatsappThreadIdVariants = (value: string) => {
+        const trimmed = value.trim();
+        const stripped = trimmed.replace(/:[0-9]+(?=@)/, '');
+        const variants = new Set<string>([trimmed, stripped]);
+
+        // Preserve group/LID JIDs as-is (canonical is already a JID string).
+        if (stripped.includes('@g.us') || stripped.includes('@lid')) {
+          return Array.from(variants);
+        }
+
+        const digits = stripped.replace(/\D/g, '');
+        if (digits) {
+          variants.add(digits);
+          variants.add(`${digits}@s.whatsapp.net`);
+        }
+
+        // If it's already a phone JID, also add the digits-only legacy form.
+        if (stripped.includes('@s.whatsapp.net')) {
+          const jidDigits = stripped.split('@')[0].split(':')[0].replace(/\D/g, '');
+          if (jidDigits) variants.add(jidDigits);
+        }
+
+        return Array.from(variants);
+      };
+
+      const whatsappVariants = isWhatsapp ? buildWhatsappThreadIdVariants(rawThreadId) : [rawThreadId];
+
       const byThread = await this.prisma.agentConversation.findFirst({
         where: {
           tenantId: input.tenantId,
           channel,
-          externalThreadId: input.externalThreadId.trim(),
+          ...(isWhatsapp
+            ? {
+                OR: [
+                  { externalThreadId: { in: whatsappVariants } },
+                  { externalParticipantId: { in: whatsappVariants } },
+                ],
+              }
+            : { externalThreadId: rawThreadId }),
           ...connectionFilter,
         },
         orderBy: { updatedAt: 'desc' },
@@ -1031,7 +1088,8 @@ export class InboxService {
           where: { id: conversationId },
           data: {
             connectionId: connection.id,
-            externalThreadId: conversation.externalThreadId || destination,
+            // Keep WhatsApp thread id canonical so inbound webhooks and manual sends match the same conversation.
+            externalThreadId: destination,
             externalParticipantId: conversation.externalParticipantId || destination,
           },
         });

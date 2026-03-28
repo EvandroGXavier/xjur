@@ -6,6 +6,18 @@ import { getDeviceToken, getToken } from '../auth/authStorage';
  */
 export function buildStorageUrl(mediaUrl: string) {
   if (mediaUrl.startsWith('http')) return mediaUrl;
+
+  // `/storage/*` is served by Nest as a protected static route WITHOUT the `/api` prefix.
+  // If we route it through getApiUrl we'd end up requesting `/api/storage/*` which 404s.
+  const normalized = mediaUrl.startsWith('/') ? mediaUrl : `/${mediaUrl}`;
+  if (normalized.startsWith('/storage/')) {
+    const base =
+      window.location.hostname === 'localhost' || window.location.hostname.includes('idx.google.com')
+        ? `http://${window.location.hostname}:3000`
+        : '';
+    return `${base}${normalized}`;
+  }
+
   return getApiUrl(mediaUrl);
 }
 

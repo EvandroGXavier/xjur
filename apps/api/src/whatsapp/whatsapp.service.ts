@@ -230,6 +230,42 @@ export class WhatsappService implements OnModuleInit {
     return Array.from(new Set(numbers));
   }
 
+  private async upsertWhatsappIdentity(params: {
+    tenantId: string;
+    contactId: string;
+    externalId: string | null;
+    provider?: string;
+  }) {
+    const externalId = this.normalizeWhatsappJid(params.externalId);
+    if (!externalId) return;
+
+    try {
+      await this.prisma.contactChannelIdentity.upsert({
+        where: {
+          tenantId_channel_externalId: {
+            tenantId: params.tenantId,
+            channel: 'WHATSAPP',
+            externalId,
+          },
+        },
+        create: {
+          tenantId: params.tenantId,
+          contactId: params.contactId,
+          channel: 'WHATSAPP',
+          provider: params.provider || 'EVOLUTION',
+          externalId,
+        },
+        update: {
+          contactId: params.contactId,
+          provider: params.provider || 'EVOLUTION',
+        },
+      });
+    } catch {
+      // If there's historic duplication, the unique constraint may already be held by another contact.
+      // We'll still rely on whatsappE164/whatsappFullId normalization to reduce future duplicates.
+    }
+  }
+
   private async resolveWhatsappPhoneByLid(connectionId: string, lidJid?: string | null) {
     const normalizedLid = this.normalizeWhatsappJid(lidJid);
     if (!normalizedLid || !normalizedLid.includes('@lid')) {
@@ -786,6 +822,7 @@ export class WhatsappService implements OnModuleInit {
 
       const phoneClean = (resolvedPhoneFromLid || phoneRaw).replace(/\D/g, '');
       const phoneTail = phoneClean.length >= 8 ? phoneClean.slice(-8) : phoneClean;
+      const canonicalFullId = phoneClean ? `${phoneClean}@s.whatsapp.net` : null;
       const displayName =
         (await this.resolveWhatsappDisplayName(connectionId, pushName, phoneClean)) ||
         pushName ||
@@ -794,6 +831,39 @@ export class WhatsappService implements OnModuleInit {
         'WhatsApp Contact';
 
       let contact: any = null;
+
+      // First, try resolving by stored identities (canonical JID, digits-only, LID, etc.)
+      const identityCandidates = Array.from(
+        new Set(
+          [
+            lidJid,
+            canonicalFullId,
+            phoneClean,
+            fullJid,
+            remoteJid,
+            ...senderCandidates,
+          ]
+            .map((candidate) => this.normalizeWhatsappJid(candidate))
+            .filter(Boolean) as string[],
+        ),
+      );
+
+      if (identityCandidates.length > 0) {
+        const identity = await this.prisma.contactChannelIdentity.findFirst({
+          where: {
+            tenantId,
+            channel: 'WHATSAPP',
+            externalId: { in: identityCandidates },
+          },
+          orderBy: { updatedAt: 'desc' },
+        });
+
+        if (identity?.contactId) {
+          contact = await this.prisma.contact.findFirst({
+            where: { id: identity.contactId, tenantId },
+          });
+        }
+      }
 
       if (lidJid) {
         contact = await this.prisma.contact.findFirst({
@@ -820,6 +890,8 @@ export class WhatsappService implements OnModuleInit {
           where: {
             tenantId,
             OR: [
+              { whatsappFullId: { equals: canonicalFullId || undefined } },
+              { whatsappE164: { equals: phoneClean || undefined } },
               { whatsapp: { equals: fullJid } },
               { whatsapp: { equals: phoneClean } },
               { phone: { equals: phoneClean } },
@@ -853,6 +925,14 @@ export class WhatsappService implements OnModuleInit {
 
         if (phoneClean && (!contact.whatsapp || contact.whatsapp.includes('@lid'))) {
           updateData.whatsapp = phoneClean;
+        }
+
+        if (phoneClean && !contact.whatsappE164) {
+          updateData.whatsappE164 = phoneClean;
+        }
+
+        if (canonicalFullId && !contact.whatsappFullId) {
+          updateData.whatsappFullId = canonicalFullId;
         }
 
         if (
@@ -890,12 +970,21 @@ export class WhatsappService implements OnModuleInit {
             tenantId,
             name: displayName,
             whatsapp: phoneClean || undefined,
+            whatsappE164: phoneClean || undefined,
+            whatsappFullId: canonicalFullId || undefined,
             category: isGroup ? 'Grupo' : 'Lead',
             document: null,
             notes: `Adicionado automaticamente via WhatsApp. ${lidJid || fullJid}`
           }
         });
       }
+
+      // Register aliases so future inbound/outbound lookups converge to this contact.
+      await this.upsertWhatsappIdentity({ tenantId, contactId: contact.id, externalId: canonicalFullId, provider: 'EVOLUTION' });
+      await this.upsertWhatsappIdentity({ tenantId, contactId: contact.id, externalId: phoneClean, provider: 'EVOLUTION' });
+      await this.upsertWhatsappIdentity({ tenantId, contactId: contact.id, externalId: fullJid, provider: 'EVOLUTION' });
+      await this.upsertWhatsappIdentity({ tenantId, contactId: contact.id, externalId: remoteJid, provider: 'EVOLUTION' });
+      await this.upsertWhatsappIdentity({ tenantId, contactId: contact.id, externalId: lidJid, provider: 'EVOLUTION' });
 
       if (!isGroup && !contact.profilePicUrl && !message.key.fromMe) {
         try {

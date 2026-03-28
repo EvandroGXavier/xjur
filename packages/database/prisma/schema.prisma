@@ -25,6 +25,7 @@ model Tenant {
   users               User[]
   trustedDevices      TrustedDevice[]
   contacts            Contact[]
+  contactChannelIdentities ContactChannelIdentity[]
   processes           Process[]
   categories          DocumentCategory[]
   templates           DocumentTemplate[]
@@ -158,6 +159,10 @@ model Contact {
   // Campos Gerais
   document      String? // CPF/CNPJ (Mantido para busca rápida/compatibilidade)
   whatsapp      String?
+  // Canonical WhatsApp identity (digits only, E.164 without '+'). Ex: 5531199999999
+  whatsappE164  String?
+  // Canonical WhatsApp thread id used by Evolution/Baileys. Ex: 5531199999999@s.whatsapp.net
+  whatsappFullId String?
   email         String?
   phone         String?
   notes         String?
@@ -196,13 +201,36 @@ model Contact {
   purchasesAsBuyer          PurchaseOrder[]          @relation("PurchaseOrderBuyer") // Como comprador
   agentConversations        AgentConversation[]
   agentParticipants         AgentParticipant[]       @relation("AgentParticipantContact")
+  channelIdentities         ContactChannelIdentity[]
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@index([document]) // Index on document generic field
+  @@index([whatsappE164])
+  @@index([whatsappFullId])
   @@index([personType])
   @@index([category])
   @@map("contacts")
+}
+
+// Stores external identifiers (aliases) that can map back to a single Contact.
+// This is especially important for WhatsApp LIDs (@lid) and provider-specific JID variants.
+model ContactChannelIdentity {
+  id         String   @id @default(uuid())
+  tenantId   String
+  contactId  String
+  channel    String   // WHATSAPP, TELEGRAM, EMAIL, ...
+  provider   String?  // EVOLUTION, BAILEYS, META, ...
+  externalId String   // ex: 5531...@s.whatsapp.net, ...@lid, group jid, etc.
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, channel, externalId])
+  @@index([tenantId, contactId, channel])
+  @@map("contact_channel_identities")
 }
 
 model PersonDetailPF {

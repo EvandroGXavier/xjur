@@ -586,7 +586,7 @@ export function ProcessForm() {
                 return;
             }
 
-            setActiveTab('TIMELINE');
+            setActiveTab('PARTIES');
             setTimelineRefreshToken((current) => current + 1);
             await fetchProcess();
             if (id) {
@@ -765,11 +765,11 @@ export function ProcessForm() {
         : 'border-amber-500/30 bg-amber-500/15 text-amber-100';
     const pdfDossierInputId = isEditing ? `process-dossier-upload-${id}` : 'process-dossier-upload';
 
-    const TabButton = ({ tabId, label, icon: Icon }: any) => (
+    const TabButton = ({ tabId, label, icon: Icon, hasIndicator }: any) => (
         <button
             type="button"
             onClick={() => setActiveTab(tabId)}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition ${
+            className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition relative ${
                 activeTab === tabId
                     ? 'border-indigo-500 text-indigo-400'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -777,8 +777,19 @@ export function ProcessForm() {
         >
             <Icon size={16} />
             {label}
+            {hasIndicator && (
+                <span className="absolute top-2 right-1.5 w-2 h-2 bg-amber-500 rounded-full border border-slate-900 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+            )}
         </button>
     );
+
+    const hasUnclassifiedParties = useMemo(() => {
+        return importedParties.some(p => 
+            !p.isClient && 
+            !p.isOpposing && 
+            !LAWYER_TERMS.some(term => (p.type || '').toUpperCase().includes(term))
+        );
+    }, [importedParties]);
 
     return (
         <div className="p-6 md:p-8 animate-in fade-in">
@@ -796,7 +807,7 @@ export function ProcessForm() {
                 <div className="flex border-b border-slate-800 mb-6 overflow-x-auto scroller-hidden">
                     <TabButton tabId="MAIN" label="PRINCIPAL" icon={FileText} />
                     <TabButton tabId="TJ" label="TJ" icon={Gavel} />
-                    {(isEditing || importedParties.length > 0) && <TabButton tabId="PARTIES" label="PARTES" icon={Users} />}
+                    {(isEditing || importedParties.length > 0) && <TabButton tabId="PARTIES" label="PARTES" icon={Users} hasIndicator={hasUnclassifiedParties} />}
                     {(isEditing || importedMovements.length > 0) && <TabButton tabId="TIMELINE" label="ANDAMENTOS" icon={Activity} />}
                     {isEditing && <TabButton tabId="DOCUMENTS" label="DOCUMENTOS" icon={FolderOpen} />}
                     {isEditing && <TabButton tabId="AGENDA" label="AGENDA" icon={Calendar} />}
@@ -809,8 +820,11 @@ export function ProcessForm() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 animate-in slide-in-from-top-4 duration-500">
                         {/* IA Import Card */}
                         <div 
+                            role="button"
+                            tabIndex={0}
                             onClick={() => document.getElementById(pdfDossierInputId)?.click()}
-                            className="group relative overflow-hidden bg-slate-900 border border-slate-700 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-slate-800/50 transition cursor-pointer shadow-lg"
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById(pdfDossierInputId)?.click(); }}
+                            className="group relative overflow-hidden bg-slate-900 border border-slate-700 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-slate-800/50 transition cursor-pointer shadow-lg outline-none focus:ring-2 focus:ring-indigo-500/50"
                         >
                             <div className="absolute top-0 right-0 p-2 bg-indigo-500 text-white text-[10px] font-bold rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity">POWERED BY DR.X</div>
                             <div className="flex items-center gap-5">

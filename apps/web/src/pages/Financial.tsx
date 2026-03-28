@@ -2403,7 +2403,7 @@ export function Financial(props: FinancialProps = {}) {
                   Resultados Filtro
                 </p>
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
+                  <span className="text-xl sm:text-2xl font-bold text-white tracking-tighter tabular-nums break-words">
                     {filteredRecords.length}
                   </span>
                   <span className="text-xs font-bold text-slate-500 uppercase">
@@ -2416,7 +2416,7 @@ export function Financial(props: FinancialProps = {}) {
                   Receitas Filtradas
                 </p>
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-2xl sm:text-3xl font-bold text-emerald-400 tracking-tight tabular-nums break-words">
+                  <span className="text-xl sm:text-2xl font-bold text-emerald-400 tracking-tighter tabular-nums break-words">
                     {formatCurrency(filteredSummary.income)}
                   </span>
                   <span className="text-[10px] font-bold text-emerald-500/50 uppercase">parcial</span>
@@ -2427,7 +2427,7 @@ export function Financial(props: FinancialProps = {}) {
                   Despesas Filtradas
                 </p>
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-2xl sm:text-3xl font-bold text-red-400 tracking-tight tabular-nums break-words">
+                  <span className="text-xl sm:text-2xl font-bold text-red-400 tracking-tighter tabular-nums break-words">
                     {formatCurrency(filteredSummary.expense)}
                   </span>
                   <span className="text-[10px] font-bold text-red-500/50 uppercase">
@@ -2453,7 +2453,7 @@ export function Financial(props: FinancialProps = {}) {
                     <TrendingUp size={20} />
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
                       {formatCurrency(cardMetrics.INCOME_ALL.amount)}
                     </div>
                     <div className="text-[11px] text-slate-500">
@@ -2482,7 +2482,7 @@ export function Financial(props: FinancialProps = {}) {
                     <Clock size={20} />
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
                       {formatCurrency(cardMetrics.INCOME_PENDING.amount)}
                     </div>
                     <div className="text-[11px] text-slate-500">
@@ -2511,7 +2511,7 @@ export function Financial(props: FinancialProps = {}) {
                     <AlertTriangle size={20} />
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
                       {formatCurrency(cardMetrics.INCOME_OVERDUE.amount)}
                     </div>
                     <div className="text-[11px] text-slate-500">
@@ -2540,7 +2540,7 @@ export function Financial(props: FinancialProps = {}) {
                     <TrendingDown size={20} />
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
                       {formatCurrency(cardMetrics.EXPENSE_ALL.amount)}
                     </div>
                     <div className="text-[11px] text-slate-500">
@@ -2569,7 +2569,7 @@ export function Financial(props: FinancialProps = {}) {
                     <Clock size={20} />
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
                       {formatCurrency(cardMetrics.EXPENSE_PENDING.amount)}
                     </div>
                     <div className="text-[11px] text-slate-500">
@@ -2598,7 +2598,7 @@ export function Financial(props: FinancialProps = {}) {
                     <DollarSign size={20} />
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-white">
+                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
                       {cardMetrics.ALL.count}
                     </div>
                     <div className="text-[11px] text-slate-500">
