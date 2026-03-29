@@ -9,7 +9,12 @@
  * - Enriquecimento de dados (CNPJ e CEP)
  */
 
-const API_URL = process.env.API_URL || 'http://api.dr-x.xtd.com.br';
+const API_URL = process.env.API_URL || 'http://localhost:3000';
+
+// Auth (prefer env AUTH_TOKEN, otherwise auto register+login)
+let AUTH_TOKEN = process.env.AUTH_TOKEN || null;
+let TEST_EMAIL = process.env.TEST_EMAIL || `contacts_test_${Date.now()}@example.com`;
+let TEST_PASSWORD = process.env.TEST_PASSWORD || 'password123';
 
 // Cores para output no terminal
 const colors = {
@@ -25,6 +30,12 @@ const colors = {
 let contactPFId = null;
 let contactPJId = null;
 let addressId = null;
+let additionalContactId = null;
+let relationTypeId = null;
+let relationId = null;
+let assetTypeId = null;
+let assetId = null;
+let contractId = null;
 
 // Contador de testes
 let totalTests = 0;
@@ -41,6 +52,10 @@ async function request(method, endpoint, body = null) {
     },
   };
 
+  if (AUTH_TOKEN) {
+    options.headers.Authorization = `Bearer ${AUTH_TOKEN}`;
+  }
+
   if (body) {
     options.body = JSON.stringify(body);
   }
@@ -52,6 +67,41 @@ async function request(method, endpoint, body = null) {
   } catch (error) {
     return { status: 0, data: null, ok: false, error: error.message };
   }
+}
+
+async function ensureAuth() {
+  if (AUTH_TOKEN) return;
+
+  section('0. AUTENTICAÇÃO (register + login)');
+
+  const registerPayload = {
+    tenantName: `Contacts Test Corp ${Date.now()}`,
+    document: `987654320001${Math.floor(Math.random() * 90) + 10}`,
+    adminName: 'Contacts Admin',
+    email: TEST_EMAIL,
+    password: TEST_PASSWORD,
+    mobile: '11999999999',
+  };
+
+  const register = await request('POST', '/saas/register', registerPayload);
+  testResult(
+    'POST /saas/register - Criar tenant + admin',
+    register.ok && register.status === 201,
+    register.ok ? `tenantId: ${register.data.tenantId}` : `Status: ${register.status}`,
+  );
+
+  const login = await request('POST', '/auth/login', { email: TEST_EMAIL, password: TEST_PASSWORD });
+  testResult(
+    'POST /auth/login - Obter JWT',
+    login.ok && login.status === 200 && login.data && login.data.access_token,
+    login.ok ? 'Token recebido' : `Status: ${login.status}`,
+  );
+
+  if (!login.ok || !login.data || !login.data.access_token) {
+    throw new Error('Falha ao autenticar. Verifique se a API está rodando e acessível.');
+  }
+
+  AUTH_TOKEN = login.data.access_token;
 }
 
 // Função para exibir resultado do teste
@@ -233,6 +283,196 @@ async function testAddAddress() {
   }
 }
 
+async function testAdditionalContacts() {
+  section('6. CONTATOS ADICIONAIS (CRUD)');
+
+  if (!contactPFId) {
+    testResult('Pré-requisito: contato PF criado', false, 'contactPFId não definido');
+    return;
+  }
+
+  const created = await request('POST', `/contacts/${contactPFId}/additional-contacts`, {
+    type: 'EMAIL',
+    value: 'alt@example.com',
+    nomeContatoAdicional: 'Financeiro',
+  });
+
+  testResult(
+    'POST /contacts/:id/additional-contacts - Criar contato adicional',
+    created.ok && created.status === 201,
+    created.ok ? `ID: ${created.data.id}` : `Status: ${created.status}`,
+  );
+
+  if (!created.ok) return;
+  additionalContactId = created.data.id;
+
+  const updated = await request('PATCH', `/contacts/${contactPFId}/additional-contacts/${additionalContactId}`, {
+    value: 'alt2@example.com',
+  });
+
+  testResult(
+    'PATCH /contacts/:id/additional-contacts/:contactId - Atualizar contato adicional',
+    updated.ok && updated.status === 200 && updated.data && updated.data.value === 'alt2@example.com',
+    updated.ok ? `Value: ${updated.data.value}` : `Status: ${updated.status}`,
+  );
+
+  const removed = await request('DELETE', `/contacts/${contactPFId}/additional-contacts/${additionalContactId}`);
+  testResult(
+    'DELETE /contacts/:id/additional-contacts/:contactId - Excluir contato adicional',
+    removed.ok,
+    `Status: ${removed.status}`,
+  );
+}
+
+async function testRelations() {
+  section('7. RELAÇÕES (CRUD)');
+
+  if (!contactPFId || !contactPJId) {
+    testResult('Pré-requisito: contatos PF e PJ criados', false, `PF: ${!!contactPFId}, PJ: ${!!contactPJId}`);
+    return;
+  }
+
+  const type = await request('POST', '/contacts/relations/types', {
+    name: `Socio ${Date.now()}`,
+    reverseName: 'Socio',
+    isBilateral: true,
+  });
+
+  testResult(
+    'POST /contacts/relations/types - Criar tipo de relação',
+    type.ok && type.status === 201,
+    type.ok ? `ID: ${type.data.id}` : `Status: ${type.status}`,
+  );
+
+  if (!type.ok) return;
+  relationTypeId = type.data.id;
+
+  const created = await request('POST', `/contacts/${contactPFId}/relations`, {
+    toContactId: contactPJId,
+    relationTypeId,
+  });
+
+  testResult(
+    'POST /contacts/:id/relations - Criar relação',
+    created.ok && created.status === 201,
+    created.ok ? `ID: ${created.data.id}` : `Status: ${created.status}`,
+  );
+
+  if (!created.ok) return;
+  relationId = created.data.id;
+
+  const list = await request('GET', `/contacts/${contactPFId}/relations`);
+  testResult(
+    'GET /contacts/:id/relations - Listar relações do contato',
+    list.ok && Array.isArray(list.data),
+    list.ok ? `Total: ${list.data.length}` : `Status: ${list.status}`,
+  );
+
+  const removed = await request('DELETE', `/contacts/${contactPFId}/relations/${relationId}`);
+  testResult(
+    'DELETE /contacts/:id/relations/:relationId - Excluir relação',
+    removed.ok,
+    `Status: ${removed.status}`,
+  );
+}
+
+async function testAssets() {
+  section('8. BENS (CRUD)');
+
+  if (!contactPFId) {
+    testResult('Pré-requisito: contato PF criado', false, 'contactPFId não definido');
+    return;
+  }
+
+  const type = await request('POST', '/contacts/assets/types', { name: `Imóvel ${Date.now()}` });
+  testResult(
+    'POST /contacts/assets/types - Criar tipo de bem',
+    type.ok && type.status === 201,
+    type.ok ? `ID: ${type.data.id}` : `Status: ${type.status}`,
+  );
+  if (!type.ok) return;
+  assetTypeId = type.data.id;
+
+  const created = await request('POST', `/contacts/${contactPFId}/assets`, {
+    assetTypeId,
+    description: 'Apartamento',
+    acquisitionDate: '2025-01-15',
+    value: 123456.78,
+  });
+  testResult(
+    'POST /contacts/:id/assets - Criar bem',
+    created.ok && created.status === 201,
+    created.ok ? `ID: ${created.data.id}` : `Status: ${created.status}`,
+  );
+  if (!created.ok) return;
+  assetId = created.data.id;
+
+  const updated = await request('PATCH', `/contacts/${contactPFId}/assets/${assetId}`, {
+    assetTypeId,
+    description: 'Apartamento (Atualizado)',
+    acquisitionDate: '2025-01-15',
+    value: 123456.78,
+    notes: 'Atualizado no teste',
+  });
+  testResult(
+    'PATCH /contacts/:id/assets/:assetId - Atualizar bem',
+    updated.ok && updated.status === 200,
+    updated.ok ? `Desc: ${updated.data.description}` : `Status: ${updated.status}`,
+  );
+
+  const removed = await request('DELETE', `/contacts/${contactPFId}/assets/${assetId}`);
+  testResult('DELETE /contacts/:id/assets/:assetId - Excluir bem', removed.ok, `Status: ${removed.status}`);
+}
+
+async function testContracts() {
+  section('9. CONTRATOS (CRUD)');
+
+  if (!contactPFId) {
+    testResult('Pré-requisito: contato PF criado', false, 'contactPFId não definido');
+    return;
+  }
+
+  const created = await request('POST', `/contacts/${contactPFId}/contracts`, {
+    type: 'SERVICE',
+    description: 'Contrato Mensal',
+    dueDay: 10,
+    firstDueDate: '2025-02-10',
+    billingFrequency: 'MONTHLY',
+    transactionKind: 'INCOME',
+    counterpartyRole: 'CONTRACTOR',
+    counterpartyName: 'Cliente X',
+    status: 'ACTIVE',
+  });
+  testResult(
+    'POST /contacts/:id/contracts - Criar contrato',
+    created.ok && created.status === 201,
+    created.ok ? `ID: ${created.data.id}` : `Status: ${created.status}`,
+  );
+  if (!created.ok) return;
+  contractId = created.data.id;
+
+  const updated = await request('PATCH', `/contacts/${contactPFId}/contracts/${contractId}`, {
+    type: 'SERVICE',
+    description: 'Contrato Mensal (Atualizado)',
+    dueDay: 10,
+    firstDueDate: '2025-02-10',
+    billingFrequency: 'MONTHLY',
+    transactionKind: 'INCOME',
+    counterpartyRole: 'CONTRACTOR',
+    counterpartyName: 'Cliente X',
+    status: 'ACTIVE',
+    notes: 'Atualizado no teste',
+  });
+  testResult(
+    'PATCH /contacts/:id/contracts/:contractId - Atualizar contrato',
+    updated.ok && updated.status === 200,
+    updated.ok ? `ID: ${updated.data.id}` : `Status: ${updated.status}`,
+  );
+
+  const removed = await request('DELETE', `/contacts/${contactPFId}/contracts/${contractId}`);
+  testResult('DELETE /contacts/:id/contracts/:contractId - Excluir contrato', removed.ok, `Status: ${removed.status}`);
+}
+
 async function testUpdateAddress() {
   section('6. ATUALIZAR ENDEREÇO');
 
@@ -395,6 +635,7 @@ async function runAllTests() {
   const startTime = Date.now();
 
   try {
+    await ensureAuth();
     await testCreateContactPF();
     await testCreateContactPJ();
     await testReadContacts();
@@ -404,6 +645,10 @@ async function runAllTests() {
     await testEnrichCNPJ();
     await testEnrichCEP();
     await testDeleteAddress();
+    await testAdditionalContacts();
+    await testRelations();
+    await testAssets();
+    await testContracts();
     await testDeleteContacts();
     await testValidations();
   } catch (error) {

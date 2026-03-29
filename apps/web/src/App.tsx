@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, ProcessTasks, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ProposalsPage, PurchasesPage, FiscalPage, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions, InventoryDashboard } from './pages';
 import { ProcessForm } from './pages/processes/ProcessForm';
 import { getToken } from './auth/authStorage';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
   const token = getToken();
@@ -14,42 +15,44 @@ function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        
-        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-          <Route index element={<Dashboard />} />
-          <Route path="chat" element={<AtendimentoPage />} />
-          <Route path="kanban" element={<Kanban />} />
-          <Route path="processes" element={<Processes />} />
-          <Route path="processes/config" element={<ProcessConfig />} />
-          <Route path="processes/tasks" element={<ProcessTasks />} />
-          <Route path="processes/new" element={<ProcessForm />} />
-          <Route path="processes/:id" element={<ProcessForm />} />
-          <Route path="agenda" element={<Agenda />} />
-          <Route path="financial" element={<Financial />} />
-          <Route path="financial/payment-conditions" element={<PaymentConditions />} />
-          <Route path="inventory" element={<Navigate to="/inventory/dashboard" replace />} />
-          <Route path="inventory/dashboard" element={<InventoryDashboard />} />
-          <Route path="inventory/products" element={<ProductsList />} />
-          <Route path="inventory/proposals" element={<ProposalsPage />} />
-          <Route path="inventory/purchases" element={<PurchasesPage />} />
-          <Route path="inventory/fiscal" element={<FiscalPage />} />
-          <Route path="contacts" element={<ContactList />} />
-          <Route path="contacts/config" element={<ContactConfig />} />
-          <Route path="contacts/import" element={<ImportContacts />} />
-          <Route path="contacts/new" element={<ContactForm />} />
-          <Route path="contacts/:id" element={<ContactForm />} />
-          <Route path="ai" element={<AI />} />
-          <Route path="documents" element={<Library />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
+      <ErrorBoundary title="Falha ao carregar o sistema">
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          
+          <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+            <Route index element={<Dashboard />} />
+            <Route path="chat" element={<AtendimentoPage />} />
+            <Route path="kanban" element={<Kanban />} />
+            <Route path="processes" element={<Processes />} />
+            <Route path="processes/config" element={<ProcessConfig />} />
+            <Route path="processes/tasks" element={<ProcessTasks />} />
+            <Route path="processes/new" element={<ProcessForm />} />
+            <Route path="processes/:id" element={<ProcessForm />} />
+            <Route path="agenda" element={<Agenda />} />
+            <Route path="financial" element={<Financial />} />
+            <Route path="financial/payment-conditions" element={<PaymentConditions />} />
+            <Route path="inventory" element={<Navigate to="/inventory/dashboard" replace />} />
+            <Route path="inventory/dashboard" element={<InventoryDashboard />} />
+            <Route path="inventory/products" element={<ProductsList />} />
+            <Route path="inventory/proposals" element={<ProposalsPage />} />
+            <Route path="inventory/purchases" element={<PurchasesPage />} />
+            <Route path="inventory/fiscal" element={<FiscalPage />} />
+            <Route path="contacts" element={<ContactList />} />
+            <Route path="contacts/config" element={<ContactConfig />} />
+            <Route path="contacts/import" element={<ImportContacts />} />
+            <Route path="contacts/new" element={<ContactForm />} />
+            <Route path="contacts/:id" element={<ContactForm />} />
+            <Route path="ai" element={<AI />} />
+            <Route path="documents" element={<Library />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="users" element={<UsersPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

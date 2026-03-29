@@ -1,5 +1,7 @@
 import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../prisma.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
@@ -960,7 +962,6 @@ export class ContactsService {
   }
 
   getAttachmentPath(fileName: string) {
-    const path = require('path');
     return path.join(
       process.cwd(),
       'uploads',
@@ -977,8 +978,6 @@ export class ContactsService {
     const newAttachments = [];
 
     if (files && files.length > 0) {
-      const fs = require('fs');
-      const path = require('path');
       const uploadDir = path.join(process.cwd(), 'uploads', 'contacts');
 
       if (!fs.existsSync(uploadDir)) {
@@ -1043,7 +1042,6 @@ export class ContactsService {
   }
 
   async uploadAttachments(contactId: string, tenantId: string, files: Array<any>) {
-    console.log(`[ATTACHMENT] Recebendo ${files?.length || 0} arquivos para contato ${contactId}`);
     if (!files || files.length === 0) {
       throw new BadRequestException('Nenhum arquivo enviado');
     }
@@ -1100,7 +1098,6 @@ export class ContactsService {
       (item: any) => item?.fileName !== safeFileName,
     );
 
-    const fs = require('fs');
     const filePath = this.getAttachmentPath(safeFileName);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);

@@ -37,7 +37,11 @@ export class EvolutionService {
     this.defaultApiKey = this.configService.get<string>('EVOLUTION_API_KEY') || 
                          this.configService.get<string>('EVO_API_KEY') || 
                          '';
-    this.logger.log(`Evolution API defaults: URL=${this.defaultApiUrl}`);
+    
+    const enabled = this.configService.get<string>('WHATSAPP_ENABLED') === 'true';
+    if (enabled) {
+      this.logger.log(`Evolution API defaults: URL=${this.defaultApiUrl}`);
+    }
   }
 
   // ==========================================

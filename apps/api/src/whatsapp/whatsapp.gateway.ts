@@ -1,6 +1,7 @@
 import { WebSocketGateway, WebSocketServer, OnGatewayInit } from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 @WebSocketGateway({
   cors: {
@@ -14,8 +15,13 @@ export class WhatsappGateway implements OnGatewayInit {
 
   private readonly logger = new Logger(WhatsappGateway.name);
 
+  constructor(private readonly configService: ConfigService) {}
+
   afterInit() {
-    this.logger.log('🔌 WhatsappGateway initialized (namespace: /whatsapp)');
+    const enabled = this.configService.get<string>('WHATSAPP_ENABLED') === 'true';
+    if (enabled) {
+      this.logger.log('🔌 WhatsappGateway initialized (namespace: /whatsapp)');
+    }
   }
 
   /**

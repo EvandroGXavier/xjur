@@ -32,6 +32,7 @@ import { ImportContactsDto } from './dto/import-contact.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 import { Response } from 'express';
+import * as fs from 'fs';
 
 @Controller('contacts')
 @UseGuards(JwtAuthGuard)
@@ -69,49 +70,49 @@ export class ContactsController {
 
   @Get()
   findAll(
-      @CurrentUser() user: CurrentUserData, 
-      @Query('search') search?: string,
-      @Query('includedTags') includedTags?: string,
-      @Query('excludedTags') excludedTags?: string,
-      @Query('active') active?: string,
-      @Query('birthDateStart') birthDateStart?: string,
-      @Query('birthDateEnd') birthDateEnd?: string,
-      @Query('cpf') cpf?: string,
-      @Query('rg') rg?: string,
-      @Query('motherName') motherName?: string,
-      @Query('fatherName') fatherName?: string,
-      @Query('profession') profession?: string,
-      @Query('nationality') nationality?: string,
-      @Query('naturality') naturality?: string,
-      @Query('gender') gender?: string,
-      @Query('civilStatus') civilStatus?: string,
-      @Query('cnh') cnh?: string,
-      @Query('cnhCategory') cnhCategory?: string,
-      @Query('nis') nis?: string,
-      @Query('pis') pis?: string,
-      @Query('ctps') ctps?: string,
-      @Query('cnpj') cnpj?: string,
-      @Query('companyName') companyName?: string,
-      @Query('stateRegistration') stateRegistration?: string,
-      @Query('birthMonth') birthMonth?: string,
-      // Address Filters
-      @Query('city') city?: string,
-      @Query('state') state?: string,
-      @Query('district') district?: string,
-      @Query('zipCode') zipCode?: string,
-      @Query('street') street?: string,
-      // Additional Contact Filters
-      @Query('additionalValue') additionalValue?: string,
-      @Query('additionalName') additionalName?: string,
-      // Contract Filters
-      @Query('contractDescription') contractDescription?: string,
-      @Query('contractCounterparty') contractCounterparty?: string,
+    @CurrentUser() user: CurrentUserData,
+    @Query('search') search?: string,
+    @Query('includedTags') includedTags?: string,
+    @Query('excludedTags') excludedTags?: string,
+    @Query('active') active?: string,
+    @Query('birthDateStart') birthDateStart?: string,
+    @Query('birthDateEnd') birthDateEnd?: string,
+    @Query('cpf') cpf?: string,
+    @Query('rg') rg?: string,
+    @Query('motherName') motherName?: string,
+    @Query('fatherName') fatherName?: string,
+    @Query('profession') profession?: string,
+    @Query('nationality') nationality?: string,
+    @Query('naturality') naturality?: string,
+    @Query('gender') gender?: string,
+    @Query('civilStatus') civilStatus?: string,
+    @Query('cnh') cnh?: string,
+    @Query('cnhCategory') cnhCategory?: string,
+    @Query('nis') nis?: string,
+    @Query('pis') pis?: string,
+    @Query('ctps') ctps?: string,
+    @Query('cnpj') cnpj?: string,
+    @Query('companyName') companyName?: string,
+    @Query('stateRegistration') stateRegistration?: string,
+    @Query('birthMonth') birthMonth?: string,
+    // Address Filters
+    @Query('city') city?: string,
+    @Query('state') state?: string,
+    @Query('district') district?: string,
+    @Query('zipCode') zipCode?: string,
+    @Query('street') street?: string,
+    // Additional Contact Filters
+    @Query('additionalValue') additionalValue?: string,
+    @Query('additionalName') additionalName?: string,
+    // Contract Filters
+    @Query('contractDescription') contractDescription?: string,
+    @Query('contractCounterparty') contractCounterparty?: string,
   ) {
     return this.contactsService.findAll(
-      this.getTenantId(user), 
-      search, 
-      includedTags, 
-      excludedTags, 
+      this.getTenantId(user),
+      search,
+      includedTags,
+      excludedTags,
       active,
       birthDateStart,
       birthDateEnd,
@@ -140,8 +141,8 @@ export class ContactsController {
         birthMonth: birthMonth ? parseInt(birthMonth) : undefined,
         address: { city, state, district, zipCode, street },
         additionalContact: { value: additionalValue, name: additionalName },
-        contract: { description: contractDescription, counterparty: contractCounterparty }
-      }
+        contract: { description: contractDescription, counterparty: contractCounterparty },
+      },
     );
   }
 
@@ -265,12 +266,7 @@ export class ContactsController {
     @CurrentUser() user: CurrentUserData,
     @Res() res: Response,
   ) {
-    const attachment = await this.contactsService.getAttachmentForContact(
-      id,
-      user.tenantId,
-      filename,
-    );
-    const fs = require('fs');
+    const attachment = await this.contactsService.getAttachmentForContact(id, user.tenantId, filename);
 
     if (!fs.existsSync(attachment.filePath)) {
       return res.status(404).json({ message: 'Arquivo nao encontrado' });
@@ -312,76 +308,76 @@ export class ContactsController {
   // Relations Endpoints
   @Get('relations/types')
   getRelationTypes(@CurrentUser() user: CurrentUserData) {
-      return this.contactsService.getRelationTypes(this.getTenantId(user));
+    return this.contactsService.getRelationTypes(this.getTenantId(user));
   }
 
   @Post('relations/types')
   createRelationType(@Body() dto: CreateRelationTypeDto, @CurrentUser() user: CurrentUserData) {
-      return this.contactsService.createRelationType(this.getTenantId(user), dto);
+    return this.contactsService.createRelationType(this.getTenantId(user), dto);
   }
 
   @Get(':id/relations')
   getContactRelations(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-      return this.contactsService.getContactRelations(id, this.getTenantId(user));
+    return this.contactsService.getContactRelations(id, this.getTenantId(user));
   }
 
   @Post(':id/relations')
   createContactRelation(
-      @Param('id') id: string, 
-      @Body() dto: CreateContactRelationDto,
-      @CurrentUser() user: CurrentUserData
+    @Param('id') id: string,
+    @Body() dto: CreateContactRelationDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-      return this.contactsService.createContactRelation(this.getTenantId(user), id, dto);
+    return this.contactsService.createContactRelation(this.getTenantId(user), id, dto);
   }
 
   @Delete(':id/relations/:relationId')
   removeContactRelation(
-      @Param('relationId') relationId: string,
-      @CurrentUser() user: CurrentUserData
+    @Param('relationId') relationId: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
-      return this.contactsService.removeContactRelation(this.getTenantId(user), relationId);
+    return this.contactsService.removeContactRelation(this.getTenantId(user), relationId);
   }
 
   // Assets Endpoints
   @Get('assets/types')
   getAssetTypes(@CurrentUser() user: CurrentUserData) {
-      return this.contactsService.getAssetTypes(this.getTenantId(user));
+    return this.contactsService.getAssetTypes(this.getTenantId(user));
   }
 
   @Post('assets/types')
   createAssetType(@Body() dto: CreateAssetTypeDto, @CurrentUser() user: CurrentUserData) {
-      return this.contactsService.createAssetType(this.getTenantId(user), dto);
+    return this.contactsService.createAssetType(this.getTenantId(user), dto);
   }
 
   @Get(':id/assets')
   getContactAssets(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-      return this.contactsService.getContactAssets(id, this.getTenantId(user));
+    return this.contactsService.getContactAssets(id, this.getTenantId(user));
   }
 
   @Post(':id/assets')
   createContactAsset(
-      @Param('id') id: string,
-      @Body() dto: CreateContactAssetDto,
-      @CurrentUser() user: CurrentUserData
+    @Param('id') id: string,
+    @Body() dto: CreateContactAssetDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-      return this.contactsService.createContactAsset(this.getTenantId(user), id, dto);
+    return this.contactsService.createContactAsset(this.getTenantId(user), id, dto);
   }
 
   @Patch(':id/assets/:assetId')
   updateContactAsset(
-      @Param('assetId') assetId: string,
-      @Body() dto: UpdateContactAssetDto,
-      @CurrentUser() user: CurrentUserData
+    @Param('assetId') assetId: string,
+    @Body() dto: UpdateContactAssetDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-      return this.contactsService.updateContactAsset(this.getTenantId(user), assetId, dto);
+    return this.contactsService.updateContactAsset(this.getTenantId(user), assetId, dto);
   }
 
   @Delete(':id/assets/:assetId')
   removeContactAsset(
-      @Param('assetId') assetId: string,
-      @CurrentUser() user: CurrentUserData
+    @Param('assetId') assetId: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
-      return this.contactsService.removeContactAsset(this.getTenantId(user), assetId);
+    return this.contactsService.removeContactAsset(this.getTenantId(user), assetId);
   }
 
   // Contracts Endpoints

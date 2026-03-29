@@ -1,42 +1,47 @@
-export const masks = {
+﻿export const masks = {
   cpf: (value: string) => {
-    return value
+    const input = String(value ?? '');
+    return input
       .replace(/\D/g, '')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
-      .replace(/(-\d{2})\d+?$/, '$1');
+      .replace(/(\d{3})(\d)/, '.')
+      .replace(/(\d{3})(\d)/, '.')
+      .replace(/(\d{3})(\d{1,2})/, '-')
+      .replace(/(-\d{2})\d+?$/, '');
   },
 
   cnpj: (value: string) => {
-    return value
+    const input = String(value ?? '');
+    return input
       .replace(/\D/g, '')
-      .replace(/(\d{2})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1/$2')
-      .replace(/(\d{4})(\d)/, '$1-$2')
-      .replace(/(-\d{2})\d+?$/, '$1');
+      .replace(/(\d{2})(\d)/, '.')
+      .replace(/(\d{3})(\d)/, '.')
+      .replace(/(\d{3})(\d)/, '/')
+      .replace(/(\d{4})(\d)/, '-')
+      .replace(/(-\d{2})\d+?$/, '');
   },
 
   phone: (value: string) => {
-    return value
+    const input = String(value ?? '');
+    return input
       .replace(/\D/g, '')
-      .replace(/(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d{5})(\d)/, '$1-$2')
-      .replace(/(-\d{4})\d+?$/, '$1');
+      .replace(/(\d{2})(\d)/, '() ')
+      .replace(/(\d{5})(\d)/, '-')
+      .replace(/(-\d{4})\d+?$/, '');
   },
 
   cep: (value: string) => {
-    return value
+    const input = String(value ?? '');
+    return input
       .replace(/\D/g, '')
-      .replace(/(\d{5})(\d)/, '$1-$2')
-      .replace(/(-\d{3})\d+?$/, '$1');
+      .replace(/(\d{5})(\d)/, '-')
+      .replace(/(-\d{3})\d+?$/, '');
   },
 
   cnj: (value: string) => {
     // Padronização: 0000000-00.0000.0.00.0000
     // Remove tudo que não é dígito ou letra
-    const raw = value.replace(/[^\dA-Z]/gi, '').toUpperCase();
+    const input = String(value ?? '');
+    const raw = input.replace(/[^\dA-Z]/gi, '').toUpperCase();
     const digits = raw.replace(/\D/g, '');
     const suffix = raw.replace(/[\d]/g, '').substring(0, 2);
 
@@ -53,79 +58,82 @@ export const masks = {
     if (suffix.length > 0 && digits.length >= 20) {
       res += '/' + suffix;
     } else if (suffix.length > 0) {
-      // Se tiver letra mas ainda não completou os 20 dígitos, 
+      // Se tiver letra mas ainda não completou os 20 dígitos,
       // permite apenas no final se o usuário digitar
       res += '/' + suffix;
     }
 
     return res;
   },
-  
+
   currency: (value: string) => {
-      const number = value.replace(/\D/g, '');
-      const result = (Number(number) / 100).toFixed(2)
-        .replace('.', ',')
-        .replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
-      return `R$ ${result}`;
+    const input = String(value ?? '');
+    const number = input.replace(/\D/g, '');
+    const result = (Number(number) / 100)
+      .toFixed(2)
+      .replace('.', ',')
+      .replace(/(\d)(?=(\d{3})+(?!\d))/g, '.');
+    return `R$ ${result}`;
   },
-  
+
   date: (value: string) => {
-    return value
+    const input = String(value ?? '');
+    return input
       .replace(/\D/g, '')
-      .replace(/(\d{2})(\d)/, '$1/$2')
-      .replace(/(\d{2})(\d)/, '$1/$2')
-      .replace(/(\d{4})\d+?$/, '$1');
-  }
+      .replace(/(\d{2})(\d)/, '/')
+      .replace(/(\d{2})(\d)/, '/')
+      .replace(/(\d{4})\d+?$/, '');
+  },
 };
 
 export const unmask = (value: string) => {
-    return value.replace(/\D/g, '');
+  return value.replace(/\D/g, '');
 };
 
 export const isValidCpf = (value: string) => {
-    const digits = unmask(value || '');
+  const digits = unmask(value || '');
 
-    if (digits.length !== 11) return false;
-    if (/^(\d)\1{10}$/.test(digits)) return false;
+  if (digits.length !== 11) return false;
+  if (/(^(\d)\1{10}$)/.test(digits)) return false;
 
-    const calculateDigit = (base: string) => {
-        let total = 0;
-        let multiplier = base.length + 1;
+  const calculateDigit = (base: string) => {
+    let total = 0;
+    let multiplier = base.length + 1;
 
-        for (const digit of base) {
-            total += Number(digit) * multiplier--;
-        }
+    for (const digit of base) {
+      total += Number(digit) * multiplier--;
+    }
 
-        const remainder = total % 11;
-        return remainder < 2 ? 0 : 11 - remainder;
-    };
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
 
-    const firstDigit = calculateDigit(digits.slice(0, 9));
-    const secondDigit = calculateDigit(digits.slice(0, 10));
+  const firstDigit = calculateDigit(digits.slice(0, 9));
+  const secondDigit = calculateDigit(digits.slice(0, 10));
 
-    return digits.endsWith(`${firstDigit}${secondDigit}`);
+  return digits.endsWith(`${firstDigit}${secondDigit}`);
 };
 
 export const isValidCnpj = (value: string) => {
-    const digits = unmask(value || '');
+  const digits = unmask(value || '');
 
-    if (digits.length !== 14) return false;
-    if (/^(\d)\1{13}$/.test(digits)) return false;
+  if (digits.length !== 14) return false;
+  if (/(^(\d)\1{13}$)/.test(digits)) return false;
 
-    const calculateDigit = (base: string, factor: number) => {
-        let total = 0;
+  const calculateDigit = (base: string, factor: number) => {
+    let total = 0;
 
-        for (const digit of base) {
-            total += Number(digit) * factor;
-            factor = factor === 2 ? 9 : factor - 1;
-        }
+    for (const digit of base) {
+      total += Number(digit) * factor;
+      factor = factor === 2 ? 9 : factor - 1;
+    }
 
-        const remainder = total % 11;
-        return remainder < 2 ? 0 : 11 - remainder;
-    };
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
 
-    const firstDigit = calculateDigit(digits.slice(0, 12), 5);
-    const secondDigit = calculateDigit(digits.slice(0, 12) + String(firstDigit), 6);
+  const firstDigit = calculateDigit(digits.slice(0, 12), 5);
+  const secondDigit = calculateDigit(digits.slice(0, 12) + String(firstDigit), 6);
 
-    return digits.endsWith(`${firstDigit}${secondDigit}`);
+  return digits.endsWith(`${firstDigit}${secondDigit}`);
 };

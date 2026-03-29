@@ -49,7 +49,7 @@ interface ContactData {
     additionalContacts?: { type: string; value: string }[];
 }
 
-interface ProcessParty {
+export interface ProcessParty {
     id: string;
     contactId: string;
     isClient: boolean;

@@ -2297,7 +2297,7 @@ export class ProcessesService {
             }
 
             if (excludedTags) {
-                const excArray = excludedTags.split(',');
+                const excArray = String(excludedTags).split(',');
                 where.AND.push({
                     tags: {
                         none: { tagId: { in: excArray } },

@@ -36,6 +36,7 @@ import { useHotkeys } from '../../hooks/useHotkeys';
 import { clsx } from 'clsx';
 import { getOfficeFolderDisplayPath } from '../../utils/officePath';
 import { Financial } from '../Financial';
+import { ImportedParty, CnjTimelineImportStatus, PdfDossierImportResult } from './types';
 
 const DEFAULT_AREAS = [
     { label: 'Civel', value: 'Civel' },
@@ -113,65 +114,7 @@ const normalizeLifecycleStatus = (value?: string | null, fallback = 'ATIVO') => 
     return statusMap[normalized] || fallback;
 };
 
-type ImportedParty = {
-    name: string;
-    type: string;
-    document?: string;
-    phone?: string;
-    email?: string;
-    oab?: string;
-    representedNames?: string[];
-    isClient?: boolean;
-    isOpposing?: boolean;
-};
-
 const LAWYER_TERMS = ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'];
-
-type CnjTimelineImportStatus = {
-    canImport: boolean;
-    reasonCode: string;
-    message: string;
-    actionLabel: string;
-    checkedAt: string;
-    cnj: string | null;
-    totalAvailableCount: number;
-    importedTimelineCount: number;
-    newMovementCount: number;
-    lastSourceUpdateAt: string | null;
-    sourceSystem: string | null;
-    sourceCourt: string | null;
-    isProcessSaved: boolean;
-};
-
-type PdfDossierImportResult = {
-    success: boolean;
-    processId?: string;
-    processAction?: 'CREATED' | 'UPDATED';
-    importedCount: number;
-    skippedCount: number;
-    totalCandidateCount: number;
-    deadlineCount: number;
-    explicitFatalDateCount: number;
-    cnjMovementCount: number;
-    message: string;
-    process?: {
-        id: string;
-    };
-    drxSummary?: {
-        answer?: string | null;
-        matchedSkills?: Array<{
-            id?: string | null;
-            name?: string | null;
-        }>;
-    };
-    analysis?: {
-        pageCount?: number;
-        documentCount?: number;
-        proceduralActCount?: number;
-        textLength?: number;
-        ocrStatus?: string;
-    };
-};
 
 const normalizeCnjDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
 
@@ -245,7 +188,9 @@ export function ProcessForm() {
         const fetchInitialData = async () => {
             try {
                 const res = await api.get('/workflows');
-                setWorkflows(res.data.filter((w: any) => w.isActive) || []);
+                if (res.data && Array.isArray(res.data)) {
+                    setWorkflows(res.data.filter((w: any) => w.isActive) || []);
+                }
             } catch (error) {
                 console.error('Failed to load workflows', error);
             }
@@ -299,6 +244,8 @@ export function ProcessForm() {
             setLoading(true);
             const res = await api.get(`/processes/${id}`);
             const data = res.data;
+            if (!data) throw new Error('Dados do processo não encontrados');
+
             setSavedProcessCnj(String(data.cnj || ''));
             setForm({
                 title: data.title || '',
@@ -314,7 +261,7 @@ export function ProcessForm() {
                 class: data.class || '',
                 distributionDate: data.distributionDate ? String(data.distributionDate).slice(0, 10) : '',
                 judge: data.judge || '',
-                value: data.value ? parseFloat(data.value) : 0,
+                value: data.value ? parseFloat(String(data.value)) : 0,
                 description: data.description || '',
                 folder: data.folder || data.msFolderUrl || '',
                 localFolder: data.localFolder || '',
@@ -324,22 +271,25 @@ export function ProcessForm() {
             });
             setImportedParties(Array.isArray(data.parties) ? data.parties : []);
             setImportedMovements(Array.isArray(data.movements) ? data.movements : []);
+            
             setLastConsultSummary(
                 Array.isArray(data.processParties) && data.processParties.length > 0
-                    ? `${data.processParties.length} parte(s) sincronizadas no cadastro do processo${Array.isArray(data.processPartyRepresentations) && data.processPartyRepresentations.length > 0 ? ` e ${data.processPartyRepresentations.length} vinculo(s) de representacao` : ''}`
+                    ? `${data.processParties.length} parte(s) sincronizadas`
                     : Array.isArray(data.parties) && data.parties.length > 0
-                    ? `${data.parties.length} parte(s) prontas para sincronizacao`
+                    ? `${data.parties.length} parte(s) prontas`
                     : '',
             );
+
             const pdfImport = data.metadata?.pdfDossierImport;
             setLastPdfImportSummary(
                 pdfImport
-                    ? `${pdfImport.importedCount || 0} andamento(s) extraido(s) do PDF do processo, ${pdfImport.explicitFatalDateCount || 0} com prazo fatal expresso e ${pdfImport.cnjMovementCount || 0} movimento(s) oficiais em paralelo no CNJ/DataJud.${formatMatchedSkillSummary(pdfImport.drxSummary)}`
+                    ? `${pdfImport.importedCount || 0} andamentos extraídos do PDF.`
                     : '',
             );
-        } catch {
-            toast.error('Erro ao carregar processo');
-            navigate('/processes');
+        } catch (error: any) {
+            console.error('Erro ao buscar processo:', error);
+            toast.error('Erro ao carregar dados do processo para edição.');
+            // Não redirige imediatamente para dar chance de ver o erro
         } finally {
             setLoading(false);
         }
@@ -453,7 +403,6 @@ export function ProcessForm() {
             return;
         }
 
-        // NOVO: Validar Cliente Principal
         // NOVO: Validar Cliente Principal
         const hasClient = importedParties.some(p => p.isClient || (p.type && p.type.toUpperCase().includes('CLIENTE')));
         if (!hasClient) {
@@ -764,6 +713,7 @@ export function ProcessForm() {
         ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200'
         : 'border-amber-500/30 bg-amber-500/15 text-amber-100';
     const pdfDossierInputId = isEditing ? `process-dossier-upload-${id}` : 'process-dossier-upload';
+    const pdfDossierInputControlId = `${pdfDossierInputId}-control`;
 
     const TabButton = ({ tabId, label, icon: Icon, hasIndicator }: any) => (
         <button
@@ -783,16 +733,25 @@ export function ProcessForm() {
         </button>
     );
 
-    const hasUnclassifiedParties = useMemo(() => {
-        return importedParties.some(p => 
-            !p.isClient && 
-            !p.isOpposing && 
-            !LAWYER_TERMS.some(term => (p.type || '').toUpperCase().includes(term))
-        );
-    }, [importedParties]);
+    const hasUnclassifiedParties = Array.isArray(importedParties)
+        ? importedParties.some((party) => {
+              if (!party) return false;
+              const partyType = String(party.type || '').toUpperCase();
+              const isLawyer = LAWYER_TERMS.some((term) => partyType.includes(term));
+              if (isLawyer) return false;
+              return !party.isClient && !party.isOpposing;
+          })
+        : false;
 
     return (
         <div className="p-6 md:p-8 animate-in fade-in">
+            <input
+                id={pdfDossierInputControlId}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                onChange={(event) => void handleImportProcessPdf(event)}
+            />
             <div className="flex items-center gap-4 mb-6">
                 <button onClick={() => navigate('/processes')} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
                     <ArrowLeft size={20} />
@@ -822,8 +781,8 @@ export function ProcessForm() {
                         <div 
                             role="button"
                             tabIndex={0}
-                            onClick={() => document.getElementById(pdfDossierInputId)?.click()}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById(pdfDossierInputId)?.click(); }}
+                            onClick={() => document.getElementById(pdfDossierInputControlId)?.click()}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById(pdfDossierInputControlId)?.click(); }}
                             className="group relative overflow-hidden bg-slate-900 border border-slate-700 rounded-2xl p-6 hover:border-indigo-500/50 hover:bg-slate-800/50 transition cursor-pointer shadow-lg outline-none focus:ring-2 focus:ring-indigo-500/50"
                         >
                             <div className="absolute top-0 right-0 p-2 bg-indigo-500 text-white text-[10px] font-bold rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity">POWERED BY DR.X</div>
@@ -1193,15 +1152,8 @@ export function ProcessForm() {
                                                 )}
                                             </div>
                                             <div className="flex min-w-[240px] flex-col gap-2">
-                                                <input
-                                                    id={pdfDossierInputId}
-                                                    type="file"
-                                                    accept=".pdf,application/pdf"
-                                                    className="hidden"
-                                                    onChange={(event) => void handleImportProcessPdf(event)}
-                                                />
                                                 <label
-                                                    htmlFor={pdfDossierInputId}
+                                                    htmlFor={pdfDossierInputControlId}
                                                     className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/15 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/25 ${importingPdfDossier ? 'pointer-events-none opacity-60' : ''}`}
                                                 >
                                                     {importingPdfDossier ? (
@@ -1254,11 +1206,11 @@ export function ProcessForm() {
                                 processId={id!} 
                                 onPartiesChange={(newParties) => {
                                     const mapped = newParties.map(p => ({
-                                        name: p.contact.name,
-                                        type: p.role.name,
-                                        isClient: p.isClient,
-                                        isOpposing: p.isOpposing,
-                                        document: p.contact.document
+                                        name: p.contact?.name || '',
+                                        type: p.role?.name || '',
+                                        isClient: !!p.isClient,
+                                        isOpposing: !!p.isOpposing,
+                                        document: p.contact?.document || ''
                                     }));
                                     setImportedParties(mapped);
                                 }}
@@ -1271,7 +1223,8 @@ export function ProcessForm() {
                                 </div>
                                 <div className="divide-y divide-slate-800">
                                     {importedParties.map((party, idx) => {
-                                        const isLawyer = LAWYER_TERMS.some(term => party.type.toUpperCase().includes(term));
+                                        const partyType = String(party?.type || '').toUpperCase();
+                                        const isLawyer = LAWYER_TERMS.some(term => partyType.includes(term));
                                         return (
                                             <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition">
                                                 <div className="flex items-center gap-3">

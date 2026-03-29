@@ -414,9 +414,9 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
 
         if (!searchTerm) return true;
         
-        const term = searchTerm.toLowerCase();
+        const term = (searchTerm || '').toLowerCase();
         const matchesSearch = 
-            t.title.toLowerCase().includes(term) || 
+            (t.title || '').toLowerCase().includes(term) || 
             (t.description?.toLowerCase() || '').includes(term) ||
             (t.responsibleName?.toLowerCase() || '').includes(term) ||
             (t.displayId?.toLowerCase() || '').includes(term);
@@ -523,14 +523,14 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                             {loading ? (
                                 [...Array(5)].map((_, i) => (
                                     <tr key={i} className="animate-pulse bg-white">
-                                        <td colSpan={6} className="px-4 py-5 text-center">
+                                        <td colSpan={7} className="px-4 py-5 text-center">
                                             <div className="h-4 bg-slate-100 rounded w-full"></div>
                                         </td>
                                     </tr>
                                 ))
                             ) : filteredTimelines.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-12 text-center text-slate-500 bg-slate-50">
+                                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500 bg-slate-50">
                                         <div className="flex flex-col items-center gap-2">
                                             <Search size={32} className="text-slate-300" />
                                             <p className="font-medium">Nenhum andamento encontrado.</p>

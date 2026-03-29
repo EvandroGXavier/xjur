@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X } from 'lucide-react';
+import { clsx } from 'clsx';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
 
@@ -15,10 +16,11 @@ interface InlineTagsProps {
   tags: { tag: Tag }[];
   entityId: string;
   entityType: 'contact' | 'process' | 'financial' | 'timeline';
-  onRefresh: () => void;
+  onRefresh?: () => void;
+  className?: string;
 }
 
-export function InlineTags({ tags, entityId, entityType, onRefresh }: InlineTagsProps) {
+export function InlineTags({ tags, entityId, entityType, onRefresh, className }: InlineTagsProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,7 @@ export function InlineTags({ tags, entityId, entityType, onRefresh }: InlineTags
     try {
       await api.post(`/tags/${entityType}/${entityId}/${tagId}`);
       toast.success('Tag adicionada');
-      onRefresh();
+      onRefresh?.();
       setIsMenuOpen(false);
     } catch (error) {
       toast.error('Erro ao adicionar tag');
@@ -67,17 +69,17 @@ export function InlineTags({ tags, entityId, entityType, onRefresh }: InlineTags
     try {
       await api.delete(`/tags/${entityType}/${entityId}/${tagId}`);
       toast.success('Tag removida');
-      onRefresh();
+      onRefresh?.();
     } catch (error) {
       toast.error('Erro ao remover tag');
     }
   };
 
-  const attachedTagIds = tags.map(t => t.tag.id);
+  const attachedTagIds = (tags || []).filter(t => t && t.tag).map(t => t.tag.id);
 
   return (
-    <div className="flex flex-wrap gap-1.5 items-center">
-      {tags.map(({ tag }) => (
+    <div className={clsx("flex flex-wrap gap-1.5 items-center", className)}>
+      {(tags || []).filter(t => t && t.tag).map(({ tag }) => (
         <span
           key={tag.id}
           className="group relative flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all hover:pr-5 overflow-hidden"

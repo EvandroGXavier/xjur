@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs';
 import { PrismaService } from '../prisma.service';
@@ -33,9 +34,22 @@ export class WhatsappService implements OnModuleInit {
     private readonly inboxService: InboxService,
     @Inject(forwardRef(() => DrxClawService))
     private readonly drxClawService: DrxClawService,
+    private readonly configService: ConfigService,
   ) {}
 
   async onModuleInit() {
+    const enabled = this.configService.get<string>('WHATSAPP_ENABLED') === 'true';
+    if (!enabled) {
+      this.logger.log('WhatsApp integration is DISABLED via WHATSAPP_ENABLED flag');
+      return;
+    }
+
+    const restore = this.configService.get<string>('WHATSAPP_RESTORE_SESSIONS') !== 'false';
+    if (!restore) {
+      this.logger.log('WhatsApp Session Restoration is DISABLED via WHATSAPP_RESTORE_SESSIONS flag');
+      return;
+    }
+
     this.logger.log('Evolution API Integration Initialized');
     try {
       await this.restoreSessions();
