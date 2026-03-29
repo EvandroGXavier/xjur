@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import * as fs from 'fs';
 import { MicrosoftGraphService } from '../integrations/microsoft-graph.service';
@@ -2057,16 +2057,17 @@ export class ProcessesService {
         return newTenant.id;
     }
 
-    private async buildProcessCode(tenantId: string, data: CreateProcessDto) {
-        if (data.category !== 'EXTRAJUDICIAL') {
-            return data.code || this.normalizeCnj(data.cnj) || data.cnj;
-        }
+    private cleanOptionalText(value?: string | null) {
+        if (typeof value !== 'string') return undefined;
+        const trimmed = value.trim();
+        return trimmed.length ? trimmed : undefined;
+    }
 
-        const year = new Date().getFullYear();
+    private async buildYearSequenceCode(tenantId: string, prefix: string, year: number) {
         const codes = await this.prisma.process.findMany({
             where: {
                 tenantId,
-                code: { startsWith: `CASO-${year}-` },
+                code: { startsWith: `${prefix}-${year}-` },
             },
             select: { code: true },
         });
@@ -2082,7 +2083,25 @@ export class ProcessesService {
             }
         }
 
-        return `CASO-${year}-${String(maxSeq + 1).padStart(4, '0')}`;
+        return `${prefix}-${year}-${String(maxSeq + 1).padStart(4, '0')}`;
+    }
+
+    private async buildProcessCode(tenantId: string, data: CreateProcessDto) {
+        const providedCode = this.cleanOptionalText(data.code);
+        if (providedCode) return providedCode;
+
+        if (data.category === 'EXTRAJUDICIAL') {
+            const year = new Date().getFullYear();
+            return this.buildYearSequenceCode(tenantId, 'CASO', year);
+        }
+
+        const normalizedCnj = this.normalizeCnj(data.cnj);
+        if (normalizedCnj) return normalizedCnj;
+        if (this.cleanOptionalText(data.cnj)) return data.cnj!;
+
+        // Processos administrativos / sem CNJ: gera código interno sequencial por ano
+        const year = new Date().getFullYear();
+        return this.buildYearSequenceCode(tenantId, 'PROC', year);
     }
 
     async create(data: CreateProcessDto) {
@@ -2094,7 +2113,6 @@ export class ProcessesService {
         }
 
         const tenantId = await this.resolveTenantId(data.tenantId);
-        const code = await this.buildProcessCode(tenantId, data);
         const normalizedStatus = this.normalizeLifecycleStatus(data.status, 'ATIVO');
         const processMetadata = this.buildProcessMetadata(data.metadata, data.status, normalizedStatus);
 
@@ -2109,69 +2127,78 @@ export class ProcessesService {
 
         const inputParties = Array.isArray(data.parties) ? data.parties : [];
         const hasClientInParties = inputParties.some(p => p.isClient || String(p.type || '').toUpperCase().includes('CLIENTE'));
-        
-        const processData: any = {
-            tenantId,
-            workflowId: finalWorkflowId || null,
-            cnj: this.normalizeCnj(data.cnj),
-            category: data.category,
-            title: data.title || `Processo ${this.normalizeCnj(data.cnj) || data.cnj}`,
-            code,
-            description: data.description,
-            folder: data.folder,
-            localFolder: data.localFolder,
-            court: data.court,
-            courtSystem: data.courtSystem,
-            npu: this.normalizeCnj(data.cnj),
-            vars: data.vars,
-            district: data.district,
-            status: normalizedStatus,
-            area: data.area,
-            subject: data.subject,
-            class: data.class,
-            distributionDate: this.parseDate(data.distributionDate),
-            judge: data.judge,
-            value: this.parseMoneyValue(data.value),
-            metadata: processMetadata,
-            parties: Array.isArray(data.parties) ? data.parties : [],
-        };
+
+        const codeWasProvided = !!this.cleanOptionalText(data.code);
+        const maxAttempts = 5;
 
         try {
-            const process =
-                data.category === 'JUDICIAL' && data.cnj
-                    ? await this.prisma.process.upsert({
-                        where: { 
-                            tenantId_cnj: {
-                                tenantId,
-                                cnj: processData.cnj!
-                            }
-                        },
-                        update: {
-                            cnj: processData.cnj,
-                            category: processData.category,
-                            title: processData.title,
-                            code: processData.code,
-                            description: processData.description,
-                            folder: processData.folder,
-                            localFolder: processData.localFolder,
-                            court: processData.court,
-                            courtSystem: processData.courtSystem,
-                            vars: processData.vars,
-                            district: processData.district,
-                            status: processData.status,
-                            area: processData.area,
-                            subject: processData.subject,
-                            class: processData.class,
-                            distributionDate: processData.distributionDate,
-                            judge: processData.judge,
-                            value: processData.value,
-                            metadata: processData.metadata,
-                        },
-                        create: processData,
-                    })
-                    : await this.prisma.process.create({
-                        data: processData,
-                    });
+            let lastError: any;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                const code = await this.buildProcessCode(tenantId, data);
+
+                const processData: any = {
+                    tenantId,
+                    workflowId: finalWorkflowId || null,
+                    cnj: this.normalizeCnj(data.cnj),
+                    category: data.category,
+                    title: data.title || `Processo ${this.normalizeCnj(data.cnj) || data.cnj}`,
+                    code,
+                    description: data.description,
+                    folder: data.folder,
+                    localFolder: data.localFolder,
+                    court: data.court,
+                    courtSystem: data.courtSystem,
+                    npu: this.normalizeCnj(data.cnj),
+                    vars: data.vars,
+                    district: data.district,
+                    status: normalizedStatus,
+                    area: data.area,
+                    subject: data.subject,
+                    class: data.class,
+                    distributionDate: this.parseDate(data.distributionDate),
+                    judge: data.judge,
+                    value: this.parseMoneyValue(data.value),
+                    metadata: processMetadata,
+                    parties: Array.isArray(data.parties) ? data.parties : [],
+                };
+
+                try {
+                    const process =
+                        data.category === 'JUDICIAL' && data.cnj
+                            ? await this.prisma.process.upsert({
+                                where: {
+                                    tenantId_cnj: {
+                                        tenantId,
+                                        cnj: processData.cnj!,
+                                    },
+                                },
+                                update: {
+                                    cnj: processData.cnj,
+                                    category: processData.category,
+                                    title: processData.title,
+                                    code: processData.code,
+                                    description: processData.description,
+                                    folder: processData.folder,
+                                    localFolder: processData.localFolder,
+                                    court: processData.court,
+                                    courtSystem: processData.courtSystem,
+                                    vars: processData.vars,
+                                    district: processData.district,
+                                    status: processData.status,
+                                    area: processData.area,
+                                    subject: processData.subject,
+                                    class: processData.class,
+                                    distributionDate: processData.distributionDate,
+                                    judge: processData.judge,
+                                    value: processData.value,
+                                    metadata: processData.metadata,
+                                },
+                                create: processData,
+                            })
+                            : await this.prisma.process.create({
+                                data: processData,
+                            });
 
         // Registrar andamento automático de criação
         await this.timelineService.createSystemTimeline(
@@ -2204,6 +2231,29 @@ export class ProcessesService {
 
             await this.syncMicrosoftFolder(tenantId, process.id);
             return this.findOne(process.id, tenantId);
+                } catch (error: any) {
+                    lastError = error;
+                    const prismaError = error as any;
+                    if (prismaError?.code === 'P2002') {
+                        const target = prismaError?.meta?.target;
+                        const isCodeConflict =
+                            Array.isArray(target) && target.includes('tenantId') && target.includes('code');
+
+                        if (isCodeConflict) {
+                            if (codeWasProvided || attempt === maxAttempts) {
+                                throw new ConflictException('Ja existe um processo com este codigo interno.');
+                            }
+                            continue;
+                        }
+
+                        throw new ConflictException('Registro duplicado. Verifique CNJ e Codigo.');
+                    }
+                    throw error;
+                }
+            }
+
+            console.error('Error creating/upserting process:', lastError);
+            throw lastError;
         } catch (error: any) {
             console.error('Error creating/upserting process:', error);
             throw error;
