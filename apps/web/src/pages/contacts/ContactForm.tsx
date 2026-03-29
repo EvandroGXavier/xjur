@@ -67,7 +67,8 @@ interface ContactData {
   document?: string;
   email?: string;
   phone: string; // Telefone
-  whatsapp?: string; // Celular (Obrigatório)
+  whatsappE164?: string;
+  whatsappFullId?: string; // ID do WhatsApp
   notes?: string;
   category?: string;
   addresses?: Address[];
@@ -346,6 +347,7 @@ export function ContactForm() {
     personType: 'LEAD',
     phone: '',
     whatsapp: '',
+    whatsappFullId: '',
     document: '',
     addresses: [],
     additionalContacts: [],
@@ -1392,11 +1394,9 @@ export function ContactForm() {
         });
         
         if (enrichedAddress) {
-             setAddressForm(enrichedAddress);
-             toast.success('Dados do CNPJ e endereco preparados para salvamento automatico.');
-             setShowAddressForm(true);
+             toast.success('Dados da empresa e endereço carregados com sucesso!');
         } else {
-             toast.success('Dados do CNPJ carregados com sucesso!');
+             toast.success('Dados da empresa carregados com sucesso!');
         }
     } catch (err: any) {
       console.error(err);
@@ -1471,6 +1471,18 @@ export function ContactForm() {
   const handleAddAddress = async () => {
     if (!id || id === 'new') {
       toast.warning('Salve o contato antes de adicionar endereços');
+      return;
+    }
+
+    // Verificar duplicidade antes de enviar
+    const isDuplicate = Array.isArray(formData.addresses) && formData.addresses.some(address =>
+      (address.zipCode || '') === addressForm.zipCode &&
+      (address.street || '').trim().toLowerCase() === addressForm.street?.trim().toLowerCase() &&
+      (address.number || '').trim().toLowerCase() === (addressForm.number || '').trim().toLowerCase()
+    );
+
+    if (isDuplicate) {
+      toast.warning('Este endereço já está cadastrado para este contato.');
       return;
     }
 
@@ -1865,9 +1877,9 @@ export function ContactForm() {
                              <FileText size={20} className="text-indigo-400" /> Informações Principais
                          </h3>
                          
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                              {/* Nome Fantasia / Nome */}
-                             <div className="space-y-2 md:col-span-2">
+                             <div className="space-y-2 md:col-span-3">
                                  <label className="text-sm font-medium text-slate-400">
                                      {formData.personType === 'PJ' ? 'Nome Fantasia *' : 'Nome Completo *'}
                                  </label>
@@ -1910,6 +1922,20 @@ export function ContactForm() {
                                  />
                              </div>
 
+                             {/* WhatsApp Full ID */}
+                             <div className="space-y-2">
+                                 <label className="text-sm font-medium text-slate-400 flex items-center gap-1">
+                                     WhatsApp ID (Sistema)
+                                     <HelpCircle size={12} className="text-slate-500" title="Identificador técnico do WhatsApp (ex: 55... @s.whatsapp.net)" />
+                                 </label>
+                                 <input 
+                                    value={formData.whatsappFullId || ''}
+                                    onChange={e => setFormData({...formData, whatsappFullId: e.target.value})}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="Identificador do WhatsApp"
+                                 />
+                             </div>
+
                              {/* E-mail */}
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400">E-mail</label>
@@ -1924,7 +1950,7 @@ export function ContactForm() {
                              </div>
                              
                              {/* Documento (CPF / CNPJ) - Misto */}
-                             <div className="space-y-2">
+                             <div className="space-y-2 md:col-span-2">
                                 <label className="text-sm font-medium text-slate-400">
                                     Documento (CPF / CNPJ)
                                 </label>
@@ -2000,7 +2026,7 @@ export function ContactForm() {
                              </div>
 
                              {/* Observações */}
-                             <div className="space-y-2 md:col-span-2">
+                             <div className="space-y-2 md:col-span-3">
                                  <label className="text-sm font-medium text-slate-400">Observações</label>
                                  <textarea 
                                     rows={4}
