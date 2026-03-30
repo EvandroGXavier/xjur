@@ -140,8 +140,12 @@ export class DocumentsController {
   }
 
   @Post('templates/:id/customize')
-  customizeTemplate(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-    return this.documentsService.customizeTemplate(id, user.tenantId);
+  customizeTemplate(
+    @Param('id') id: string, 
+    @CurrentUser() user: CurrentUserData,
+    @Body() body: any,
+  ) {
+    return this.documentsService.customizeTemplate(id, user.tenantId, body);
   }
 
   @Post('system/sync')

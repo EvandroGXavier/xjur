@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
     FileText, Plus, Search, Trash2, 
-    BookOpen, Archive, Save, ArrowLeft, Tag as TagIcon, X, Settings2, Sparkles, RefreshCw, Shield
+    BookOpen, Archive, Save, ArrowLeft, Tag as TagIcon, X, Settings2, Sparkles, RefreshCw, Shield, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
@@ -89,6 +89,7 @@ export function Library() {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [editorMetadataText, setEditorMetadataText] = useState('');
     const [editorReadOnly, setEditorReadOnly] = useState(false);
+    const [editorAction, setEditorAction] = useState<'EDIT' | 'COPY'>('EDIT');
 
     const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
@@ -212,8 +213,16 @@ export function Library() {
         setIsEditorOpen(true);
     };
 
-    const handleEditTemplate = (tpl: Template) => {
+    const handleEditTemplate = (tpl: Template, action: 'EDIT' | 'COPY') => {
+        setEditorAction(action);
         setEditorFromTemplate(tpl);
+        if (action === 'COPY') {
+            setEditorMode('TENANT'); // Force to tenant mode to allow editing before saving copy
+            setEditorReadOnly(false);
+            if (!tpl.title.endsWith('(Cópia)')) {
+                setEditorTitle(tpl.title + ' (Cópia)');
+            }
+        }
         setIsEditorOpen(true);
     };
 
@@ -269,31 +278,29 @@ export function Library() {
         }
     };
 
-    const handleCustomizeSystemTemplate = async () => {
-        if (!editingTemplate?.id) return;
+    const handleSaveAsCopy = async () => {
         try {
-            const res = await api.post(`/documents/templates/${editingTemplate.id}/customize`);
-            toast.success('Modelo copiado para seu escritório');
-            setEditorFromTemplate(res.data);
-        } catch (err) {
-            console.error(err);
-            toast.error('Erro ao personalizar modelo do sistema');
-        }
-    };
+            const payload: any = {
+                title: editorTitle,
+                content: editorContent,
+                categoryId: editorCategoryId || undefined,
+                description: editorDescription,
+                preferredStorage: editorPreferredStorage || undefined,
+                tags: editorTags.map((t: any) => typeof t === 'string' ? t : t.name).filter(Boolean),
+                sourceTemplateId: editingTemplate?.id
+            };
 
-    const handleCustomizeFromCard = async (tpl: Template) => {
-        try {
-            const res = await api.post(`/documents/templates/${tpl.id}/customize`);
-            toast.success('Modelo copiado para seu escritório');
-            // Abre diretamente a cópia editável
-            setEditorFromTemplate(res.data);
-            setIsEditorOpen(true);
+            const res = await api.post('/documents/templates', payload);
+            toast.success('Cópia salva com sucesso! (Original mantido)');
+            setIsEditorOpen(false);
             fetchData();
         } catch (err) {
             console.error(err);
-            toast.error('Erro ao personalizar modelo do sistema');
+            toast.error('Erro ao salvar cópia');
         }
     };
+
+
 
     const handleSaveTemplate = async () => {
         if (editorReadOnly) {
@@ -462,19 +469,22 @@ export function Library() {
                         <button onClick={() => setIsEditorOpen(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition">
                             <ArrowLeft size={24} />
                         </button>
-                        <div>
-                            <input 
-                                value={editorTitle}
-                                onChange={e => setEditorTitle(e.target.value)}
-                                placeholder="Título do Modelo (Ex: Procuração Ad Judicia)"
-                                className={clsx(
-                                    "bg-transparent text-xl font-bold text-white focus:outline-none placeholder-slate-600 w-96",
-                                    editorReadOnly && "opacity-80"
-                                )}
-                                autoFocus
-                                disabled={editorReadOnly}
-                            />
-                            <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 max-w-2xl group">
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    value={editorTitle}
+                                    onChange={e => setEditorTitle(e.target.value)}
+                                    placeholder="Título do Modelo (Ex: Procuração Ad Judicia)"
+                                    className={clsx(
+                                        "bg-transparent text-xl font-bold text-white focus:outline-none placeholder-slate-600 w-full px-2 py-1 transition-colors rounded",
+                                        editorReadOnly ? "opacity-80" : "hover:bg-slate-800 focus:bg-slate-800 border-b border-dashed border-slate-600 focus:border-indigo-500 hover:border-indigo-400"
+                                    )}
+                                    autoFocus
+                                    disabled={editorReadOnly}
+                                    title={editorReadOnly ? "Modelo do sistema não pode ser renomeado aqui" : "Clique para alterar o nome do modelo"}
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 px-2">
                                 {isSystem && (
                                     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
                                         <Sparkles size={14} /> Modelo do Sistema
@@ -489,37 +499,36 @@ export function Library() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {isSystem ? (
+                        {isSystem && canEditSystem && (
                             <>
-                                {canEditSystem && (
-                                    <>
-                                        {!!editingTemplate?.id && (
-                                            <button
-                                                onClick={() => handleDeleteSystemTemplate(editingTemplate.id)}
-                                                className="px-4 py-2 bg-red-500/15 hover:bg-red-500/25 text-red-300 rounded-lg font-bold flex items-center gap-2 transition border border-red-500/20"
-                                                title="Excluir modelo do sistema"
-                                            >
-                                                <Trash2 size={18} /> Excluir
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={handleSaveTemplate}
-                                            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
-                                            title="Salvar alterações no modelo do sistema"
-                                        >
-                                            <Save size={18} /> Salvar (Sistema)
-                                        </button>
-                                    </>
+                                {!!editingTemplate?.id && (
+                                    <button
+                                        onClick={() => handleDeleteSystemTemplate(editingTemplate.id)}
+                                        className="px-4 py-2 bg-red-500/15 hover:bg-red-500/25 text-red-300 rounded-lg font-bold flex items-center gap-2 transition border border-red-500/20"
+                                        title="Excluir modelo do sistema"
+                                    >
+                                        <Trash2 size={18} /> Excluir
+                                    </button>
                                 )}
                                 <button
-                                    onClick={handleCustomizeSystemTemplate}
-                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold flex items-center gap-2 transition border border-slate-700"
-                                    title="Cria uma cópia editável para seu escritório"
+                                    onClick={handleSaveTemplate}
+                                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
+                                    title="Salvar alterações no modelo do sistema"
                                 >
-                                    <Sparkles size={18} /> Personalizar
+                                    <Save size={18} /> Salvar (Sistema)
                                 </button>
                             </>
-                        ) : (
+                        )}
+                        {editorAction === 'COPY' && (
+                            <button
+                                onClick={handleSaveAsCopy}
+                                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
+                                title="Salvar como uma Nova Cópia no seu escritório"
+                            >
+                                <Copy size={18} /> Salvar como Cópia
+                            </button>
+                        )}
+                        {editorAction === 'EDIT' && (!isSystem || canEditSystem) && (
                             <button
                                 onClick={handleSaveTemplate}
                                 className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
@@ -887,33 +896,26 @@ export function Library() {
                  {activeTab === 'TEMPLATES' ? (
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredTemplates.map(tpl => (
-                             <div key={tpl.id} className="bg-slate-900 border border-slate-800 rounded-xl p-6 group hover:border-indigo-500/50 transition cursor-pointer" onClick={() => handleEditTemplate(tpl)}>
+                             <div key={tpl.id} className="bg-slate-900 border border-slate-800 rounded-xl p-6 group transition flex flex-col h-full hover:border-indigo-500/50">
                                  <div className="flex justify-between items-start mb-4">
                                      <div className="p-3 bg-indigo-500/10 rounded-lg text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition">
                                          <FileText size={24} /> 
                                      </div>
-                                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                                     <div className="flex gap-2">
                                         {tpl.isSystemTemplate ? (
                                             <>
                                                 {isSuperAdmin && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleDeleteSystemTemplate(tpl.id); }}
-                                                        className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg"
+                                                        className="p-2 hover:bg-red-500/20 text-red-500 bg-red-500/10 rounded-lg transition"
                                                         title="Excluir (Sistema)"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
                                                 )}
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleCustomizeFromCard(tpl); }}
-                                                    className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 transition"
-                                                    title="Criar uma cópia editável para seu escritório"
-                                                >
-                                                    <Sparkles size={14} /> Personalizar
-                                                </button>
                                             </>
                                         ) : (
-                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(tpl.id); }} className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg" title="Excluir"><Trash2 size={16} /></button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(tpl.id); }} className="p-2 hover:bg-red-500/20 text-red-500 bg-red-500/10 rounded-lg transition" title="Excluir"><Trash2 size={16} /></button>
                                         )}
                                      </div>
                                  </div>
@@ -973,10 +975,28 @@ export function Library() {
                                         )}
                                     </div>
                                  ) : null}
-                                 {!!tpl.categoryId && (
-                                    <p className="text-slate-500 text-xs mb-1">Categoria: {categoryNameById(tpl.categoryId) || '—'}</p>
-                                 )}
-                                 <p className="text-slate-500 text-sm">Atualizado em {new Date(tpl.updatedAt).toLocaleDateString()}</p>
+                                  {!!tpl.categoryId && (
+                                     <div className="mt-auto pt-2">
+                                         <span className="text-xs text-slate-500 flex items-center gap-1">
+                                             <TagIcon size={12} /> {categoryNameById(tpl.categoryId)}
+                                         </span>
+                                     </div>
+                                  )}
+
+                                 <div className="mt-4 pt-4 border-t border-slate-800 flex flex-col sm:flex-row gap-2">
+                                     <button
+                                         onClick={(e) => { e.stopPropagation(); handleEditTemplate(tpl, 'COPY')}}
+                                         className="flex-1 py-2 text-sm font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg flex justify-center items-center gap-2 transition border border-indigo-500/20"
+                                     >
+                                         <Copy size={16} /> Fazer Cópia
+                                     </button>
+                                     <button
+                                         onClick={(e) => { e.stopPropagation(); handleEditTemplate(tpl, 'EDIT')}}
+                                         className="flex-1 py-2 text-sm font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-lg flex justify-center items-center gap-2 transition border border-slate-700"
+                                     >
+                                         <FileText size={16} /> {tpl.isSystemTemplate && !isSuperAdmin ? 'Visualizar' : 'Editar'}
+                                     </button>
+                                 </div>
                              </div>
                          ))}
                         {filteredTemplates.length === 0 && !loading && (

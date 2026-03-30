@@ -595,7 +595,7 @@ export class DocumentsService {
     return { ok: true };
   }
 
-  async customizeTemplate(templateId: string, tenantId: string) {
+  async customizeTemplate(templateId: string, tenantId: string, customData?: any) {
     await this.ensureSystemLibrarySeeded();
 
     const systemTemplate = await this.prisma.documentTemplate.findFirst({
@@ -610,13 +610,13 @@ export class DocumentsService {
     const created = await this.prisma.documentTemplate.create({
       data: {
         tenantId,
-        title: systemTemplate.title,
-        content: systemTemplate.content,
+        title: customData?.title?.trim() || systemTemplate.title,
+        content: customData?.content || systemTemplate.content,
         categoryId: null,
         isSystemTemplate: false,
         systemKey: null,
         sourceTemplateId: systemTemplate.id,
-        description: systemTemplate.description,
+        description: customData?.description !== undefined ? customData?.description : systemTemplate.description,
         // Tags globais (relaÃ§Ã£o). MantÃ©m campo legacy apenas no System Template.
         tags: null,
         preferredStorage: systemTemplate.preferredStorage,
