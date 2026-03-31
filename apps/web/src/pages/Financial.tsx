@@ -2443,26 +2443,26 @@ export function Financial(props: FinancialProps = {}) {
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
               <button
                 onClick={() => handleCardFilterChange("INCOME_ALL")}
-                className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
                   activeCardFilter === "INCOME_ALL"
                     ? "bg-green-500/10 border-green-500/50 shadow-lg"
                     : "bg-slate-900 border-slate-800 hover:bg-slate-800"
                 }`}
               >
-                <div className="flex justify-between items-start mb-2 gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/20 text-green-400">
-                    <TrendingUp size={20} />
+                <div className="flex justify-between items-center mb-3">
+                  <div className="p-1.5 rounded-lg bg-green-500/20 text-green-400 shrink-0">
+                    <TrendingUp size={16} />
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
-                      {formatCurrency(cardMetrics.INCOME_ALL.amount)}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {cardMetrics.INCOME_ALL.count} registros
-                    </div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    {cardMetrics.INCOME_ALL.count} registros
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="mb-1">
+                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
+                    {formatCurrency(cardMetrics.INCOME_ALL.amount)}
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
                   Receitas (Tudo)
                 </span>
                 {activeCardFilter === "INCOME_ALL" && (
@@ -2472,26 +2472,26 @@ export function Financial(props: FinancialProps = {}) {
 
               <button
                 onClick={() => handleCardFilterChange("INCOME_PENDING")}
-                className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
                   activeCardFilter === "INCOME_PENDING"
                     ? "bg-blue-500/10 border-blue-500/50 shadow-lg"
                     : "bg-slate-900 border-slate-800 hover:bg-slate-800"
                 }`}
               >
-                <div className="flex justify-between items-start mb-2 gap-3">
-                  <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
-                    <Clock size={20} />
+                <div className="flex justify-between items-center mb-3">
+                  <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 shrink-0">
+                    <Clock size={16} />
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
-                      {formatCurrency(cardMetrics.INCOME_PENDING.amount)}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {cardMetrics.INCOME_PENDING.count} em aberto
-                    </div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    {cardMetrics.INCOME_PENDING.count} pendentes
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="mb-1">
+                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
+                    {formatCurrency(cardMetrics.INCOME_PENDING.amount)}
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
                   Receitas Abertas
                 </span>
                 {activeCardFilter === "INCOME_PENDING" && (
@@ -2501,26 +2501,26 @@ export function Financial(props: FinancialProps = {}) {
 
               <button
                 onClick={() => handleCardFilterChange("INCOME_OVERDUE")}
-                className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
                   activeCardFilter === "INCOME_OVERDUE"
                     ? "bg-orange-500/10 border-orange-500/50 shadow-lg"
                     : "bg-slate-900 border-slate-800 hover:bg-slate-800"
                 }`}
               >
-                <div className="flex justify-between items-start mb-2 gap-3">
-                  <div className="p-2 rounded-lg bg-orange-500/20 text-orange-400">
-                    <AlertTriangle size={20} />
+                <div className="flex justify-between items-center mb-3">
+                  <div className="p-1.5 rounded-lg bg-orange-500/20 text-orange-400 shrink-0">
+                    <AlertTriangle size={16} />
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
-                      {formatCurrency(cardMetrics.INCOME_OVERDUE.amount)}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {cardMetrics.INCOME_OVERDUE.count} vencidas
-                    </div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    {cardMetrics.INCOME_OVERDUE.count} vencidas
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="mb-1">
+                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
+                    {formatCurrency(cardMetrics.INCOME_OVERDUE.amount)}
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
                   Receitas em Atraso
                 </span>
                 {activeCardFilter === "INCOME_OVERDUE" && (
@@ -2530,26 +2530,26 @@ export function Financial(props: FinancialProps = {}) {
 
               <button
                 onClick={() => handleCardFilterChange("EXPENSE_ALL")}
-                className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
                   activeCardFilter === "EXPENSE_ALL"
                     ? "bg-red-500/10 border-red-500/50 shadow-lg"
                     : "bg-slate-900 border-slate-800 hover:bg-slate-800"
                 }`}
               >
-                <div className="flex justify-between items-start mb-2 gap-3">
-                  <div className="p-2 rounded-lg bg-red-500/20 text-red-400">
-                    <TrendingDown size={20} />
+                <div className="flex justify-between items-center mb-3">
+                  <div className="p-1.5 rounded-lg bg-red-500/20 text-red-400 shrink-0">
+                    <TrendingDown size={16} />
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
-                      {formatCurrency(cardMetrics.EXPENSE_ALL.amount)}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {cardMetrics.EXPENSE_ALL.count} registros
-                    </div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    {cardMetrics.EXPENSE_ALL.count} registros
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="mb-1">
+                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
+                    {formatCurrency(cardMetrics.EXPENSE_ALL.amount)}
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
                   Despesas (Tudo)
                 </span>
                 {activeCardFilter === "EXPENSE_ALL" && (
@@ -2559,26 +2559,26 @@ export function Financial(props: FinancialProps = {}) {
 
               <button
                 onClick={() => handleCardFilterChange("EXPENSE_PENDING")}
-                className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
                   activeCardFilter === "EXPENSE_PENDING"
                     ? "bg-purple-500/10 border-purple-500/50 shadow-lg"
                     : "bg-slate-900 border-slate-800 hover:bg-slate-800"
                 }`}
               >
-                <div className="flex justify-between items-start mb-2 gap-3">
-                  <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
-                    <Clock size={20} />
+                <div className="flex justify-between items-center mb-3">
+                  <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 shrink-0">
+                    <Clock size={16} />
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
-                      {formatCurrency(cardMetrics.EXPENSE_PENDING.amount)}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {cardMetrics.EXPENSE_PENDING.count} em aberto
-                    </div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    {cardMetrics.EXPENSE_PENDING.count} pendentes
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="mb-1">
+                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
+                    {formatCurrency(cardMetrics.EXPENSE_PENDING.amount)}
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
                   Despesas Abertas
                 </span>
                 {activeCardFilter === "EXPENSE_PENDING" && (
@@ -2588,26 +2588,26 @@ export function Financial(props: FinancialProps = {}) {
 
               <button
                 onClick={() => handleCardFilterChange("ALL")}
-                className={`p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group ${
+                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
                   activeCardFilter === "ALL"
                     ? "bg-indigo-500/10 border-indigo-500/50 shadow-lg"
                     : "bg-slate-900 border-slate-800 hover:bg-slate-800"
                 }`}
               >
-                <div className="flex justify-between items-start mb-2 gap-3">
-                  <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
-                    <DollarSign size={20} />
+                <div className="flex justify-between items-center mb-3">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 shrink-0">
+                    <DollarSign size={16} />
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-white tracking-tighter tabular-nums">
-                      {cardMetrics.ALL.count}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      {formatCurrency(cardMetrics.ALL.amount)}
-                    </div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    {cardMetrics.ALL.count} registros
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="mb-1">
+                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
+                    {formatCurrency(cardMetrics.ALL.amount)}
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
                   Todas Transações
                 </span>
                 {activeCardFilter === "ALL" && (
@@ -2996,10 +2996,10 @@ export function Financial(props: FinancialProps = {}) {
 
           {/* Records Table */}
           <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl antialiased">
-            <div className="overflow-x-auto overflow-y-hidden">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] relative">
               <table className="min-w-[1100px] w-full border-collapse">
-              <thead>
-                <tr className="bg-slate-950/50 border-b border-slate-800">
+              <thead className="sticky top-0 z-20">
+                <tr className="bg-slate-950 border-b border-slate-800">
                   <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
                     Contatos & Contas
                   </th>

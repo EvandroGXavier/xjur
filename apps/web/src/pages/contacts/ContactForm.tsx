@@ -2976,35 +2976,36 @@ export function ContactForm() {
                                         const attachmentUrl = getAttachmentUrl(attachment);
                                         return (
                                             <div key={attachment.fileName} className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-                                                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                                                    <div className="min-w-0">
-                                                        <AttachmentPreview url={attachmentUrl} title={attachment.originalName}>
-                                                            <button className="text-left">
-                                                                <p className="font-semibold text-white truncate hover:text-indigo-300 transition">
+                                                <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start gap-4">
+                                                    <div className="min-w-0 overflow-hidden w-full block">
+                                                        <AttachmentPreview url={attachmentUrl} title={attachment.originalName} className="block w-full">
+                                                            <button className="text-left w-full block group">
+                                                                <p className="font-semibold text-white break-words hover:text-indigo-300 transition w-full max-w-full leading-tight">
                                                                     {attachment.originalName}
                                                                 </p>
                                                             </button>
                                                         </AttachmentPreview>
-                                                        <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-400">
+                                                        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-400">
                                                             <span>{formatFileSize(attachment.size)}</span>
                                                             <span>{attachment.mimeType || 'arquivo'}</span>
                                                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                                                                 <CheckCircle2 size={12} />
-                                                                Upload concluido
+                                                                Upload concluído
                                                             </span>
                                                             {attachment.uploadedAt && (
                                                                 <span>{new Date(attachment.uploadedAt).toLocaleString('pt-BR')}</span>
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <div className="flex flex-wrap gap-2">
+                                                    <div className="flex flex-wrap gap-1.5 shrink-0 justify-end">
                                                         <AttachmentPreview url={attachmentUrl} title={attachment.originalName}>
-                                                            <button className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition">
+                                                            <button title="Abrir arquivo" className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition text-xs font-medium">
                                                                 <ExternalLink size={14} />
                                                                 Abrir
                                                             </button>
                                                         </AttachmentPreview>
                                                         <button
+                                                            title="Baixar arquivo"
                                                             onClick={async () => {
                                                                 try {
                                                                     const { fetchProtectedMediaBlob } = await import('../../services/protectedMedia');
@@ -3023,21 +3024,23 @@ export function ContactForm() {
                                                                     toast.error('Erro ao baixar arquivo');
                                                                 }
                                                             }}
-                                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                                                            className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition text-xs font-medium"
                                                         >
                                                             <Download size={14} />
                                                             Baixar
                                                         </button>
                                                         <button
+                                                            title="Imprimir arquivo"
                                                             onClick={() => handlePrintAttachment(attachment)}
-                                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
+                                                            className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition text-xs font-medium"
                                                         >
                                                             <Printer size={14} />
                                                             Imprimir
                                                         </button>
                                                         <button
+                                                            title="Excluir arquivo"
                                                             onClick={() => handleDeleteAttachment(attachment.fileName)}
-                                                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 transition"
+                                                            className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 transition text-xs font-medium"
                                                         >
                                                             <Trash2 size={14} />
                                                             Excluir

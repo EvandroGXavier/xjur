@@ -1,15 +1,15 @@
 import { useState, useRef, ReactNode, useEffect } from 'react';
-import { FileText, X } from 'lucide-react';
-import { getToken } from '../../auth/authStorage';
+import { FileText } from 'lucide-react';
 
 interface AttachmentPreviewProps {
   url: string;
   title: string;
   children: ReactNode;
   delayClose?: number; // Delay to close popup in ms (e.g. 500ms)
+  className?: string;
 }
 
-export function AttachmentPreview({ url, title, children, delayClose = 400 }: AttachmentPreviewProps) {
+export function AttachmentPreview({ url, title, children, delayClose = 400, className }: AttachmentPreviewProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export function AttachmentPreview({ url, title, children, delayClose = 400 }: At
     };
   }, []);
 
-  const handleMouseEnterTrigger = (e: React.MouseEvent) => {
+  const handleMouseEnterTrigger = (_e: React.MouseEvent) => {
     if (closeTimeout.current) {
       clearTimeout(closeTimeout.current);
       closeTimeout.current = null;
@@ -125,7 +125,7 @@ export function AttachmentPreview({ url, title, children, delayClose = 400 }: At
       {/* Trigger Area */}
       <div 
         ref={triggerRef}
-        className="inline-block"
+        className={className || "inline-block"}
         onMouseEnter={handleMouseEnterTrigger}
         onMouseLeave={handleMouseLeaveTrigger}
       >

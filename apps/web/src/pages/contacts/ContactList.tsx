@@ -596,6 +596,7 @@ export function ContactList() {
 
             <div className="pt-2 border-t border-slate-800/50">
                 <AdvancedTagFilter 
+                    scope="CONTACT"
                     onFilterChange={(inc, exc) => { 
                         setIncludedTags(inc); 
                         setExcludedTags(exc); 

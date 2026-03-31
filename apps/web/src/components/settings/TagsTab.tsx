@@ -28,6 +28,11 @@ const SCOPE_OPTIONS = [
     { value: 'TASK', label: 'Tarefa', color: 'text-pink-400' },
     { value: 'TICKET', label: 'Atendimento', color: 'text-indigo-400' },
     { value: 'LIBRARY', label: 'Biblioteca', color: 'text-violet-400' },
+    { value: 'ESTOQUE', label: 'Estoque', color: 'text-slate-400' },
+    { value: 'ORCAMENTO', label: 'Orçamento', color: 'text-slate-400' },
+    { value: 'TAREFA', label: 'Tarefas', color: 'text-slate-400' },
+    { value: 'PRAZO', label: 'Prazos', color: 'text-slate-400' },
+    { value: 'DOCUMENTO', label: 'Documentos', color: 'text-slate-400' },
 ];
 
 export function TagsTab() {
