@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
-import { ArrowLeft, ExternalLink, FileText, Loader2, Pencil, Plus, Save, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileText, Loader2, Pencil, Plus, Save, Sparkles, Trash2, Printer, Download, MessageCircle } from 'lucide-react';
+import html2pdf from 'html2pdf.js';
 import { clsx } from 'clsx';
 import { RichTextEditor, RichTextEditorHandle } from '../ui/RichTextEditor';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
@@ -180,6 +181,69 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
         } finally {
             setAiLoading(false);
         }
+    };
+
+    const handlePrint = (doc: ProcessDocument) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            toast.error('Por favor, permita pop-ups para imprimir.');
+            return;
+        }
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>${doc.title}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20mm; margin: 0; color: #000; background: #fff; }
+                        @media print { body { padding: 0; margin: 0; } }
+                    </style>
+                </head>
+                <body>${doc.content || ''}</body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Timeout to allow images/fonts to load
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
+    };
+
+    const handleSavePdf = async (doc: ProcessDocument) => {
+        const element = document.createElement('div');
+        element.innerHTML = doc.content || '';
+        element.style.padding = '20mm';
+        element.style.color = 'black';
+        element.style.backgroundColor = 'white';
+
+        const opt = {
+            margin: 0,
+            filename: `${(doc.title || 'Documento').replace(/\s+/g, '_')}_${Date.now()}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        } as const;
+
+        const renderPromise = html2pdf().from(element).set(opt).save();
+        toast.promise(renderPromise, {
+            loading: 'Gerando PDF...',
+            success: 'PDF salvo com sucesso!',
+            error: 'Falha ao salvar PDF',
+        });
+    };
+
+    const handleSendWhatsApp = (doc: ProcessDocument) => {
+        // Create a plain text version for messaging, or just send a generic message 
+        // asking the user to send the PDF.
+        const tempObj = document.createElement('div');
+        tempObj.innerHTML = doc.content || '';
+        const plainText = tempObj.innerText.trim();
+        
+        const message = encodeURIComponent(`*${doc.title}*\n\n${plainText.substring(0, 1000)}...`);
+        const waUrl = `https://wa.me/?text=${message}`;
+        window.open(waUrl, '_blank');
+        toast.info('Abrindo WhatsApp...');
     };
 
     if (loading) {
@@ -361,6 +425,27 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                                         <ExternalLink size={16} />
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => handleSavePdf(doc)}
+                                    className="p-2 hover:bg-slate-800 text-slate-300 rounded-lg"
+                                    title="Baixar PDF"
+                                >
+                                    <Download size={16} />
+                                </button>
+                                <button
+                                    onClick={() => handlePrint(doc)}
+                                    className="p-2 hover:bg-slate-800 text-slate-300 rounded-lg"
+                                    title="Imprimir"
+                                >
+                                    <Printer size={16} />
+                                </button>
+                                <button
+                                    onClick={() => handleSendWhatsApp(doc)}
+                                    className="p-2 hover:bg-emerald-600/15 text-emerald-400 rounded-lg"
+                                    title="Compartilhar no WhatsApp"
+                                >
+                                    <MessageCircle size={16} />
+                                </button>
                                 <button
                                     onClick={() => openEditor(doc)}
                                     className="p-2 hover:bg-slate-800 text-slate-300 rounded-lg"

@@ -155,9 +155,9 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                 const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
                 
                 onSuccess(file);
-            } catch (error) {
-                console.error(error);
-                toast.error('Erro ao salvar/gerar documento');
+            } catch (error: any) {
+                console.error('GERACAO ERRO', error, error?.response?.data);
+                toast.error(`Erro: ${error?.response?.data?.message || error?.message || String(error)}`);
             } finally {
                 setRendering(false);
             }

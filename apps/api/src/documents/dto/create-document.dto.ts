@@ -1,10 +1,33 @@
+import { IsString, IsOptional, IsEnum, IsObject } from 'class-validator';
+
 export class CreateDocumentDto {
+  @IsString()
   title: string;
+
+  @IsString()
   content: string;
-  tenantId: string;
+
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
+
+  @IsOptional()
+  @IsString()
   templateId?: string;
+
+  @IsOptional()
+  @IsString()
   processId?: string;
+
+  @IsOptional()
+  @IsString()
   timelineId?: string;
-  snapshot?: any; // JSON object with variable values
+
+  @IsOptional()
+  @IsObject()
+  snapshot?: any;
+
+  @IsOptional()
+  @IsEnum(['DRAFT', 'FINALIZED'])
   status?: 'DRAFT' | 'FINALIZED';
 }
