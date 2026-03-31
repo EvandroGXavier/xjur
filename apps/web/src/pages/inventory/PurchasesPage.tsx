@@ -18,7 +18,9 @@ export function PurchasesPage() {
     usePaymentConditions();
 
   const [formData, setFormData] = useState<any>({
-    contactId: "",
+    contactId: null,
+    buyerId: null,
+    paymentConditionId: null,
     expectedDate: "",
     deliveryDate: "",
     paymentCondition: "",
@@ -26,7 +28,6 @@ export function PurchasesPage() {
     items: [],
     financialInstallments: [],
     xmlData: null,
-    buyerId: "",
     supplierName: "",
   });
 
@@ -39,7 +40,9 @@ export function PurchasesPage() {
   const handleNovoPedido = () => {
     setSelectedPurchase(null);
     setFormData({
-      contactId: "",
+      contactId: null,
+      buyerId: null,
+      paymentConditionId: null,
       expectedDate: "",
       deliveryDate: "",
       paymentCondition: "",
@@ -287,6 +290,9 @@ export function PurchasesPage() {
 
       const payload = {
         ...formData,
+        contactId: formData.contactId || null,
+        buyerId: formData.buyerId || null,
+        paymentConditionId: formData.paymentConditionId || null,
         paymentCondition: JSON.stringify(formData.financialInstallments),
         totalAmount,
       };
@@ -326,11 +332,15 @@ export function PurchasesPage() {
       try {
         const res = await api.post("/purchases/parse-xml", { xml: xmlStr });
         const data = res.data;
+        
+        // Ativa o modo de edição para mostrar os dados importados
+        setIsEditing(true);
+        setSelectedPurchase(null);
+
         setFormData({
-          ...formData,
           contactId: data.contactId,
           buyerId: data.buyerId,
-          paymentConditionId: data.paymentConditionId || "",
+          paymentConditionId: data.paymentConditionId || null,
           expectedDate: data.expectedDate
             ? data.expectedDate.split("T")[0]
             : "",
@@ -341,7 +351,7 @@ export function PurchasesPage() {
           items: data.items,
           xmlData: data.xmlData,
           supplierName: data.xmlData.supplierName,
-          buyerName: data.xmlData.buyerName, // We can use this to show in picker
+          buyerName: data.xmlData.buyerName,
           financialInstallments:
             data.xmlData.dups?.map((dup: any) => ({
               dueDate: new Date(String(dup.dVenc) + "T12:00:00").toISOString().split("T")[0],
@@ -870,9 +880,16 @@ export function PurchasesPage() {
       <div className="bg-slate-800/50 text-white px-4 py-2 flex items-center justify-between border-b-2 border-teal-500">
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold text-teal-400">Compras / Entradas</h1>
+          <input
+            type="file"
+            accept=".xml"
+            id="importXmlListInput"
+            className="hidden"
+            onChange={handleImportXmlFile}
+          />
           <button
-            onClick={handleNovoPedido}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 text-sm rounded flex items-center gap-2"
+            onClick={() => document.getElementById("importXmlListInput")?.click()}
+            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-sm rounded flex items-center gap-2 shadow-lg shadow-purple-900/20 transition-all font-bold"
           >
             <Plus size={16} /> Nova Compra / Importar XML
           </button>

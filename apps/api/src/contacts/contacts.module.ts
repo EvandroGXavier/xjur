@@ -10,6 +10,6 @@ import { PrismaService } from '../prisma.service';
   imports: [],
   controllers: [ContactsController],
   providers: [ContactsService, EnrichmentService, ContactsImportService, PrismaService],
-  exports: [ContactsService, ContactsImportService],
+  exports: [ContactsService, ContactsImportService, EnrichmentService],
 })
 export class ContactsModule {}

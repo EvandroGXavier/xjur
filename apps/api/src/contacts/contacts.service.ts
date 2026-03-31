@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma.service';
+import { EnrichmentService } from './enrichment.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -12,7 +13,10 @@ import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto'
 
 @Injectable()
 export class ContactsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly enrichmentService: EnrichmentService,
+  ) {}
 
   private async getContactOrThrow(contactId: string, tenantId: string, include?: Record<string, any>) {
     const contact = await this.prisma.contact.findFirst({
@@ -1844,6 +1848,101 @@ export class ContactsService {
       default:
         throw new BadRequestException('Invalid bulk action');
     }
+  }
+
+  async enrichContactPJ(contactId: string, tenantId: string, cnpj: string, force = false) {
+    const cleanCNPJ = cnpj.replace(/\D/g, '');
+    if (!cleanCNPJ) return null;
+
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: contactId, tenantId },
+      include: { pjDetails: true }
+    });
+
+    if (!contact) throw new NotFoundException('Contato nao encontrado');
+
+    // Se ja tem dados e nao eh force, retorna o atual
+    if (!force && contact.pjDetails?.mainActivity && (contact.pjDetails.mainActivity as any)?.code) {
+      return this.flattenContact(contact);
+    }
+
+    try {
+      const enriched = await this.enrichmentService.consultCNPJ(cleanCNPJ);
+      
+      const openingDate = this.parseBrDate(enriched.abertura);
+      const statusDate = this.parseBrDate(enriched.data_situacao);
+      const cleanCapital = this.parseNumericValue(enriched.capital_social);
+
+      // Atualiza o nome do contato se o nome fantasia for mais especifico
+      const betterName = enriched.nome_fantasia || enriched.fantasia || contact.name;
+      if (betterName && betterName !== contact.name) {
+        await this.prisma.contact.update({
+          where: { id: contactId },
+          data: { name: betterName }
+        });
+      }
+
+      return await this.prisma.personDetailPJ.upsert({
+        where: { contactId },
+        update: {
+          openingDate,
+          companyName: enriched.nome || enriched.razao_social || undefined,
+          tradingName: enriched.nome_fantasia || enriched.fantasia || undefined,
+          municipalRegistration: enriched.inscricao_municipal || undefined,
+          size: enriched.porte,
+          legalNature: enriched.natureza_juridica,
+          mainActivity: enriched.atividade_principal?.[0] || null,
+          sideActivities: enriched.atividades_secundarias || [],
+          shareCapital: cleanCapital,
+          status: enriched.situacao,
+          statusDate,
+          statusReason: enriched.motivo_situacao,
+          pjQsa: enriched.qsa || [],
+        },
+        create: {
+          contactId,
+          cnpj: cleanCNPJ,
+          companyName: enriched.nome || enriched.razao_social || contact.name,
+          tradingName: enriched.nome_fantasia || enriched.fantasia,
+          municipalRegistration: enriched.inscricao_municipal,
+          openingDate,
+          size: enriched.porte,
+          legalNature: enriched.natureza_juridica,
+          mainActivity: enriched.atividade_principal?.[0] || null,
+          sideActivities: enriched.atividades_secundarias || [],
+          shareCapital: cleanCapital,
+          status: enriched.situacao,
+          statusDate,
+          statusReason: enriched.motivo_situacao,
+          pjQsa: enriched.qsa || [],
+        }
+      });
+    } catch (e) {
+      console.warn(`Erro ao enriquecer contato ${contactId}: ${e.message}`);
+      return contact.pjDetails;
+    }
+  }
+
+  private parseBrDate(dateStr: string) {
+    if (!dateStr) return undefined;
+    try {
+      if (dateStr.includes('-') && dateStr.split('-')[0].length === 4) return new Date(dateStr);
+      if (dateStr.includes('/')) {
+        const p = dateStr.split('/');
+        return new Date(`${p[2]}-${p[1]}-${p[0]}`);
+      }
+      return new Date(dateStr);
+    } catch { return undefined; }
+  }
+
+  private parseNumericValue(val: any) {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    const s = String(val);
+    try {
+      if (s.includes(',')) return parseFloat(s.replace(/\./g, "").replace(",", "."));
+      return parseFloat(s);
+    } catch { return 0; }
   }
 }
 

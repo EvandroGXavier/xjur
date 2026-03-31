@@ -271,9 +271,11 @@ model PersonDetailPJ {
   id        String @id @default(uuid())
   contactId String @unique
 
-  cnpj              String?
-  companyName       String? // Razão Social
-  stateRegistration String? // Inscrição Estadual
+  cnpj                   String?
+  companyName            String? // Razão Social
+  tradingName            String? // Nome Fantasia
+  stateRegistration      String? // Inscrição Estadual
+  municipalRegistration  String? // Inscrição Municipal
 
   // Dados Expandidos PJ (Receita Federal)
   openingDate       DateTime?

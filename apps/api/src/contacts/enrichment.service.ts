@@ -3,8 +3,11 @@ import axios from 'axios';
 
 export interface CNPJData {
   cnpj: string;
+  nome?: string;
+  fantasia?: string;
   razao_social: string;
   nome_fantasia: string;
+  inscricao_municipal?: string;
   cnae_fiscal: string;
   cnae_fiscal_descricao: string;
   data_inicio_atividade: string;

@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import { XMLParser } from "fast-xml-parser";
 import { StockService } from "../stock/stock.service";
+import { EnrichmentService } from "../contacts/enrichment.service";
+import { ContactsService } from "../contacts/contacts.service";
 import { isValidCnpj, isValidCpf, normalizeDigits } from "../common/validation-utils";
 
 @Injectable()
@@ -9,6 +11,8 @@ export class PurchasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stockService: StockService,
+    private readonly enrichmentService: EnrichmentService,
+    private readonly contactsService: ContactsService,
   ) {}
 
   async parseXmlPreview(tenantId: string, xmlContent: string) {
@@ -22,10 +26,17 @@ export class PurchasesService {
     const nfeProc = parsed.nfeProc || parsed.NFeProc;
     const nfe = nfeProc?.NFe?.infNFe || nfeProc?.infNFe || parsed.NFe?.infNFe;
 
-    if (!nfe) {
+    // Support for NFSe (Nota Fiscal de Servico)
+    const nfse = parsed.NFSe?.infNFSe || parsed.nfse?.infNFSe || parsed.CompNfse?.nfse?.infNFSe;
+
+    if (!nfe && !nfse) {
       throw new BadRequestException(
-        "O arquivo enviado nao parece ser um XML valido de NF-e.",
+        "O arquivo enviado nao parece ser um XML valido de NF-e ou NFSe.",
       );
+    }
+
+    if (nfse) {
+      return this.handleNfse(tenantId, nfse, xmlContent);
     }
 
     const { emit, dest, det, cobr, ide, total } = nfe;
@@ -98,6 +109,17 @@ export class PurchasesService {
           });
        }
     }
+
+     // Tenta enriquecer se for PJ
+     if (emit.CNPJ) {
+        await this.contactsService.enrichContactPJ(contact.id, tenantId, supplierDocument);
+        if (emit.IE) {
+          await this.prisma.personDetailPJ.update({
+            where: { contactId: contact.id },
+            data: { stateRegistration: String(emit.IE) }
+          });
+        }
+     }
 
 
     const invoiceKey = nfe["@_Id"]?.replace("NFe", "");
@@ -698,6 +720,160 @@ export class PurchasesService {
 
       return updated;
     });
+  }
+
+  private async handleNfse(tenantId: string, nfse: any, xmlContent: string) {
+    const emit = nfse.emit || nfse.Emitente;
+    const valores = nfse.valores || nfse.Valores;
+    const dps = nfse.DPS?.infDPS || nfse.dps?.infDPS || nfse.InfDPS;
+    const serv = dps?.serv || dps?.Servico || dps?.Serv;
+    const toma = dps?.toma || dps?.Tomador;
+
+    // 1. Supplier (Emitente)
+    let supplierDocument = normalizeDigits(emit?.CNPJ || emit?.CPF || "");
+    if (emit?.CNPJ) supplierDocument = supplierDocument.padStart(14, '0');
+    else if (emit?.CPF) supplierDocument = supplierDocument.padStart(11, '0');
+
+    if (!supplierDocument) {
+      throw new BadRequestException("CNPJ/CPF do prestador nao encontrado na NFSe.");
+    }
+
+    let contact = await this.prisma.contact.findFirst({
+      where: { tenantId, document: supplierDocument },
+    });
+
+    const supplierName = emit?.xNome || emit?.RazaoSocial || "Prestador Servico";
+
+    if (!contact) {
+      contact = await this.prisma.contact.create({
+        data: {
+          tenantId,
+          name: supplierName,
+          document: supplierDocument,
+          email: emit?.email || "",
+          phone: emit?.fone || "",
+          personType: emit?.CNPJ ? "PJ" : "PF",
+          category: "Fornecedor",
+        },
+      });
+    }
+
+    if (emit?.CNPJ) {
+      await this.contactsService.enrichContactPJ(contact.id, tenantId, supplierDocument);
+      if (emit?.IM) {
+        await this.prisma.personDetailPJ.update({
+          where: { contactId: contact.id },
+          data: { municipalRegistration: String(emit.IM) }
+        });
+      }
+    }
+
+    // Address info
+    const ender = emit?.enderNac || emit?.Endereco;
+    if (ender) {
+      const existingAddress = await this.prisma.address.findFirst({
+        where: {
+          contactId: contact.id,
+          zipCode: String(ender.CEP || "").replace(/\D/g, ""),
+          number: String(ender.nro || ""),
+        },
+      });
+
+      if (!existingAddress) {
+        await this.prisma.address.create({
+          data: {
+            contactId: contact.id,
+            type: "Principal",
+            zipCode: String(ender.CEP || "").replace(/\D/g, ""),
+            street: ender.xLgr || "",
+            number: String(ender.nro || ""),
+            complement: ender.xCpl ? String(ender.xCpl) : null,
+            district: ender.xBairro || "",
+            city: ender.xMun || "",
+            state: ender.UF || "",
+          },
+        });
+      }
+    }
+
+    // 2. Items (Services)
+    const items = [];
+    const servCode = serv?.cServ?.cTribNac || "SERVICE";
+    const servName = serv?.cServ?.xDescServ || "Servico Prestado";
+    const servValue = parseFloat(valores?.vLiq || valores?.vServ || dps?.valores?.vServPrest?.vServ || "0");
+
+    let product = await this.prisma.product.findFirst({
+      where: { tenantId, OR: [{ sku: servCode }, { name: servName }] },
+    });
+
+    if (!product) {
+      product = await this.prisma.product.create({
+        data: {
+          tenantId,
+          name: servName,
+          sku: servCode,
+          type: "SERVICE",
+          currentStock: 0,
+          costPrice: servValue,
+          supplierId: contact.id,
+        },
+      });
+    }
+
+    items.push({
+      productId: product.id,
+      quantity: 1,
+      unitCost: servValue,
+      discount: 0,
+      total: servValue,
+      _productName: servName,
+    });
+
+    // 3. Buyer (Destinatario)
+    let buyerContactId = null;
+    if (toma) {
+      const buyerDoc = normalizeDigits(toma.CNPJ || toma.CPF || "");
+      if (buyerDoc) {
+        let buyerContact = await this.prisma.contact.findFirst({
+          where: { tenantId, document: buyerDoc },
+        });
+
+        if (!buyerContact) {
+          buyerContact = await this.prisma.contact.create({
+            data: {
+              tenantId,
+              name: toma.xNome || toma.RazaoSocial || "",
+              document: buyerDoc,
+              personType: toma.CNPJ ? "PJ" : "PF",
+              category: "Cliente/Comprador",
+            },
+          });
+        }
+        buyerContactId = buyerContact.id;
+      }
+    }
+
+    const nNFSe = nfse.nNFSe || nfse.Numero || "0";
+    const dhEmi = dps?.dhEmi || nfse.dhProc || new Date().toISOString();
+
+    return {
+      contactId: contact.id,
+      buyerId: buyerContactId,
+      paymentConditionId: null,
+      expectedDate: dhEmi,
+      deliveryDate: dhEmi,
+      notes: `Ref. NFSe: ${nNFSe}`,
+      items,
+      xmlData: {
+        xmlContent,
+        accessKey: nfse["@_Id"]?.replace("NFS", "") || nNFSe,
+        number: nNFSe,
+        dups: [],
+        supplierName,
+        buyerName: toma ? (toma.xNome || toma.RazaoSocial) : null,
+        invoiceTotal: servValue,
+      },
+    };
   }
 
   private buildParties(
