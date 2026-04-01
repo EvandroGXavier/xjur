@@ -113,10 +113,40 @@ const DOCUMENT_TYPE_HINTS = [
     'Documento',
 ];
 
+const DOCUMENT_TYPE_DEFINITIONS = [
+    { type: 'Peticao inicial', aliases: ['Petição Inicial', 'PETIÇÃO INICIAL'] },
+    { type: 'Peticao', aliases: ['Petição', 'PETIÇÃO'] },
+    { type: 'Manifestacao', aliases: ['Manifestação', 'MANIFESTAÇÃO'] },
+    { type: 'Despacho', aliases: ['Despacho'] },
+    { type: 'Decisao', aliases: ['Decisão', 'DECISÃO', 'Outras Decisões', 'DECISAO DE SANEAMENTO E DE ORGANIZACAO DO PROCESSO'] },
+    { type: 'Sentenca', aliases: ['Sentença', 'SENTENÇA'] },
+    { type: 'Certidao', aliases: ['Certidão', 'CERTIDÃO', 'Certidão de Triagem', 'Certidão de Oficial de Justiça', 'Juntada de Certidão', 'Expedição de Certidão'] },
+    { type: 'Mandado', aliases: ['Mandado', 'Mandado Digitalizado', 'Juntada de Mandado'] },
+    { type: 'Citacao', aliases: ['Citação', 'CITACAO'] },
+    { type: 'Intimacao', aliases: ['Intimação', 'INTIMAÇÃO'] },
+    { type: 'Guia', aliases: ['Guia', 'Guias de Recolhimento/ Deposito/ Custas'] },
+    { type: 'Comprovante', aliases: ['Comprovante', 'Comprovante de Pagamento', 'Comprovante de pagamento', 'Comprovante de pagamento de custas'] },
+    { type: 'Procuracao', aliases: ['Procuração', 'PROCURAÇÃO'] },
+    { type: 'Documento de Comprovacao', aliases: ['Documento de Comprovação'] },
+    { type: 'Documento de Identificacao', aliases: ['Documento de Identificação'] },
+    { type: 'Comprovante de Endereco', aliases: ['Comprovante de Endereço'] },
+    { type: 'Declaracao de Hipossuficiencia', aliases: ['Declaração de Hipossuficiência'] },
+    { type: 'Comprovante de Rendimento', aliases: ['Comprovante de Rendimento', 'Comprovante de Rendimento (Outros)'] },
+    { type: 'Aviso de Recebimento', aliases: ['Aviso de Recebimento'] },
+    { type: 'Substabelecimento', aliases: ['Substabelecimento'] },
+    { type: 'Impugnacao', aliases: ['Impugnação ao Cumprimento de Sentença', 'EXCEÇÃO DE PRÉ-EXECUTIVIDADE'] },
+    { type: 'Ato ordinatorio', aliases: ['Ato Ordinatório Praticado Documento Encaminhado a Disponibilizacao no Diar'] },
+    { type: 'Outros Documentos', aliases: ['Outros Documentos'] },
+    { type: 'Documento', aliases: ['Documento', 'Formal de Partilha', 'Termo', 'Ata', 'Ofício', 'Comunicacao'] },
+];
+
 const EPROC_EVENT_CODE_LABELS: Record<string, string> = {
     INIC1: 'Peticao inicial',
+    PET1: 'Peticao',
+    MANIF1: 'Manifestacao',
     CONTEST: 'Contestacao',
     CONTESTACAO: 'Contestacao',
+    CONTRAZ1: 'Contrarrazoes',
     IMPUGNA: 'Impugnacao',
     RECURSO: 'Recurso',
     SENT1: 'Sentenca',
@@ -124,6 +154,11 @@ const EPROC_EVENT_CODE_LABELS: Record<string, string> = {
     DECISAO: 'Decisao',
     MANIF: 'Manifestacao',
     CERT: 'Certidao',
+    CERTIDAO1: 'Certidao',
+    CERTDIST1: 'Certidao',
+    CERTRIAG1: 'Certidao',
+    ATOORD1: 'Ato ordinatorio',
+    OUTDOC1: 'Outros Documentos',
 };
 
 const CNJ_CAPTURE_PATTERN = String.raw`(\d{7}\s*-\s*\d{2}\s*\.\s*\d{4}\s*\.\s*\d\s*\.\s*\d{2}\s*\.\s*\d{4}|\d{20})`;
@@ -177,10 +212,7 @@ export class ProcessPdfService {
         const metadata = this.buildMetadataSummary(normalizedText, parsed.pageCount, parsed.textLength, courtSystem, documents);
         const deadlineCandidates = this.extractDeadlineCandidates(normalizedText, documents);
         const proceduralActs = documents.filter((document) => this.isProceduralAct(document));
-        const parts = this.mergeImportedParties(
-            this.extractParties(normalizedText),
-            this.extractPjePartyLawyerBlock(normalizedText),
-        );
+        const parts = this.extractPartiesPreferred(normalizedText, courtSystem);
         const description = this.buildDescription(normalizedText, documents);
         const importSource = this.resolveImportSource(courtSystem);
         const timelineReferenceType = courtSystem === 'Eproc' ? 'EVENT' : 'DOCUMENT_ID';
@@ -599,6 +631,21 @@ export class ProcessPdfService {
             .slice(0, 30);
     }
 
+    private extractPartiesPreferred(text: string, courtSystem?: string | null) {
+        if (courtSystem === 'PJe') {
+            const pjeBlockParties = this.extractPjePartyLawyerBlock(text);
+            return this.compactImportedParties(
+                this.mergeImportedParties(pjeBlockParties, this.extractPjeTriageParticipants(text, pjeBlockParties)),
+            ).slice(0, 50);
+        }
+
+        if (courtSystem === 'Eproc') {
+            return this.compactImportedParties(this.extractEprocPartiesAndLawyers(text)).slice(0, 50);
+        }
+
+        return this.compactImportedParties(this.extractParties(text)).slice(0, 50);
+    }
+
     private mergeImportedParties(...collections: LegacyImportedParty[][]) {
         const merged = new Map<string, LegacyImportedParty>();
 
@@ -634,6 +681,53 @@ export class ProcessPdfService {
         }
 
         return Array.from(merged.values());
+    }
+
+    private compactImportedParties(parties: LegacyImportedParty[]) {
+        const compacted = new Map<string, LegacyImportedParty>();
+
+        for (const party of parties || []) {
+            const name = String(party?.name || '').replace(/\s+/g, ' ').trim();
+            if (!name) continue;
+
+            const normalizedName = this.normalizeLooseText(name);
+            const normalizedDocument = String(party?.document || '').replace(/\D/g, '');
+            const normalizedType = this.normalizePartyType(String(party?.type || 'PARTE'));
+            const pole = this.inferPartyPole(normalizedType);
+            const key = this.isLawyerType(normalizedType)
+                ? `${normalizedName}::${normalizedDocument || 'NO_DOC'}::LAWYER`
+                : `${normalizedName}::${normalizedDocument || 'NO_DOC'}::${pole || normalizedType}`;
+            const existing = compacted.get(key);
+            const representedNames = new Map<string, string>();
+
+            for (const candidate of [...(existing?.representedNames || []), ...(party?.representedNames || [])]) {
+                const normalizedCandidate = this.normalizeLooseText(candidate);
+                if (normalizedCandidate && !representedNames.has(normalizedCandidate)) {
+                    representedNames.set(normalizedCandidate, String(candidate).trim());
+                }
+            }
+
+            compacted.set(key, {
+                ...(existing || {}),
+                ...party,
+                name,
+                type: this.choosePreferredPartyType(existing?.type, normalizedType),
+                document: existing?.document || party?.document,
+                oab: existing?.oab || party?.oab,
+                representedNames: Array.from(representedNames.values()),
+                isClient: party?.isClient ?? existing?.isClient,
+                isOpposing: party?.isOpposing ?? existing?.isOpposing,
+            });
+        }
+
+        return Array.from(compacted.values())
+            .filter((party) => {
+                const normalizedName = this.normalizeLooseText(party.name);
+                if (!normalizedName) return false;
+                if (normalizedName.endsWith(' E')) return false;
+                if (normalizedName.includes('POR SEU')) return false;
+                return true;
+            });
     }
 
     private extractPjePartyLawyerBlock(text: string): LegacyImportedParty[] {
@@ -702,7 +796,7 @@ export class ProcessPdfService {
 
             pushParty({ name, type });
 
-            if (readingLawyerGroup) {
+            if (readingLawyerGroup || pendingPrincipalNames.length === 0) {
                 pendingPrincipalNames = [name];
                 readingLawyerGroup = false;
                 continue;
@@ -712,6 +806,163 @@ export class ProcessPdfService {
         }
 
         return Array.from(parties.values());
+    }
+
+    private extractPjeTriageParticipants(text: string, knownParties: LegacyImportedParty[]) {
+        const triageBlocks = Array.from(
+            String(text || '').matchAll(/CERTID[AÃ]O DE TRIAGEM[\s\S]{0,2000}?ASSUNTO:[^\n]+\n([\s\S]{0,600}?)Certifico que:/gi),
+        );
+        if (triageBlocks.length === 0) {
+            return [];
+        }
+
+        const knownByName = new Map<string, LegacyImportedParty>();
+        const clientNames: string[] = [];
+        const opposingNames: string[] = [];
+
+        for (const party of knownParties || []) {
+            const normalizedName = this.normalizeLooseText(party?.name);
+            if (!normalizedName) continue;
+            knownByName.set(normalizedName, party);
+            if (this.inferPartyPole(party.type) === 'POLO_ATIVO') {
+                clientNames.push(party.name);
+            }
+            if (this.inferPartyPole(party.type) === 'POLO_PASSIVO') {
+                opposingNames.push(party.name);
+            }
+        }
+
+        const extracted: LegacyImportedParty[] = [];
+
+        for (const block of triageBlocks) {
+            const entries = Array.from(
+                String(block[1] || '').matchAll(/([A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡][A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡\s]+?)\s+CPF:\s*([\d\.\-\/]+)/gi),
+            ).map((match) => ({
+                name: String(match[1] || '').replace(/\s+/g, ' ').trim(),
+                document: String(match[2] || '').trim(),
+            }));
+
+            if (entries.length === 0) continue;
+
+            const firstOpponentIndex = entries.findIndex((entry) => {
+                const existing = knownByName.get(this.normalizeLooseText(entry.name));
+                return this.inferPartyPole(existing?.type || '') === 'POLO_PASSIVO';
+            });
+
+            for (let index = 0; index < entries.length; index += 1) {
+                const entry = entries[index];
+                const existing = knownByName.get(this.normalizeLooseText(entry.name));
+
+                if (existing) {
+                    extracted.push({
+                        ...existing,
+                        document: existing.document || entry.document,
+                    });
+                    continue;
+                }
+
+                if (firstOpponentIndex > 0 && index > 0 && index < firstOpponentIndex && clientNames.length > 0) {
+                    extracted.push({
+                        name: entry.name,
+                        type: 'ADVOGADO',
+                        document: entry.document,
+                        representedNames: clientNames,
+                        isClient: true,
+                    });
+                    continue;
+                }
+
+                if (firstOpponentIndex >= 0 && index > firstOpponentIndex && opposingNames.length > 0) {
+                    extracted.push({
+                        name: entry.name,
+                        type: 'ADVOGADO CONTRARIO',
+                        document: entry.document,
+                        representedNames: opposingNames,
+                        isOpposing: true,
+                    });
+                }
+            }
+        }
+
+        return extracted;
+    }
+
+    private extractEprocPartiesAndLawyers(text: string) {
+        const block = text.match(/Partes e Representantes([\s\S]*?)Informa[cÃ§][oÃµ]es Adicionais/i)?.[1];
+        if (!block) return [];
+
+        const lines = block
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        const extracted: LegacyImportedParty[] = [];
+        const sequentialRoles = Array.from(
+            (lines.find((line) => /\bAUTOR\b/i.test(line) && /\bR[EÃ‰]U\b/i.test(line)) || '').matchAll(/\b(AUTOR(?:A)?|R[EÃ‰]U|REQUERENTE|REQUERIDO(?:A)?|EXECUTADO(?:A)?|EXEQUENTE|PERITO|TERCEIRO)\b/gi),
+        ).map((match) => this.normalizePartyType(match[1]));
+
+        let lastPrincipal: LegacyImportedParty | null = null;
+        let currentRole: string | null = null;
+        let sequentialRoleIndex = 0;
+
+        for (const line of lines) {
+            if (/^Procurador\(es\):$/i.test(line)) {
+                continue;
+            }
+
+            if (/^(AUTOR(?:A)?|R[EÃ‰]U|REQUERENTE|REQUERIDO(?:A)?|EXECUTADO(?:A)?|EXEQUENTE|PERITO|TERCEIRO)$/i.test(line)) {
+                currentRole = this.normalizePartyType(line);
+                continue;
+            }
+
+            const partyMatch = line.match(/^(.+?)\s+\(([\d\.\-\/]+)\)\s*-\s*Pessoa/i);
+            if (partyMatch) {
+                const role = currentRole || sequentialRoles[sequentialRoleIndex] || 'PARTE';
+                const party: LegacyImportedParty = {
+                    name: partyMatch[1].trim(),
+                    type: role,
+                    document: partyMatch[2],
+                    representedNames: [],
+                    isClient: this.inferPartyPole(role) === 'POLO_ATIVO' ? true : undefined,
+                    isOpposing: this.inferPartyPole(role) === 'POLO_PASSIVO' ? true : undefined,
+                };
+                extracted.push(party);
+                lastPrincipal = party;
+                currentRole = null;
+                if (sequentialRoleIndex < sequentialRoles.length - 1) {
+                    sequentialRoleIndex += 1;
+                }
+                continue;
+            }
+
+            const roleSpecificPartyMatch = line.match(/^(.+?)\s+\(([\d\.\-\/]+)\)$/);
+            if (roleSpecificPartyMatch && currentRole) {
+                const party: LegacyImportedParty = {
+                    name: roleSpecificPartyMatch[1].trim(),
+                    type: currentRole,
+                    document: roleSpecificPartyMatch[2],
+                    representedNames: [],
+                };
+                extracted.push(party);
+                lastPrincipal = party;
+                currentRole = null;
+                continue;
+            }
+
+            const lawyerMatch = line.match(/^(.+?)\s+([A-Z]{2}\s*\d{4,6})$/i);
+            if (lawyerMatch) {
+                const isOpposing = this.inferPartyPole(lastPrincipal?.type || '') === 'POLO_PASSIVO';
+                extracted.push({
+                    name: lawyerMatch[1].trim(),
+                    type: isOpposing ? 'ADVOGADO CONTRARIO' : 'ADVOGADO',
+                    oab: lawyerMatch[2].replace(/\s+/g, ''),
+                    representedNames: lastPrincipal?.name ? [lastPrincipal.name] : [],
+                    isClient: isOpposing ? undefined : true,
+                    isOpposing: isOpposing ? true : undefined,
+                });
+            }
+        }
+
+        return extracted;
     }
 
     private isLawyerType(type: string) {

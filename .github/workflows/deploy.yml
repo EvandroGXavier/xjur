@@ -30,30 +30,24 @@ jobs:
             git fetch --all
             git reset --hard origin/main
 
-            echo "2️⃣ Instalando dependências..."
-            npm install
+            echo "2️⃣ Instalando dependências (Para garantir apenas Prisma/Push na host)..."
+            npm install --production=false
 
             echo "3️⃣ Garantindo que o Banco de Dados está rodando para o Push..."
             docker compose -f docker-compose.prod.yml up -d db
             sleep 5
 
-            echo "4️⃣ Sincronizando Banco de Dados ANTES do Build (Evita erro de coluna faltando)..."
+            echo "4️⃣ Sincronizando Banco de Dados (Schema Push)..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public"
             npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
 
-            echo "5️⃣ Gerando a Interface Web (Frontend) na VPS..."
-            npx turbo run build --filter=web
-
-            echo "6️⃣ Limpando PM2..."
-            pm2 delete all 2>/dev/null || true
-
-            echo "7️⃣ Configurando Variáveis Docker..."
+            echo "5️⃣ Configurando Variáveis Docker..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=public"
             
-            echo "8️⃣ Reconstruindo Containers..."
-            docker compose -f docker-compose.prod.yml build --no-cache api web
+            echo "6️⃣ Reconstruindo Containers (com Cache, muito mais rápido)..."
+            docker compose -f docker-compose.prod.yml build api web
             
-            echo "9️⃣ Subindo a Stack Completa..."
+            echo "7️⃣ Subindo a Stack Completa..."
             docker compose -f docker-compose.prod.yml up -d
             
             echo "========================================="
@@ -61,7 +55,7 @@ jobs:
             echo "========================================="
             docker compose -f docker-compose.prod.yml ps
             
-            echo "1️⃣0️⃣ Sincronizando Webhooks do Telegram..."
+            echo "8️⃣ Sincronizando Webhooks do Telegram..."
             # Executamos o script de dentro do container da API para usar o ambiente correto
             docker compose -f docker-compose.prod.yml exec -T api node -e "
               const { NestFactory } = require('@nestjs/core');
