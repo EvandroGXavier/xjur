@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Sliders, Bell, Clock, Users, Save, ToggleLeft, ToggleRight, Plus, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
+import { queuePresetColors } from '../../../utils/themeColors';
 
 interface Queue {
     id: string;
@@ -53,10 +54,10 @@ export function AtendimentoSettings() {
     });
 
     const [queues, setQueues] = useState<Queue[]>([
-        { id: '1', name: 'Comercial', color: '#6366f1', members: 3 },
-        { id: '2', name: 'Jurídico', color: '#eab308', members: 5 },
-        { id: '3', name: 'Financeiro', color: '#22c55e', members: 2 },
-        { id: '4', name: 'Suporte', color: '#06b6d4', members: 4 },
+        { id: '1', name: 'Comercial', color: queuePresetColors[0], members: 3 },
+        { id: '2', name: 'Jurídico', color: queuePresetColors[1], members: 5 },
+        { id: '3', name: 'Financeiro', color: queuePresetColors[2], members: 2 },
+        { id: '4', name: 'Suporte', color: queuePresetColors[3], members: 4 },
     ]);
 
     const [newQueueName, setNewQueueName] = useState('');
@@ -67,11 +68,10 @@ export function AtendimentoSettings() {
 
     const addQueue = () => {
         if (!newQueueName.trim()) return;
-        const colors = ['#6366f1', '#ef4444', '#f97316', '#22c55e', '#06b6d4', '#ec4899'];
         const newQueue: Queue = {
             id: Math.random().toString(36).substr(2, 9),
             name: newQueueName,
-            color: colors[queues.length % colors.length],
+            color: queuePresetColors[queues.length % queuePresetColors.length],
             members: 0,
         };
         setQueues([...queues, newQueue]);

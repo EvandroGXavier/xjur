@@ -3,6 +3,7 @@ import { api } from '../../services/api';
 import { Check, X, Tag as TagIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
+import { defaultTagColor } from '../../utils/themeColors';
 
 export interface TagData {
   id: string;
@@ -106,7 +107,7 @@ export function AdvancedTagFilter({ onFilterChange, scope }: AdvancedTagFilterPr
             {state === 'EXCLUDED' && <X size={12} className="text-red-500" />}
             <div 
               className="w-2 h-2 rounded-full" 
-              style={{ backgroundColor: tag.color || '#6366f1' }}
+              style={{ backgroundColor: tag.color || defaultTagColor }}
             />
             {tag.name}
           </button>

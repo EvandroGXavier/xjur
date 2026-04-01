@@ -172,7 +172,7 @@ export function ConfiguracoesWhatsapp() {
         
         {/* Header Premium DR.X */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-8">
-          <div className="bg-gradient-to-r from-slate-900 via-[#1E3A8A]/40 to-slate-900 p-8 border-b border-slate-800 flex items-center gap-6">
+          <div className="bg-gradient-to-r from-slate-900 via-blue-800/40 to-slate-900 p-8 border-b border-slate-800 flex items-center gap-6">
             <div className="w-16 h-16 bg-blue-600/20 rounded-2xl flex items-center justify-center border border-blue-500/30 shadow-lg shadow-blue-500/10">
               <Shield className="text-blue-400" size={36} />
             </div>

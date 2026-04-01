@@ -12,6 +12,7 @@ import {
 import { clsx } from 'clsx';
 import { api } from '../../services/api';
 import { titleCase, numberToExtenso } from '../../utils/textUtils';
+import { embeddedContentColor } from '../../utils/themeColors';
 
 interface RichTextEditorProps {
     value: string;
@@ -120,13 +121,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         for (let r = 0; r < tableRows; r++) {
             let colsHtml = '';
             for (let c = 0; c < tableCols; c++) {
-                colsHtml += `<td style="border: 1px solid #475569; padding: 8px;">Célula ${r + 1}-${c + 1}</td>`;
+                colsHtml += `<td style="border: 1px solid ${embeddedContentColor.border}; padding: 8px;">Célula ${r + 1}-${c + 1}</td>`;
             }
             rowsHtml += `<tr>${colsHtml}</tr>`;
         }
 
          const tableHTML = `
-            <table style="width: 100%; border-collapse: collapse; margin: 10px 0; border: 1px solid #475569;">
+            <table style="width: 100%; border-collapse: collapse; margin: 10px 0; border: 1px solid ${embeddedContentColor.border};">
                 <tbody>
                     ${rowsHtml}
                 </tbody>
@@ -146,8 +147,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                 display: inline-block;
                 width: 150px;
                 height: 100px;
-                border: 2px solid #6366f1;
-                background-color: rgba(99, 102, 241, 0.1);
+                border: 2px solid ${embeddedContentColor.accent};
+                background-color: ${embeddedContentColor.accentSoft};
                 border-radius: ${borderRadius};
                 padding: 10px;
                 margin: 5px;

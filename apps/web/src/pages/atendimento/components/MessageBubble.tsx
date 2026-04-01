@@ -111,7 +111,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         {/* Menu Contextual (Diferencial DR.X) */}
         {isMenuOpen && !isSystem && (
            <div ref={menuRef} className={clsx(
-              "absolute top-8 z-30 w-[260px] bg-[#233138] border border-slate-700/50 shadow-xl rounded-xl py-1 text-sm overflow-hidden",
+              "absolute top-8 z-30 w-[260px] bg-slate-800 border border-slate-700/50 shadow-xl rounded-xl py-1 text-sm overflow-hidden",
               isMe ? "right-0" : "left-0"
            )}>
               {/* Emojis row */}

@@ -13,6 +13,7 @@ import { clsx } from 'clsx';
 import { getUser } from '../auth/authStorage';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpLibrary } from '../data/helpManuals';
+import { defaultTagColor, withAlpha } from '../utils/themeColors';
 
 interface Category {
     id: string;
@@ -150,7 +151,7 @@ export function Library() {
             .map((t) => ({
                 id: String(t?.id || '').trim(),
                 name: String(t?.name || '').trim(),
-                color: String(t?.color || '#6366f1').trim(),
+                color: String(t?.color || defaultTagColor).trim(),
                 textColor: t?.textColor ? String(t.textColor) : undefined,
             }))
             .filter((t) => t.id && t.name)
@@ -944,9 +945,9 @@ export function Library() {
                                                 key={String(t?.id || t?.name)}
                                                 className="text-[11px] px-2 py-0.5 rounded-full border"
                                                 style={{
-                                                    backgroundColor: `${String(t?.color || '#6366f1')}20`,
-                                                    borderColor: `${String(t?.color || '#6366f1')}55`,
-                                                    color: String(t?.color || '#6366f1'),
+                                                    backgroundColor: withAlpha(String(t?.color || defaultTagColor), 0.12),
+                                                    borderColor: withAlpha(String(t?.color || defaultTagColor), 0.33),
+                                                    color: String(t?.color || defaultTagColor),
                                                 }}
                                             >
                                                 {String(t?.name || '')}

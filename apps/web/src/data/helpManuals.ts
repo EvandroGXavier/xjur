@@ -1,4 +1,5 @@
 import { HelpSection } from '../components/HelpModal';
+import { embeddedContentColor } from '../utils/themeColors';
 
 export const helpContacts: HelpSection[] = [
   {
@@ -178,18 +179,18 @@ export const helpMicrosoft365: HelpSection[] = [
 const helpVideoEmbed = (envKey: string, title: string) => {
   const raw = String((import.meta as any)?.env?.[envKey] || '').trim();
   if (!raw) {
-    return `<div style="border:1px dashed #475569; border-radius: 12px; padding: 12px; background: rgba(15, 23, 42, 0.55); color:#cbd5e1;">
+    return `<div style="border:1px dashed ${embeddedContentColor.border}; border-radius: 12px; padding: 12px; background: ${embeddedContentColor.surfaceInverse}; color:${embeddedContentColor.textInverse};">
       <b>Vídeo:</b> ${title}<br/>
-      <span style="color:#94a3b8;">(Configure <code>${envKey}</code> com um link de embed ou MP4 para aparecer aqui.)</span>
+      <span style="color:${embeddedContentColor.textInverseMuted};">(Configure <code>${envKey}</code> com um link de embed ou MP4 para aparecer aqui.)</span>
     </div>`;
   }
 
   const isMp4 = raw.toLowerCase().endsWith('.mp4');
   if (isMp4) {
-    return `<video controls style="width:100%; border-radius:12px; border:1px solid #334155; margin-top: 8px;" src="${raw}"></video>`;
+    return `<video controls style="width:100%; border-radius:12px; border:1px solid ${embeddedContentColor.borderStrong}; margin-top: 8px;" src="${raw}"></video>`;
   }
 
-  return `<div style="position:relative; width:100%; padding-top:56.25%; border-radius:12px; overflow:hidden; border:1px solid #334155; margin-top: 8px;">
+  return `<div style="position:relative; width:100%; padding-top:56.25%; border-radius:12px; overflow:hidden; border:1px solid ${embeddedContentColor.borderStrong}; margin-top: 8px;">
     <iframe src="${raw}" title="${title}" style="position:absolute; inset:0; width:100%; height:100%; border:0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
   </div>`;
 };
@@ -212,7 +213,7 @@ export const helpSettingsMyTenant: HelpSection[] = [
       '<li>Gere um documento pela Biblioteca: o cabeçalho/rodapé será inserido automaticamente.</li>' +
       '</ol><br/>' +
       '<b>Variáveis úteis:</b> <code>{{tenant.name}}</code>, <code>{{tenant.document}}</code>, <code>{{process.cnj}}</code>, <code>{{process.district}}</code>, <code>{{process.uf}}</code>, <code>{{contact.name}}</code>, <code>{{today.fullDate}}</code>.<br/><br/>' +
-      '<img src="/help/settings/tenant-header-footer.svg" alt="Cabeçalho e rodapé por tenant" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+      '<img src="/help/settings/tenant-header-footer.svg" alt="Cabeçalho e rodapé por tenant" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
     title: 'Exemplo pronto (copiar e ajustar)',
@@ -252,7 +253,7 @@ export const helpSettingsTags: HelpSection[] = [
     title: 'Exemplo prático (Biblioteca)',
     content:
       'Para organizar modelos na Biblioteca, crie tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b> e marque o escopo <b>Biblioteca</b>. Assim, ao editar um modelo, você verá apenas as tags permitidas para a Biblioteca.<br/><br/>' +
-      '<img src="/help/library/library-tags.svg" alt="Exemplo de tags na Biblioteca" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+      '<img src="/help/library/library-tags.svg" alt="Exemplo de tags na Biblioteca" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
     title: 'Vídeo rápido (tags por módulo)',
@@ -265,7 +266,7 @@ export const helpLibrary: HelpSection[] = [
     title: 'Visão Geral (Biblioteca de Modelos)',
     content:
       'A <b>Biblioteca</b> centraliza suas <b>minutas</b>, <b>contratos</b> e <b>peças</b> para reutilização. Você pode manter modelos do <b>Escritório</b> (editáveis) e também usar modelos do <b>Sistema</b> (base/Visual Law).<br/><br/><b>Objetivo:</b> reduzir retrabalho e padronizar a redação, mantendo variáveis e estrutura prontas para o Word Online.<br/><br/>' +
-      '<img src="/help/library/library-overview.svg" alt="Visão rápida da Biblioteca" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+      '<img src="/help/library/library-overview.svg" alt="Visão rápida da Biblioteca" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
     title: 'Buscar e Abrir Modelos',
@@ -276,7 +277,7 @@ export const helpLibrary: HelpSection[] = [
     title: 'Modelos do Sistema x Modelos do Escritório',
     content:
       '<b>Modelo do Sistema</b> aparece com selo <b>Sistema</b> e serve como base. Normalmente ele não é editável pelo usuário.<br/><br/>Para adaptar ao seu escritório, clique em <b>"Personalizar"</b>. Isso cria uma <b>cópia editável</b> (selo <b>Escritório</b>) mantendo a estrutura original.<br/><br/>' +
-      '<img src="/help/library/library-personalizar.svg" alt="Como personalizar um modelo do Sistema" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+      '<img src="/help/library/library-personalizar.svg" alt="Como personalizar um modelo do Sistema" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
     title: 'Criar um Novo Modelo (Escritório)',
@@ -287,14 +288,14 @@ export const helpLibrary: HelpSection[] = [
     title: 'Tags (Pesquisa rápida)',
     content:
       'As <b>Tags</b> servem para organizar e encontrar modelos rapidamente. Você pode:<ul><li>Digitar a tag e pressionar <b>Enter</b> para adicionar</li><li>Usar tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b>, <b>Execução</b>, <b>Consumidor</b></li></ul><br/><b>Dica:</b> mantenha poucas tags bem consistentes (padronização) em vez de muitas variações.<br/><br/>' +
-      '<img src="/help/library/library-tags.svg" alt="Exemplo de padronização de tags" style="width:100%; border-radius:12px; border:1px solid #334155;" />' +
+      '<img src="/help/library/library-tags.svg" alt="Exemplo de padronização de tags" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />' +
       '<br/><br/><b>Exemplo pronto:</b><br/><code>#Cível #CPC #Contestação</code> (peças)<br/><code>#Contrato #Imóvel #CompraEVenda</code> (contratos)',
   },
   {
     title: 'Variáveis Dinâmicas (Automação)',
     content:
       'No editor, use as <b>Variáveis Dinâmicas</b> para automatizar preenchimentos (ex.: <code>{{contact.name}}</code>, <code>{{process.cnj}}</code>, <code>{{today.fullDate}}</code>).<br/><br/>Quando o modelo for usado para gerar documento, o sistema substitui automaticamente as variáveis com dados reais.<br/><br/>' +
-      '<img src="/help/library/library-variaveis.svg" alt="Exemplo de variáveis dinâmicas" style="width:100%; border-radius:12px; border:1px solid #334155;" />' +
+      '<img src="/help/library/library-variaveis.svg" alt="Exemplo de variáveis dinâmicas" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />' +
       '<br/><br/><b>Exemplo pronto (copiar e colar):</b><pre><code>&lt;p&gt;Cliente: {{contact.name}} — CPF/CNPJ {{contact.document}}&lt;/p&gt;\n&lt;p&gt;Processo: {{process.cnj}} — {{process.district}}/{{process.uf}}&lt;/p&gt;\n&lt;p&gt;Data: {{today.fullDate}}&lt;/p&gt;</code></pre>',
   },
   {
@@ -324,7 +325,7 @@ export const helpLibrary: HelpSection[] = [
     title: 'Histórico Gerado',
     content:
       'Na aba <b>"Histórico Gerado"</b> você acompanha documentos já criados a partir dos modelos (rascunho/finalizado), com data de criação e status.<br/><br/>' +
-      '<img src="/help/library/library-historico.svg" alt="Histórico gerado" style="width:100%; border-radius:12px; border:1px solid #334155;" />',
+      '<img src="/help/library/library-historico.svg" alt="Histórico gerado" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
     title: 'Atalhos',

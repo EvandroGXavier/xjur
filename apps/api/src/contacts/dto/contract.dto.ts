@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateContactContractDto {
@@ -44,4 +45,4 @@ export class CreateContactContractDto {
   notes?: string;
 }
 
-export class UpdateContactContractDto extends CreateContactContractDto {}
+export class UpdateContactContractDto extends PartialType(CreateContactContractDto) {}

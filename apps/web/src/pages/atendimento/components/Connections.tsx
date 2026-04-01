@@ -1311,7 +1311,7 @@ export function Connections({ onOpenHelp }: ConnectionsProps) {
                                                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                                                 <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">�x� Webhoook Listener</h3>
                                             </div>
-                                            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-[#0d1117] font-mono text-[11px] text-emerald-400 leading-relaxed space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-slate-950 font-mono text-[11px] text-emerald-400 leading-relaxed space-y-4">
                                                 {testEvents.length === 0 ? (
                                                     <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-50">
                                                         <Wifi size={32} className="mb-2" />

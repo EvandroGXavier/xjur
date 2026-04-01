@@ -761,16 +761,24 @@ export class ContactsService {
       return d === '9999999999' || d === '99999999999';
     };
     const isPlaceholderEmail = (val: string) => val.toLowerCase().trim() === 'nt@nt.com.br';
+    const getPhoneMatchKey = (val: string) => {
+      const digits = this.normalizeDigits(val);
+      if (!digits || isPlaceholderPhone(digits)) return '';
+      return digits.slice(-8);
+    };
+
+    const whatsappMatch = getPhoneMatchKey(whatsapp);
+    const phoneMatch = getPhoneMatchKey(phone);
 
     const conditions: any[] = [];
     if (name) conditions.push({ name: { equals: name, mode: 'insensitive' } });
-    if (whatsapp && !isPlaceholderPhone(whatsapp)) {
-      conditions.push({ whatsapp: { endsWith: whatsapp.slice(-8) } });
-      conditions.push({ phone: { endsWith: whatsapp.slice(-8) } });
+    if (whatsappMatch) {
+      conditions.push({ whatsapp: { endsWith: whatsappMatch } });
+      conditions.push({ phone: { endsWith: whatsappMatch } });
     }
-    if (phone && !isPlaceholderPhone(phone)) {
-      conditions.push({ phone: { endsWith: phone.slice(-8) } });
-      conditions.push({ whatsapp: { endsWith: phone.slice(-8) } });
+    if (phoneMatch) {
+      conditions.push({ phone: { endsWith: phoneMatch } });
+      conditions.push({ whatsapp: { endsWith: phoneMatch } });
     }
     if (email && !isPlaceholderEmail(email)) {
       conditions.push({ email: { equals: email, mode: 'insensitive' } });
@@ -779,25 +787,18 @@ export class ContactsService {
     if (cpf) conditions.push({ pfDetails: { cpf: { endsWith: cpf } } });
     if (cnpj) conditions.push({ pjDetails: { cnpj: { endsWith: cnpj } } });
 
-    const requiresFullPhoneScan =
-      (whatsapp && !isPlaceholderPhone(whatsapp)) ||
-      (phone && !isPlaceholderPhone(phone));
-
-    if (conditions.length === 0 && !requiresFullPhoneScan) return null;
+    if (conditions.length === 0) return null;
 
     const query: any = {
       where: {
         tenantId,
+        OR: conditions,
       },
       include: {
         pfDetails: true,
         pjDetails: true,
       },
     };
-
-    if (!requiresFullPhoneScan && conditions.length > 0) {
-      query.where.OR = conditions;
-    }
 
     if (excludeId) {
       query.where.id = { not: excludeId };
@@ -807,8 +808,8 @@ export class ContactsService {
     if (!matches || matches.length === 0) return null;
 
     for (const hit of matches as any[]) {
-      const hitWhatsapp = this.normalizeDigits(hit.whatsapp);
-      const hitPhone = this.normalizeDigits(hit.phone);
+      const hitWhatsappMatch = getPhoneMatchKey(hit.whatsapp);
+      const hitPhoneMatch = getPhoneMatchKey(hit.phone);
       const hitDocument = this.normalizeDigits(hit.document);
       const hitCpf = this.normalizeDigits(hit.pfDetails?.cpf);
       const hitCnpj = this.normalizeDigits(hit.pjDetails?.cnpj);
@@ -822,16 +823,14 @@ export class ContactsService {
         return { id: hit.id, matchedField: 'e-mail' };
       }
       if (
-        whatsapp &&
-        !isPlaceholderPhone(whatsapp) &&
-        (hitWhatsapp === whatsapp || hitPhone === whatsapp)
+        whatsappMatch &&
+        (hitWhatsappMatch === whatsappMatch || hitPhoneMatch === whatsappMatch)
       ) {
         return { id: hit.id, matchedField: 'celular/whatsapp' };
       }
       if (
-        phone &&
-        !isPlaceholderPhone(phone) &&
-        (hitPhone === phone || hitWhatsapp === phone)
+        phoneMatch &&
+        (hitPhoneMatch === phoneMatch || hitWhatsappMatch === phoneMatch)
       ) {
         return { id: hit.id, matchedField: 'telefone' };
       }
@@ -1176,6 +1175,10 @@ export class ContactsService {
   }
 
   async createContactRelation(tenantId: string, fromContactId: string, data: any) {
+    if (fromContactId === data.toContactId) {
+      throw new BadRequestException('O contato nao pode ser vinculado a si mesmo.');
+    }
+
     await Promise.all([
       this.getContactOrThrow(fromContactId, tenantId),
       this.getContactOrThrow(data.toContactId, tenantId),
@@ -1193,9 +1196,17 @@ export class ContactsService {
     const duplicate = await this.prisma.contactRelation.findFirst({
       where: {
         tenantId,
-        fromContactId,
-        toContactId: data.toContactId,
         relationTypeId: data.relationTypeId,
+        OR: [
+          {
+            fromContactId,
+            toContactId: data.toContactId,
+          },
+          {
+            fromContactId: data.toContactId,
+            toContactId: fromContactId,
+          },
+        ],
       },
       select: { id: true },
     });
@@ -1565,15 +1576,22 @@ export class ContactsService {
     const currentContract = contracts[contractIndex];
     const updatedContract = {
       ...currentContract,
-      type: data.type?.trim(),
-      description: data.description?.trim(),
-      dueDay: Number(data.dueDay),
-      firstDueDate: data.firstDueDate,
-      billingFrequency: data.billingFrequency,
-      transactionKind: data.transactionKind,
-      counterpartyRole: data.counterpartyRole,
-      counterpartyName: data.counterpartyName?.trim(),
-      notes: data.notes?.trim() || '',
+      type: data.type !== undefined ? data.type?.trim() : currentContract.type,
+      description:
+        data.description !== undefined ? data.description?.trim() : currentContract.description,
+      dueDay: data.dueDay != null ? Number(data.dueDay) : currentContract.dueDay,
+      firstDueDate: data.firstDueDate !== undefined ? data.firstDueDate : currentContract.firstDueDate,
+      billingFrequency:
+        data.billingFrequency !== undefined ? data.billingFrequency : currentContract.billingFrequency,
+      transactionKind:
+        data.transactionKind !== undefined ? data.transactionKind : currentContract.transactionKind,
+      counterpartyRole:
+        data.counterpartyRole !== undefined ? data.counterpartyRole : currentContract.counterpartyRole,
+      counterpartyName:
+        data.counterpartyName !== undefined
+          ? data.counterpartyName?.trim()
+          : currentContract.counterpartyName,
+      notes: data.notes !== undefined ? data.notes?.trim() || '' : currentContract.notes || '',
       status: data.status || currentContract.status || 'ACTIVE',
       updatedAt: new Date().toISOString(),
     };

@@ -432,7 +432,7 @@ export function Financial(props: FinancialProps = {}) {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<
     "dashboard" | "records" | "accounts" | "conditions"
-  >(isEmbeddedInProcess ? "records" : "dashboard");
+  >("records");
   const [searchTerm, setSearchTerm] = useState("");
 
   useHotkeys({
@@ -2153,17 +2153,6 @@ export function Financial(props: FinancialProps = {}) {
         </div>
         <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">
           <button
-            onClick={() => setView("dashboard")}
-            className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
-              view === "dashboard"
-                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
-            }`}
-          >
-            <TrendingUp size={16} />
-            Dashboard
-          </button>
-          <button
             onClick={() => setView("records")}
             className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
               view === "records"
@@ -2916,6 +2905,7 @@ export function Financial(props: FinancialProps = {}) {
                           }))
                         }
                         placeholder="Selecionar período"
+                        align="left"
                       />
                     </div>
 
@@ -2938,6 +2928,7 @@ export function Financial(props: FinancialProps = {}) {
                           }))
                         }
                         placeholder="Selecionar período"
+                        align="left"
                       />
                     </div>
 
@@ -2963,6 +2954,7 @@ export function Financial(props: FinancialProps = {}) {
                           }))
                         }
                         placeholder="Selecionar período"
+                        align="right"
                       />
                     </div>
                   </div>

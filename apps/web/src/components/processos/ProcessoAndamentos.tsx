@@ -508,7 +508,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden shadow-2xl">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs bg-white text-slate-900 border-collapse">
-                        <thead className="bg-[#f0f0f0] text-slate-700 font-bold border-b-2 border-slate-300">
+                        <thead className="bg-slate-100 text-slate-700 font-bold border-b-2 border-slate-300">
                             <tr>
                                 <th className="px-2 py-2 w-12 text-center border-r border-slate-200">#</th>
                                 <th className="px-2 py-2 w-40 border-r border-slate-200">Data/Hora (REIFC)</th>
@@ -544,7 +544,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         key={item.id} 
                                         className={clsx(
                                             "hover:bg-yellow-50/50 transition-colors group",
-                                            idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]"
+                                            idx % 2 === 0 ? "bg-white" : "bg-slate-50"
                                         )}
                                     >
                                         <td className="px-2 py-2 text-center font-mono text-slate-400 border-r border-slate-100 text-[10px] align-top">
@@ -582,7 +582,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         </td>
                                         <td className="px-2 py-2 border-r border-slate-100 align-top">
                                             <div className="flex flex-col">
-                                                <span className="font-bold text-[#0056b3] text-[13px] hover:underline cursor-pointer leading-tight mb-1" onClick={() => openEdit(item)}>
+                                                <span className="font-bold text-blue-700 text-[13px] hover:underline cursor-pointer leading-tight mb-1" onClick={() => openEdit(item)}>
                                                     {item.title}
                                                 </span>
                                                 {item.displayId && (

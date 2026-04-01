@@ -4,7 +4,6 @@ import {
   addMonths,
   endOfMonth,
   endOfWeek,
-  endOfYear,
   format,
   isAfter,
   isBefore,
@@ -14,15 +13,13 @@ import {
   parseISO,
   startOfMonth,
   startOfWeek,
-  startOfYear,
   subDays,
   subMonths,
-  subWeeks,
-  subYears,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, X, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Portal } from './Portal';
 
 export type DateRangeValue = {
   from?: string;
@@ -60,17 +57,6 @@ const DEFAULT_PRESETS: Preset[] = [
       to: endOfWeek(t, { weekStartsOn: 1 }),
     }),
   },
-  {
-    key: 'lastWeek',
-    label: 'Semana passada',
-    getRange: (t) => {
-      const base = subWeeks(t, 1);
-      return {
-        from: startOfWeek(base, { weekStartsOn: 1 }),
-        to: endOfWeek(base, { weekStartsOn: 1 }),
-      };
-    },
-  },
   { key: 'thisMonth', label: 'Este mês', getRange: (t) => ({ from: startOfMonth(t), to: endOfMonth(t) }) },
   {
     key: 'lastMonth',
@@ -78,15 +64,6 @@ const DEFAULT_PRESETS: Preset[] = [
     getRange: (t) => {
       const base = subMonths(t, 1);
       return { from: startOfMonth(base), to: endOfMonth(base) };
-    },
-  },
-  { key: 'thisYear', label: 'Este ano', getRange: (t) => ({ from: startOfYear(t), to: endOfYear(t) }) },
-  {
-    key: 'lastYear',
-    label: 'Ano passado',
-    getRange: (t) => {
-      const base = subYears(t, 1);
-      return { from: startOfYear(base), to: endOfYear(base) };
     },
   },
 ];
@@ -112,6 +89,7 @@ export function DateRangePicker({
   disabled,
   presets = DEFAULT_PRESETS,
   className,
+  align = 'right',
 }: {
   value?: DateRangeValue;
   onChange: (next: DateRangeValue) => void;
@@ -119,6 +97,7 @@ export function DateRangePicker({
   disabled?: boolean;
   presets?: Preset[];
   className?: string;
+  align?: 'left' | 'right';
 }) {
   const today = useMemo(() => new Date(), []);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -128,18 +107,42 @@ export function DateRangePicker({
   const [monthStart, setMonthStart] = useState<Date>(() => startOfMonth(today));
   const [draftFrom, setDraftFrom] = useState<Date | null>(() => parseISODateOrNull(value?.from));
   const [draftTo, setDraftTo] = useState<Date | null>(() => parseISODateOrNull(value?.to));
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0, width: 0 });
 
   const hasValue = Boolean(value?.from && value?.to);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !triggerRef.current) return;
+    
+    // Atualiza o rascunho com o valor real ao abrir
     const from = parseISODateOrNull(value?.from);
     const to = parseISODateOrNull(value?.to);
     setDraftFrom(from);
     setDraftTo(to);
     setMonthStart(startOfMonth(from || today));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+
+    // Calcula posição para o Portal
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownWidth = 640; // Reduzido para 640px
+    const dropdownHeight = 360; // Altura aproximada do calendário + presets
+    
+    let top = rect.bottom + window.scrollY + 8;
+    let left = align === 'left' ? rect.left : rect.right - dropdownWidth;
+    
+    // Ajuste se sair da tela (viewport check horizontal)
+    if (left < 16) left = 16;
+    if (left + dropdownWidth > window.innerWidth - 16) {
+      left = window.innerWidth - dropdownWidth - 16;
+    }
+
+    // Ajuste se sair da tela (viewport check vertical)
+    if (rect.bottom + dropdownHeight > window.innerHeight - 16) {
+      top = rect.top + window.scrollY - dropdownHeight - 8;
+    }
+
+    setPopoverPos({ top, left, width: dropdownWidth });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -184,7 +187,6 @@ export function DateRangePicker({
       return;
     }
 
-    // second click
     if (isSameDay(day, draftFrom)) {
       setDraftTo(day);
       return;
@@ -207,23 +209,25 @@ export function DateRangePicker({
 
   const renderMonth = (month: Date, days: Date[]) => {
     const monthLabel = format(month, "MMMM 'de' yyyy", { locale: ptBR });
-    const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+    const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
     return (
-      <div className="w-[280px]">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-sm font-semibold text-slate-200 capitalize">{monthLabel}</div>
+      <div className="w-[210px]">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div className="text-[13px] font-black uppercase text-slate-100 tracking-wider">
+            {monthLabel}
+          </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-[11px] text-slate-500 mb-1">
-          {weekDays.map((w) => (
-            <div key={w} className="text-center py-1">
+        <div className="grid grid-cols-7 gap-1 text-[10px] font-bold text-slate-500 mb-1">
+          {weekDays.map((w, idx) => (
+            <div key={idx} className="text-center py-1">
               {w}
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0.5">
           {days.map((d) => {
             const inMonth = isSameMonth(d, month);
             const isStart = Boolean(selectedInterval && isSameDay(d, selectedInterval.start));
@@ -239,11 +243,11 @@ export function DateRangePicker({
                 type="button"
                 onClick={() => onDayClick(d)}
                 className={clsx(
-                  'h-9 w-9 rounded-md text-sm transition-colors flex items-center justify-center',
-                  !inMonth && 'text-slate-600 hover:text-slate-300',
-                  inMonth && 'text-slate-200 hover:bg-slate-800',
-                  inRange && 'bg-indigo-500/15',
-                  (isStart || isEnd || isSingle) && 'bg-indigo-600 text-white hover:bg-indigo-600',
+                  'h-7 w-7 rounded-lg text-[11px] transition-all flex items-center justify-center font-bold',
+                  !inMonth && 'text-slate-700 opacity-30 hover:opacity-100',
+                  inMonth && 'text-slate-300 hover:bg-slate-800',
+                  inRange && 'bg-indigo-500/10 text-indigo-300',
+                  (isStart || isEnd || isSingle) && 'bg-indigo-600 text-white hover:bg-indigo-600 shadow-lg shadow-indigo-500/20',
                 )}
                 title={format(d, 'dd/MM/yyyy')}
               >
@@ -266,14 +270,14 @@ export function DateRangePicker({
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          'w-full px-3 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between gap-3',
+          'w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex items-center justify-between gap-3 shadow-inner hover:border-slate-700 transition-all',
           disabled && 'opacity-60 cursor-not-allowed',
         )}
         aria-label="Selecionar período"
         title={label}
       >
-        <span className={clsx('flex items-center gap-2 min-w-0', !hasValue && 'text-slate-400')}>
-          <Calendar size={16} className={clsx(hasValue ? 'text-indigo-300' : 'text-slate-500')} />
+        <span className={clsx('flex items-center gap-2 min-w-0 text-sm font-medium', !hasValue && 'text-slate-500')}>
+          <Calendar size={16} className={clsx(hasValue ? 'text-indigo-400' : 'text-slate-500')} />
           <span className="truncate">{label}</span>
         </span>
 
@@ -286,124 +290,142 @@ export function DateRangePicker({
                 e.stopPropagation();
                 clear();
               }}
-              className="p-1 rounded hover:bg-slate-800 text-slate-300"
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors"
               title="Limpar período"
-              aria-label="Limpar período"
             >
               <X size={14} />
             </button>
           )}
-          <ChevronRight size={16} className="text-slate-500" />
+          <ChevronRight size={14} className={clsx('text-slate-600 transition-transform', open && 'rotate-90')} />
         </span>
       </button>
 
       {open && (
-        <div
-          ref={popoverRef}
-          className="absolute z-[120] mt-2 w-[920px] max-w-[92vw] right-0 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
-        >
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-3">
-            <div className="text-sm font-semibold text-white">Selecionar período</div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMonthStart((m) => subMonths(m, 1))}
-                className="p-2 rounded-lg hover:bg-slate-800 text-slate-200"
-                title="Mês anterior"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setMonthStart((m) => addMonths(m, 1))}
-                className="p-2 rounded-lg hover:bg-slate-800 text-slate-200"
-                title="Próximo mês"
-              >
-                <ChevronRight size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="p-2 rounded-lg hover:bg-slate-800 text-slate-200"
-                title="Fechar"
-              >
-                <X size={18} />
-              </button>
+        <Portal>
+          <div
+            ref={popoverRef}
+            style={{
+              position: 'fixed',
+              top: popoverPos.top,
+              left: popoverPos.left,
+              width: popoverPos.width,
+            }}
+            className="z-[9999] bg-slate-900 border border-slate-700/50 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+              <div className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Clock size={12} className="text-indigo-400" />
+                Definir Faixa de Tempo
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMonthStart((m) => subMonths(m, 1))}
+                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthStart((m) => addMonths(m, 1))}
+                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                >
+                  <ChevronRight size={18} />
+                </button>
+                <div className="w-px h-4 bg-slate-800 mx-1" />
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="p-2 rounded-xl hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="p-4 flex flex-col lg:flex-row gap-4">
-            <div className="flex gap-4 flex-1 overflow-x-auto">
-              {renderMonth(leftMonth, leftGrid)}
-              {renderMonth(rightMonth, rightGrid)}
-            </div>
-
-            <div className="w-full lg:w-[240px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-800 pt-4 lg:pt-0 lg:pl-4">
-              <div className="text-xs uppercase tracking-wider text-slate-400 mb-3">Presets</div>
-              <div className="grid gap-2">
+            <div className="flex">
+              <div className="w-[160px] border-r border-slate-700 bg-slate-900/50 p-3 space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 px-1">Atalhos</div>
                 {presets.map((p) => (
                   <button
                     key={p.key}
                     type="button"
                     onClick={() => applyPreset(p)}
-                    className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-800 transition-colors text-sm text-left"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-bold text-slate-300 hover:bg-indigo-500/10 hover:text-indigo-400 hover:border-indigo-500/30 transition-all text-left"
                   >
                     {p.label}
                   </button>
                 ))}
+              </div>
+
+              <div className="flex-1 p-4">
+                <div className="flex gap-4 items-start">
+                  {renderMonth(leftMonth, leftGrid)}
+                  <div className="w-[210px] hidden md:block">
+                    {renderMonth(rightMonth, rightGrid)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between gap-4">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                {draftFrom && draftTo ? (
+                  <span className="flex items-center gap-2">
+                    <span className="text-emerald-500">De {format(draftFrom, 'dd/MM/yyyy')}</span>
+                    <ArrowRight size={10} />
+                    <span className="text-emerald-500">Até {format(draftTo, 'dd/MM/yyyy')}</span>
+                  </span>
+                ) : draftFrom ? (
+                  <span>Selecione a data final...</span>
+                ) : (
+                  <span>Aguardando seleção...</span>
+                )}
+              </div>
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setDraftFrom(null);
-                    setDraftTo(null);
-                  }}
-                  className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-800 transition-colors text-sm text-left"
+                  onClick={() => setOpen(false)}
+                  className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors"
                 >
-                  Período customizado
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={applyDraft}
+                  disabled={!draftFrom || !draftTo}
+                  className={clsx(
+                    'px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg',
+                    (!draftFrom || !draftTo) 
+                      ? 'bg-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20 active:scale-95',
+                  )}
+                >
+                  Confirmar Período
                 </button>
               </div>
             </div>
           </div>
-
-          <div className="p-4 border-t border-slate-800 flex items-center justify-between gap-3">
-            <div className="text-xs text-slate-400">
-              {draftFrom && draftTo ? (
-                <span>
-                  Selecionado: <b className="text-slate-200">{format(draftFrom, 'dd/MM/yyyy')}</b> até{' '}
-                  <b className="text-slate-200">{format(draftTo, 'dd/MM/yyyy')}</b>
-                </span>
-              ) : draftFrom ? (
-                <span>
-                  Selecione a data final (início: <b className="text-slate-200">{format(draftFrom, 'dd/MM/yyyy')}</b>)
-                </span>
-              ) : (
-                <span>Selecione a data inicial.</span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="px-4 py-2 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={applyDraft}
-                disabled={!draftFrom || !draftTo}
-                className={clsx(
-                  'px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors',
-                  (!draftFrom || !draftTo) && 'opacity-60 cursor-not-allowed',
-                )}
-              >
-                Filtrar
-              </button>
-            </div>
-          </div>
-        </div>
+        </Portal>
       )}
     </div>
   );
 }
+
+const ArrowRight = ({ size, className }: { size: number; className?: string }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="3" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M5 12h14" />
+    <path d="m12 5 7 7-7 7" />
+  </svg>
+);
 

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ContactPickerGlobal } from "../../components/contacts/ContactPickerGlobal";
 import { usePaymentConditions } from "../../hooks/usePaymentConditions";
 import { useHotkeys } from "../../hooks/useHotkeys";
+import { embeddedContentColor } from "../../utils/themeColors";
 
 export function ProposalsPage() {
   const [proposals, setProposals] = useState<any[]>([]);
@@ -62,24 +63,24 @@ export function ProposalsPage() {
         <head>
           <title>Orçamento #${String(proposal.code).padStart(6, "0")}</title>
           <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-            .title { font-size: 24px; font-weight: bold; margin: 0; color: #111; text-transform: uppercase; }
-            .subtitle { color: #666; font-size: 14px; margin-top: 5px; }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: ${embeddedContentColor.text}; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${embeddedContentColor.text}; padding-bottom: 20px; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; margin: 0; color: ${embeddedContentColor.textStrong}; text-transform: uppercase; }
+            .subtitle { color: ${embeddedContentColor.textMuted}; font-size: 14px; margin-top: 5px; }
             .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-            .info-box { border: 1px solid #ddd; padding: 15px; border-radius: 4px; background: #fafafa; }
-            .info-box strong { display: block; margin-bottom: 5px; color: #222; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+            .info-box { border: 1px solid ${embeddedContentColor.borderSoft}; padding: 15px; border-radius: 4px; background: ${embeddedContentColor.surfaceMuted}; }
+            .info-box strong { display: block; margin-bottom: 5px; color: ${embeddedContentColor.textStrong}; border-bottom: 1px solid ${embeddedContentColor.surfaceSoft}; padding-bottom: 5px; }
             .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { text-align: left; padding: 10px; border-bottom: 2px solid #ddd; background: #f5f5f5; font-size: 12px; text-transform: uppercase; color: #555; }
-            td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+            th { text-align: left; padding: 10px; border-bottom: 2px solid ${embeddedContentColor.borderSoft}; background: ${embeddedContentColor.surfaceSoft}; font-size: 12px; text-transform: uppercase; color: ${embeddedContentColor.textMuted}; }
+            td { padding: 10px; border-bottom: 1px solid ${embeddedContentColor.surfaceSoft}; font-size: 14px; }
             .text-right { text-align: right; }
             .totals { width: 300px; float: right; margin-bottom: 30px; }
             .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
-            .total-row.grand-total { border-top: 2px solid #333; font-weight: bold; font-size: 18px; margin-top: 10px; padding-top: 10px; }
+            .total-row.grand-total { border-top: 2px solid ${embeddedContentColor.text}; font-weight: bold; font-size: 18px; margin-top: 10px; padding-top: 10px; }
             .clear { clear: both; }
-            .notes { border-top: 1px solid #ddd; padding-top: 20px; font-size: 13px; color: #666; }
-            .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; border: 1px solid #333; }
+            .notes { border-top: 1px solid ${embeddedContentColor.borderSoft}; padding-top: 20px; font-size: 13px; color: ${embeddedContentColor.textMuted}; }
+            .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; border: 1px solid ${embeddedContentColor.text}; }
             .financial-table th, .financial-table td { font-size: 12px; padding: 6px; }
           </style>
         </head>
@@ -141,7 +142,7 @@ export function ProposalsPage() {
           <div class="clear"></div>
 
           ${proposal.financialRecords && proposal.financialRecords.length > 0 ? `
-            <h4 style="margin-bottom: 10px; color: #333;">Previsão Financeira</h4>
+            <h4 style="margin-bottom: 10px; color: ${embeddedContentColor.text};">Previsão Financeira</h4>
             <table class="financial-table" style="width: 50%;">
               <thead>
                 <tr>
@@ -169,7 +170,7 @@ export function ProposalsPage() {
             </div>
           ` : ''}
           
-          <div style="margin-top: 50px; text-align: center; border-top: 1px dashed #ccc; padding-top: 20px;">
+          <div style="margin-top: 50px; text-align: center; border-top: 1px dashed ${embeddedContentColor.borderSoft}; padding-top: 20px;">
             ___________________________________________________<br/>
             Assinatura do Cliente
           </div>
@@ -969,7 +970,7 @@ export function ProposalsPage() {
                 </h3>
                 <div className="p-0 overflow-auto flex-1">
                   <table className="w-full text-left text-sm border-collapse">
-                    <thead className="bg-[#0078D7] text-white">
+                    <thead className="bg-blue-600 text-white">
                       <tr>
                         <th className="px-3 py-2 border-b border-blue-800">
                           Código
@@ -1036,7 +1037,7 @@ export function ProposalsPage() {
                 </h3>
                 <div className="p-0 overflow-auto flex-1">
                   <table className="w-full text-left text-sm border-collapse">
-                    <thead className="bg-[#0078D7] text-white">
+                    <thead className="bg-blue-600 text-white">
                       <tr>
                         <th className="px-3 py-2 border-b border-blue-800">Parcela</th>
                         <th className="px-3 py-2 border-b border-blue-800">Vencimento</th>

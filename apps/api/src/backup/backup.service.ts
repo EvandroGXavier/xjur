@@ -7,6 +7,7 @@ import {
 import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { BackupGateway } from './backup.gateway';
 
 type ToolInfo = {
   available: boolean;
@@ -26,6 +27,8 @@ type DatabaseConfig = {
 @Injectable()
 export class BackupService {
   private readonly backupsDir = path.join(process.cwd(), 'storage', 'backups');
+
+  constructor(private readonly gateway: BackupGateway) {}
 
   getBackupsDirectory() {
     this.ensureBackupsDirectory();
@@ -106,6 +109,7 @@ export class BackupService {
         '--if-exists',
         '--no-owner',
         '--no-privileges',
+        '--verbose',
         '--host',
         database.host,
         '--port',
@@ -173,6 +177,7 @@ export class BackupService {
           '--if-exists',
           '--no-owner',
           '--no-privileges',
+          '--verbose',
           '--host',
           database.host,
           '--port',
@@ -364,6 +369,9 @@ export class BackupService {
     actionLabel: string,
     toolName?: string,
   ) {
+    this.gateway.emitMessage(`Iniciando ${actionLabel}...`);
+    this.gateway.emitProgress(actionLabel, 1, `Preparando ${actionLabel}...`);
+
     await new Promise<void>((resolve, reject) => {
       const child = spawn(command, args, {
         env: {
@@ -374,12 +382,36 @@ export class BackupService {
       });
 
       let stderr = '';
+      let lastLine = '';
 
+      // Most tools (pg_dump, pg_restore) send verbose output to stderr
       child.stderr.on('data', (chunk) => {
-        stderr += chunk.toString();
+        const data = chunk.toString();
+        stderr += data;
+        
+        // Split by lines and emit the last one as current status
+        const lines = data.split(/\r?\n/).filter(Boolean);
+        if (lines.length > 0) {
+          lastLine = lines[lines.length - 1].trim();
+          // Remove potential prefix like "pg_dump: "
+          const displayLine = lastLine.replace(/^pg_(dump|restore|sql):\s*/i, '');
+          this.gateway.emitProgress(actionLabel, -1, displayLine);
+        }
+      });
+
+      child.stdout.on('data', (chunk) => {
+        // Some tools might use stdout for progress
+        const data = chunk.toString();
+        const lines = data.split(/\r?\n/).filter(Boolean);
+        if (lines.length > 0) {
+          const line = lines[lines.length - 1].trim();
+          this.gateway.emitProgress(actionLabel, -1, line);
+        }
       });
 
       child.on('error', (error) => {
+        this.gateway.emitProgress(actionLabel, 0, `Falha: ${error.message}`);
+        this.gateway.emitMessage(`Erro ao ${actionLabel}: ${error.message}`, 'error');
         reject(
           new InternalServerErrorException(
             `Falha ao ${actionLabel}: ${error.message}`,
@@ -389,6 +421,8 @@ export class BackupService {
 
       child.on('close', (code) => {
         if (code === 0) {
+          this.gateway.emitProgress(actionLabel, 100, `${actionLabel} concluído com sucesso!`);
+          this.gateway.emitMessage(`${actionLabel} concluído com sucesso!`, 'success');
           resolve();
           return;
         }
@@ -402,10 +436,14 @@ export class BackupService {
           console.warn(
             `[BACKUP] ${toolName || 'Comando'} finalizado com avisos (code 1), mas erros foram ignorados: ${stderr}`,
           );
+          this.gateway.emitProgress(actionLabel, 100, `${actionLabel} concluído com avisos.`);
+          this.gateway.emitMessage(`${actionLabel} concluído com avisos ignorados.`, 'success');
           resolve();
           return;
         }
 
+        this.gateway.emitProgress(actionLabel, 0, `Falha no comando.`);
+        this.gateway.emitMessage(`Falha ao ${actionLabel}.`, 'error');
         reject(
           new BadRequestException(
             `Nao foi possivel ${actionLabel}. ${stderr.trim() || 'Verifique as credenciais do banco e as ferramentas PostgreSQL.'}`,

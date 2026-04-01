@@ -4,6 +4,12 @@ import { Tags as TagsIcon, Plus, Trash2, Edit, Search, X, Palette, Check } from 
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
+import {
+    defaultTagColor,
+    defaultTagTextColor,
+    getContrastTextColor,
+    tagPresetColors,
+} from '../../utils/themeColors';
 
 interface Tag {
     id: string;
@@ -15,11 +21,7 @@ interface Tag {
     active: boolean;
 }
 
-const PRESET_COLORS = [
-    '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
-    '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
-    '#64748b', '#d946ef', '#f43f5e', '#0ea5e9', '#a855f7',
-];
+const PRESET_COLORS = [...tagPresetColors];
 
 const SCOPE_OPTIONS = [
     { value: 'CONTACT', label: 'Contato', color: 'text-blue-400' },
@@ -45,8 +47,8 @@ export function TagsTab() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         name: '',
-        color: '#6366f1',
-        textColor: '#ffffff',
+        color: defaultTagColor,
+        textColor: defaultTagTextColor,
         scope: ['TICKET'] as string[],
     });
 
@@ -94,7 +96,7 @@ export function TagsTab() {
         setFormData({
             name: tag.name,
             color: tag.color,
-            textColor: tag.textColor || '#ffffff',
+            textColor: tag.textColor || defaultTagTextColor,
             scope: tag.scope || ['TICKET'],
         });
         setIsFormOpen(true);
@@ -124,20 +126,12 @@ export function TagsTab() {
     const resetForm = () => {
         setIsFormOpen(false);
         setEditingId(null);
-        setFormData({ name: '', color: '#6366f1', textColor: '#ffffff', scope: ['TICKET'] });
+        setFormData({ name: '', color: defaultTagColor, textColor: defaultTagTextColor, scope: ['TICKET'] });
     };
 
     const filteredTags = tags.filter(t =>
         t.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-
-    const getContrastColor = (hex: string) => {
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        return luminance > 0.5 ? '#000000' : '#ffffff';
-    };
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -204,14 +198,14 @@ export function TagsTab() {
                                     {PRESET_COLORS.map(color => (
                                         <button
                                             key={color}
-                                            onClick={() => setFormData({ ...formData, color, textColor: getContrastColor(color) })}
+                                            onClick={() => setFormData({ ...formData, color, textColor: getContrastTextColor(color) })}
                                             className={clsx(
                                                 "w-full aspect-square rounded-lg border-2 transition-all hover:scale-110 flex items-center justify-center",
                                                 formData.color === color ? "border-white" : "border-transparent"
                                             )}
                                             style={{ backgroundColor: color }}
                                         >
-                                            {formData.color === color && <Check size={14} style={{ color: getContrastColor(color) }} />}
+                                            {formData.color === color && <Check size={14} style={{ color: getContrastTextColor(color) }} />}
                                         </button>
                                     ))}
                                 </div>
@@ -261,7 +255,7 @@ export function TagsTab() {
                             <div className="flex justify-between items-start">
                                 <span 
                                     className="px-3 py-1 rounded-full text-xs font-bold shadow-sm"
-                                    style={{ backgroundColor: tag.color, color: tag.textColor || '#fff' }}
+                                    style={{ backgroundColor: tag.color, color: tag.textColor || defaultTagTextColor }}
                                 >
                                     {tag.name}
                                 </span>

@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
+import { useBackupSocket } from '../../hooks/useBackupSocket';
+import { Terminal } from 'lucide-react';
 
 type BackupStatus = {
   database: {
@@ -50,6 +52,26 @@ export function BackupTab() {
   const [createLabel, setCreateLabel] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
+  const [lastLog, setLastLog] = useState<string | null>(null);
+
+  const { isConnected, on } = useBackupSocket();
+
+  useEffect(() => {
+    return on('progress', (data: any) => {
+      // Se progress for -1, apenas atualizamos o log sem mudar a barra (se for uma tarefa longa de um comando verbose)
+      if (data.progress !== -1) {
+        setProgress(data.progress);
+      }
+      setLastLog(data.message);
+    });
+  }, [on]);
+
+  useEffect(() => {
+    return on('message', (data: any) => {
+      if (data.type === 'success') toast.success(data.message);
+      if (data.type === 'error') toast.error(data.message);
+    });
+  }, [on]);
 
   const backups = status?.backups || [];
   const toolsReady = Boolean(
@@ -92,25 +114,10 @@ export function BackupTab() {
   const handleCreateBackup = async () => {
     try {
       setBusyAction('create');
-      setProgress(0);
-      
-      // Simular progresso para criacao (pg_dump nao reporta facil por REST)
-      const interval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 95) return prev;
-          const step = prev < 50 ? 5 : prev < 80 ? 2 : 0.5;
-          return prev + step;
-        });
-      }, 800);
-
       const response = await api.post('/backup/create', {
         label: createLabel.trim() || undefined,
       });
 
-      clearInterval(interval);
-      setProgress(100);
-      
-      toast.success(response.data?.message || 'Backup criado com sucesso');
       setCreateLabel('');
       await loadStatus();
     } catch (error: any) {
@@ -118,7 +125,10 @@ export function BackupTab() {
       toast.error(error?.response?.data?.message || 'Erro ao criar backup');
     } finally {
       setBusyAction(null);
-      setTimeout(() => setProgress(0), 1000);
+      setTimeout(() => {
+        setProgress(0);
+        setLastLog(null);
+      }, 2000);
     }
   };
 
@@ -184,32 +194,20 @@ export function BackupTab() {
 
     try {
       setBusyAction(`restore:${backup.fileName}`);
-      setProgress(0);
-
-      // Simular progresso para restauracao
-      const interval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 95) return prev;
-          const step = prev < 40 ? 4 : prev < 70 ? 1 : 0.2;
-          return prev + step;
-        });
-      }, 1000);
-
       const response = await api.post(`/backup/restore/${encodeURIComponent(backup.fileName)}`, {
         confirmation,
       });
 
-      clearInterval(interval);
-      setProgress(100);
-
-      toast.success(response.data?.message || 'Restauracao concluida');
       await loadStatus();
     } catch (error: any) {
       console.error(error);
       toast.error(error?.response?.data?.message || 'Erro ao restaurar backup');
     } finally {
       setBusyAction(null);
-      setTimeout(() => setProgress(0), 1000);
+      setTimeout(() => {
+        setProgress(0);
+        setLastLog(null);
+      }, 2000);
     }
   };
 
@@ -251,12 +249,53 @@ export function BackupTab() {
             disabled={loading || !!busyAction}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-indigo-400 hover:text-white disabled:opacity-50"
           >
+            <div className={clsx("w-2 h-2 rounded-full", isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             Atualizar Status
           </button>
         </div>
 
-        {/* PROGRESS BAR */}
+        {/* ACTIVE OPERATION OVERLAY OR BANNER */}
+        {busyAction && (
+          <div className="mt-6 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-6 animate-in fade-in duration-300">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-indigo-500/20 rounded-xl">
+                  <RefreshCw size={24} className="text-indigo-400 animate-spin" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-white uppercase tracking-wider">
+                    {busyAction === 'create' ? 'Gerando Backup' : 
+                     busyAction.startsWith('restore') ? 'Restaurando Banco de Dados' : 
+                     busyAction === 'upload' ? 'Subindo Arquivo' : 'Processando...'}
+                  </h4>
+                  <p className="text-xs text-slate-400">Não feche esta janela até a conclusão.</p>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-2xl font-black text-indigo-400">
+                  {progress > 0 ? `${progress.toFixed(0)}%` : '--%'}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="h-4 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800 shadow-inner p-0.5">
+                <div 
+                  className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(99,102,241,0.4)]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            {lastLog && (
+              <div className="mt-4 flex items-start gap-2 text-xs font-mono text-emerald-400/80 bg-slate-950/50 p-2 rounded-lg border border-slate-800">
+                <Terminal size={14} className="mt-0.5" />
+                <span className="break-all">{lastLog}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-6 grid gap-4 lg:grid-cols-4">
           <div className={toolCardClass}>
@@ -321,29 +360,6 @@ export function BackupTab() {
               {busyAction === 'create' ? 'Gerando...' : 'Criar Backup Completo'}
             </button>
           </div>
-
-          {/* PROGRESS BAR LOCAL - CREATE */}
-          <div className="mt-6 space-y-2">
-            <div className="flex justify-between text-[11px] uppercase font-black tracking-widest">
-              <span className={busyAction === 'create' ? "text-indigo-600 dark:text-indigo-400 animate-pulse" : "text-slate-400 dark:text-slate-600"}>
-                Status da Operação
-              </span>
-              <span className={busyAction === 'create' ? "text-indigo-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-700"}>
-                {busyAction === 'create' ? `${progress.toFixed(0)}%` : 'Aguardando'}
-              </span>
-            </div>
-            <div className="h-4 w-full bg-slate-200 dark:bg-slate-950 rounded-full overflow-hidden border border-slate-300 dark:border-slate-800/50 shadow-inner">
-              <div 
-                className={clsx(
-                  "h-full transition-all duration-300 ease-out flex items-center justify-center text-[9px] font-bold text-white",
-                  busyAction === 'create' ? "bg-indigo-600 dark:bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.4)]" : "bg-slate-300 dark:bg-slate-800"
-                )}
-                style={{ width: `${busyAction === 'create' ? progress : 0}%` }}
-              >
-                {busyAction === 'create' && progress > 5 && `${progress.toFixed(0)}%`}
-              </div>
-            </div>
-          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
@@ -373,27 +389,6 @@ export function BackupTab() {
             >
               {busyAction === 'upload' ? 'Enviando...' : 'Enviar Para a Biblioteca de Backups'}
             </button>
-            <div className="space-y-1.5 pt-1">
-              <div className="flex justify-between text-[11px] uppercase font-black tracking-widest">
-                 <span className={busyAction === 'upload' ? "text-indigo-600 dark:text-indigo-400 animate-pulse" : "text-slate-400 dark:text-slate-600"}>
-                  Progresso do Upload
-                </span>
-                <span className={busyAction === 'upload' ? "text-indigo-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-700"}>
-                  {busyAction === 'upload' ? `${progress.toFixed(0)}%` : 'Inativo'}
-                </span>
-              </div>
-              <div className="h-4 w-full bg-slate-200 dark:bg-slate-950 rounded-full overflow-hidden border border-slate-300 dark:border-slate-800/50 shadow-inner">
-                <div 
-                  className={clsx(
-                    "h-full transition-all duration-300 ease-out flex items-center justify-center text-[9px] font-bold text-white",
-                    busyAction === 'upload' ? "bg-indigo-600 dark:bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.4)]" : "bg-slate-300 dark:bg-slate-800"
-                  )}
-                  style={{ width: `${busyAction === 'upload' ? progress : 0}%` }}
-                >
-                   {busyAction === 'upload' && progress > 5 && `${progress.toFixed(0)}%`}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

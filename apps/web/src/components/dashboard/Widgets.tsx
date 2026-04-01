@@ -16,6 +16,7 @@ import {
   PieChart,
   Pie
 } from 'recharts';
+import { dashboardChartColors, themeColor } from '../../utils/themeColors';
 
 interface StatsProps {
   id: string;
@@ -52,8 +53,6 @@ export function StatsWidget({ data }: StatsProps) {
 export function StatusChartWidget({ id, data }: { id: string, data: any }) {
   if (!data?.statusDistribution) return null;
 
-  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-
   return (
     <div className="p-4 h-full flex flex-col">
       <h3 className="text-slate-200 text-sm font-semibold mb-4 flex items-center gap-2">
@@ -66,12 +65,19 @@ export function StatusChartWidget({ id, data }: { id: string, data: any }) {
             <XAxis dataKey="status" hide />
             <YAxis hide />
             <Tooltip 
-              contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-              itemStyle={{ color: '#fff' }}
+              contentStyle={{
+                backgroundColor: themeColor.slate800,
+                border: `1px solid ${themeColor.slate700}`,
+                borderRadius: '8px',
+              }}
+              itemStyle={{ color: themeColor.white }}
             />
             <Bar dataKey="_count._all" radius={[4, 4, 0, 0]}>
               {data.statusDistribution.map((entry: any, index: number) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell
+                  key={`cell-${index}`}
+                  fill={dashboardChartColors[index % dashboardChartColors.length]}
+                />
               ))}
             </Bar>
           </BarChart>
@@ -108,8 +114,8 @@ export function FinancialSummaryWidget({ id, data }: { id: string, data: any }) 
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  <Cell fill="#10b981" />
-                  <Cell fill="#ef4444" />
+                  <Cell fill={themeColor.emerald500} />
+                  <Cell fill={themeColor.red500} />
                 </Pie>
                 <Tooltip />
               </PieChart>

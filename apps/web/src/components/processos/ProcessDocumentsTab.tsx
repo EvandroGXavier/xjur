@@ -6,6 +6,7 @@ import html2pdf from 'html2pdf.js';
 import { clsx } from 'clsx';
 import { RichTextEditor, RichTextEditorHandle } from '../ui/RichTextEditor';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
+import { embeddedContentColor } from '../../utils/themeColors';
 
 interface ProcessDocument {
     id: string;
@@ -194,7 +195,7 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                 <head>
                     <title>${doc.title}</title>
                     <style>
-                        body { font-family: Arial, sans-serif; padding: 20mm; margin: 0; color: #000; background: #fff; }
+                        body { font-family: Arial, sans-serif; padding: 20mm; margin: 0; color: ${embeddedContentColor.textStrong}; background: ${embeddedContentColor.surface}; }
                         @media print { body { padding: 0; margin: 0; } }
                     </style>
                 </head>
@@ -510,4 +511,3 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
         </div>
     );
 }
-

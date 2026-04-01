@@ -66,10 +66,15 @@ describe('ContactsService', () => {
         findMany: jest.fn(),
       },
     };
+    const enrichmentService = {
+      consultCNPJ: jest.fn(),
+      consultCEP: jest.fn(),
+    };
 
     return {
       prisma,
-      service: new ContactsService(prisma as never),
+      enrichmentService,
+      service: new ContactsService(prisma as never, enrichmentService as never),
     };
   };
 
@@ -150,6 +155,42 @@ describe('ContactsService', () => {
     );
   });
 
+  it('detecta duplicidade por telefone com formatos diferentes usando os ultimos 8 digitos', async () => {
+    const { prisma, service } = createService();
+    prisma.contact.findMany.mockResolvedValue([
+      {
+        id: 'contact-duplicado',
+        name: 'Contato Existente',
+        whatsapp: '(31) 98877-6655',
+        phone: null,
+        email: null,
+        document: null,
+        pfDetails: null,
+        pjDetails: null,
+      },
+    ]);
+
+    const duplicate = await service.findDuplicateContact(
+      'tenant-1',
+      { name: 'Novo Contato', phone: '988776655' },
+      'contact-atual',
+    );
+
+    expect(prisma.contact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId: 'tenant-1',
+          id: { not: 'contact-atual' },
+          OR: expect.arrayContaining([
+            { phone: { endsWith: '88776655' } },
+            { whatsapp: { endsWith: '88776655' } },
+          ]),
+        }),
+      }),
+    );
+    expect(duplicate).toEqual({ id: 'contact-duplicado', matchedField: 'telefone' });
+  });
+
   it('impede duplicidade exata de vinculo entre contatos', async () => {
     const { prisma, service } = createService();
     prisma.contact.findFirst.mockResolvedValue({ id: 'contact-1', tenantId: 'tenant-1' });
@@ -162,6 +203,172 @@ describe('ContactsService', () => {
         relationTypeId: 'type-1',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('impede auto-vinculo no backend mesmo se a requisicao chegar pela API', async () => {
+    const { prisma, service } = createService();
+
+    await expect(
+      service.createContactRelation('tenant-1', 'contact-1', {
+        toContactId: 'contact-1',
+        relationTypeId: 'type-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.contactRelation.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('impede duplicidade invertida de vinculo entre contatos', async () => {
+    const { prisma, service } = createService();
+    prisma.contact.findFirst.mockResolvedValue({ id: 'contact-1', tenantId: 'tenant-1' });
+    prisma.relationType.findFirst.mockResolvedValue({ id: 'type-1' });
+    prisma.contactRelation.findFirst.mockResolvedValue({ id: 'relation-1' });
+
+    await expect(
+      service.createContactRelation('tenant-1', 'contact-1', {
+        toContactId: 'contact-2',
+        relationTypeId: 'type-1',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.contactRelation.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        relationTypeId: 'type-1',
+        OR: [
+          {
+            fromContactId: 'contact-1',
+            toContactId: 'contact-2',
+          },
+          {
+            fromContactId: 'contact-2',
+            toContactId: 'contact-1',
+          },
+        ],
+      },
+      select: { id: true },
+    });
+  });
+
+  it('protege a aba de enderecos contra edicao cruzada entre contatos', async () => {
+    const { prisma, service } = createService();
+    prisma.contact.findFirst.mockResolvedValue({ id: 'contact-1', tenantId: 'tenant-1' });
+    prisma.address.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updateAddress(
+        'contact-1',
+        'address-1',
+        { city: 'Belo Horizonte' } as never,
+        'tenant-1',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.address.update).not.toHaveBeenCalled();
+  });
+
+  it('protege a aba de contatos adicionais contra exclusao cruzada', async () => {
+    const { prisma, service } = createService();
+    prisma.contact.findFirst.mockResolvedValue({ id: 'contact-1', tenantId: 'tenant-1' });
+    prisma.additionalContact.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.removeAdditionalContact('contact-1', 'additional-1', 'tenant-1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(prisma.additionalContact.delete).not.toHaveBeenCalled();
+  });
+
+  it('permite editar patrimonio parcialmente sem exigir reenvio do tipo', async () => {
+    const { prisma, service } = createService();
+    prisma.contactAsset.findUnique.mockResolvedValue({
+      id: 'asset-1',
+      tenantId: 'tenant-1',
+      assetTypeId: 'type-1',
+      description: 'Imovel antigo',
+    });
+    prisma.contactAsset.update.mockResolvedValue({
+      id: 'asset-1',
+      description: 'Imovel atualizado',
+    });
+
+    const result = await service.updateContactAsset('tenant-1', 'asset-1', {
+      description: 'Imovel atualizado',
+    });
+
+    expect(prisma.assetType.findFirst).not.toHaveBeenCalled();
+    expect(prisma.contactAsset.update).toHaveBeenCalledWith({
+      where: { id: 'asset-1' },
+      data: { description: 'Imovel atualizado' },
+    });
+    expect(result.description).toBe('Imovel atualizado');
+  });
+
+  it('mantem dados do contrato ao editar parcialmente e permite excluir no final da sequencia', async () => {
+    const { prisma, service } = createService();
+    prisma.contact.update.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 'contact-1', metadata: data.metadata }),
+    );
+
+    prisma.contact.findFirst.mockResolvedValueOnce({
+      id: 'contact-1',
+      metadata: {},
+    });
+
+    const createdContracts = await service.createContactContract('tenant-1', 'contact-1', {
+      type: 'HONORARIOS',
+      description: 'Mensalidade consultiva',
+      dueDay: 10,
+      firstDueDate: '2026-04-10',
+      billingFrequency: 'MONTHLY',
+      transactionKind: 'INCOME',
+      counterpartyRole: 'CONTRACTOR',
+      counterpartyName: 'Maria Cliente',
+      notes: 'Contrato principal',
+      status: 'ACTIVE',
+    });
+
+    const createdContract = createdContracts[0];
+
+    prisma.contact.findFirst.mockResolvedValueOnce({
+      id: 'contact-1',
+      metadata: { contracts: createdContracts },
+    });
+
+    const updatedContracts = await service.updateContactContract(
+      'tenant-1',
+      'contact-1',
+      createdContract.id,
+      {
+        status: 'PAUSED',
+        notes: 'Pausado por renegociacao',
+      },
+    );
+
+    expect(updatedContracts[0]).toEqual(
+      expect.objectContaining({
+        id: createdContract.id,
+        description: 'Mensalidade consultiva',
+        dueDay: 10,
+        counterpartyName: 'Maria Cliente',
+        status: 'PAUSED',
+        notes: 'Pausado por renegociacao',
+      }),
+    );
+
+    prisma.contact.findFirst.mockResolvedValueOnce({
+      id: 'contact-1',
+      metadata: { contracts: updatedContracts },
+    });
+
+    const remainingContracts = await service.removeContactContract(
+      'tenant-1',
+      'contact-1',
+      createdContract.id,
+    );
+
+    expect(remainingContracts).toEqual([]);
+    expect(prisma.contact.update).toHaveBeenCalledTimes(3);
   });
 
   it('inativa o contato quando a exclusao falha por vinculos obrigatorios', async () => {

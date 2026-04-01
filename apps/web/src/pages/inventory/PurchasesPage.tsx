@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ContactPickerGlobal } from "../../components/contacts/ContactPickerGlobal";
 import { usePaymentConditions } from "../../hooks/usePaymentConditions";
 import { useHotkeys } from "../../hooks/useHotkeys";
+import { embeddedContentColor } from "../../utils/themeColors";
 
 export function PurchasesPage() {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -71,12 +72,12 @@ export function PurchasesPage() {
         <title>Imprimir Pedido de Compra</title>
         <style>
           body { font-family: Arial, sans-serif; font-size: 12px; margin: 0; padding: 20px; }
-          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-          .info-box { border: 1px solid #000; padding: 10px; margin-bottom: 15px; border-radius: 4px; }
-          .info-box h3 { margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 5px; font-size: 14px;}
+          .header { text-align: center; border-bottom: 2px solid ${embeddedContentColor.textStrong}; padding-bottom: 10px; margin-bottom: 20px; }
+          .info-box { border: 1px solid ${embeddedContentColor.textStrong}; padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+          .info-box h3 { margin-top: 0; border-bottom: 1px solid ${embeddedContentColor.borderSoft}; padding-bottom: 5px; font-size: 14px;}
           table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th, td { border: 1px solid #000; padding: 6px; text-align: left; }
-          th { background-color: #f0f0f0; }
+          th, td { border: 1px solid ${embeddedContentColor.textStrong}; padding: 6px; text-align: left; }
+          th { background-color: ${embeddedContentColor.surfaceSoft}; }
           .text-right { text-align: right; }
           .total { font-weight: bold; font-size: 14px; text-align: right; }
           @media print {
@@ -1067,7 +1068,7 @@ export function PurchasesPage() {
                 </h3>
                 <div className="p-0 overflow-auto flex-1">
                   <table className="w-full text-left text-sm border-collapse">
-                    <thead className="bg-[#0078D7] text-white">
+                    <thead className="bg-blue-600 text-white">
                       <tr>
                         <th className="px-3 py-2 border-b border-blue-800 w-24">
                           Código
@@ -1134,7 +1135,7 @@ export function PurchasesPage() {
                 </h3>
                 <div className="p-0 overflow-auto flex-1">
                   <table className="w-full text-left text-sm border-collapse">
-                    <thead className="bg-[#0078D7] text-white">
+                    <thead className="bg-blue-600 text-white">
                       <tr>
                         <th className="px-3 py-2 border-b border-blue-800">Parcela</th>
                         <th className="px-3 py-2 border-b border-blue-800">Vencimento</th>

@@ -1,3 +1,4 @@
+import { PartialType } from '@nestjs/mapped-types';
 import { IsString, IsNotEmpty, IsOptional, IsNumber, IsDateString } from 'class-validator';
 
 export class CreateAssetTypeDto {
@@ -32,4 +33,4 @@ export class CreateContactAssetDto {
   notes?: string;
 }
 
-export class UpdateContactAssetDto extends CreateContactAssetDto {}
+export class UpdateContactAssetDto extends PartialType(CreateContactAssetDto) {}
