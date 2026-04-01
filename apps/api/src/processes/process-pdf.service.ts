@@ -620,6 +620,43 @@ export class ProcessPdfService {
             }
         }
 
+        const normalizedEprocLines = this.extractEprocPartiesSectionLines(text);
+        if (normalizedEprocLines.length > 0) {
+            let pendingRoles: string[] = [];
+            let roleIndex = 0;
+
+            for (const line of normalizedEprocLines) {
+                const normalizedLine = this.normalizeLooseText(line);
+
+                if (normalizedLine.includes('PROCURADOR')) {
+                    pendingRoles = [];
+                    roleIndex = 0;
+                    continue;
+                }
+
+                const roleTokens = Array.from(
+                    normalizedLine.matchAll(/\b(AUTOR|AUTORA|REU|REQUERENTE|REQUERIDO|REQUERIDA|EXECUTADO|EXECUTADA|EXEQUENTE|PERITO|TERCEIRO)\b/gi),
+                ).map((match) => this.normalizePartyType(match[1]));
+                if (roleTokens.length > 0 && !line.includes('(')) {
+                    pendingRoles = roleTokens;
+                    roleIndex = 0;
+                    continue;
+                }
+
+                const documentMatch = line.match(/\(([\d\.\-\/]+)\)/);
+                if (!documentMatch) {
+                    continue;
+                }
+
+                const name = line.replace(/\([\d\.\-\/]+\)(?:\s*-\s*Pessoa\b[^\n]*)?/i, '').trim();
+                const role = pendingRoles[roleIndex] || 'PARTE';
+                pushParty(name, role, documentMatch[1]);
+                if (pendingRoles.length > 1 && roleIndex < pendingRoles.length - 1) {
+                    roleIndex += 1;
+                }
+            }
+        }
+
         return Array.from(parties.values())
             .filter((party) => {
                 const normalizedName = this.normalizeLooseText(party.name);
@@ -635,12 +672,22 @@ export class ProcessPdfService {
         if (courtSystem === 'PJe') {
             const pjeBlockParties = this.extractPjePartyLawyerBlock(text);
             return this.compactImportedParties(
-                this.mergeImportedParties(pjeBlockParties, this.extractPjeTriageParticipants(text, pjeBlockParties)),
+                this.mergeImportedParties(
+                    ...(pjeBlockParties.length > 0 ? [] : [this.extractParties(text)]),
+                    pjeBlockParties,
+                    this.extractPjeTriageParticipants(text, pjeBlockParties),
+                ),
             ).slice(0, 50);
         }
 
         if (courtSystem === 'Eproc') {
-            return this.compactImportedParties(this.extractEprocPartiesAndLawyers(text)).slice(0, 50);
+            const eprocParties = this.extractEprocPartiesAndLawyers(text);
+            return this.compactImportedParties(
+                this.mergeImportedParties(
+                    ...(eprocParties.length > 0 ? [] : [this.extractParties(text)]),
+                    eprocParties,
+                ),
+            ).slice(0, 50);
         }
 
         return this.compactImportedParties(this.extractParties(text)).slice(0, 50);
@@ -694,9 +741,10 @@ export class ProcessPdfService {
             const normalizedDocument = String(party?.document || '').replace(/\D/g, '');
             const normalizedType = this.normalizePartyType(String(party?.type || 'PARTE'));
             const pole = this.inferPartyPole(normalizedType);
+            const identity = normalizedName || normalizedDocument || 'UNKNOWN';
             const key = this.isLawyerType(normalizedType)
-                ? `${normalizedName}::${normalizedDocument || 'NO_DOC'}::LAWYER`
-                : `${normalizedName}::${normalizedDocument || 'NO_DOC'}::${pole || normalizedType}`;
+                ? `${identity}::LAWYER`
+                : `${identity}::${pole || normalizedType}`;
             const existing = compacted.get(key);
             const representedNames = new Map<string, string>();
 
@@ -773,7 +821,7 @@ export class ProcessPdfService {
                 break;
             }
 
-            const entryMatch = line.match(/^(.*?)\s+\(([^)]+)\)$/);
+            const entryMatch = line.match(/^(.*?)\s+\((.+)\)$/);
             if (!entryMatch) {
                 continue;
             }
@@ -835,8 +883,9 @@ export class ProcessPdfService {
         const extracted: LegacyImportedParty[] = [];
 
         for (const block of triageBlocks) {
+            const triageText = String(block[1] || '').replace(/\s*\n\s*/g, ' ');
             const entries = Array.from(
-                String(block[1] || '').matchAll(/([A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡][A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡\s]+?)\s+CPF:\s*([\d\.\-\/]+)/gi),
+                triageText.matchAll(/([A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡][A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡\s]+?)\s+CPF:\s*([\d\.\-\/]+)/gi),
             ).map((match) => ({
                 name: String(match[1] || '').replace(/\s+/g, ' ').trim(),
                 document: String(match[2] || '').trim(),
@@ -887,7 +936,103 @@ export class ProcessPdfService {
         return extracted;
     }
 
+    private extractEprocPartiesSectionLines(text: string) {
+        const lines = String(text || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        if (lines.length === 0) return [];
+
+        const normalizedLines = lines.map((line) => this.normalizeLooseText(line));
+        const startIndex = normalizedLines.findIndex((line) => line.includes('PARTES E REPRESENTANTES'));
+        if (startIndex < 0) return [];
+
+        const endIndex = normalizedLines.findIndex((line, index) => {
+            if (index <= startIndex) return false;
+            return (
+                line.includes('INFORMACOES ADICIONAIS') ||
+                line.startsWith('CHAVE PROCESSO') ||
+                line.startsWith('ANEXOS ELETRONICOS') ||
+                line.startsWith('PAGINA DE SEPARACAO') ||
+                /^--\s*\d+\s+OF\s+\d+\s*--$/i.test(line)
+            );
+        });
+
+        const sliceEnd = endIndex > startIndex ? endIndex : Math.min(lines.length, startIndex + 40);
+        return lines.slice(startIndex + 1, sliceEnd);
+    }
+
     private extractEprocPartiesAndLawyers(text: string) {
+        const normalizedSectionLines = this.extractEprocPartiesSectionLines(text);
+        if (normalizedSectionLines.length > 0) {
+            const extracted: LegacyImportedParty[] = [];
+            const headerLine = normalizedSectionLines.find((line) => {
+                const normalized = this.normalizeLooseText(line);
+                return normalized.includes('AUTOR') && normalized.includes('REU');
+            });
+            const sequentialRoles: string[] = [];
+            if (headerLine) {
+                const normalizedHeader = this.normalizeLooseText(headerLine);
+                if (normalizedHeader.includes('AUTOR')) sequentialRoles.push('AUTOR');
+                if (normalizedHeader.includes('REU')) sequentialRoles.push('REU');
+            }
+
+            let lastPrincipal: LegacyImportedParty | null = null;
+            let currentRole: string | null = null;
+            let sequentialRoleIndex = 0;
+
+            for (const line of normalizedSectionLines) {
+                const normalizedLine = this.normalizeLooseText(line);
+
+                if (normalizedLine.includes('PROCURADOR')) {
+                    continue;
+                }
+
+                if (
+                    ['AUTOR', 'AUTORA', 'REU', 'REQUERENTE', 'REQUERIDO', 'REQUERIDA', 'EXECUTADO', 'EXECUTADA', 'EXEQUENTE', 'PERITO', 'TERCEIRO'].includes(
+                        normalizedLine,
+                    )
+                ) {
+                    currentRole = this.normalizePartyType(line);
+                    continue;
+                }
+
+                const partyMatch = line.match(/^(.+?)\s+\(([\d\.\-\/]+)\)(?:\s*-\s*Pessoa\b.*)?$/i);
+                if (partyMatch) {
+                    const role = currentRole || sequentialRoles[sequentialRoleIndex] || 'PARTE';
+                    const party: LegacyImportedParty = {
+                        name: partyMatch[1].trim(),
+                        type: role,
+                        document: partyMatch[2],
+                        representedNames: [],
+                        isClient: this.inferPartyPole(role) === 'POLO_ATIVO' ? true : undefined,
+                        isOpposing: this.inferPartyPole(role) === 'POLO_PASSIVO' ? true : undefined,
+                    };
+                    extracted.push(party);
+                    lastPrincipal = party;
+                    currentRole = null;
+                    if (sequentialRoleIndex < sequentialRoles.length - 1) {
+                        sequentialRoleIndex += 1;
+                    }
+                    continue;
+                }
+
+                const lawyerMatch = line.match(/^(.+?)\s+((?:OAB\/)?[A-Z]{2}\s*[\d\.\s]{4,12})$/i);
+                if (lawyerMatch) {
+                    const isOpposing = this.inferPartyPole(lastPrincipal?.type || '') === 'POLO_PASSIVO';
+                    extracted.push({
+                        name: lawyerMatch[1].trim(),
+                        type: isOpposing ? 'ADVOGADO CONTRARIO' : 'ADVOGADO',
+                        oab: lawyerMatch[2].replace(/^OAB\//i, '').replace(/[.\s]+/g, ''),
+                        representedNames: lastPrincipal?.name ? [lastPrincipal.name] : [],
+                        isClient: isOpposing ? undefined : true,
+                        isOpposing: isOpposing ? true : undefined,
+                    });
+                }
+            }
+
+            return extracted;
+        }
         const block = text.match(/Partes e Representantes([\s\S]*?)Informa[cÃ§][oÃµ]es Adicionais/i)?.[1];
         if (!block) return [];
 
@@ -896,9 +1041,16 @@ export class ProcessPdfService {
             .map((line) => line.trim())
             .filter(Boolean);
         const extracted: LegacyImportedParty[] = [];
-        const sequentialRoles = Array.from(
-            (lines.find((line) => /\bAUTOR\b/i.test(line) && /\bR[EÃ‰]U\b/i.test(line)) || '').matchAll(/\b(AUTOR(?:A)?|R[EÃ‰]U|REQUERENTE|REQUERIDO(?:A)?|EXECUTADO(?:A)?|EXEQUENTE|PERITO|TERCEIRO)\b/gi),
-        ).map((match) => this.normalizePartyType(match[1]));
+        const headerLine = lines.find((line) => {
+            const normalized = this.normalizeLooseText(line);
+            return normalized.includes('AUTOR') && normalized.includes('REU');
+        });
+        const sequentialRoles: string[] = [];
+        if (headerLine) {
+            const normalizedHeader = this.normalizeLooseText(headerLine);
+            if (normalizedHeader.includes('AUTOR')) sequentialRoles.push('AUTOR');
+            if (normalizedHeader.includes('REU')) sequentialRoles.push('REU');
+        }
 
         let lastPrincipal: LegacyImportedParty | null = null;
         let currentRole: string | null = null;
@@ -1028,27 +1180,31 @@ export class ProcessPdfService {
             return this.extractEprocDocuments(fullText);
         }
 
-        const documents = new Map<string, PdfProcessDocument>();
+        const documents = new Map<string, PdfProcessDocument>(
+            this.extractPjeCoverDocuments(lines).map((document) => [document.documentId, document]),
+        );
 
-        for (const line of lines) {
-            const match = line.match(/^(\d{10,11})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\s+(.+)$/);
-            if (!match) continue;
+        if (documents.size === 0) {
+            for (const line of lines) {
+                const match = line.match(/^(\d{10,11})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\s+(.+)$/);
+                if (!match) continue;
 
-            const [, documentId, signedAtRaw, rawLabel] = match;
-            const parsedLabel = this.parseDocumentLabel(rawLabel);
-            const signedAt = this.toIsoFromBrazilianDate(signedAtRaw);
+                const [, documentId, signedAtRaw, rawLabel] = match;
+                const parsedLabel = this.parseDocumentLabel(rawLabel);
+                const signedAt = this.toIsoFromBrazilianDate(signedAtRaw);
 
-            if (!documents.has(documentId)) {
-                documents.set(documentId, {
-                    documentId,
-                    referenceType: 'DOCUMENT_ID',
-                    signedAt,
-                    label: parsedLabel.label,
-                    documentType: parsedLabel.documentType,
-                    contentText: null,
-                    contentPreview: null,
-                    deadlineCandidates: [],
-                });
+                if (!documents.has(documentId)) {
+                    documents.set(documentId, {
+                        documentId,
+                        referenceType: 'DOCUMENT_ID',
+                        signedAt,
+                        label: parsedLabel.label,
+                        documentType: parsedLabel.documentType,
+                        contentText: null,
+                        contentPreview: null,
+                        deadlineCandidates: [],
+                    });
+                }
             }
         }
 
@@ -1145,8 +1301,10 @@ export class ProcessPdfService {
                     this.buildEprocEventLabel(footer.eventNumber, footer.referenceCode, separator?.label),
                 documentType:
                     baseDocument.documentType ||
-                    this.inferDocumentTypeFromContent(cleanContent) ||
-                    this.inferEprocDocumentType(footer.referenceCode, separator?.label),
+                    this.inferEprocDocumentType(footer.referenceCode, separator?.label) ||
+                    this.inferDocumentTypeFromLabel(baseDocument.label || this.buildEprocEventLabel(footer.eventNumber, footer.referenceCode, separator?.label)) ||
+                    this.inferDocumentTypeFromLabel(cleanContent.slice(0, 240)) ||
+                    this.inferDocumentTypeFromContent(cleanContent),
                 contentText: mergedContent || null,
                 contentPreview: mergedContent ? mergedContent.slice(0, 320) : null,
             });
@@ -1271,6 +1429,8 @@ export class ProcessPdfService {
         if (fromCode) return fromCode;
 
         const normalized = this.normalizeLooseText(separatorLabel);
+        if (normalized.includes('PETICAO')) return 'Peticao';
+        if (normalized.includes('CONTRARRAZO')) return 'Contrarrazoes';
         if (normalized.includes('CERTIDAO')) return 'Certidao';
         if (normalized.includes('DISTRIBUID')) return 'Distribuicao';
         if (normalized.includes('CITACAO')) return 'Citacao';
@@ -1291,16 +1451,73 @@ export class ProcessPdfService {
             .trim();
     }
 
+    private extractPjeCoverDocuments(lines: string[]) {
+        const headerIndex = lines.findIndex((line) => /^Id\.\s*Data da Assinatura Documento Tipo$/i.test(line));
+        if (headerIndex < 0) return [];
+
+        const rows: string[] = [];
+        let currentRow = '';
+
+        for (const line of lines.slice(headerIndex + 1, headerIndex + 600)) {
+            if (/^Num\.\s*\d{10,11}\s*-\s*P[aÃ¡]g\./i.test(line)) {
+                break;
+            }
+
+            if (/^--\s*\d+\s+of\s+\d+\s*--$/i.test(line)) {
+                continue;
+            }
+
+            if (/^(\d{10,11})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\s+(.+)$/.test(line)) {
+                if (currentRow) {
+                    rows.push(currentRow.trim());
+                }
+                currentRow = line.trim();
+                continue;
+            }
+
+            if (!currentRow) {
+                continue;
+            }
+
+            currentRow = `${currentRow} ${line.trim()}`.trim();
+        }
+
+        if (currentRow) {
+            rows.push(currentRow.trim());
+        }
+
+        return rows
+            .map((row) => {
+                const match = row.match(/^(\d{10,11})\s+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})\s+(.+)$/);
+                if (!match) return null;
+
+                const [, documentId, signedAtRaw, rawLabel] = match;
+                const parsedLabel = this.parseDocumentLabel(rawLabel);
+
+                return {
+                    documentId,
+                    referenceType: 'DOCUMENT_ID' as const,
+                    signedAt: this.toIsoFromBrazilianDate(signedAtRaw),
+                    label: parsedLabel.label,
+                    documentType: parsedLabel.documentType,
+                    contentText: null,
+                    contentPreview: null,
+                    deadlineCandidates: [],
+                };
+            })
+            .filter(Boolean) as PdfProcessDocument[];
+    }
+
     private parseDocumentLabel(rawLabel: string) {
         const cleanLabel = String(rawLabel || '').replace(/\s+/g, ' ').trim();
-        const normalized = this.normalizeLooseText(cleanLabel);
-        const documentType =
-            DOCUMENT_TYPE_HINTS.find((hint) => normalized.endsWith(this.normalizeLooseText(hint))) ||
-            DOCUMENT_TYPE_HINTS.find((hint) => normalized.includes(this.normalizeLooseText(hint))) ||
-            null;
+        const matchedAlias = this.findDocumentTypeAlias(cleanLabel, true);
+        const documentType = matchedAlias?.type || this.inferDocumentTypeFromLabel(cleanLabel);
+        const labelWithoutType = matchedAlias?.alias
+            ? this.removeTrailingDocumentType(cleanLabel, matchedAlias.alias)
+            : cleanLabel;
 
         return {
-            label: cleanLabel,
+            label: labelWithoutType || cleanLabel,
             documentType,
         };
     }
@@ -1361,13 +1578,68 @@ export class ProcessPdfService {
         return firstLine ? firstLine.slice(0, 140) : null;
     }
 
+    private inferDocumentTypeFromLabel(contentText?: string | null) {
+        return this.findDocumentTypeAlias(contentText || '', false)?.type || null;
+    }
+
+    private findDocumentTypeAlias(contentText: string, suffixOnly: boolean) {
+        const normalizedText = this.normalizeLooseText(contentText);
+        if (!normalizedText) return null;
+
+        const aliases = DOCUMENT_TYPE_DEFINITIONS.flatMap((definition) =>
+            definition.aliases.map((alias) => ({
+                alias,
+                type: definition.type,
+                normalizedAlias: this.normalizeLooseText(alias),
+            })),
+        ).sort((left, right) => right.normalizedAlias.length - left.normalizedAlias.length);
+
+        return (
+            aliases.find((candidate) =>
+                suffixOnly ? normalizedText.endsWith(candidate.normalizedAlias) : normalizedText.includes(candidate.normalizedAlias),
+            ) || null
+        );
+    }
+
+    private escapeRegex(value: string) {
+        return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    private removeTrailingDocumentType(label: string, alias: string) {
+        const directRemoval = String(label || '')
+            .replace(new RegExp(`${this.escapeRegex(alias)}$`, 'i'), '')
+            .replace(/[-–:\s]+$/g, '')
+            .trim();
+
+        if (directRemoval && directRemoval !== label) {
+            return directRemoval;
+        }
+
+        const labelWords = String(label || '').trim().split(/\s+/);
+        const aliasWords = String(alias || '').trim().split(/\s+/);
+        if (labelWords.length > aliasWords.length) {
+            return labelWords.slice(0, labelWords.length - aliasWords.length).join(' ').trim();
+        }
+
+        return String(label || '').trim();
+    }
+
     private inferDocumentTypeFromContent(contentText: string) {
+        const fromLabel = this.inferDocumentTypeFromLabel(contentText);
+        if (fromLabel) return fromLabel;
+
         const normalized = this.normalizeLooseText(contentText);
         if (normalized.includes('INTIMA')) return 'Intimacao';
         if (normalized.includes('DESPACH')) return 'Despacho';
         if (normalized.includes('DECISAO')) return 'Decisao';
         if (normalized.includes('CERTIDAO')) return 'Certidao';
         if (normalized.includes('MANDADO')) return 'Mandado';
+        if (normalized.includes('CITACAO')) return 'Citacao';
+        if (normalized.includes('GUIA')) return 'Guia';
+        if (normalized.includes('COMPROVANTE')) return 'Comprovante';
+        if (normalized.includes('PROCURACAO')) return 'Procuracao';
+        if (normalized.includes('AVISO DE RECEBIMENTO')) return 'Aviso de Recebimento';
+        if (normalized.includes('SUBSTABELEC')) return 'Substabelecimento';
         if (normalized.includes('FORMAL DE PARTILHA')) return 'Formal de Partilha';
         if (normalized.includes('CONTESTA')) return 'Contestacao';
         if (normalized.includes('PETICAO INICIAL') || normalized.includes('PROPOR A PRESENTE')) return 'Peticao inicial';
