@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { extractTextFromPdfBuffer } from '../common/pdf-parse.util';
 
 type LegacyImportedParty = {
     name: string;
@@ -125,6 +126,14 @@ const EPROC_EVENT_CODE_LABELS: Record<string, string> = {
     CERT: 'Certidao',
 };
 
+const CNJ_CAPTURE_PATTERN = String.raw`(\d{7}\s*-\s*\d{2}\s*\.\s*\d{4}\s*\.\s*\d\s*\.\s*\d{2}\s*\.\s*\d{4}|\d{20})`;
+const CNJ_REGEX = new RegExp(String.raw`(?<!\d)${CNJ_CAPTURE_PATTERN}(?!\d)`, 'gi');
+const CNJ_PREFERRED_PATTERNS = [
+    new RegExp(String.raw`N(?:u|\u00fa)mero(?:\s+do)?(?:\s+processo)?\s*[:\-]?\s*${CNJ_CAPTURE_PATTERN}`, 'i'),
+    new RegExp(String.raw`N[\u00ba\u00b0o]\s*(?:do\s+processo)?\s*[:\-]?\s*${CNJ_CAPTURE_PATTERN}`, 'i'),
+    new RegExp(String.raw`PROCESSO\s*N[\u00ba\u00b0o]?\s*[:\-]?\s*${CNJ_CAPTURE_PATTERN}`, 'i'),
+];
+
 @Injectable()
 export class ProcessPdfService {
     async extractDataFromPdf(fileBuffer: Buffer): Promise<ExtractedProcessData> {
@@ -207,13 +216,12 @@ export class ProcessPdfService {
     }
 
     private async extractPdfText(fileBuffer: Buffer): Promise<{ text: string; pageCount: number; textLength: number; ocrStatus: FullProcessPdfAnalysis['ocrStatus'] }> {
-        const pdf = require('pdf-parse');
         let ocrStatus: FullProcessPdfAnalysis['ocrStatus'] = 'NOT_NEEDED';
 
         try {
-            const data = await pdf(fileBuffer);
-            let text = data.text || '';
-            const pageCount = data.numpages || 0;
+            const parsed = await extractTextFromPdfBuffer(fileBuffer);
+            let text = parsed.text || '';
+            const pageCount = parsed.pageCount || 0;
 
             if (text.trim().length < 100 && pageCount > 0) {
                 try {
@@ -239,6 +247,27 @@ export class ProcessPdfService {
             };
         } catch (err) {
             console.error('[ProcessPdfService] PDF Parse Error:', err);
+            try {
+                const ocrText = await this.performOcr(fileBuffer, 3);
+                if (ocrText.trim().length > 50) {
+                    return {
+                        text: ocrText,
+                        pageCount: 0,
+                        textLength: ocrText.length,
+                        ocrStatus: 'SUCCESS',
+                    };
+                }
+
+                return {
+                    text: '',
+                    pageCount: 0,
+                    textLength: 0,
+                    ocrStatus: 'FAILED_LOW_QUALITY',
+                };
+            } catch (ocrErr) {
+                console.error('[ProcessPdfService] OCR Fallback Error:', ocrErr);
+            }
+
             return {
                 text: '',
                 pageCount: 0,
@@ -272,43 +301,6 @@ export class ProcessPdfService {
         return fullText;
     }
 
-    private coercePdfText(result: any) {
-        if (typeof result === 'string') {
-            return result;
-        }
-
-        if (result && typeof result.text === 'string') {
-            return result.text;
-        }
-
-        if (Array.isArray(result?.pages)) {
-            return result.pages
-                .map((page: any) => {
-                    if (typeof page === 'string') return page;
-                    if (typeof page?.text === 'string') return page.text;
-                    return '';
-                })
-                .join('\n');
-        }
-
-        return '';
-    }
-
-    private coercePageCount(infoResult: any) {
-        const direct =
-            Number(infoResult?.total ?? infoResult?.totalPages ?? infoResult?.numpages ?? 0) ||
-            Number(infoResult?.info?.Pages ?? 0);
-        if (direct > 0) {
-            return direct;
-        }
-
-        if (Array.isArray(infoResult?.pages)) {
-            return infoResult.pages.length;
-        }
-
-        return 0;
-    }
-
     private normalizeExtractedText(text: string) {
         return String(text || '')
             .replace(/\r/g, '')
@@ -337,11 +329,46 @@ export class ProcessPdfService {
     }
 
     private extractCnj(text: string) {
-        const match =
-            text.match(/\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})\b/) ||
-            text.match(/\b(\d{20})\b/);
-        if (!match) return undefined;
-        return match[1].replace(/\D/g, '');
+        const preferredWindow = String(text || '').slice(0, 20000);
+        const prioritizedSources = [preferredWindow, text];
+
+        for (const source of prioritizedSources) {
+            for (const pattern of CNJ_PREFERRED_PATTERNS) {
+                const match = source.match(pattern);
+                const normalized = this.normalizeCnjCandidate(match?.[1]);
+                if (normalized) {
+                    return normalized;
+                }
+            }
+        }
+
+        const frequencies = new Map<string, { count: number; firstIndex: number }>();
+        for (const match of String(text || '').matchAll(CNJ_REGEX)) {
+            const normalized = this.normalizeCnjCandidate(match[1]);
+            if (!normalized) continue;
+            const current = frequencies.get(normalized);
+            frequencies.set(normalized, {
+                count: (current?.count || 0) + 1,
+                firstIndex: current?.firstIndex ?? match.index ?? Number.MAX_SAFE_INTEGER,
+            });
+        }
+
+        if (frequencies.size === 0) {
+            return undefined;
+        }
+
+        return Array.from(frequencies.entries())
+            .sort((left, right) => {
+                if (right[1].count !== left[1].count) {
+                    return right[1].count - left[1].count;
+                }
+                return left[1].firstIndex - right[1].firstIndex;
+            })[0]?.[0];
+    }
+
+    private normalizeCnjCandidate(value?: string | null) {
+        const digits = String(value || '').replace(/\D/g, '');
+        return digits.length === 20 ? digits : undefined;
     }
 
     private detectCourtSystem(text: string) {

@@ -1743,9 +1743,9 @@ export class ProcessesService {
                   })
                 : null;
 
+        let result;
+
         if (existingSamePole) {
-            // Verificar se já existe outro registro com exatamente a mesma tríade (processo, contato, role alvo)
-            // para evitar colisão na constraint única durante a alteração de papel (role)
             const targetExisting = await this.prisma.processParty.findUnique({
                 where: {
                     processId_contactId_roleId: {
@@ -1757,21 +1757,40 @@ export class ProcessesService {
             });
 
             if (targetExisting && targetExisting.id !== existingSamePole.id) {
-                // Se o alvo já existe, removemos o registro redundante do mesmo polo
-                // e atualizamos o registro do alvo com os novos dados
                 console.log(`Resolving collision for party update: deleting ${existingSamePole.id}, updating ${targetExisting.id}`);
                 await this.prisma.processParty.delete({ where: { id: existingSamePole.id } });
-                return this.prisma.processParty.update({
+                result = await this.prisma.processParty.update({
                     where: { id: targetExisting.id },
                     data,
                 });
+            } else {
+                result = await this.prisma.processParty.update({
+                    where: { id: existingSamePole.id },
+                    data: {
+                        roleId: role.id,
+                        ...data,
+                    },
+                });
             }
-
-            return this.prisma.processParty.update({
-                where: { id: existingSamePole.id },
-                data: {
+        } else {
+            result = await this.prisma.processParty.upsert({
+                where: {
+                    processId_contactId_roleId: {
+                        processId,
+                        contactId,
+                        roleId: role.id,
+                    },
+                },
+                update: data,
+                create: {
+                    tenantId,
+                    processId,
+                    contactId,
                     roleId: role.id,
-                    ...data,
+                    qualificationId: qualification?.id || undefined,
+                    isClient: flags.isClient,
+                    isOpposing: flags.isOpposing,
+                    notes,
                 },
             });
         }
@@ -1782,6 +1801,7 @@ export class ProcessesService {
                 where: {
                     processId,
                     contactId,
+                    id: { not: result.id },
                     role: {
                         category: { in: ['POLO_ATIVO', 'POLO_PASSIVO'] }
                     }
@@ -1789,26 +1809,7 @@ export class ProcessesService {
             });
         }
 
-        return this.prisma.processParty.upsert({
-            where: {
-                processId_contactId_roleId: {
-                    processId,
-                    contactId,
-                    roleId: role.id,
-                },
-            },
-            update: data,
-            create: {
-                tenantId,
-                processId,
-                contactId,
-                roleId: role.id,
-                qualificationId: qualification?.id || undefined,
-                isClient: flags.isClient,
-                isOpposing: flags.isOpposing,
-                notes,
-            },
-        });
+        return result;
     }
 
     private matchImportedPartyRef(
