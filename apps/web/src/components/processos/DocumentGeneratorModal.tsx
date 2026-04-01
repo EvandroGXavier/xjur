@@ -244,6 +244,9 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                                 <RichTextEditor 
                                     value={generatedContent}
                                     onChange={setGeneratedContent}
+                                    showVariables={false}
+                                    minHeight={760}
+                                    placeholder="Revise o documento gerado antes de salvar."
                                     className="h-full"
                                 />
                              </div>

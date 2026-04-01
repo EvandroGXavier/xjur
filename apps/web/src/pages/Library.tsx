@@ -812,6 +812,8 @@ export function Library() {
                             value={editorContent} 
                             onChange={setEditorContent} 
                             showVariables={true}
+                            minHeight={960}
+                            placeholder="Estruture aqui o modelo da Biblioteca com títulos, subtítulos, cláusulas, assinaturas, tabelas e variáveis dinâmicas."
                             readOnly={editorReadOnly}
                             className={editorReadOnly ? "opacity-95" : undefined}
                         />

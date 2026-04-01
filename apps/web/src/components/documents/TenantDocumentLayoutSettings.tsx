@@ -90,11 +90,11 @@ export function TenantDocumentLayoutSettings() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
             <div className="text-xs font-bold text-slate-300 mb-2">Cabeçalho (topo)</div>
-            <RichTextEditor value={headerHtml} onChange={setHeaderHtml} showVariables={true} />
+            <RichTextEditor value={headerHtml} onChange={setHeaderHtml} showVariables={true} minHeight={280} placeholder="Monte aqui o cabeçalho padrão do escritório." />
           </div>
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
             <div className="text-xs font-bold text-slate-300 mb-2">Rodapé (final)</div>
-            <RichTextEditor value={footerHtml} onChange={setFooterHtml} showVariables={true} />
+            <RichTextEditor value={footerHtml} onChange={setFooterHtml} showVariables={true} minHeight={280} placeholder="Monte aqui o rodapé padrão do escritório." />
           </div>
         </div>
       )}
@@ -114,4 +114,3 @@ Rodapé:
     </div>
   );
 }
-

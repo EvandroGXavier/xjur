@@ -350,6 +350,8 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                         onChange={setEditorContent}
                         className="h-full"
                         showVariables={false}
+                        minHeight={860}
+                        placeholder="Edite aqui o documento do processo com qualidade de peça final."
                     />
                 </div>
             </div>

@@ -1,0 +1,128 @@
+.rich-text-editor .ProseMirror {
+  min-height: var(--editor-min-height, 720px);
+  padding: 48px 56px 80px;
+  font-family: Calibri, "Segoe UI", Arial, sans-serif;
+  font-size: 12pt;
+  line-height: 1.65;
+  color: #0f172a;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.rich-text-editor .ProseMirror p,
+.rich-text-editor .ProseMirror ul,
+.rich-text-editor .ProseMirror ol,
+.rich-text-editor .ProseMirror table,
+.rich-text-editor .ProseMirror blockquote {
+  margin: 0 0 1rem;
+}
+
+.rich-text-editor .ProseMirror h1,
+.rich-text-editor .ProseMirror h2,
+.rich-text-editor .ProseMirror h3 {
+  color: #0f172a;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+
+.rich-text-editor .ProseMirror h1 {
+  font-size: 22pt;
+  line-height: 1.25;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rich-text-editor .ProseMirror h2 {
+  font-size: 16pt;
+  line-height: 1.35;
+}
+
+.rich-text-editor .ProseMirror h3 {
+  font-size: 13pt;
+  line-height: 1.4;
+}
+
+.rich-text-editor .ProseMirror ul,
+.rich-text-editor .ProseMirror ol {
+  padding-left: 1.5rem;
+}
+
+.rich-text-editor .ProseMirror blockquote {
+  border-left: 4px solid #6366f1;
+  background: #eef2ff;
+  color: #312e81;
+  border-radius: 0 16px 16px 0;
+  padding: 14px 16px;
+}
+
+.rich-text-editor .ProseMirror hr {
+  border: 0;
+  border-top: 2px solid #cbd5e1;
+  margin: 1.5rem 0;
+}
+
+.rich-text-editor .ProseMirror a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.rich-text-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.rich-text-editor .tableWrapper {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.rich-text-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.rich-text-editor th,
+.rich-text-editor td {
+  border: 1px solid #cbd5e1;
+  padding: 10px 12px;
+  vertical-align: top;
+}
+
+.rich-text-editor th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.rich-text-editor .selectedCell::after {
+  background: rgba(99, 102, 241, 0.12);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.rich-text-editor .column-resize-handle {
+  background: #6366f1;
+  bottom: 0;
+  pointer-events: none;
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 4px;
+}
+
+.rich-text-editor [data-page-break="true"] {
+  page-break-after: always;
+  break-after: page;
+}
+
+@media (max-width: 768px) {
+  .rich-text-editor .ProseMirror {
+    padding: 28px 22px 56px;
+  }
+}
