@@ -981,10 +981,46 @@ export class ProcessPdfService {
         if (normalized.includes('EXECUTADO')) return 'EXECUTADO';
         if (normalized.includes('APELANTE')) return 'APELANTE';
         if (normalized.includes('APELADO')) return 'APELADO';
+        if (normalized.includes('PERITO')) return 'PERITO';
+        if (normalized.includes('TERCEIRO')) return 'TERCEIRO';
         if (['ADVOGADO', 'ADVOGADA', 'PROCURADOR', 'PROCURADORA', 'DEFENSOR'].some((term) => normalized.includes(term))) {
             return normalized.includes('CONTRAR') ? 'ADVOGADO CONTRARIO' : 'ADVOGADO';
         }
         return 'PARTE';
+    }
+
+    private inferPartyPole(type?: string | null) {
+        const normalized = this.normalizePartyType(String(type || 'PARTE'));
+        if (['AUTOR', 'REQUERENTE', 'EXEQUENTE', 'APELANTE', 'INVENTARIANTE'].includes(normalized)) return 'POLO_ATIVO';
+        if (['REU', 'REQUERIDO', 'EXECUTADO', 'APELADO'].includes(normalized)) return 'POLO_PASSIVO';
+        return null;
+    }
+
+    private choosePreferredPartyType(existingType?: string | null, nextType?: string | null) {
+        const priorities: Record<string, number> = {
+            PARTE: 0,
+            TERCEIRO: 1,
+            AUTOR: 5,
+            REQUERENTE: 5,
+            EXEQUENTE: 6,
+            INVENTARIANTE: 6,
+            REU: 5,
+            REQUERIDO: 5,
+            EXECUTADO: 6,
+            APELANTE: 4,
+            APELADO: 4,
+            PERITO: 7,
+            ADVOGADO: 8,
+            'ADVOGADO CONTRARIO': 8,
+        };
+
+        const normalizedExisting = this.normalizePartyType(String(existingType || 'PARTE'));
+        const normalizedNext = this.normalizePartyType(String(nextType || 'PARTE'));
+        return (priorities[normalizedNext] || 0) >= (priorities[normalizedExisting] || 0) ? normalizedNext : normalizedExisting;
+    }
+
+    private countDocumentLikeTokens(value: string) {
+        return (String(value || '').match(/\b(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/g) || []).length;
     }
 
     private extractDocuments(lines: string[], fullText: string, courtSystem?: string | null): PdfProcessDocument[] {
