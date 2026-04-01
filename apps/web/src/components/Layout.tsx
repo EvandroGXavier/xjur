@@ -234,7 +234,7 @@ export function Layout() {
           isSidebarCollapsed={isSidebarCollapsed}
           toggleSidebarCollapsed={toggleSidebarCollapsed}
         />
-        <div className="p-3 sm:p-4 lg:p-8 max-w-7xl mx-auto w-full flex-1">
+        <div className="w-full flex-1 p-0">
           <Outlet />
         </div>
       </main>

@@ -70,6 +70,7 @@ import { AttachmentPreview } from "../components/ui/AttachmentPreview";
 import { DateRangePicker } from "../components/ui/DateRangePicker";
 import { useNavigate } from "react-router-dom";
 import { useHotkeys } from "../hooks/useHotkeys";
+import { clsx } from "clsx";
 
 interface FinancialRecord {
   id: string;
@@ -2129,7 +2130,7 @@ export function Financial(props: FinancialProps = {}) {
   }
 
   return (
-    <div className={isEmbeddedInProcess ? "space-y-6 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30" : "p-4 sm:p-6 lg:p-8 space-y-6 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30"}>
+    <div className={clsx("flex flex-col h-full space-y-6 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30 animate-in fade-in duration-700", isEmbeddedInProcess ? "p-4" : "p-6 md:p-10")}>
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>

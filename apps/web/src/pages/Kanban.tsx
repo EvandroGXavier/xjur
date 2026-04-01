@@ -92,7 +92,7 @@ export const Kanban: React.FC = () => {
     };
 
     return (
-        <div className="h-full flex flex-col bg-slate-950 p-6 overflow-hidden">
+        <div className="h-full flex flex-col p-6 md:p-10 overflow-hidden animate-in fade-in duration-700">
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Quadro Kanban</h1>

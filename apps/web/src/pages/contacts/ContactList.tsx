@@ -214,18 +214,6 @@ export function ContactList() {
           sortableItems = sortableItems.filter(c => c.createdAt && new Date(c.createdAt) >= sevenDaysAgo);
       }
 
-      // Aplica o termo de busca via texto (já feito na API, mas mantido para consistência se a API não for usada)
-      // if (searchTerm) {
-      //     const lowerTerm = searchTerm.toLowerCase();
-      //     sortableItems = sortableItems.filter(c => 
-      //         (c.name && c.name.toLowerCase().includes(lowerTerm)) ||
-      //         (c.email && c.email.toLowerCase().includes(lowerTerm)) ||
-      //         (c.document && c.document.toLowerCase().includes(lowerTerm)) ||
-      //         (c.phone && c.phone.toLowerCase().includes(lowerTerm)) ||
-      //         (c.whatsapp && c.whatsapp.toLowerCase().includes(lowerTerm))
-      //     );
-      // }
-
       // Aplica a ordenação
       if (sortConfig.key && sortConfig.direction) {
           sortableItems.sort((a, b) => {
@@ -240,9 +228,6 @@ export function ContactList() {
   }, [contacts, sortConfig, searchTerm, activeCardFilter]);
 
   const handleCardClick = (cardId: CardFilter) => {
-    // Se clicar no mesmo filtro ativo, não muda para todos, mantém ativo.
-    // Se preferir modo toggle, seria:
-    // setActiveCardFilter(prev => prev === cardId ? 'ALL' : cardId)
     setActiveCardFilter(cardId);
   }
 
@@ -267,7 +252,7 @@ export function ContactList() {
   ];
 
   return (
-    <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-500 p-6 md:p-8">
+    <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-700 p-6 md:p-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">

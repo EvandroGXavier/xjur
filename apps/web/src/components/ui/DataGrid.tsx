@@ -95,9 +95,9 @@ export function DataGrid<T extends { id: string }>({
     : data;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col h-full shadow-lg">
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-left text-sm text-slate-400">
+    <div className="w-full bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-full shadow-xl">
+      <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
+        <table className="min-w-full w-full text-left text-sm text-slate-400 border-collapse">
           <thead className="bg-slate-950 text-slate-300 font-medium sticky top-0 z-10 shadow-sm border-b border-slate-800">
             <tr>
               {/* Checkbox Column */}

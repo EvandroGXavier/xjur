@@ -46,7 +46,7 @@ export function Dashboard() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 md:p-10 animate-in fade-in duration-700">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-2">
         <div>

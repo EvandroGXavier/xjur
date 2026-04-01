@@ -249,7 +249,7 @@ export function ProcessList() {
     };
 
     return (
-        <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-500 p-6 md:p-8">
+        <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-700 p-6 md:p-10">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
