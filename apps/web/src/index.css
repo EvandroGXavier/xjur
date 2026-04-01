@@ -22,6 +22,7 @@
   --color-slate-50: 248 250 252;
   --color-white: 255 255 255;
   --color-black: 0 0 0;
+  --color-indigo-300: 165 180 252;
   --color-indigo-400: 129 140 248;
   --color-indigo-500: 99 102 241;
   --color-indigo-600: 79 70 229;
@@ -57,6 +58,8 @@
   --color-emerald-500: 16 185 129;
   --color-emerald-600: 5 150 105;
   --color-emerald-700: 4 120 87;
+  --color-amber-200: 253 230 138;
+  --color-amber-300: 252 211 77;
   --color-amber-400: 251 191 36;
   --color-amber-500: 245 158 11;
   --color-amber-600: 217 119 6;
@@ -133,6 +136,7 @@ html.light {
   
   --color-white: 15 23 42; /* Text White inverts to dark text */
   --color-black: 255 255 255; /* Black inverts to white */
+  --color-indigo-300: 79 70 229;
   --color-indigo-400: 67 56 202;
   --color-indigo-500: 55 48 163;
   --color-indigo-600: 49 46 129;
@@ -168,6 +172,8 @@ html.light {
   --color-emerald-500: 4 120 87;
   --color-emerald-600: 6 95 70;
   --color-emerald-700: 6 78 59;
+  --color-amber-200: 180 83 9;
+  --color-amber-300: 146 64 14;
   --color-amber-400: 180 83 9;
   --color-amber-500: 146 64 14;
   --color-amber-600: 120 53 15;
@@ -329,6 +335,7 @@ html.light {
     --color-slate-300: 100 116 139;
     --color-slate-400: 71 85 105;
     --color-slate-500: 51 65 85;
+    --color-indigo-300: 79 70 229;
     --color-indigo-400: 67 56 202;
     --color-indigo-500: 55 48 163;
     --color-indigo-600: 49 46 129;
@@ -361,6 +368,8 @@ html.light {
     --color-emerald-500: 4 120 87;
     --color-emerald-600: 6 95 70;
     --color-emerald-700: 6 78 59;
+    --color-amber-200: 180 83 9;
+    --color-amber-300: 146 64 14;
     --color-amber-400: 180 83 9;
     --color-amber-500: 146 64 14;
     --color-amber-600: 120 53 15;

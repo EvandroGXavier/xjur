@@ -21,6 +21,7 @@ export default {
           950: 'rgb(var(--color-slate-950) / <alpha-value>)',
         },
         indigo: {
+          300: 'rgb(var(--color-indigo-300) / <alpha-value>)',
           400: 'rgb(var(--color-indigo-400) / <alpha-value>)',
           500: 'rgb(var(--color-indigo-500) / <alpha-value>)',
           600: 'rgb(var(--color-indigo-600) / <alpha-value>)',
@@ -70,6 +71,8 @@ export default {
           700: 'rgb(var(--color-emerald-700) / <alpha-value>)',
         },
         amber: {
+          200: 'rgb(var(--color-amber-200) / <alpha-value>)',
+          300: 'rgb(var(--color-amber-300) / <alpha-value>)',
           400: 'rgb(var(--color-amber-400) / <alpha-value>)',
           500: 'rgb(var(--color-amber-500) / <alpha-value>)',
           600: 'rgb(var(--color-amber-600) / <alpha-value>)',

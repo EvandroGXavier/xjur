@@ -3,6 +3,8 @@ export const themeColor = {
   black: 'rgb(2, 6, 23)',
   slate700: 'rgb(var(--color-slate-700))',
   slate800: 'rgb(var(--color-slate-800))',
+  slate900: 'rgb(var(--color-slate-900))',
+  slate950: 'rgb(var(--color-slate-950))',
   indigo500: 'rgb(var(--color-indigo-500))',
   emerald500: 'rgb(var(--color-emerald-500))',
   amber500: 'rgb(var(--color-amber-500))',
@@ -82,6 +84,35 @@ function extractRgb(color: string) {
   return matches.slice(0, 3).map((value) => Number(value));
 }
 
+function clampByte(value: number) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function formatRgb(rgb: number[]) {
+  return `rgb(${clampByte(rgb[0])}, ${clampByte(rgb[1])}, ${clampByte(rgb[2])})`;
+}
+
+function srgbToLinear(channel: number) {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function getRelativeLuminance(rgb: number[]) {
+  const [r, g, b] = rgb.map(srgbToLinear);
+  return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+}
+
+function getContrastRatio(foreground: number[], background: number[]) {
+  const lighter = Math.max(getRelativeLuminance(foreground), getRelativeLuminance(background));
+  const darker = Math.min(getRelativeLuminance(foreground), getRelativeLuminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function mixRgb(source: number[], target: number[], amount: number) {
+  const ratio = Math.max(0, Math.min(1, amount));
+  return source.map((value, index) => value + ((target[index] ?? value) - value) * ratio);
+}
+
 export function resolveCssColor(color?: string | null, fallback = defaultTagColor) {
   const input = String(color || '').trim() || fallback;
 
@@ -114,4 +145,69 @@ export function getContrastTextColor(color?: string | null, fallback = defaultTa
   const [r, g, b] = rgb;
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luminance > 0.58 ? themeColor.black : defaultTagTextColor;
+}
+
+export function getReadableAccentColor(
+  color?: string | null,
+  options?: {
+    against?: string | null;
+    fallback?: string;
+    minContrast?: number;
+    maxMix?: number;
+  },
+) {
+  const fallback = options?.fallback || defaultTagColor;
+  const resolved = resolveCssColor(color, fallback);
+  const rgb = extractRgb(resolved);
+  if (!rgb) return resolved;
+
+  const surfaceResolved = resolveCssColor(options?.against, themeColor.white);
+  const surfaceRgb = extractRgb(surfaceResolved) || [255, 255, 255];
+  const minimumContrast = options?.minContrast ?? 4.7;
+  if (getContrastRatio(rgb, surfaceRgb) >= minimumContrast) {
+    return resolved;
+  }
+
+  const surfaceIsLight = getRelativeLuminance(surfaceRgb) >= 0.45;
+  const targetResolved = surfaceIsLight
+    ? resolveCssColor(themeColor.slate800, themeColor.black)
+    : resolveCssColor(themeColor.white, themeColor.white);
+  const targetRgb = extractRgb(targetResolved) || (surfaceIsLight ? [15, 23, 42] : [255, 255, 255]);
+  const maxMix = Math.max(0.2, Math.min(0.96, options?.maxMix ?? 0.88));
+
+  let fallbackCandidate = rgb;
+  for (let step = 1; step <= 14; step += 1) {
+    const amount = (step / 14) * maxMix;
+    const candidate = mixRgb(rgb, targetRgb, amount);
+    fallbackCandidate = candidate;
+    if (getContrastRatio(candidate, surfaceRgb) >= minimumContrast) {
+      return formatRgb(candidate);
+    }
+  }
+
+  return formatRgb(fallbackCandidate);
+}
+
+export function getAccentUiStyles(
+  color?: string | null,
+  options?: {
+    backgroundAlpha?: number;
+    borderAlpha?: number;
+    surfaceColor?: string | null;
+    fallback?: string;
+    minContrast?: number;
+  },
+) {
+  const fallback = options?.fallback || defaultTagColor;
+  const accentColor = String(color || '').trim() || fallback;
+
+  return {
+    backgroundColor: withAlpha(accentColor, options?.backgroundAlpha ?? 0.14, fallback),
+    borderColor: withAlpha(accentColor, options?.borderAlpha ?? 0.34, fallback),
+    color: getReadableAccentColor(accentColor, {
+      against: options?.surfaceColor,
+      fallback,
+      minContrast: options?.minContrast,
+    }),
+  };
 }

@@ -13,7 +13,7 @@ import { clsx } from 'clsx';
 import { getUser } from '../auth/authStorage';
 import { HelpModal, useHelpModal } from '../components/HelpModal';
 import { helpLibrary } from '../data/helpManuals';
-import { defaultTagColor, withAlpha } from '../utils/themeColors';
+import { defaultTagColor, getAccentUiStyles, themeColor } from '../utils/themeColors';
 
 interface Category {
     id: string;
@@ -51,6 +51,22 @@ interface DocumentHistory {
     status: string;
     createdAt: string;
 }
+
+const getLibraryAccentStyles = (
+    color?: string | null,
+    options?: {
+        backgroundAlpha?: number;
+        borderAlpha?: number;
+        minContrast?: number;
+        surfaceColor?: string | null;
+    },
+) => getAccentUiStyles(color, {
+    surfaceColor: themeColor.slate950,
+    backgroundAlpha: 0.14,
+    borderAlpha: 0.34,
+    minContrast: 4.8,
+    ...options,
+});
 
 export function Library() {
     const isSuperAdmin = (() => {
@@ -93,6 +109,32 @@ export function Library() {
     const [editorAction, setEditorAction] = useState<'EDIT' | 'COPY'>('EDIT');
 
     const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+    const systemAccentStyle = getLibraryAccentStyles(themeColor.amber500, {
+        backgroundAlpha: 0.14,
+        borderAlpha: 0.34,
+        minContrast: 5,
+    });
+    const systemActionStyle = getLibraryAccentStyles(themeColor.amber500, {
+        backgroundAlpha: 0.16,
+        borderAlpha: 0.4,
+        minContrast: 5.1,
+    });
+    const officeAccentStyle = getLibraryAccentStyles(themeColor.emerald500, {
+        backgroundAlpha: 0.14,
+        borderAlpha: 0.34,
+        minContrast: 4.9,
+    });
+    const copyAccentStyle = getLibraryAccentStyles(themeColor.indigo500, {
+        backgroundAlpha: 0.14,
+        borderAlpha: 0.32,
+        minContrast: 4.8,
+    });
+    const internalCommentAccentStyle = getLibraryAccentStyles(themeColor.amber500, {
+        backgroundAlpha: 0.1,
+        borderAlpha: 0.26,
+        minContrast: 5.3,
+        surfaceColor: themeColor.slate900,
+    });
 
     useHotkeys({
         onNew: () => handleNewTemplate(),
@@ -487,12 +529,18 @@ export function Library() {
                             </div>
                             <div className="flex items-center gap-2 mt-1 px-2">
                                 {isSystem && (
-                                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                    <span
+                                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
+                                        style={systemAccentStyle}
+                                    >
                                         <Sparkles size={14} /> Modelo do Sistema
                                     </span>
                                 )}
                                 {!!editingTemplate?.sourceTemplateId && !isSystem && (
-                                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                    <span
+                                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
+                                        style={copyAccentStyle}
+                                    >
                                         Copiado do Sistema
                                     </span>
                                 )}
@@ -622,7 +670,10 @@ export function Library() {
                                             </div>
                                         )}
                                         {internalCommentsPreview.length > 0 && (
-                                            <div className="bg-amber-500/10 border border-amber-500/20 rounded p-2">
+                                            <div
+                                                className="rounded p-2 border"
+                                                style={internalCommentAccentStyle}
+                                            >
                                                 <div className="text-[11px] font-bold text-amber-300 mb-1">ComentÃ¡rios Internos</div>
                                                 <ul className="list-disc pl-4 text-xs text-amber-200/90 space-y-1">
                                                     {internalCommentsPreview.map((c) => (
@@ -877,7 +928,8 @@ export function Library() {
                                 </button>
                                 <button
                                     onClick={handleNewSystemTemplate}
-                                    className="px-5 py-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 font-medium rounded-lg flex items-center gap-2 transition border border-amber-500/20"
+                                    className="px-5 py-3 font-medium rounded-lg flex items-center gap-2 transition border shadow-sm hover:brightness-95"
+                                    style={systemActionStyle}
                                     title="Criar novo modelo do sistema (SuperAdmin)"
                                 >
                                     <Shield size={18} /> Novo Sistema
@@ -925,14 +977,20 @@ export function Library() {
                                  <h3 className="font-bold text-white text-lg mb-1 truncate">{tpl.title}</h3>
                                  {tpl.isSystemTemplate && (
                                     <div className="mb-2">
-                                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                        <span
+                                            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
+                                            style={systemAccentStyle}
+                                        >
                                             <Sparkles size={14} /> Sistema
                                         </span>
                                     </div>
                                  )}
                                  {!tpl.isSystemTemplate && (
                                     <div className="mb-2">
-                                        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                        <span
+                                            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
+                                            style={officeAccentStyle}
+                                        >
                                             Escritório
                                         </span>
                                     </div>
@@ -946,11 +1004,12 @@ export function Library() {
                                             <span
                                                 key={String(t?.id || t?.name)}
                                                 className="text-[11px] px-2 py-0.5 rounded-full border"
-                                                style={{
-                                                    backgroundColor: withAlpha(String(t?.color || defaultTagColor), 0.12),
-                                                    borderColor: withAlpha(String(t?.color || defaultTagColor), 0.33),
-                                                    color: String(t?.color || defaultTagColor),
-                                                }}
+                                                style={getLibraryAccentStyles(String(t?.color || defaultTagColor), {
+                                                    backgroundAlpha: 0.13,
+                                                    borderAlpha: 0.4,
+                                                    minContrast: 5,
+                                                    surfaceColor: themeColor.slate900,
+                                                })}
                                             >
                                                 {String(t?.name || '')}
                                             </span>
@@ -966,7 +1025,8 @@ export function Library() {
                                         {(tpl.tags as any[]).slice(0, 3).map((t) => (
                                             <span
                                                 key={String(t)}
-                                                className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                                                className="text-[11px] px-2 py-0.5 rounded-full border"
+                                                style={copyAccentStyle}
                                             >
                                                 #{String(t)}
                                             </span>
@@ -989,7 +1049,8 @@ export function Library() {
                                  <div className="mt-4 pt-4 border-t border-slate-800 flex flex-col sm:flex-row gap-2">
                                      <button
                                          onClick={(e) => { e.stopPropagation(); handleEditTemplate(tpl, 'COPY')}}
-                                         className="flex-1 py-2 text-sm font-bold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg flex justify-center items-center gap-2 transition border border-indigo-500/20"
+                                         className="flex-1 py-2 text-sm font-bold rounded-lg flex justify-center items-center gap-2 transition border hover:brightness-95"
+                                         style={copyAccentStyle}
                                      >
                                          <Copy size={16} /> Fazer Cópia
                                      </button>
@@ -1020,7 +1081,10 @@ export function Library() {
                                          <p className="text-xs text-slate-500">Criado em {new Date(doc.createdAt).toLocaleDateString()}</p>
                                      </div>
                                  </div>
-                                 <span className={clsx("px-2 py-1 text-xs rounded border", doc.status === 'FINALIZED' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20")}>
+                                 <span
+                                    className="px-2 py-1 text-xs rounded border"
+                                    style={doc.status === 'FINALIZED' ? officeAccentStyle : systemAccentStyle}
+                                 >
                                      {doc.status === 'FINALIZED' ? 'Finalizado' : 'Rascunho'}
                                  </span>
                              </div>
