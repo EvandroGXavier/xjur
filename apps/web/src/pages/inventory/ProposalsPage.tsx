@@ -6,10 +6,12 @@ import { ContactPickerGlobal } from "../../components/contacts/ContactPickerGlob
 import { usePaymentConditions } from "../../hooks/usePaymentConditions";
 import { useHotkeys } from "../../hooks/useHotkeys";
 import { embeddedContentColor } from "../../utils/themeColors";
+import { CreatableSelect } from "../../components/ui/CreatableSelect";
 
 export function ProposalsPage() {
   const [proposals, setProposals] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
 
   const [selectedProposal, setSelectedProposal] = useState<any | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -36,7 +38,17 @@ export function ProposalsPage() {
     loadProposals();
     loadDependencies();
     fetchConditions();
+    loadUsers();
   }, []);
+
+  const loadUsers = async () => {
+    try {
+      const res = await api.get("/users");
+      setUsers(res.data);
+    } catch {
+      console.error("Erro ao carregar usuários");
+    }
+  };
 
   const handleNovaProposta = () => {
     setSelectedProposal(null);
@@ -97,16 +109,27 @@ export function ProposalsPage() {
           </div>
           
           <div class="info-grid">
-            <div class="info-box">
-              <strong>Dados do Cliente</strong>
-              <div class="info-row"><span>Nome:</span> <span>${proposal.contact?.name || "-"}</span></div>
-              <div class="info-row"><span>Doc:</span> <span>${proposal.contact?.document || "-"}</span></div>
+            <div class="info-box" style="grid-column: span 2;">
+              <strong>Para</strong>
+              <div style="font-size: 14px; line-height: 1.6;">
+                <div style="font-weight: bold; font-size: 16px;">${proposal.contact?.name || "-"}</div>
+                <div>${proposal.contact?.document ? (proposal.contact.personType === 'PJ' ? 'CNPJ: ' : 'CPF: ') + proposal.contact.document : "-"} ${proposal.contact?.stateRegistration ? `| IE: ${proposal.contact.stateRegistration}` : ""}</div>
+                <div>${[proposal.contact?.address, proposal.contact?.number, proposal.contact?.complement].filter(Boolean).join(", ")}</div>
+                <div>${[proposal.contact?.neighborhood, proposal.contact?.city, proposal.contact?.state].filter(Boolean).join(" - ")}</div>
+                <div>${proposal.contact?.zipCode ? `CEP: ${proposal.contact.zipCode}` : ""}</div>
+                <div style="margin-top: 5px;">
+                  ${proposal.contact?.phone ? `Celular: ${proposal.contact.phone}` : ""} 
+                  ${proposal.contact?.email ? ` | E-mail: ${proposal.contact.email}` : ""}
+                </div>
+              </div>
             </div>
-            <div class="info-box">
+            <div class="info-box" style="grid-column: span 2; margin-top: 10px;">
               <strong>Informações Comerciais</strong>
-              <div class="info-row"><span>Vendedor:</span> <span>${proposal.salesperson || "-"}</span></div>
-              <div class="info-row"><span>Validade:</span> <span>${proposal.validUntil ? new Date(proposal.validUntil).toLocaleDateString() : "-"}</span></div>
-              <div class="info-row"><span>Entrega:</span> <span>${proposal.deliveryDate ? new Date(proposal.deliveryDate).toLocaleDateString() : "-"}</span></div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
+                <div class="info-row"><span>Vendedor:</span> <span>${proposal.salesperson || "-"}</span></div>
+                <div class="info-row"><span>Validade:</span> <span>${proposal.validUntil ? new Date(proposal.validUntil).toLocaleDateString() : "-"}</span></div>
+                <div class="info-row"><span>Entrega:</span> <span>${proposal.deliveryDate ? new Date(proposal.deliveryDate).toLocaleDateString() : "-"}</span></div>
+              </div>
             </div>
           </div>
 
@@ -324,19 +347,28 @@ export function ProposalsPage() {
   };
 
   const handleAddItem = () => {
-    setFormData({
-      ...formData,
-      items: [
-        ...formData.items,
-        { productId: "", quantity: 1, unitPrice: 0, discount: 0, total: 0 },
-      ],
-    });
+    const newItems = [
+      ...formData.items,
+      { productId: "", quantity: 1, unitPrice: 0, discount: 0, total: 0 },
+    ];
+    setFormData((prev: any) => ({
+      ...prev,
+      items: newItems,
+    }));
+    // Se tiver condiÃ§Ã£o de pgto, recalcula parcelas
+    if (formData.paymentConditionId) {
+       setTimeout(() => handlePaymentConditionChange(formData.paymentConditionId, newItems), 0);
+    }
   };
 
   const handleRemoveItem = (index: number) => {
     const newItems = [...formData.items];
     newItems.splice(index, 1);
-    setFormData({ ...formData, items: newItems });
+    setFormData((prev: any) => ({ ...prev, items: newItems }));
+    // Se tiver condiÃ§Ã£o de pgto, recalcula parcelas
+    if (formData.paymentConditionId) {
+       setTimeout(() => handlePaymentConditionChange(formData.paymentConditionId, newItems), 0);
+    }
   };
 
   const handleItemChange = (index: number, field: string, value: any) => {
@@ -360,21 +392,27 @@ export function ProposalsPage() {
         Number(newItems[index].discount || 0);
     }
 
-    setFormData({ ...formData, items: newItems });
+    setFormData((prev: any) => ({ ...prev, items: newItems }));
+    
+    // Se tiver condiÃ§Ã£o de pgto, recalcula parcelas
+    if (formData.paymentConditionId) {
+       setTimeout(() => handlePaymentConditionChange(formData.paymentConditionId, newItems), 0);
+    }
   };
 
-  const handlePaymentConditionChange = (condId: string) => {
+  const handlePaymentConditionChange = (condId: string, currentItems?: any[]) => {
+    const itemsToUse = currentItems || formData.items;
     if (!condId) {
-      setFormData({
-        ...formData,
+      setFormData((prev: any) => ({
+        ...prev,
         paymentConditionId: "",
         financialInstallments: [],
-      });
+      }));
       return;
     }
     const cond = paymentConditions.find((c) => c.id === condId);
     if (cond && cond.installments) {
-      const total = formData.items.reduce(
+      const total = itemsToUse.reduce(
         (acc: number, item: any) => acc + Number(item.total),
         0,
       );
@@ -396,11 +434,11 @@ export function ProposalsPage() {
           installment: i.installment,
         };
       });
-      setFormData({
-        ...formData,
+      setFormData((prev: any) => ({
+        ...prev,
         paymentConditionId: condId,
         financialInstallments: insts,
-      });
+      }));
     }
   };
 
@@ -435,6 +473,35 @@ export function ProposalsPage() {
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 text-sm">
           {/* Top Panel - Info do Pedido */}
           <div className="bg-slate-800/50 border text-xs sm:text-sm border-slate-800 p-3 rounded shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Linha 1: Cliente (Destaque Total) */}
+            <div className="md:col-span-3 flex items-center gap-2 bg-slate-900/50 p-2 rounded border border-slate-700/50 mb-1">
+              <label className="font-semibold text-teal-400 w-20 shrink-0">
+                Cliente:
+              </label>
+              <div className="flex-1 w-full relative z-40 bg-slate-950 rounded border border-slate-700 pointer-events-auto shadow-sm">
+                <ContactPickerGlobal
+                  onAdd={async () => {}}
+                  hideRole={true}
+                  hideQualification={true}
+                  showAction={false}
+                  hideContactLabel={true}
+                  onSelectContact={(id) =>
+                    setFormData({ ...formData, contactId: id })
+                  }
+                  defaultContact={
+                    selectedProposal?.contact && formData.contactId === selectedProposal.contact.id
+                      ? {
+                          id: selectedProposal.contact.id,
+                          name: selectedProposal.contact.name,
+                          document: selectedProposal.contact.document,
+                        }
+                      : null
+                  }
+                  className="!p-0 !bg-transparent !border-none !shadow-none"
+                />
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <label className="font-semibold text-slate-400 w-20">
                 Pedido:
@@ -450,44 +517,18 @@ export function ProposalsPage() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="font-semibold text-slate-400 w-20 shrink-0">
-                Cliente:
-              </label>
-              <div className="flex-1 w-full relative z-40 bg-slate-950 rounded border border-slate-700 pointer-events-auto shadow-sm">
-                <ContactPickerGlobal
-                  onAdd={async () => {}}
-                  hideRole={true}
-                  hideQualification={true}
-                  showAction={false}
-                  hideContactLabel={true}
-                  onSelectContact={(id) =>
-                    setFormData({ ...formData, contactId: id })
-                  }
-                  defaultContact={
-                    selectedProposal?.contact
-                      ? {
-                          id: selectedProposal.contact.id,
-                          name: selectedProposal.contact.name,
-                          document: selectedProposal.contact.document,
-                        }
-                      : null
-                  }
-                  className="!p-0 !bg-transparent !border-none !shadow-none"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
               <label className="font-semibold text-slate-400 w-20">
                 Vendedor:
               </label>
-              <input
-                autoFocus
-                className="border border-slate-700 bg-slate-950 text-white px-2 py-1 rounded w-full outline-none"
-                value={formData.salesperson}
-                onChange={(e) =>
-                  setFormData({ ...formData, salesperson: e.target.value })
-                }
-              />
+              <div className="flex-1 w-full relative z-30">
+                <CreatableSelect
+                  options={users.map(u => ({ label: u.name, value: u.name }))}
+                  value={formData.salesperson}
+                  onChange={(val) => setFormData((prev: any) => ({ ...prev, salesperson: val }))}
+                  placeholder="Vendedor..."
+                  className="!bg-slate-950 font-medium"
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -594,24 +635,19 @@ export function ProposalsPage() {
                           className="border-b border-slate-800 hover:bg-slate-800/80 transition-colors text-white"
                         >
                           <td className="p-1 px-2 border-r border-slate-800">
-                            <select
-                              className="w-full bg-transparent outline-none text-white [&>option]:bg-slate-900"
-                              value={item.productId}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  idx,
-                                  "productId",
-                                  e.target.value,
-                                )
-                              }
-                            >
-                              <option value="">Selecione...</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="relative z-10">
+                              <CreatableSelect 
+                                value={item.productId}
+                                onChange={(val) => handleItemChange(idx, "productId", val)}
+                                options={products.map(p => ({ 
+                                  label: p.name, 
+                                  value: p.id, 
+                                  description: `SKU: ${p.sku} | R$ ${p.sellPrice}` 
+                                }))}
+                                placeholder="Consultar produto..."
+                                className="!bg-transparent border-none"
+                              />
+                            </div>
                           </td>
                           <td className="p-1 px-2 border-r border-slate-800">
                             <input

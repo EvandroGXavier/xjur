@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState, type ReactNode } from 'react';
-import { AlignCenter, AlignLeft, AlignRight, Bold, Copy, Italic, List, ListOrdered, Plus, Quote, Table, Trash2, Type, Underline, X } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, Bold, Copy, Italic, List, ListOrdered, Plus, Quote, Table, Trash2, Type, Underline, X, RotateCcw } from 'lucide-react';
 import { clsx } from 'clsx';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -242,48 +242,43 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                         <ToolbarColorField label="Destaque" value={currentBackgroundColor} disabled={!editor || readOnly} onChange={(color) => run((currentEditor) => currentEditor.chain().focus().setBackgroundColor(color).run())} onClear={() => run((currentEditor) => currentEditor.chain().focus().unsetBackgroundColor().run())} />
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-900 px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900 px-2 py-1">
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-900 px-3 py-2.5">
+                        <div className="flex items-center gap-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-1 shadow-inner">
                             <ToolbarButton label="B" title="Negrito" active={Boolean(editor?.isActive('bold'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleBold().run())} />
                             <ToolbarButton label="I" title="Itálico" active={Boolean(editor?.isActive('italic'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleItalic().run())} />
                             <ToolbarButton label={<Underline size={15} />} title="Sublinhado" active={Boolean(editor?.isActive('underline'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleUnderline().run())} />
                             <ToolbarButton label="S" title="Riscado" active={Boolean(editor?.isActive('strike'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleStrike().run())} />
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900 px-2 py-1">
+                        <div className="flex items-center gap-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-1 shadow-inner">
                             <ToolbarButton label={<AlignLeft size={15} />} title="Alinhar à esquerda" active={Boolean(editor?.isActive({ textAlign: 'left' }))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().setTextAlign('left').run())} />
                             <ToolbarButton label={<AlignCenter size={15} />} title="Centralizar" active={Boolean(editor?.isActive({ textAlign: 'center' }))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().setTextAlign('center').run())} />
                             <ToolbarButton label={<AlignRight size={15} />} title="Alinhar à direita" active={Boolean(editor?.isActive({ textAlign: 'right' }))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().setTextAlign('right').run())} />
-                            <ToolbarButton label="J" title="Justificar" active={Boolean(editor?.isActive({ textAlign: 'justify' }))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().setTextAlign('justify').run())} />
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900 px-2 py-1">
+                        <div className="flex items-center gap-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-1 shadow-inner">
                             <ToolbarButton label={<List size={15} />} title="Lista com marcadores" active={Boolean(editor?.isActive('bulletList'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleBulletList().run())} />
                             <ToolbarButton label={<ListOrdered size={15} />} title="Lista numerada" active={Boolean(editor?.isActive('orderedList'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleOrderedList().run())} />
-                            <ToolbarButton label={<Quote size={15} />} title="Citação / destaque" active={Boolean(editor?.isActive('blockquote'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleBlockquote().run())} />
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-2 py-1">
-                            <div className="flex items-center gap-1 text-[10px] uppercase tracking-[0.18em] text-slate-500"><Table size={14} /> Tabela</div>
-                            <input type="number" min="1" max="12" value={tableRows} onChange={(e) => setTableRows(Number(e.target.value) || 1)} disabled={!editor || readOnly} className="w-14 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white outline-none focus:border-indigo-500" title="Linhas" />
-                            <span className="text-slate-500">x</span>
-                            <input type="number" min="1" max="8" value={tableCols} onChange={(e) => setTableCols(Number(e.target.value) || 1)} disabled={!editor || readOnly} className="w-14 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-white outline-none focus:border-indigo-500" title="Colunas" />
-                            <button type="button" disabled={!editor || readOnly} onMouseDown={(event) => event.preventDefault()} onClick={() => run((currentEditor) => currentEditor.chain().focus().insertTable({ rows: tableRows, cols: tableCols, withHeaderRow: true }).run())} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
-                                <Plus size={14} /> Inserir
+                        <div className="hidden lg:flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-1 ml-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 whitespace-nowrap"><Table size={13} /> Tabela</div>
+                            <input type="number" min="1" max="12" value={tableRows} onChange={(e) => setTableRows(Number(e.target.value) || 1)} disabled={!editor || readOnly} className="w-12 rounded border border-slate-800 bg-slate-950 px-1.5 py-1 text-xs text-white outline-none focus:border-indigo-500 transition-colors" />
+                            <span className="text-slate-600">x</span>
+                            <input type="number" min="1" max="8" value={tableCols} onChange={(e) => setTableCols(Number(e.target.value) || 1)} disabled={!editor || readOnly} className="w-12 rounded border border-slate-800 bg-slate-950 px-1.5 py-1 text-xs text-white outline-none focus:border-indigo-500 transition-colors" />
+                            <button type="button" disabled={!editor || readOnly} onMouseDown={(event) => event.preventDefault()} onClick={() => run((currentEditor) => currentEditor.chain().focus().insertTable({ rows: tableRows, cols: tableCols, withHeaderRow: true }).run())} className="rounded-md bg-slate-800 hover:bg-slate-700 p-1 text-indigo-400 border border-slate-700 transition">
+                                <Plus size={14} />
                             </button>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900 px-2 py-1">
+                        <div className="flex items-center gap-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-1 shadow-inner">
                             <ToolbarButton label="Aa" title="Capitalizar" disabled={!editor || readOnly} onClick={() => transformSelectionText('capitalize')} />
-                            <ToolbarButton label="AA" title="Maiúsculas" disabled={!editor || readOnly} onClick={() => transformSelectionText('uppercase')} />
-                            <ToolbarButton label="aa" title="Minúsculas" disabled={!editor || readOnly} onClick={() => transformSelectionText('lowercase')} />
                             <ToolbarButton label="123" title="Número por extenso" disabled={!editor || readOnly} onClick={() => transformSelectionText('extenso')} />
                         </div>
 
-                        <div className="ml-auto flex flex-wrap items-center gap-1">
+                        <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 p-1">
+                            <ToolbarButton label={<RotateCcw size={14} />} title="Desfazer" disabled={!editor || readOnly || !editor?.can().undo()} onClick={() => run((currentEditor) => currentEditor.chain().focus().undo().run())} />
                             <ToolbarButton label="Limpar" title="Limpar formatação" disabled={!editor || readOnly} onClick={clearFormatting} />
-                            <ToolbarButton label="Desfazer" title="Desfazer" disabled={!editor || readOnly || !editor?.can().undo()} onClick={() => run((currentEditor) => currentEditor.chain().focus().undo().run())} />
-                            <ToolbarButton label="Refazer" title="Refazer" disabled={!editor || readOnly || !editor?.can().redo()} onClick={() => run((currentEditor) => currentEditor.chain().focus().redo().run())} />
                         </div>
                     </div>
 
@@ -314,26 +309,28 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             </div>
 
             {showVariables && (
-                <aside className="flex w-[300px] flex-col border-l border-slate-800 bg-slate-950/95">
-                    <div className="border-b border-slate-800 px-4 py-3">
-                        <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">Variáveis dinâmicas</div>
-                        <p className="mt-1 text-xs text-slate-500">Clique para inserir no ponto do cursor.</p>
-                        <input type="text" value={variableQuery} onChange={(e) => setVariableQuery(e.target.value)} placeholder="Buscar variável..." className="mt-3 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-indigo-500" />
+                <aside className="flex w-[280px] shrink-0 flex-col border-l border-slate-800 bg-slate-950 overflow-hidden">
+                    <div className="border-b border-slate-800 px-4 py-4 bg-slate-950/50">
+                        <div className="text-[10px] font-black uppercase tracking-[0.25em] text-indigo-400 mb-1">Dicionário DrX</div>
+                        <div className="text-xs font-bold uppercase tracking-[0.15em] text-slate-300">Variáveis Dinâmicas</div>
+                        <input type="text" value={variableQuery} onChange={(e) => setVariableQuery(e.target.value)} placeholder="Buscar variável..." className="mt-4 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all" />
                     </div>
 
-                    <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
-                        {variableGroups.length === 0 && <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-500">Nenhuma variável encontrada.</div>}
+                    <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 custom-scrollbar">
+                        {variableGroups.length === 0 && <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-5 text-center text-xs text-slate-500">Nenhuma variável encontrada para sua busca.</div>}
                         {variableGroups.map(([category, items]) => (
-                            <div key={category} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
-                                <div className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-indigo-300">{category}</div>
-                                <div className="space-y-2">
+                            <div key={category} className="rounded-2xl border border-slate-800/60 bg-slate-900/30 p-3">
+                                <div className="mb-3 pl-1 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">{category}</div>
+                                <div className="space-y-1.5">
                                     {items.map((item) => (
-                                        <button key={item.key} type="button" onClick={() => insertVariable(item.key)} className="group flex w-full items-start justify-between gap-3 rounded-xl border border-transparent bg-slate-950/80 px-3 py-2 text-left transition hover:border-indigo-500/40 hover:bg-slate-900" title={item.key}>
+                                        <button key={item.key} type="button" onClick={() => insertVariable(item.key)} className="group flex w-full items-start justify-between gap-3 rounded-xl border border-transparent bg-slate-950/40 px-3 py-2.5 text-left transition-all hover:border-slate-700 hover:bg-slate-900 active:scale-[0.98]" title={item.key}>
                                             <div className="min-w-0">
-                                                <div className="truncate text-sm font-medium text-slate-200">{item.label}</div>
-                                                <div className="truncate text-[11px] text-slate-500">{`{{${item.key}}}`}</div>
+                                                <div className="truncate text-[12px] font-semibold text-slate-200 group-hover:text-white">{item.label}</div>
+                                                <div className="truncate text-[10px] font-mono text-slate-500 group-hover:text-indigo-400">{`{{${item.key}}}`}</div>
                                             </div>
-                                            <Copy size={14} className="mt-0.5 shrink-0 text-slate-600 transition group-hover:text-indigo-300" />
+                                            <div className="mt-1 flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 group-hover:bg-indigo-600/20">
+                                                <Copy size={12} className="text-slate-600 transition group-hover:text-indigo-400" />
+                                            </div>
                                         </button>
                                     ))}
                                 </div>

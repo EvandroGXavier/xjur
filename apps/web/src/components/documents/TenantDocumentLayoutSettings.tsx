@@ -87,14 +87,20 @@ export function TenantDocumentLayoutSettings() {
       {loading ? (
         <div className="text-slate-500 mt-4">Carregando...</div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-            <div className="text-xs font-bold text-slate-300 mb-2">Cabeçalho (topo)</div>
-            <RichTextEditor value={headerHtml} onChange={setHeaderHtml} showVariables={true} minHeight={280} placeholder="Monte aqui o cabeçalho padrão do escritório." />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Cabeçalho (Topo)</h3>
+            </div>
+            <RichTextEditor value={headerHtml} onChange={setHeaderHtml} showVariables={true} minHeight={320} placeholder="Monte aqui o cabeçalho padrão do escritório." />
           </div>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-            <div className="text-xs font-bold text-slate-300 mb-2">Rodapé (final)</div>
-            <RichTextEditor value={footerHtml} onChange={setFooterHtml} showVariables={true} minHeight={280} placeholder="Monte aqui o rodapé padrão do escritório." />
+          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+               <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Rodapé (Final)</h3>
+            </div>
+            <RichTextEditor value={footerHtml} onChange={setFooterHtml} showVariables={true} minHeight={320} placeholder="Monte aqui o rodapé padrão do escritório." />
           </div>
         </div>
       )}

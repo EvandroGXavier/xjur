@@ -240,12 +240,12 @@ export function ContactPickerGlobal({
                         <div className="flex-1 relative">
                             {selectedContact ? (
                                 <div className="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/30 rounded-lg px-3 py-1.5 text-xs text-indigo-300 animate-in zoom-in-95 h-[34px]">
-                                    <div className="flex items-center gap-2 overflow-hidden">
+                                    <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
                                         <div className="w-5 h-5 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px] font-bold text-indigo-400 shrink-0 uppercase">
                                             {selectedContact.name.charAt(0)}
                                         </div>
-                                        <span className="font-medium truncate">{selectedContact.name}</span>
-                                        {selectedContact.document && <span className="text-[10px] opacity-50 font-mono">({selectedContact.document})</span>}
+                                        <span className="font-medium truncate block flex-1">{selectedContact.name}</span>
+                                        {selectedContact.document && <span className="text-[10px] opacity-70 font-mono shrink-0">({selectedContact.document})</span>}
                                     </div>
                                     <button 
                                         onClick={() => {

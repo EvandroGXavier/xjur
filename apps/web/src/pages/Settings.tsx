@@ -20,6 +20,7 @@ import {
   Tags,
   Database,
   Wand2,
+  Lock,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { HelpModal, useHelpModal } from "../components/HelpModal";
@@ -1056,7 +1057,7 @@ export function Settings() {
                         </div>
                         <span className="text-[11px] font-bold uppercase tracking-wider">{opt.label}</span>
                       </button>
-                    ))}
+                    ))} 
                   </div>
                 </div>
               </div>
@@ -1067,7 +1068,7 @@ export function Settings() {
         {/* === TAGS TAB === */}
         {activeTab === "tags" && <TagsTab />}
 
-        {/* === MY TENANT TAB === */}
+
         {activeTab === "my-tenant" && (
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-white mb-6">
@@ -1079,12 +1080,12 @@ export function Settings() {
             ) : (
               <form
                 onSubmit={handleSaveMyTenant}
-                className="space-y-6 max-w-2xl"
+                className="space-y-6 max-w-4xl"
               >
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">
-                      Nome do Escritório
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                  <div className="md:col-span-8">
+                    <label className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500 mb-2">
+                      Nome do Escritório / Empresa
                     </label>
                     <input
                       type="text"
@@ -1092,206 +1093,143 @@ export function Settings() {
                       onChange={(e) =>
                         setFormData({ ...formData, name: e.target.value })
                       }
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-indigo-500 outline-none"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                      placeholder="Nome fantasia da sua empresa"
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">
+                  <div className="md:col-span-4">
+                    <label className="block text-xs font-bold uppercase tracking-[0.18em] text-slate-500 mb-2">
                       CNPJ/CPF
                     </label>
-                    <input
-                      type="text"
-                      value={formData.document || ""}
-                      disabled
-                      className="w-full bg-slate-950/50 border border-slate-800/50 rounded-lg px-4 py-2 text-slate-500 cursor-not-allowed"
-                    />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      O documento não pode ser alterado.
+                    <div className="relative group">
+                      <input
+                        type="text"
+                        value={formData.document || ""}
+                        disabled
+                        className="w-full bg-slate-950/50 border border-slate-800/50 rounded-xl px-4 py-3 text-slate-500 cursor-not-allowed italic"
+                      />
+                      <div className="absolute right-3 top-3 opacity-50">
+                        <Building2 size={18} />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-600 mt-2 flex items-center gap-1">
+                      <HelpCircle size={12} /> Documento mestre do contrato SaaS (não alterável)
                     </p>
                   </div>
                 </div>
 
                 <TenantDocumentLayoutSettings />
 
-                <div className="mt-8 pt-6 border-t border-slate-800 space-y-6">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="mt-8 pt-8 border-t border-slate-800">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2.5 bg-blue-500/10 rounded-xl">
+                      <svg className="w-6 h-6 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
+                      </svg>
+                    </div>
                     <div>
-                      <h4 className="text-md font-semibold text-white mb-2 flex items-center gap-2">
-                        <svg
-                          className="w-5 h-5 text-blue-500"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                        >
-                          <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z" />
-                        </svg>
-                        Integracao com Microsoft 365
-                      </h4>
-                      <p className="text-sm text-slate-400 max-w-2xl">
-                        Configure a autenticacao no Azure, a biblioteca do OneDrive/SharePoint e registre observacoes operacionais para a equipe saber configurar, usar e testar a integracao.
-                      </p>
+                      <h4 className="text-lg font-bold text-white">Integração Microsoft 365</h4>
+                      <p className="text-xs text-slate-500 uppercase tracking-widest mt-0.5">Armazenamento Automático em Cloud</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setIsHelpOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/20"
+                      className="ml-auto inline-flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-blue-400 transition-all hover:bg-blue-500/10 hover:text-blue-300 active:scale-95"
                     >
-                      <HelpCircle size={16} />
-                      Ajuda de Configuracao
+                      <HelpCircle size={14} /> Ajuda
                     </button>
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">1. Azure</p>
-                      <p className="mt-2 text-sm text-slate-200">Cadastre Tenant ID, Client ID e Client Secret da aplicacao com permissoes Application.</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">2. Biblioteca</p>
-                      <p className="mt-2 text-sm text-slate-200">Informe o Drive ID e a pasta raiz onde os processos e documentos serao criados.</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">3. Validacao</p>
-                      <p className="mt-2 text-sm text-slate-200">Execute o teste para autenticar, localizar a pasta e criar uma pasta temporaria de prova.</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 bg-slate-950 p-5 rounded-lg border border-slate-800">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={formData.msStorageActive || false}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            msStorageActive: e.target.checked,
-                          })
-                        }
-                        id="myMsStorageActive"
-                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
-                      />
-                      <label
-                        htmlFor="myMsStorageActive"
-                        className="text-sm font-medium text-white cursor-pointer"
+                  <div className="bg-slate-950/40 border border-slate-800/60 rounded-2xl p-6 space-y-8">
+                    <div className="flex items-center justify-between p-4 bg-blue-500/5 rounded-xl border border-blue-500/10">
+                      <div className="flex items-center gap-3">
+                        <div className={clsx("w-3 h-3 rounded-full transition-all duration-500", formData.msStorageActive ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-slate-700")} />
+                        <div>
+                          <p className="text-sm font-semibold text-white">Status da Integração</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Ative para habilitar o OneDrive/SharePoint</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, msStorageActive: !formData.msStorageActive })}
+                        className={clsx(
+                          "w-12 h-6 rounded-full relative transition-all duration-300 outline-none ring-offset-2 ring-offset-slate-950 focus:ring-2 focus:ring-blue-500/50",
+                          formData.msStorageActive ? "bg-blue-600" : "bg-slate-800"
+                        )}
                       >
-                        Ativar Armazenamento OneDrive/SharePoint
-                      </label>
+                        <div className={clsx("absolute top-1 w-4 h-4 bg-white rounded-full transition-transform duration-300", formData.msStorageActive ? "translate-x-7" : "translate-x-1")} />
+                      </button>
                     </div>
 
                     {formData.msStorageActive && (
-                      <div className="space-y-4 mt-4 pt-4 border-t border-slate-800/50 animate-in fade-in duration-300">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-400 mb-1">
-                            Tenant ID (Diretorio Azure)
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.msTenantId || ""}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                msTenantId: e.target.value,
-                              })
-                            }
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
-                            placeholder="Ex: 83e40612-8967-4775-a1f5-d0946602163f"
-                          />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 animate-in slide-in-from-top-2 duration-500">
+                        <div className="space-y-6">
+                           <div>
+                              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Azure Tenant ID</label>
+                              <input
+                                type="text"
+                                value={formData.msTenantId || ""}
+                                onChange={(e) => setFormData({ ...formData, msTenantId: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-700"
+                                placeholder="00000000-0000-0000-0000-000000000000"
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Microsoft Client ID</label>
+                              <input
+                                type="text"
+                                value={formData.msClientId || ""}
+                                onChange={(e) => setFormData({ ...formData, msClientId: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500 outline-none transition-all"
+                                placeholder="ID da aplicação registrada"
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Microsoft Client Secret</label>
+                              <div className="relative group">
+                                <input
+                                  type="password"
+                                  value={formData.msClientSecret || ""}
+                                  onChange={(e) => setFormData({ ...formData, msClientSecret: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500 outline-none transition-all"
+                                />
+                                <Lock size={16} className="absolute right-4 top-3.5 text-slate-700 group-hover:text-blue-500 transition-colors" />
+                              </div>
+                           </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">
-                              Client ID (App)
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.msClientId || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  msClientId: e.target.value,
-                                })
-                              }
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">
-                              Client Secret
-                            </label>
-                            <input
-                              type="password"
-                              value={formData.msClientSecret || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  msClientSecret: e.target.value,
-                                })
-                              }
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">
-                              Drive ID / Biblioteca
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.msDriveId || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  msDriveId: e.target.value,
-                                })
-                              }
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
-                              placeholder="Ex: b!ABCDEF..."
-                            />
-                            <p className="text-xs text-slate-500 mt-1">
-                              Recomendado. O teste preenche automaticamente quando conseguir descobrir.
-                            </p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">
-                              ID da Pasta Raiz
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.msFolderId || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  msFolderId: e.target.value,
-                                })
-                              }
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 text-white focus:border-blue-500 outline-none"
-                              placeholder="Ex: 01XTLPBK3F..."
-                            />
-                            <p className="text-xs text-slate-500 mt-1">
-                              Pasta mae onde as subpastas dos processos serao geradas.
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-400 mb-1">
-                            Observacoes da Integracao
-                          </label>
-                          <textarea
-                            rows={4}
-                            value={formData.msObservation || ""}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                msObservation: e.target.value,
-                              })
-                            }
-                            className="w-full resize-y bg-slate-900 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none"
-                            placeholder="Ex: Biblioteca principal aprovada pelo TI em 11/03/2026, usar homologacao para testes, responsavel pela conta Microsoft: financeiro@empresa.com."
-                          />
-                          <p className="text-xs text-slate-500 mt-1">
-                            Registre contexto, cuidados, links, responsaveis e detalhes relevantes para uso e suporte.
-                          </p>
+
+                        <div className="space-y-6">
+                           <div>
+                              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">SharePoint Drive ID</label>
+                              <input
+                                type="text"
+                                value={formData.msDriveId || ""}
+                                onChange={(e) => setFormData({ ...formData, msDriveId: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500 outline-none transition-all"
+                                placeholder="b!ABCDEF..."
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Pasta Raiz (Folder ID)</label>
+                              <input
+                                type="text"
+                                value={formData.msFolderId || ""}
+                                onChange={(e) => setFormData({ ...formData, msFolderId: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500 outline-none transition-all"
+                                placeholder="Pasta principal do Xjur"
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Notas da Operação</label>
+                              <textarea
+                                rows={1}
+                                value={formData.msObservation || ""}
+                                onChange={(e) => setFormData({ ...formData, msObservation: e.target.value })}
+                                className="w-full resize-none bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:border-blue-500 outline-none transition-all"
+                                placeholder="Contexto extra sobre esta conta..."
+                              />
+                           </div>
                         </div>
                       </div>
                     )}
@@ -1300,7 +1238,7 @@ export function Settings() {
                   <Microsoft365Diagnostics result={microsoft365TestResult} />
                 </div>
 
-                <div className="pt-6 border-t border-slate-800 flex flex-col gap-3 md:flex-row md:justify-end">
+                <div className="pt-8 mt-8 border-t border-slate-800 flex flex-col gap-3 md:flex-row md:justify-end">
                   <button
                     type="button"
                     disabled={testingMicrosoft365 || !myTenant}
