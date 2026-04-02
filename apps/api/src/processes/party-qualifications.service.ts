@@ -79,8 +79,17 @@ export class PartyQualificationsService implements OnModuleInit {
         });
     }
 
-    async delete(id: string) {
-        const usage = await this.prisma.processParty.count({ where: { qualificationId: id } });
+    async delete(id: string, tenantId: string) {
+        const qualification = await this.prisma.partyQualification.findFirst({
+            where: { id, tenantId },
+            select: { id: true },
+        });
+
+        if (!qualification) {
+            throw new NotFoundException('Qualificacao nao encontrada');
+        }
+
+        const usage = await this.prisma.processParty.count({ where: { qualificationId: id, tenantId } });
 
         if (usage > 0) {
             return this.prisma.partyQualification.update({

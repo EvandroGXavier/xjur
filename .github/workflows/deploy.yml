@@ -44,8 +44,8 @@ jobs:
             echo "5️⃣ Configurando Variáveis Docker..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=public"
             
-            echo "6️⃣ Reconstruindo Containers (com Cache, muito mais rápido)..."
-            docker compose -f docker-compose.prod.yml build api web
+            echo "6️⃣ Reconstruindo Containers (FORÇANDO SEM CACHE)..."
+            docker compose -f docker-compose.prod.yml build --no-cache api web
             
             echo "7️⃣ Subindo a Stack Completa..."
             docker compose -f docker-compose.prod.yml up -d

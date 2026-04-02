@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 const DEFAULT_ROLES = [
@@ -169,9 +169,12 @@ export class ProcessPartiesService implements OnModuleInit {
         }
     }
 
-    private async getProcessContext(processId: string) {
-        const process = await this.prisma.process.findUnique({
-            where: { id: processId },
+    private async getProcessContext(processId: string, tenantId?: string) {
+        const process = await this.prisma.process.findFirst({
+            where: {
+                id: processId,
+                ...(tenantId ? { tenantId } : {}),
+            },
             select: { id: true, tenantId: true },
         });
 
@@ -179,9 +182,12 @@ export class ProcessPartiesService implements OnModuleInit {
         return process;
     }
 
-    private async ensureContactExists(contactId: string) {
-        const contact = await this.prisma.contact.findUnique({
-            where: { id: contactId },
+    private async ensureContactExists(contactId: string, tenantId?: string) {
+        const contact = await this.prisma.contact.findFirst({
+            where: {
+                id: contactId,
+                ...(tenantId ? { tenantId } : {}),
+            },
             select: { id: true, name: true },
         });
 
@@ -261,18 +267,42 @@ export class ProcessPartiesService implements OnModuleInit {
 
     private async resolveContactId(
         processId: string,
+        tenantId: string,
         contactId?: string,
         quickContact?: QuickContactInput,
         category = 'Outro',
     ) {
         if (contactId) {
-            const contact = await this.ensureContactExists(contactId);
+            const contact = await this.ensureContactExists(contactId, tenantId);
             return contact.id;
         }
 
-        const process = await this.getProcessContext(processId);
+        if (!quickContact?.name?.trim()) {
+            throw new BadRequestException('Selecione um contato existente ou informe os dados do cadastro rapido.');
+        }
+
+        const process = await this.getProcessContext(processId, tenantId);
         const contact = await this.createQuickContact(process.tenantId, quickContact!, category);
         return contact.id;
+    }
+
+    private async ensureQualificationExists(tenantId: string, qualificationId?: string) {
+        if (!qualificationId) return null;
+
+        const qualification = await this.prisma.partyQualification.findFirst({
+            where: {
+                id: qualificationId,
+                tenantId,
+                active: true,
+            },
+            select: { id: true },
+        });
+
+        if (!qualification) {
+            throw new NotFoundException('Qualificacao da parte nao encontrada');
+        }
+
+        return qualification;
     }
 
     async findAllRoles(tenantId: string) {
@@ -308,8 +338,14 @@ export class ProcessPartiesService implements OnModuleInit {
         });
     }
 
-    async deleteRole(id: string) {
-        const usage = await this.prisma.processParty.count({ where: { roleId: id } });
+    async deleteRole(id: string, tenantId: string) {
+        const role = await this.prisma.partyRole.findFirst({
+            where: { id, tenantId },
+            select: { id: true },
+        });
+        if (!role) throw new NotFoundException('Tipo de parte nao encontrado');
+
+        const usage = await this.prisma.processParty.count({ where: { roleId: id, tenantId } });
 
         if (usage > 0) {
             return this.prisma.partyRole.update({
@@ -321,15 +357,20 @@ export class ProcessPartiesService implements OnModuleInit {
         return this.prisma.partyRole.delete({ where: { id } });
     }
 
-    async findByProcess(processId: string) {
+    async findByProcess(processId: string, tenantId: string) {
+        const process = await this.getProcessContext(processId, tenantId);
         return this.prisma.processParty.findMany({
-            where: { processId },
+            where: {
+                processId: process.id,
+                tenantId: process.tenantId,
+            },
             include: this.basePartyInclude,
             orderBy: { createdAt: 'asc' },
         });
     }
 
     async addParty(data: {
+        tenantId: string;
         processId: string;
         contactId: string;
         roleId: string;
@@ -338,14 +379,20 @@ export class ProcessPartiesService implements OnModuleInit {
         isOpposing?: boolean;
         notes?: string;
     }) {
-        const process = await this.getProcessContext(data.processId);
-        await this.ensureContactExists(data.contactId);
+        const process = await this.getProcessContext(data.processId, data.tenantId);
+        await this.ensureContactExists(data.contactId, process.tenantId);
 
-        const role = await this.prisma.partyRole.findUnique({
-            where: { id: data.roleId },
+        const role = await this.prisma.partyRole.findFirst({
+            where: {
+                id: data.roleId,
+                tenantId: process.tenantId,
+                active: true,
+            },
             select: { id: true },
         });
         if (!role) throw new NotFoundException('Tipo de parte nao encontrado');
+
+        await this.ensureQualificationExists(process.tenantId, data.qualificationId);
 
         try {
             return await this.prisma.processParty.create({
@@ -370,15 +417,17 @@ export class ProcessPartiesService implements OnModuleInit {
     }
 
     async addPrincipalParty(data: {
+        tenantId: string;
         processId: string;
         pole: PoleKey;
         contactId?: string;
         quickContact?: QuickContactInput;
         notes?: string;
     }) {
-        const process = await this.getProcessContext(data.processId);
+        const process = await this.getProcessContext(data.processId, data.tenantId);
         const resolvedContactId = await this.resolveContactId(
             data.processId,
+            process.tenantId,
             data.contactId,
             data.quickContact,
             'Parte',
@@ -386,6 +435,7 @@ export class ProcessPartiesService implements OnModuleInit {
         const roleId = await this.resolveRoleId(process.tenantId, this.getPrincipalRoleCandidates(data.pole));
 
         return this.addParty({
+            tenantId: process.tenantId,
             processId: data.processId,
             contactId: resolvedContactId,
             roleId,
@@ -394,16 +444,21 @@ export class ProcessPartiesService implements OnModuleInit {
     }
 
     async addRepresentative(data: {
+        tenantId: string;
         processId: string;
         partyId: string;
         contactId?: string;
         quickContact?: QuickContactInput;
         notes?: string;
     }) {
-        const process = await this.getProcessContext(data.processId);
+        const process = await this.getProcessContext(data.processId, data.tenantId);
 
         const principalParty = await this.prisma.processParty.findFirst({
-            where: { id: data.partyId, processId: data.processId },
+            where: {
+                id: data.partyId,
+                processId: data.processId,
+                tenantId: process.tenantId,
+            },
             include: {
                 role: {
                     select: {
@@ -420,6 +475,7 @@ export class ProcessPartiesService implements OnModuleInit {
         const pole = this.inferPoleFromRole(principalParty.role.name, principalParty.role.category) || 'active';
         const resolvedContactId = await this.resolveContactId(
             data.processId,
+            process.tenantId,
             data.contactId,
             data.quickContact,
             'Advogado',
@@ -431,6 +487,7 @@ export class ProcessPartiesService implements OnModuleInit {
                 processId: data.processId,
                 contactId: resolvedContactId,
                 roleId,
+                tenantId: process.tenantId,
             },
             include: this.basePartyInclude,
         });
@@ -467,53 +524,106 @@ export class ProcessPartiesService implements OnModuleInit {
         return this.findByProcess(data.processId);
     }
 
-    async unlinkRepresentative(processId: string, partyId: string, representativePartyId: string) {
+    async unlinkRepresentative(processId: string, partyId: string, representativePartyId: string, tenantId: string) {
+        const process = await this.getProcessContext(processId, tenantId);
         const link = await this.prisma.processPartyRepresentation.findFirst({
             where: {
-                processId,
+                processId: process.id,
                 partyId,
                 representativePartyId,
+                tenantId: process.tenantId,
             },
         });
 
         if (!link) throw new NotFoundException('Vinculo de procurador nao encontrado');
 
         await this.prisma.processPartyRepresentation.delete({ where: { id: link.id } });
-        await this.cleanupOrphanRepresentativeParties(processId, [representativePartyId]);
+        await this.cleanupOrphanRepresentativeParties(process.id, process.tenantId, [representativePartyId]);
 
         return { success: true };
     }
 
     async updateParty(id: string, data: {
+        tenantId: string;
         roleId?: string;
         qualificationId?: string;
         isClient?: boolean;
         isOpposing?: boolean;
         notes?: string;
     }) {
-        const existing = await this.prisma.processParty.findUnique({ where: { id } });
+        const existing = await this.prisma.processParty.findFirst({
+            where: {
+                id,
+                tenantId: data.tenantId,
+            },
+            include: {
+                role: {
+                    select: {
+                        name: true,
+                        category: true,
+                    },
+                },
+            },
+        });
         if (!existing) throw new NotFoundException('Parte nao encontrada');
+
+        if (data.roleId) {
+            const role = await this.prisma.partyRole.findFirst({
+                where: {
+                    id: data.roleId,
+                    tenantId: data.tenantId,
+                    active: true,
+                },
+                select: { id: true },
+            });
+            if (!role) throw new NotFoundException('Tipo de parte nao encontrado');
+        }
+
+        await this.ensureQualificationExists(data.tenantId, data.qualificationId);
+
+        const nextIsClient = data.isClient !== undefined ? data.isClient : existing.isClient;
+        const nextIsOpposing = nextIsClient
+            ? false
+            : data.isOpposing !== undefined
+                ? data.isOpposing
+                : existing.isOpposing;
+
+        if (existing.isClient && !nextIsClient) {
+            const otherClientCount = await this.prisma.processParty.count({
+                where: {
+                    processId: existing.processId,
+                    tenantId: data.tenantId,
+                    isClient: true,
+                    id: { not: existing.id },
+                },
+            });
+
+            if (otherClientCount === 0) {
+                throw new ConflictException('O processo precisa manter ao menos um Cliente Principal vinculado.');
+            }
+        }
 
         return this.prisma.processParty.update({
             where: { id },
             data: {
                 roleId: data.roleId !== undefined ? data.roleId : undefined,
                 qualificationId: data.qualificationId !== undefined ? data.qualificationId : undefined,
-                isClient: data.isClient !== undefined ? data.isClient : undefined,
-                isOpposing: data.isOpposing !== undefined ? data.isOpposing : undefined,
+                isClient: data.isClient !== undefined ? nextIsClient : undefined,
+                isOpposing: data.isClient !== undefined || data.isOpposing !== undefined ? nextIsOpposing : undefined,
                 notes: data.notes !== undefined ? data.notes : undefined,
             },
             include: this.basePartyInclude,
         });
     }
 
-    private async cleanupOrphanRepresentativeParties(processId: string, partyIds: string[]) {
+    private async cleanupOrphanRepresentativeParties(processId: string, tenantId: string, partyIds: string[]) {
         if (!partyIds.length) return;
 
         const candidates = await this.prisma.processParty.findMany({
             where: {
                 id: { in: partyIds },
                 processId,
+                tenantId,
             },
             include: {
                 representedPartyLinks: {
@@ -536,9 +646,12 @@ export class ProcessPartiesService implements OnModuleInit {
         }
     }
 
-    async removeParty(id: string) {
-        const existing = await this.prisma.processParty.findUnique({
-            where: { id },
+    async removeParty(id: string, tenantId: string) {
+        const existing = await this.prisma.processParty.findFirst({
+            where: {
+                id,
+                tenantId,
+            },
             include: {
                 contact: { select: { name: true } },
                 role: { select: { name: true } },
@@ -547,10 +660,25 @@ export class ProcessPartiesService implements OnModuleInit {
         });
         if (!existing) throw new NotFoundException('Parte nao encontrada');
 
+        if (existing.isClient) {
+            const otherClientCount = await this.prisma.processParty.count({
+                where: {
+                    processId: existing.processId,
+                    tenantId,
+                    isClient: true,
+                    id: { not: existing.id },
+                },
+            });
+
+            if (otherClientCount === 0) {
+                throw new ConflictException('O processo precisa manter ao menos um Cliente Principal vinculado.');
+            }
+        }
+
         const linkedRepresentativeIds = existing.representativeLinks.map(link => link.representativePartyId);
 
         await this.prisma.processParty.delete({ where: { id } });
-        await this.cleanupOrphanRepresentativeParties(existing.processId, linkedRepresentativeIds);
+        await this.cleanupOrphanRepresentativeParties(existing.processId, tenantId, linkedRepresentativeIds);
 
         return {
             success: true,
@@ -562,6 +690,7 @@ export class ProcessPartiesService implements OnModuleInit {
     }
 
     async quickContactAndParty(data: {
+        tenantId: string;
         processId: string;
         name: string;
         document?: string;
@@ -573,7 +702,7 @@ export class ProcessPartiesService implements OnModuleInit {
         isClient?: boolean;
         isOpposing?: boolean;
     }) {
-        const process = await this.getProcessContext(data.processId);
+        const process = await this.getProcessContext(data.processId, data.tenantId);
         const contact = await this.createQuickContact(
             process.tenantId,
             {
@@ -587,6 +716,7 @@ export class ProcessPartiesService implements OnModuleInit {
         );
 
         return this.addParty({
+            tenantId: process.tenantId,
             processId: data.processId,
             contactId: contact.id,
             roleId: data.roleId,

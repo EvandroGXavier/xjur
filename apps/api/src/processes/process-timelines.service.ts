@@ -5,6 +5,40 @@ import { PrismaService } from '@drx/database';
 export class ProcessTimelinesService {
     constructor(private prisma: PrismaService) {}
 
+    private async getProcessContext(processId: string, tenantId?: string) {
+        const process = await this.prisma.process.findFirst({
+            where: {
+                id: processId,
+                ...(tenantId ? { tenantId } : {}),
+            },
+            select: {
+                id: true,
+                tenantId: true,
+            },
+        });
+
+        if (!process) {
+            throw new NotFoundException('Processo nao encontrado.');
+        }
+
+        return process;
+    }
+
+    private async getTimelineContext(id: string, tenantId?: string) {
+        const timeline = await this.prisma.processTimeline.findFirst({
+            where: {
+                id,
+                ...(tenantId ? { process: { is: { tenantId } } } : {}),
+            },
+        });
+
+        if (!timeline) {
+            throw new NotFoundException('Andamento nao encontrado.');
+        }
+
+        return timeline;
+    }
+
     async listTasksForTenant(
         tenantId: string,
         currentUserEmail: string,
@@ -165,7 +199,8 @@ export class ProcessTimelinesService {
         };
     }
 
-    async create(processId: string, data: any, files?: any[], user?: string) {
+    async create(processId: string, data: any, files?: any[], user?: string, tenantId?: string) {
+        await this.getProcessContext(processId, tenantId);
         let metadata: any = data.metadata || {};
         
         if (typeof metadata === 'string') {
@@ -224,8 +259,8 @@ export class ProcessTimelinesService {
                 date: data.date ? new Date(data.date) : new Date(),
                 type: data.type || (attachments.length > 0 ? 'FILE' : 'MOVEMENT'),
                 origin: data.origin || 'INTERNO',
-                internalDate: data.internalDate ? new Date(data.internalDate) : null,
-                fatalDate: data.fatalDate ? new Date(data.fatalDate) : null,
+                internalDate: data.internalDate !== undefined ? (data.internalDate ? new Date(data.internalDate) : null) : undefined, 
+                fatalDate: data.fatalDate !== undefined ? (data.fatalDate ? new Date(data.fatalDate) : null) : undefined, 
                 displayId: data.displayId,
                 responsibleAdvogado: data.responsibleAdvogado,
                 metadata: metadata,
@@ -365,8 +400,8 @@ export class ProcessTimelinesService {
         });
     }
 
-    async update(id: string, data: any, files?: any[]) {
-        const existing = await this.prisma.processTimeline.findUnique({ where: { id } });
+    async update(id: string, data: any, files?: any[], tenantId?: string) {
+        const existing = await this.getTimelineContext(id, tenantId);
         if (!existing) throw new NotFoundException('Andamento não encontrado.');
 
         let metadata: any = existing.metadata || {};
@@ -417,8 +452,8 @@ export class ProcessTimelinesService {
                 title: data.title,
                 description: data.description,
                 date: data.date ? new Date(data.date) : undefined,
-                internalDate: data.internalDate ? new Date(data.internalDate) : null, 
-                fatalDate: data.fatalDate ? new Date(data.fatalDate) : null, 
+                internalDate: data.internalDate !== undefined ? (data.internalDate ? new Date(data.internalDate) : null) : undefined, 
+                fatalDate: data.fatalDate !== undefined ? (data.fatalDate ? new Date(data.fatalDate) : null) : undefined, 
                 type: data.type,
                 displayId: data.displayId,
                 responsibleAdvogado: data.responsibleAdvogado,
@@ -452,8 +487,8 @@ export class ProcessTimelinesService {
         return updated;
     }
 
-    async remove(id: string) {
-        const existing = await this.prisma.processTimeline.findUnique({ where: { id } });
+    async remove(id: string, tenantId?: string) {
+        await this.getTimelineContext(id, tenantId);
         if (!existing) throw new NotFoundException('Andamento não encontrado.');
 
         return this.prisma.processTimeline.delete({
