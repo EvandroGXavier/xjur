@@ -26,8 +26,9 @@ RUN npx turbo run db:generate
 
 # === BUILDER ===
 FROM deps AS builder
-# Build everything
-RUN npx turbo run build
+# Build only necessary apps for VPS (api and web)
+# Also build @drx/database since they depend on it
+RUN npx turbo run build --filter=api --filter=web
 
 # === RUNNER (API) ===
 FROM node:20-slim AS runner-api
@@ -56,10 +57,10 @@ COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 RUN echo 'server { \
     listen 80; \
     location / { \
-        root /usr/share/nginx/html; \
-        index index.html index.htm; \
-        try_files $uri $uri/ /index.html; \
+    root /usr/share/nginx/html; \
+    index index.html index.htm; \
+    try_files $uri $uri/ /index.html; \
     } \
-}' > /etc/nginx/conf.d/default.conf
+    }' > /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
