@@ -11,8 +11,11 @@ set -e
 cd /www/wwwroot/DrX || { echo "❌ A pasta /www/wwwroot/DrX não existe! Crie ela primeiro."; exit 1; }
 
 echo "1️⃣ Baixando as atualizações do GitHub..."
-git fetch --all
+git fetch --all --prune
 git reset --hard origin/main
+git clean -fd
+DEPLOY_COMMIT=$(git rev-parse --short HEAD)
+echo "📌 Commit preparado para deploy: ${DEPLOY_COMMIT}"
 
 echo "2️⃣ Instalando ou atualizando dependências Node.js..."
 npm install
@@ -41,7 +44,9 @@ export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=
 docker compose -f docker-compose.prod.yml build --no-cache api web
 
 echo "8️⃣ Subindo todo o ecossistema..."
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
+echo "${DEPLOY_COMMIT}" > /www/wwwroot/DrX/.deploy-version
+echo "✅ Commit efetivamente implantado: ${DEPLOY_COMMIT}"
 
 echo "========================================="
 echo "📊 STATUS DOS CONTAINERS:"
@@ -53,5 +58,6 @@ echo "🩺 HEALTH CHECK:"
 sleep 5
 curl -I https://dr-x.xtd.com.br | grep "HTTP" || echo "Web: ❌ Offline"
 curl -I https://api.dr-x.xtd.com.br/app | grep "HTTP" || echo "API: ❌ Offline"
+echo "📌 Versão implantada registrada em /www/wwwroot/DrX/.deploy-version"
 
 echo "🚀 DEPLOY FINALIZADO COM SUCESSO! A VPS VOLTOU A OPERAR."

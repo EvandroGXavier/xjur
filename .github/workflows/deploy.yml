@@ -27,8 +27,11 @@ jobs:
             echo "========================================="
 
             echo "1️⃣ Sincronizando código..."
-            git fetch --all
+            git fetch --all --prune
             git reset --hard origin/main
+            git clean -fd
+            DEPLOY_COMMIT=$(git rev-parse --short HEAD)
+            echo "📌 Commit preparado para deploy: ${DEPLOY_COMMIT}"
 
             echo "2️⃣ Instalando dependências (Para garantir apenas Prisma/Push na host)..."
             npm install --production=false
@@ -44,18 +47,24 @@ jobs:
             echo "5️⃣ Configurando Variáveis Docker..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@db:5432/drx_db?schema=public"
             
-            echo "6️⃣ Reconstruindo Containers (Otimizado com .dockerignore)..."
-            docker compose -f docker-compose.prod.yml build api web
+            echo "6️⃣ Encerrando serviços legados (PM2) para evitar versão antiga em portas/proxy..."
+            pm2 delete all 2>/dev/null || true
             
-            echo "7️⃣ Subindo a Stack Completa..."
-            docker compose -f docker-compose.prod.yml up -d
+            echo "7️⃣ Reconstruindo Containers sem cache para evitar reaproveitar camada antiga..."
+            docker compose -f docker-compose.prod.yml build --pull --no-cache api web
+            
+            echo "8️⃣ Subindo a Stack Completa com recriação forçada..."
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
+
+            echo "${DEPLOY_COMMIT}" > /www/wwwroot/DrX/.deploy-version
+            echo "✅ Commit efetivamente implantado: ${DEPLOY_COMMIT}"
             
             echo "========================================="
             echo "📊 STATUS FINAL:"
             echo "========================================="
             docker compose -f docker-compose.prod.yml ps
             
-            echo "8️⃣ Sincronizando Webhooks do Telegram..."
+            echo "9️⃣ Sincronizando Webhooks do Telegram..."
             # Executamos o script de dentro do container da API para usar o ambiente correto
             docker compose -f docker-compose.prod.yml exec -T api node -e "
               const { NestFactory } = require('@nestjs/core');
@@ -90,5 +99,6 @@ jobs:
             sleep 5
             curl -I https://dr-x.xtd.com.br | grep "HTTP" || echo "Web: ❌ Offline"
             curl -I https://api.dr-x.xtd.com.br/app | grep "HTTP" || echo "API: ❌ Offline"
+            echo "📌 Versão implantada registrada em /www/wwwroot/DrX/.deploy-version"
             
             echo "🚀 DEPLOY FINALIZADO COM SUCESSO!"
