@@ -579,7 +579,33 @@ export class ContactsService {
 
     await this.validateCoreContactInfo(tenantId, data, existingContact);
 
-    const duplicate = await this.findDuplicateContact(tenantId, data, id);
+    // --- Optimized Duplicate Check ---
+    // Only check for duplicates when one of the unique fields (email, phones, document, etc.)
+    // is actually being changed to a new value.
+    const existingFlat = this.flattenContact(existingContact);
+    const keysToCheck = ['email', 'name', 'whatsapp', 'phone', 'document', 'cpf', 'cnpj'];
+    const fieldsWithNewUniqueValues: any = {};
+    
+    for (const key of keysToCheck) {
+      const newVal = data[key];
+      const oldVal = existingFlat[key];
+      
+      if (newVal !== undefined && newVal !== null) {
+        const normNew = (key === 'email' || key === 'name') 
+          ? String(newVal).trim().toLowerCase() 
+          : this.normalizeDigits(newVal);
+                
+        const normOld = (key === 'email' || key === 'name')
+          ? String(oldVal || '').trim().toLowerCase()
+          : this.normalizeDigits(oldVal);
+          
+        if (normNew !== normOld && normNew !== '') {
+          fieldsWithNewUniqueValues[key] = newVal;
+        }
+      }
+    }
+
+    const duplicate = await this.findDuplicateContact(tenantId, fieldsWithNewUniqueValues, id);
     if (duplicate) {
       throw new ConflictException({
         message: 'Atualizacao causaria duplicidade com outro contato baseada nas chaves unicas.',
