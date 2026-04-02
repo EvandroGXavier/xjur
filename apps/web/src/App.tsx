@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
-import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, ProcessTasks, Login, Register, Settings, Library, UsersPage, Agenda, ProductsList, ProposalsPage, PurchasesPage, FiscalPage, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions, InventoryDashboard } from './pages';
+import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, ProcessTasks, Login, Register, Settings, Library, UsersPage, Agenda, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions, Inventory } from './pages';
 import { ProcessForm } from './pages/processes/ProcessForm';
 import { getToken } from './auth/authStorage';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -34,12 +34,7 @@ function App() {
             <Route path="agenda" element={<Agenda />} />
             <Route path="financial" element={<Financial />} />
             <Route path="financial/payment-conditions" element={<PaymentConditions />} />
-            <Route path="inventory" element={<Navigate to="/inventory/dashboard" replace />} />
-            <Route path="inventory/dashboard" element={<InventoryDashboard />} />
-            <Route path="inventory/products" element={<ProductsList />} />
-            <Route path="inventory/proposals" element={<ProposalsPage />} />
-            <Route path="inventory/purchases" element={<PurchasesPage />} />
-            <Route path="inventory/fiscal" element={<FiscalPage />} />
+            <Route path="inventory" element={<Inventory />} />
             <Route path="contacts" element={<ContactList />} />
             <Route path="contacts/config" element={<ContactConfig />} />
             <Route path="contacts/import" element={<ImportContacts />} />

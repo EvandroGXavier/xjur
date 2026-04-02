@@ -39,14 +39,7 @@ export const SYSTEM_MODULES = [
     id: 'inventory', 
     label: 'Estoque', 
     icon: Package, 
-    to: '/inventory',
-    subItems: [
-      { id: 'inventory-dashboard', label: 'Dashboard', to: '/inventory/dashboard' },
-      { id: 'inventory-products', label: 'Produtos', to: '/inventory/products' },
-      { id: 'inventory-proposals', label: 'Orçamentos', to: '/inventory/proposals' },
-      { id: 'inventory-purchases', label: 'Compras', to: '/inventory/purchases' },
-      { id: 'inventory-fiscal', label: 'Fiscal', to: '/inventory/fiscal' },
-    ]
+    to: '/inventory'
   },
   { id: 'documents', label: 'Biblioteca', icon: FileText, to: '/documents' },
   { id: 'users', label: 'Equipe', icon: ShieldCheck, to: '/users' },

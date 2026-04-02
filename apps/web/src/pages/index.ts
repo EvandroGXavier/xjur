@@ -22,3 +22,4 @@ export { PurchasesPage } from './inventory/PurchasesPage';
 export { FiscalPage } from './inventory/FiscalPage';
 export { PaymentConditions } from './PaymentConditions';
 export { InventoryDashboard } from './inventory/InventoryDashboard';
+export { Inventory } from './inventory/Inventory';
