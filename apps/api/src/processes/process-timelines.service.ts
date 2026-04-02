@@ -488,7 +488,7 @@ export class ProcessTimelinesService {
     }
 
     async remove(id: string, tenantId?: string) {
-        await this.getTimelineContext(id, tenantId);
+        const existing = await this.getTimelineContext(id, tenantId);
         if (!existing) throw new NotFoundException('Andamento não encontrado.');
 
         return this.prisma.processTimeline.delete({

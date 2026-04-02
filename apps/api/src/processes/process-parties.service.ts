@@ -521,7 +521,7 @@ export class ProcessPartiesService implements OnModuleInit {
             throw error;
         }
 
-        return this.findByProcess(data.processId);
+        return this.findByProcess(data.processId, process.tenantId);
     }
 
     async unlinkRepresentative(processId: string, partyId: string, representativePartyId: string, tenantId: string) {

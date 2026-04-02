@@ -64,8 +64,8 @@ export class ProcessesController {
     }
 
     @Delete('party-roles/:id')
-    async deleteRole(@Param('id') id: string) {
-        return this.partiesService.deleteRole(id);
+    async deleteRole(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.deleteRole(id, user.tenantId);
     }
 
     // --- PARTY QUALIFICATIONS (Qualificações - Cadastrável) ---
@@ -81,8 +81,8 @@ export class ProcessesController {
     }
 
     @Delete('party-qualifications/:id')
-    async deleteQualification(@Param('id') id: string) {
-        return this.qualificationsService.delete(id);
+    async deleteQualification(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.qualificationsService.delete(id, user.tenantId);
     }
 
     // --- CRUD PROCESS ---
@@ -246,42 +246,44 @@ export class ProcessesController {
         @Param('id') id: string, 
         @Body() body: any,
         @UploadedFiles() files: Array<any>,
-        @Req() req: any
+        @Req() req: any,
+        @CurrentUser() currentUser: CurrentUserData,
     ) {
-        const user = req.user ? (req.user.name || req.user.email) : 'sistema';
-        return this.timelinesService.create(id, body, files, user);
+        const actor = req.user ? (req.user.name || req.user.email) : 'sistema';
+        return this.timelinesService.create(id, body, files, actor, currentUser?.tenantId);
     }
 
     @Patch(':id/timelines/:timelineId')
     @UseInterceptors(FilesInterceptor('files'))
     async updateTimeline(
+        @CurrentUser() user: CurrentUserData,
         @Param('timelineId') timelineId: string, 
         @Body() body: any,
         @UploadedFiles() files?: Array<any>
     ) {
-        return this.timelinesService.update(timelineId, body, files);
+        return this.timelinesService.update(timelineId, body, files, user.tenantId);
     }
 
     @Delete(':id/timelines/:timelineId')
-    async removeTimeline(@Param('timelineId') timelineId: string) {
-        return this.timelinesService.remove(timelineId);
+    async removeTimeline(@Param('timelineId') timelineId: string, @CurrentUser() user: CurrentUserData) {
+        return this.timelinesService.remove(timelineId, user.tenantId);
     }
 
     // --- PROCESS PARTIES (Partes do Processo) ---
 
     @Get(':id/parties')
-    async findParties(@Param('id') id: string) {
-        return this.partiesService.findByProcess(id);
+    async findParties(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.findByProcess(id, user.tenantId);
     }
 
     @Post(':id/parties')
-    async addParty(@Param('id') processId: string, @Body() body: any) {
-        return this.partiesService.addParty({ processId, ...body });
+    async addParty(@Param('id') processId: string, @Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.addParty({ processId, tenantId: user.tenantId, ...body });
     }
 
     @Post(':id/parties/principal')
-    async addPrincipalParty(@Param('id') processId: string, @Body() body: any) {
-        return this.partiesService.addPrincipalParty({ processId, ...body });
+    async addPrincipalParty(@Param('id') processId: string, @Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.addPrincipalParty({ processId, tenantId: user.tenantId, ...body });
     }
 
     @Post(':id/parties/:partyId/representatives')
@@ -289,8 +291,9 @@ export class ProcessesController {
         @Param('id') processId: string,
         @Param('partyId') partyId: string,
         @Body() body: any,
+        @CurrentUser() user: CurrentUserData,
     ) {
-        return this.partiesService.addRepresentative({ processId, partyId, ...body });
+        return this.partiesService.addRepresentative({ processId, partyId, tenantId: user.tenantId, ...body });
     }
 
     @Delete(':id/parties/:partyId/representatives/:representativePartyId')
@@ -298,23 +301,24 @@ export class ProcessesController {
         @Param('id') processId: string,
         @Param('partyId') partyId: string,
         @Param('representativePartyId') representativePartyId: string,
+        @CurrentUser() user: CurrentUserData,
     ) {
-        return this.partiesService.unlinkRepresentative(processId, partyId, representativePartyId);
+        return this.partiesService.unlinkRepresentative(processId, partyId, representativePartyId, user.tenantId);
     }
 
     @Patch(':id/parties/:partyId')
-    async updateParty(@Param('partyId') partyId: string, @Body() body: any) {
-        return this.partiesService.updateParty(partyId, body);
+    async updateParty(@Param('partyId') partyId: string, @Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.updateParty(partyId, { ...body, tenantId: user.tenantId });
     }
 
     @Delete(':id/parties/:partyId')
-    async removeParty(@Param('partyId') partyId: string) {
-        return this.partiesService.removeParty(partyId);
+    async removeParty(@Param('partyId') partyId: string, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.removeParty(partyId, user.tenantId);
     }
 
     @Post(':id/parties/quick-contact')
-    async quickContactAndParty(@Param('id') processId: string, @Body() body: any) {
-        return this.partiesService.quickContactAndParty({ processId, ...body });
+    async quickContactAndParty(@Param('id') processId: string, @Body() body: any, @CurrentUser() user: CurrentUserData) {
+        return this.partiesService.quickContactAndParty({ processId, tenantId: user.tenantId, ...body });
     }
 
     // --- AUTOMATION ---

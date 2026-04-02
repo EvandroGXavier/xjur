@@ -182,10 +182,8 @@ export function ProcessList() {
             if (statusFilter !== 'ALL') params.status = statusFilter;
             if (debouncedSearchTerm?.trim()) params.search = debouncedSearchTerm.trim();
             if (advancedFilterPayload) params.advancedFilter = advancedFilterPayload;
-            if (updatedRange.from && updatedRange.to) {
-                params.updatedFrom = updatedRange.from;
-                params.updatedTo = updatedRange.to;
-            }
+            if (updatedRange.from) params.updatedFrom = updatedRange.from;
+            if (updatedRange.to) params.updatedTo = updatedRange.to;
             
             const response = await api.get('/processes', { signal, params });
             console.log('Processos carregados:', response.data);

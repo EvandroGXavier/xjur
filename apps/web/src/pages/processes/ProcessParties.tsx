@@ -452,8 +452,8 @@ export function ProcessParties({ processId, onPartiesChange }: ProcessPartiesPro
             await api.delete(`/processes/${processId}/parties/${partyId}`);
             toast.success('Parte removida');
             fetchParties();
-        } catch (error) {
-            toast.error('Erro ao remover parte');
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Erro ao remover parte');
         }
     };
 
@@ -488,8 +488,8 @@ export function ProcessParties({ processId, onPartiesChange }: ProcessPartiesPro
                 if (onPartiesChange) onPartiesChange(updated);
                 return updated;
             });
-        } catch (error) {
-            toast.error('Erro ao atualizar status da parte');
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Erro ao atualizar status da parte');
         }
     };
 
@@ -518,8 +518,8 @@ export function ProcessParties({ processId, onPartiesChange }: ProcessPartiesPro
             });
             toast.success(`Parte movida para o Polo ${targetPole === 'active' ? 'Ativo' : 'Passivo'}`);
             fetchParties();
-        } catch (error) {
-            toast.error('Erro ao mover parte');
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Erro ao mover parte');
         } finally {
             setDraggingPartyId(null);
         }

@@ -2634,17 +2634,41 @@ export class ProcessesService {
     async bulkAction(tenantId: string, dto: any) {
         const { action, tagId, status, lawyerName, category, processIds } = dto;
         const whereClause: any = { tenantId };
+        const normalizedSearch = String(dto.search || '').trim();
 
         if (processIds && processIds.length > 0) {
             whereClause.id = { in: processIds };
         } else {
             if (category) whereClause.category = category;
-            if (status) whereClause.status = status;
-            if (dto.search) {
+            if (status && status !== 'ALL') {
+                if (status === 'ATIVO') {
+                    whereClause.NOT = {
+                        status: {
+                            in: ['INATIVO', 'SUSPENSO', 'ARQUIVADO', 'ENCERRADO'],
+                        },
+                    };
+                } else if (status === 'INATIVO') {
+                    whereClause.status = {
+                        in: ['INATIVO', 'SUSPENSO', 'ARQUIVADO', 'ENCERRADO'],
+                    };
+                } else {
+                    whereClause.status = this.normalizeLifecycleStatus(status, status);
+                }
+            }
+            if (normalizedSearch) {
                 whereClause.OR = [
-                    { title: { contains: dto.search, mode: 'insensitive' } },
-                    { cnj: { contains: dto.search, mode: 'insensitive' } },
-                    { client: { contains: dto.search, mode: 'insensitive' } },
+                    { title: { contains: normalizedSearch, mode: 'insensitive' } },
+                    { cnj: { contains: normalizedSearch, mode: 'insensitive' } },
+                    { code: { contains: normalizedSearch, mode: 'insensitive' } },
+                    {
+                        processParties: {
+                            some: {
+                                contact: {
+                                    name: { contains: normalizedSearch, mode: 'insensitive' },
+                                },
+                            },
+                        },
+                    },
                 ];
             }
         }
@@ -2683,7 +2707,7 @@ export class ProcessesService {
                 if (!status) throw new BadRequestException('Status is required');
                 await this.prisma.process.updateMany({
                     where: { id: { in: ids } },
-                    data: { status },
+                    data: { status: this.normalizeLifecycleStatus(status, status) },
                 });
                 return { updatedCount: ids.length };
 
