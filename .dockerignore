@@ -13,8 +13,6 @@ dist
 .github
 README.md
 docker-compose*.yml
-Dockerfile
-.dockerignore
 .vscode
 .idx
 npm-debug.log*
