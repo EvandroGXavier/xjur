@@ -1,7 +1,7 @@
 {
   "name": "dr-x-monorepo",
   "private": true,
-  "version": "1.0.0.0.1",
+  "version": "1.0.001",
   "description": "DR.X - Ecossistema Jurídico Comercial",
   "workspaces": [
     "apps/*",
@@ -16,6 +16,8 @@
     "db:push": "turbo run db:push",
     "db:backup:local": "docker exec drx_db_local pg_dump -U drx_dev drx_local > backups/backup.sql",
     "db:restore:local": "docker exec -i drx_db_local psql -U drx_dev drx_local < backups/backup.sql",
+    "version:bump": "node scripts/bump-version.mjs",
+    "deploy": "npm run version:bump && git add . && git commit -m \"chore: bump version\" && git push origin main",
     "clean": "turbo run clean"
   },
   "devDependencies": {
