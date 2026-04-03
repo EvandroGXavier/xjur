@@ -316,7 +316,7 @@ export class TicketsService {
     const fullTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -336,7 +336,7 @@ export class TicketsService {
       where,
       include: {
         contact: {
-          select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true },
+          select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true },
         },
         _count: {
           select: { messages: true },
@@ -420,7 +420,7 @@ export class TicketsService {
     const updatedTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -436,7 +436,7 @@ export class TicketsService {
       where: { id },
       data: updateData,
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -498,7 +498,7 @@ export class TicketsService {
     const updatedTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -549,7 +549,7 @@ export class TicketsService {
     const updatedTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -632,7 +632,7 @@ export class TicketsService {
     file?: Express.Multer.File,
     preferredConnectionId?: string | null,
   ) {
-    const rawPhone = ticket.contact?.whatsapp || ticket.contact?.phone;
+    const rawPhone = ticket.contact?.whatsappFullId || ticket.contact?.whatsapp || ticket.contact?.phone;
     if (!rawPhone) {
       this.ticketsGateway.emitTicketError(tenantId, {
         ticketId: ticket.id,
@@ -643,7 +643,7 @@ export class TicketsService {
     }
 
     let formattedPhone = rawPhone;
-    if (!rawPhone.includes('@g.us') && !rawPhone.includes('@lid')) {
+    if (!rawPhone.includes('@g.us') && !rawPhone.includes('@lid') && !rawPhone.includes('@s.whatsapp.net')) {
       const basePhone = rawPhone.split('@')[0].split(':')[0];
       formattedPhone = this.formatNumber(basePhone);
     }

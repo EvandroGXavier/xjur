@@ -49,13 +49,18 @@ export class EvolutionService {
   // ==========================================
 
   private formatNumber(number: string): string {
+    if (!number) return '';
+
+    // Se já é um JID completo ou LID, não mexer
     if (number.includes('@g.us') || number.includes('@lid') || number.includes('@s.whatsapp.net')) {
-        return number;
+        // Remover apenas sufixos de devices se existirem (:1, :2 etc)
+        return number.replace(/:[0-9]+(?=@)/, '');
     }
+
     // Remove non-digit characters
     let cleaned = number.replace(/\D/g, '');
     
-    // If it's a Brazilian number without country code (8 or 9 digits + DDD)
+    // Se for um número brasileiro sem DDI (10 ou 11 dígitos), adiciona 55
     if (cleaned.length >= 10 && cleaned.length <= 11 && !cleaned.startsWith('55')) {
       cleaned = '55' + cleaned;
     }

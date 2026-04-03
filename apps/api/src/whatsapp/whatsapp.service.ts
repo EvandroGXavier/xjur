@@ -937,7 +937,7 @@ export class WhatsappService implements OnModuleInit {
       if (contact) {
         const updateData: any = {};
 
-        if (phoneClean && (!contact.whatsapp || contact.whatsapp.includes('@lid'))) {
+        if (phoneClean && (!contact.whatsapp || (contact.whatsapp.includes('@lid') && !phoneClean.includes('@')))) {
           updateData.whatsapp = phoneClean;
         }
 
@@ -974,7 +974,11 @@ export class WhatsappService implements OnModuleInit {
         }
       }
 
-      if (contact?.whatsapp && this.isPlausibleWhatsappNumber(contact.whatsapp)) {
+      if (contact?.whatsappFullId && contact.whatsappFullId.includes('@')) {
+          fullJid = contact.whatsappFullId;
+      } else if (contact?.whatsapp && contact.whatsapp.includes('@')) {
+          fullJid = contact.whatsapp;
+      } else if (contact?.whatsapp && this.isPlausibleWhatsappNumber(contact.whatsapp)) {
         fullJid = `${contact.whatsapp}@s.whatsapp.net`;
       }
 
@@ -983,9 +987,9 @@ export class WhatsappService implements OnModuleInit {
           data: {
             tenantId,
             name: displayName,
-            whatsapp: phoneClean || undefined,
+            whatsapp: lidJid || phoneClean || undefined,
             whatsappE164: phoneClean || undefined,
-            whatsappFullId: canonicalFullId || undefined,
+            whatsappFullId: (fullJid && fullJid.includes('@')) ? fullJid : canonicalFullId || undefined,
             category: isGroup ? 'Grupo' : 'Lead',
             document: null,
             notes: `Adicionado automaticamente via WhatsApp. ${lidJid || fullJid}`
