@@ -1,6 +1,7 @@
 import { ChangeEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import {
   CheckCheck,
+  Columns,
   Loader2,
   MessageCircle,
   Paperclip,
@@ -12,6 +13,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { Kanban } from '../Kanban';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { api, getApiUrl } from '../../services/api';
@@ -295,6 +297,7 @@ export function AtendimentoPage() {
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('OPEN');
+  const [view, setView] = useState<'chat' | 'kanban'>('chat');
   const [messageInput, setMessageInput] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
