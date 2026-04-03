@@ -1080,7 +1080,7 @@ export class WhatsappService implements OnModuleInit {
 
           if (drxResult?.reply) {
             await this.sendText(connectionId, fullJid, drxResult.reply, {
-              quoted: message.key.id,
+              quotedId: message.key.id,
               delay: 1500, // Simulando digitação
             });
           }
@@ -1249,23 +1249,25 @@ export class WhatsappService implements OnModuleInit {
   async sendText(connectionId: string, to: string, text: string, options: any = {}) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
     const response = await this.evolutionService.sendText(connectionId, to, text, options, evolutionConfig);
-    // Para v2.1.1, a resposta inclui a chave da mensagem
-    return response?.key?.id || response?.message?.key?.id;
+    // Tenta múltiplos formatos de resposta conforme versão da Evolution API
+    return response?.key?.id || response?.message?.key?.id || response?.messageId || response?.id;
   }
 
   async sendMedia(
-    connectionId: string, 
-    to: string, 
-    type: 'image' | 'video' | 'audio' | 'document', 
+    connectionId: string,
+    to: string,
+    type: 'image' | 'video' | 'audio' | 'document',
     url: string,
     caption?: string,
     mimetype?: string,
     fileName?: string
   ) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
-    const absoluteUrl = url.startsWith('http') || url.startsWith('data:') ? url : `${process.env.APP_URL || 'http://host.docker.internal:3000'}/${url}`;
-    const response = await this.evolutionService.sendMedia(connectionId, to, type, absoluteUrl, caption, fileName, evolutionConfig);
-    return response?.key?.id || response?.message?.key?.id;
+    // Repassa a URL sem conversão — evolution.service resolve caminhos locais diretamente,
+    // evitando double-resolution via APP_URL/host.docker.internal.
+    const response = await this.evolutionService.sendMedia(connectionId, to, type, url, caption, mimetype, fileName, evolutionConfig);
+    // Tenta múltiplos formatos de resposta conforme versão da Evolution API
+    return response?.key?.id || response?.message?.key?.id || response?.messageId || response?.id;
   }
 
   async markRead(connectionId: string, jid: string, messageIds: string[]) {

@@ -309,63 +309,67 @@ export class EvolutionService {
     type: 'image' | 'video' | 'audio' | 'document',
     mediaUrl: string,
     caption?: string,
+    mimeType?: string,
     fileName?: string,
     config?: EvolutionConfig
   ) {
     try {
       const client = this.getClient(config);
       const endpoint = type === 'image' ? 'sendImage' : type === 'video' ? 'sendVideo' : type === 'audio' ? 'sendWhatsAppAudio' : 'sendDocument';
-      
+
       const formattedNumber = this.formatNumber(number);
 
-      // Resolve o mediaUrl para base64 se for um caminho local ou recebido via absoluteUrl do próprio APP_URL
-    let mediaData = mediaUrl;
-    let isDirectHttp = mediaUrl.startsWith('http') && !mediaUrl.includes(process.env.APP_URL || 'host.docker.internal');
-    
-    // Tratar caso de audio/arquivo local (inclusive os que já sofreram prefix APP_URL interno)
-    if (!isDirectHttp && !mediaUrl.startsWith('data:')) {
-       const fs = require('fs');
-       const path = require('path');
-       const cleanUrl = mediaUrl.replace(process.env.APP_URL || 'http://host.docker.internal:3000', '').replace(/^\//, '');
-       const fullPath = path.join(process.cwd(), cleanUrl);
-       
-       if (fs.existsSync(fullPath)) {
-          const ext = path.extname(fullPath).toLowerCase();
-          
+      // Resolve mediaUrl para base64 se for caminho local ou URL interna (APP_URL/host.docker.internal).
+      // URLs externas reais são passadas diretamente para a Evolution baixar.
+      let mediaData = mediaUrl;
+      const isExternalHttp = mediaUrl.startsWith('http') &&
+        !mediaUrl.includes(process.env.APP_URL || 'host.docker.internal') &&
+        !mediaUrl.includes('localhost') &&
+        !mediaUrl.includes('127.0.0.1');
+
+      if (!isExternalHttp && !mediaUrl.startsWith('data:')) {
+        // Normaliza para caminho relativo ao CWD, removendo prefixos de URL interna
+        const cleanUrl = mediaUrl
+          .replace(/^https?:\/\/[^/]+/, '') // remove scheme + host
+          .replace(/^\//, '');              // remove barra inicial
+        const fullPath = path.join(process.cwd(), cleanUrl);
+
+        if (fs.existsSync(fullPath)) {
           if (type === 'audio') {
-              // Conversão via FFmpeg para garantir o Codec Opus obrigatorio da Evolution/Baileys
-              const tempOggPath = path.join(process.cwd(), `storage/uploads/temp_${Date.now()}.ogg`);
-              
-              await new Promise((resolve, reject) => {
-                  this.logger.debug(`Transcoding audio to OPUS: ${fullPath}`);
-                  ffmpeg(fullPath)
-                      .toFormat('ogg')
-                      .audioCodec('libopus')
-                      .on('error', (err) => reject(err))
-                      .on('end', () => resolve(true))
-                      .save(tempOggPath);
-              });
-              
-              const fileBuffer = fs.readFileSync(tempOggPath);
-              mediaData = `data:audio/ogg;base64,${fileBuffer.toString('base64')}`;
-              
-              // Limpar arquivo temporário de transcode
-              try { fs.unlinkSync(tempOggPath); } catch (e) {}
-              
+            // Transcodificação obrigatória para OGG/Opus (requisito do Baileys/WhatsApp)
+            const tempOggPath = path.join(process.cwd(), `storage/uploads/temp_${Date.now()}.ogg`);
+
+            await new Promise((resolve, reject) => {
+              this.logger.debug(`Transcoding audio to OPUS: ${fullPath}`);
+              ffmpeg(fullPath)
+                .toFormat('ogg')
+                .audioCodec('libopus')
+                .on('error', (err) => reject(err))
+                .on('end', () => resolve(true))
+                .save(tempOggPath);
+            });
+
+            const fileBuffer = fs.readFileSync(tempOggPath);
+            mediaData = `data:audio/ogg;base64,${fileBuffer.toString('base64')}`;
+
+            try { fs.unlinkSync(tempOggPath); } catch (e) {}
           } else {
-             // Mídias normais (imagens, documentos)
-             const fileBuffer = fs.readFileSync(fullPath);
-             const mimeTypes: Record<string, string> = {
-                 '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif',
-                 '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.ogg': 'audio/ogg', '.webm': 'audio/webm', '.mp3': 'audio/mpeg'
-             };
-             const mime = mimeTypes[ext] || 'application/octet-stream';
-             mediaData = `data:${mime};base64,${fileBuffer.toString('base64')}`;
+            const fileBuffer = fs.readFileSync(fullPath);
+            const ext = path.extname(fullPath).toLowerCase();
+            const mimeByExt: Record<string, string> = {
+              '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif',
+              '.mp4': 'video/mp4', '.pdf': 'application/pdf', '.ogg': 'audio/ogg',
+              '.webm': 'audio/webm', '.mp3': 'audio/mpeg',
+            };
+            // Usa mimeType recebido; fallback por extensão; fallback genérico
+            const mime = mimeType || mimeByExt[ext] || 'application/octet-stream';
+            mediaData = `data:${mime};base64,${fileBuffer.toString('base64')}`;
           }
-       } else {
-          this.logger.warn(`Local file not found for sending: ${fullPath} - URL origin: ${mediaUrl}`);
-       }
-    }
+        } else {
+          this.logger.error(`Local file not found for sending: ${fullPath} - URL origin: ${mediaUrl}`);
+          throw new Error(`Arquivo de mídia não encontrado no servidor: ${cleanUrl}`);
+        }
+      }
 
       const payload: any = {
         number: formattedNumber,

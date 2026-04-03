@@ -388,7 +388,7 @@ export class TicketsService {
         contentType: contentType as any,
         mediaUrl,
         scheduledAt: isScheduled ? scheduledAt : null,
-        status: isScheduled ? 'SCHEDULED' : 'SENT',
+        status: isScheduled ? 'SCHEDULED' : 'PENDING',
         quotedId: createMessageDto.quotedId,
         metadata,
       } as any,
