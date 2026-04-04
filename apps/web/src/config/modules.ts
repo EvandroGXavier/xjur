@@ -21,10 +21,7 @@ export const SYSTEM_MODULES = [
     id: 'processes', 
     label: 'Processos', 
     icon: Scale, 
-    to: '/processes',
-    subItems: [
-      { id: 'processes-tasks', label: 'Andamentos/Tarefas', to: '/processes/tasks' },
-    ]
+    to: '/processes'
   },
   { id: 'contacts', label: 'Contatos', icon: Users, to: '/contacts' },
   { id: 'kanban', label: 'Kanban', icon: Columns, to: '/kanban' },

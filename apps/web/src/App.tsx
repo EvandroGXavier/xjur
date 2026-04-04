@@ -28,7 +28,7 @@ function App() {
             <Route path="kanban" element={<Kanban />} />
             <Route path="processes" element={<Processes />} />
             <Route path="processes/config" element={<ProcessConfig />} />
-            <Route path="processes/tasks" element={<ProcessTasks />} />
+
             <Route path="processes/new" element={<ProcessForm />} />
             <Route path="processes/:id" element={<ProcessForm />} />
             <Route path="agenda" element={<Agenda />} />

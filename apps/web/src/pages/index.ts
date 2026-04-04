@@ -8,7 +8,7 @@ export * from './Settings';
 export * from './Library';
 export * from './Users';
 export * from './Financial';
-export { ProcessList as Processes } from './processes/ProcessList';
+export { Processes } from './processes/Processes';
 export { Agenda } from './Agenda';
 export { ProductsList } from './products/ProductsList';
 export * from './ForgotPassword';

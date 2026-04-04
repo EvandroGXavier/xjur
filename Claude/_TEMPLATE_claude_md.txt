@@ -1,0 +1,268 @@
+# Template: Copy & Paste para .claude.md
+
+## INSTRUÇÕES PARA USAR:
+
+1. Copie TODO conteúdo abaixo (sem as linhas de header)
+2. Cole em um novo arquivo chamado `.claude.md` na raiz do Xjur/
+3. Adapte os valores conforme sua realidade
+4. Commit ao git
+5. Próxima sessão Claude já terá instruções específicas!
+
+---
+
+# COMECE A COPIAR AQUI ↓
+
+# Instruções para Claude - Projeto DR.X Xjur
+
+## 📋 O Que é Este Projeto
+
+**DR.X** é um ecossistema jurídico SaaS em produção que automatiza fluxos para escritórios de advocacia.
+
+- **Status**: Production Ready (v1.0.001)
+- **Tipo**: Monorepo (Turborepo)
+- **Stack**: NestJS (API) + React (Web) + PostgreSQL + Redis
+- **Modelo**: Multi-tenant (cada cliente isolado)
+- **Proprietário**: DR.X / Evandro Xavier
+
+## 🏗️ Arquitetura Técnica
+
+### Monorepo Structure
+```
+apps/
+  ├── api/        # NestJS (TypeScript) - Backend REST
+  ├── web/        # React (TypeScript) - Frontend SPA
+  ├── extension/  # Chrome Extension (React)
+  └── storage/    # Storage Service
+packages/
+  └── database/   # Prisma Schema (shared)
+```
+
+### Stack Rápido
+| Componente | Tecnologia |
+|-----------|-----------|
+| Backend | NestJS 10 + TypeScript |
+| Frontend | React 18 + Vite + TailwindCSS |
+| Database | PostgreSQL (com vetores) |
+| Cache/Queue | Redis |
+| ORM | Prisma 5.20 |
+| Auth | JWT + Passport |
+| Real-time | WebSockets (Socket.io) |
+| IA | OpenAI |
+| Integrations | WhatsApp (Evolution), Microsoft 365 |
+
+## ⚙️ Padrões Obrigatórios
+
+### 1. Estrutura NestJS (Backend)
+
+Sempre siga:
+```
+src/[feature]/
+├── [feature].service.ts      # Lógica de negócio
+├── [feature].controller.ts   # Endpoints HTTP
+├── [feature].module.ts       # Declaração NestJS
+├── dto/
+│   ├── create-[feature].dto.ts
+│   └── update-[feature].dto.ts
+└── interfaces/
+    └── [feature].interface.ts
+```
+
+Regra: Lógica em Service, endpoints em Controller.
+
+### 2. Multi-Tenancy (Obrigatório)
+
+**TODA** query de dados de negócio precisa do `tenantId`:
+
+```typescript
+// ❌ ERRADO
+async getContacts() {
+  return this.prisma.contact.findMany();
+}
+
+// ✅ CORRETO
+async getContacts(tenantId: string) {
+  return this.prisma.contact.findMany({
+    where: { tenantId }
+  });
+}
+```
+
+### 3. Prisma Schema
+
+Local: `packages/database/prisma/schema.prisma`
+
+```prisma
+model Contact {
+  id       String  @id @default(cuid())
+  tenantId String  // Sempre adicione isto
+  name     String
+  // ... outros campos
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id])
+}
+```
+
+Depois de editar schema:
+```bash
+npx prisma migrate dev --name "descricao da mudanca"
+git add packages/database/prisma/migrations/
+git commit -m "chore: add migration for X"
+```
+
+### 4. DTOs e Validação
+
+```typescript
+import { IsString, IsEmail, IsOptional } from 'class-validator';
+
+export class CreateContactDto {
+  @IsString()
+  name: string;
+
+  @IsEmail()
+  email: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+}
+```
+
+## 🤖 Sistema de Skills (IA/Automação)
+
+### Tipos
+- **SYSTEM Skills**: Produto oficial (triagem, cobranca, agenda, analise processual)
+- **CUSTOM Skills**: Específico de cada cliente (criado/removido por eles)
+
+### Como Implementar Nova Skill
+
+1. Crie em: `src/agent/skills/[nome-skill]/`
+2. Implemente `execute()` method
+3. Registre em: `src/agent/agent.service.ts`
+4. Configure em UI: `apps/web/components/skills/`
+5. Teste em: `Settings > Skills > Playground`
+6. Defina: SYSTEM ou CUSTOM
+
+### Quando Sugerir
+Se a feature envolve análise de texto/IA, faça como skill em vez de endpoint.
+
+## 📞 Integrações Esperadas
+
+### WhatsApp (Evolution API)
+- Config: `src/connections/evolution/`
+- Webhook: `/api/evolution/webhook`
+- ENV vars: `EVO_API_KEY`, `EVO_SERVER_URL`, `EVO_WEBHOOK_URL`
+
+**Conectividade**:
+- Local: `http://localhost:8080` (Evolution) → `http://host.docker.internal:3000/api/...` (webhook)
+- Produção: `http://evolution:8080` (Evolution) → `http://api:3000/api/...` (webhook)
+
+### Microsoft 365
+- Config: `src/connections/microsoft/`
+- Tokens: Armazenados criptografados em DB
+- Sync: Calendário, documentos
+
+### OpenAI
+- Config: `src/agent/openai/`
+- ENV: `OPENAI_API_KEY`
+- Uso: Análise + sugestões em skills
+
+## 🔄 Fluxos Principais
+
+### Importar Processo Jurídico (PDF)
+```
+PDF Upload → Extração → DB (Process+Party+Document) → Dispara Skill → Análise OpenAI → Resumo Salvo
+```
+Arquivos: `src/documents/`, `src/processes/`, `src/agent/`
+
+### Mensagem WhatsApp Recebida
+```
+Webhook Evolution → Parse → Save DB → Emit WebSocket → Kanban UI Update → Trigger Skill (se houver)
+```
+Arquivos: `src/connections/evolution/`, `src/communications/`, `src/agent/`
+
+## 🚀 Desenvolvimento & Deploy
+
+### Local (com hot-reload)
+```bash
+# Terminal 1
+docker-compose up -d
+
+# Terminal 2
+npm run dev
+```
+- API: localhost:3000
+- Web: localhost:5173
+- DB: localhost:5432
+- Redis: localhost:6379
+
+### Produção
+```bash
+npm run version:bump
+git push origin main
+# GitHub Actions faz deploy automático para VPS
+```
+
+## ⚠️ "Gotchas" Evitar
+
+1. **Multi-tenancy bypass**: Esqueceu tenantId em query → data leak
+2. **Deletou skill SYSTEM**: Sempre PAUSE, nunca DELETE
+3. **Schema sem migração**: Adiciona coluna mas não roda `npx prisma migrate dev`
+4. **Breaking API changes**: Não versiona endpoints (`/api/v2/`)
+5. **Prod DB em localhost**: Edita producao acidentalmente
+6. **Evolution webhook errado**: Local precisa `host.docker.internal`
+
+## ✅ Checklist Antes de Cada PR
+
+- [ ] Multi-tenancy respeitado (tenantId em queries)?
+- [ ] Usou class-validator em DTOs?
+- [ ] Lógica em Service, endpoints em Controller?
+- [ ] Rodou `npx prisma migrate dev`?
+- [ ] Escreveu testes para lógica crítica?
+- [ ] Commit com mensagem clara (`feat:`, `fix:`)?
+- [ ] Documentou breaking changes?
+- [ ] Testou localmente com docker-compose?
+
+## 📚 Referências
+- NestJS: https://docs.nestjs.com
+- Prisma: https://www.prisma.io/docs
+- React: https://react.dev
+- Skills: Ver `DRX_SKILLS.md`
+- Arquitetura: Ver `ARCHITECTURE.md`
+
+## 💬 Como Solicitar Ajuda Efetivamente
+
+**BOM**:
+```
+Implemente skill "analise-risco-juridico" que:
+- Receba texto de processo
+- Use OpenAI para análise
+- Retorne JSON com {risco: high|medium|low, justificativa: string}
+```
+
+**EXCELENTE**:
+```
+Estenda modulo contacts para validar CPF/CNPJ
+Siga padrão service/controller/dto existente
+Sempre filtrar por tenantId
+Testes unitários para validação
+```
+
+---
+
+# TERMINAR DE COPIAR AQUI ↑
+
+## Depois:
+
+1. Salve como `.claude.md` na raiz (Xjur/)
+2. `git add .claude.md && git commit -m "docs: add claude instructions"`
+3. `git push`
+4. Próxima sessão Claude terá instruções específicas!
+
+## Customizações Sugeridas:
+
+Adapte valores conforme sua realidade:
+- [ ] Versão do sistema (1.0.001 → sua versão)
+- [ ] Proprietário (DR.X → seu nome)
+- [ ] URLs de documentação (se tiver Swagger, adicione)
+- [ ] Contatos do time (se aplicável)
+- [ ] Prioridades específicas do seu time
