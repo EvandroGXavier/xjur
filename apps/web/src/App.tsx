@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/Layout';
-import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, ProcessTasks, Login, Register, Settings, Library, UsersPage, Agenda, ForgotPassword, ResetPassword, ImportContacts, AtendimentoPage, Kanban, PaymentConditions, Inventory } from './pages';
+import { Dashboard, Processes, Financial, AI, ContactList, ContactForm, ContactConfig, ProcessConfig, Login, Register, Settings, Library, UsersPage, Agenda, ForgotPassword, ResetPassword, ImportContacts, Atendimento, PaymentConditions, Inventory } from './pages';
 import { ProcessForm } from './pages/processes/ProcessForm';
 import { getToken } from './auth/authStorage';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -24,8 +24,7 @@ function App() {
           
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<Dashboard />} />
-            <Route path="chat" element={<AtendimentoPage />} />
-            <Route path="kanban" element={<Kanban />} />
+            <Route path="atendimento" element={<Atendimento />} />
             <Route path="processes" element={<Processes />} />
             <Route path="processes/config" element={<ProcessConfig />} />
 
