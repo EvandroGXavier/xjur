@@ -177,6 +177,10 @@ export class SecurityService {
     }));
   }
 
+  decodeSecretValue(value?: string | null) {
+    return this.decode(value);
+  }
+
   async createSecret(tenantId: string, data: any) {
     return this.prisma.securitySecret.create({
       data: {
@@ -256,4 +260,3 @@ export class SecurityService {
     };
   }
 }
-

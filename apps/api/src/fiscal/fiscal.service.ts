@@ -335,6 +335,88 @@ export class FiscalService {
     };
   }
 
+  async transmitInvoice(tenantId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, tenantId },
+    });
+
+    if (!invoice) {
+      throw new BadRequestException('Documento fiscal nao encontrado.');
+    }
+
+    if (!['READY', 'REJECTED', 'DRAFT'].includes(invoice.status)) {
+      throw new BadRequestException(
+        'Somente documentos prontos, em rascunho ou rejeitados podem ser retransmitidos.',
+      );
+    }
+
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: 'TRANSMITTING',
+        rejectionCode: null,
+        rejectionMessage: null,
+        events: {
+          create: {
+            type: 'TRANSMISSION',
+            status: 'TRANSMITTING',
+            payload: {
+              manual: true,
+              documentModel: invoice.documentModel,
+              scope: invoice.scope,
+            },
+          },
+        },
+      },
+    });
+
+    try {
+      const transmitted =
+        invoice.documentModel === 'NFE'
+          ? await this.nfeGatewayService.authorizeInvoice(tenantId, invoice.id)
+          : invoice.documentModel === 'NFSE'
+            ? await this.bhNfseGatewayService.authorizeInvoice(
+                tenantId,
+                invoice.id,
+              )
+            : null;
+
+      if (!transmitted) {
+        throw new Error('Modelo fiscal nao suportado para transmissao.');
+      }
+
+      if (invoice.proposalId) {
+        await this.refreshProposalStatusFromInvoices(tenantId, invoice.proposalId);
+      }
+
+      return transmitted;
+    } catch (error: any) {
+      const rejected = await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          status: 'REJECTED',
+          rejectionMessage: error.message,
+          events: {
+            create: {
+              type: 'TRANSMISSION',
+              status: 'REJECTED',
+              externalMessage: error.message,
+              payload: {
+                manual: true,
+              },
+            },
+          },
+        },
+      });
+
+      if (invoice.proposalId) {
+        await this.refreshProposalStatusFromInvoices(tenantId, invoice.proposalId);
+      }
+
+      return rejected;
+    }
+  }
+
   evaluateProposalReadinessFromData(config: any, proposal: any) {
     const issues: Array<{
       scope: 'GLOBAL' | 'NFE' | 'NFSE';
@@ -737,5 +819,29 @@ export class FiscalService {
     } catch (error: any) {
       throw new BadRequestException('Falha no processamento: ' + error.message);
     }
+  }
+
+  private async refreshProposalStatusFromInvoices(
+    tenantId: string,
+    proposalId: string,
+  ) {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { tenantId, proposalId },
+    });
+
+    if (invoices.length === 0) {
+      return;
+    }
+
+    const allAuthorized = invoices.every(
+      (invoice) => invoice.status === 'AUTHORIZED',
+    );
+
+    await this.prisma.proposal.update({
+      where: { id: proposalId },
+      data: {
+        status: allAuthorized ? 'INVOICED' : 'APPROVED',
+      },
+    });
   }
 }

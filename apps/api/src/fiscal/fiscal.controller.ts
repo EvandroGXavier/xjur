@@ -46,6 +46,14 @@ export class FiscalController {
     return this.fiscalService.findInvoice(user.tenantId, id);
   }
 
+  @Post('invoices/:id/transmit')
+  transmitInvoice(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.fiscalService.transmitInvoice(user.tenantId, id);
+  }
+
   @Get('proposals/:id/readiness')
   getProposalReadiness(
     @Param('id') id: string,

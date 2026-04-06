@@ -12,6 +12,7 @@ export function FiscalPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [transmittingInvoiceId, setTransmittingInvoiceId] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [config, setConfig] = useState<any>({
     razaoSocialEmitente: '',
@@ -65,7 +66,7 @@ export function FiscalPage() {
       });
       toast.success(response.data.message || 'XML importado com sucesso');
       setFile(null);
-      loadFiscalData();
+      await loadFiscalData();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao importar XML');
     } finally {
@@ -78,11 +79,32 @@ export function FiscalPage() {
     try {
       await api.put('/fiscal/config', config);
       toast.success('Configuracao fiscal salva com sucesso');
-      loadFiscalData();
+      await loadFiscalData();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao salvar configuracao fiscal');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTransmitInvoice = async (invoiceId: string) => {
+    setTransmittingInvoiceId(invoiceId);
+    try {
+      const response = await api.post(`/fiscal/invoices/${invoiceId}/transmit`);
+      if (response.data?.status === 'AUTHORIZED') {
+        toast.success('Documento fiscal transmitido e autorizado.');
+      } else if (response.data?.status === 'REJECTED') {
+        toast.error(
+          response.data?.rejectionMessage || 'A transmissao retornou rejeicao.',
+        );
+      } else {
+        toast.success('Transmissao fiscal executada.');
+      }
+      await loadFiscalData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao transmitir documento fiscal');
+    } finally {
+      setTransmittingInvoiceId(null);
     }
   };
 
@@ -351,11 +373,11 @@ export function FiscalPage() {
               <div className="mb-1 flex items-start gap-2">
                 <AlertTriangle className="mt-0.5" size={18} />
                 <span className="font-medium">
-                  A transmissao automatica para SEFAZ e prefeitura ainda depende da proxima etapa de integracao dos gateways.
+                  Os gateways LIVE ja estao conectados, mas a autorizacao oficial ainda depende de XML assinado valido, certificado A1 carregado e endpoints homologados.
                 </span>
               </div>
               <p className="pl-7 text-xs text-amber-700">
-                O sistema ja registra configuracao, prontidao e documentos fiscais preparados para emissao.
+                Use a retransmissao manual abaixo durante a homologacao para testar NF-e e NFS-e com mais controle.
               </p>
             </div>
           </div>
@@ -392,6 +414,22 @@ export function FiscalPage() {
                   </div>
                   <div className="mt-3 text-xs text-slate-500">
                     Serie: {invoice.series || '-'} • Numero: {invoice.number || '-'} • Ambiente: {invoice.environment || '-'}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="text-xs text-slate-500">
+                      {invoice.rejectionMessage || invoice.authorizationProtocol || 'Aguardando transmissao fiscal'}
+                    </div>
+                    {['READY', 'REJECTED', 'DRAFT'].includes(invoice.status) && (
+                      <button
+                        onClick={() => handleTransmitInvoice(invoice.id)}
+                        disabled={transmittingInvoiceId === invoice.id}
+                        className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {transmittingInvoiceId === invoice.id
+                          ? 'Transmitindo...'
+                          : 'Transmitir agora'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

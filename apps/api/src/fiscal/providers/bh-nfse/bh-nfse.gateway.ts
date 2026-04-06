@@ -1,9 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma.service';
+import { SecurityService } from '../../../security/security.service';
+import axios from 'axios';
+import * as https from 'https';
+import { XMLParser } from 'fast-xml-parser';
 
 @Injectable()
 export class BhNfseGatewayService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly securityService: SecurityService,
+  ) {}
 
   async authorizeInvoice(tenantId: string, invoiceId: string) {
     const invoice = await this.prisma.invoice.findFirst({
@@ -53,10 +60,8 @@ export class BhNfseGatewayService {
       mode,
     };
 
-    if (mode !== 'MOCK') {
-      throw new Error(
-        'Gateway NFS-e BH em modo LIVE ainda depende do adaptador SOAP/Portal homologado do provedor.',
-      );
+    if (mode === 'LIVE') {
+      return this.authorizeLive(invoice, config, payload, issueDate);
     }
 
     const xmlDraft = this.buildMockXml(invoice, nfseNumber, protocol, payload);
@@ -114,6 +119,92 @@ export class BhNfseGatewayService {
     return updated;
   }
 
+  private async authorizeLive(
+    invoice: any,
+    config: any,
+    payload: any,
+    issueDate: Date,
+  ) {
+    const baseUrl = this.resolveBaseUrl(config.environment || 'HOMOLOGATION');
+    const agent = await this.buildHttpsAgent(config);
+    const xml = this.extractNationalXml(invoice);
+
+    const response = await axios.post(`${baseUrl}/nfse`, xml, {
+      httpsAgent: agent,
+      headers: {
+        'Content-Type': 'application/xml',
+      },
+      timeout: 30000,
+    });
+
+    const parsed = this.parseXml(response.data);
+    const infNfse = parsed?.NFSe?.infNFSe || parsed?.nfse?.infNFSe || null;
+
+    if (!infNfse) {
+      throw new Error('SEFIN Nacional nao retornou uma NFS-e autorizada valida.');
+    }
+
+    const protocol =
+      infNfse?.nProt ||
+      infNfse?.prot ||
+      response.headers['x-protocolo'] ||
+      null;
+    const batchNumber =
+      infNfse?.nLote || invoice.batchNumber || String(Date.now());
+    const nfseNumber = infNfse?.nNFSe || invoice.number || null;
+    const rpsNumber = infNfse?.nRps || invoice.receiptNumber || null;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.fiscalConfig.update({
+        where: { tenantId: invoice.tenantId },
+        data: {
+          proximoNumeroNfse:
+            Number(config.proximoNumeroNfse || nfseNumber || 1) + 1,
+          proximoNumeroRps: Number(config.proximoNumeroRps || rpsNumber || 1) + 1,
+        },
+      });
+
+      return tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          provider: 'SEFIN_NACIONAL_BH',
+          providerCityCode: config.codigoMunicipioIbge,
+          number: nfseNumber ? String(nfseNumber) : invoice.number,
+          receiptNumber: rpsNumber ? String(rpsNumber) : invoice.receiptNumber,
+          batchNumber: String(batchNumber),
+          issueDate,
+          xmlDraft: xml,
+          xmlAuthorized: response.data,
+          requestPayload: {
+            ...payload,
+            liveEndpoint: `${baseUrl}/nfse`,
+          },
+          responsePayload: {
+            headers: response.headers,
+          },
+          authorizationProtocol: protocol,
+          authorizationDate: issueDate,
+          status: 'AUTHORIZED',
+          events: {
+            create: {
+              type: 'AUTHORIZATION',
+              status: 'AUTHORIZED',
+              payload: {
+                live: true,
+                protocol,
+                batchNumber,
+                nfseNumber,
+                rpsNumber,
+              },
+            },
+          },
+        },
+      });
+    });
+
+    return updated;
+  }
+
   private buildMockXml(
     invoice: any,
     nfseNumber: string,
@@ -128,5 +219,75 @@ export class BhNfseGatewayService {
   <status>DRAFT</status>
   <payload>${JSON.stringify(payload)}</payload>
 </nfse>`.trim();
+  }
+
+  private resolveBaseUrl(environment: string) {
+    if (environment === 'PRODUCTION') {
+      return (
+        process.env.BH_NFSE_PROD_BASE_URL ||
+        'https://sefin.nfse.gov.br/SefinNacional'
+      );
+    }
+
+    return (
+      process.env.BH_NFSE_HOM_BASE_URL ||
+      'https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional'
+    );
+  }
+
+  private extractNationalXml(invoice: any) {
+    const xml =
+      invoice.xmlDraft ||
+      invoice.xmlContent ||
+      invoice.requestPayload?.signedXml ||
+      null;
+
+    if (!xml || (!String(xml).includes('<DPS') && !String(xml).includes('<NFSe'))) {
+      throw new Error(
+        'NFS-e em modo LIVE exige XML nacional DPS/NFSe completo em xmlDraft/requestPayload.signedXml.',
+      );
+    }
+
+    return String(xml);
+  }
+
+  private parseXml(xml: string) {
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '',
+    });
+    return parser.parse(xml);
+  }
+
+  private async buildHttpsAgent(config: any) {
+    if (!config.securitySecretId) {
+      throw new Error(
+        'Configuracao fiscal sem securitySecretId para uso do certificado A1.',
+      );
+    }
+
+    const secret = await this.prisma.securitySecret.findFirst({
+      where: {
+        tenantId: config.tenantId,
+        id: config.securitySecretId,
+      },
+    });
+
+    if (!secret) {
+      throw new Error('Segredo do certificado fiscal nao encontrado.');
+    }
+
+    const downloaded = await this.securityService.downloadSecretFile(
+      secret.id,
+      config.tenantId,
+    );
+
+    return new https.Agent({
+      pfx: downloaded.buffer,
+      passphrase: secret.password
+        ? this.securityService.decodeSecretValue(secret.password)
+        : undefined,
+      rejectUnauthorized: true,
+    });
   }
 }
