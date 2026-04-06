@@ -21,6 +21,15 @@ export function ProposalsPage({
   const [selectedProposal, setSelectedProposal] = useState<any | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [billingDialog, setBillingDialog] = useState<any>({
+    open: false,
+    loading: false,
+    submitting: false,
+    readiness: null,
+    emitFiscal: false,
+    issueProducts: false,
+    issueServices: false,
+  });
 
   const { conditions: paymentConditions, fetchConditions } =
     usePaymentConditions();
@@ -323,19 +332,77 @@ export function ProposalsPage({
   };
 
   const handleApprove = async (id: string) => {
-    if (selectedProposal?.status === "APPROVED") {
-      toast.info("Este orÃƒÂ§amento jÃƒÂ¡ foi aprovado.");
+    if (selectedProposal?.status === "APPROVED" || selectedProposal?.status === "INVOICED") {
+      toast.info("Este orcamento ja foi faturado.");
       return;
     }
 
     try {
-      await api.patch(`/proposals/${id}/status`, { status: "APPROVED" });
-      toast.success("OrÃ§amento aprovado. Financeiro e estoque atualizados!");
+      setBillingDialog((prev: any) => ({
+        ...prev,
+        open: true,
+        loading: true,
+        readiness: null,
+      }));
+
+      const readinessRes = await api.get(`/fiscal/proposals/${id}/readiness`);
+      const readiness = readinessRes.data;
+
+      setBillingDialog({
+        open: true,
+        loading: false,
+        submitting: false,
+        readiness,
+        emitFiscal: false,
+        issueProducts: readiness.hasProducts,
+        issueServices: readiness.hasServices,
+      });
+    } catch (error: any) {
+      setBillingDialog({
+        open: false,
+        loading: false,
+        submitting: false,
+        readiness: null,
+        emitFiscal: false,
+        issueProducts: false,
+        issueServices: false,
+      });
+      toast.error(error.response?.data?.message || "Erro ao preparar faturamento");
+    }
+  };
+
+  const handleBillProposal = async () => {
+    if (!selectedProposal?.id) return;
+
+    try {
+      setBillingDialog((prev: any) => ({ ...prev, submitting: true }));
+      const payload = {
+        emitFiscal: billingDialog.emitFiscal,
+        issueProducts: billingDialog.issueProducts,
+        issueServices: billingDialog.issueServices,
+      };
+
+      const response = await api.post(
+        `/proposals/${selectedProposal.id}/bill`,
+        payload,
+      );
+
+      toast.success(response.data.message || "Venda faturada com sucesso");
+      setBillingDialog({
+        open: false,
+        loading: false,
+        submitting: false,
+        readiness: null,
+        emitFiscal: false,
+        issueProducts: false,
+        issueServices: false,
+      });
       setSelectedProposal(null);
       setIsEditing(false);
       loadProposals();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Erro ao aprovar");
+      setBillingDialog((prev: any) => ({ ...prev, submitting: false }));
+      toast.error(error.response?.data?.message || "Erro ao faturar");
     }
   };
 
@@ -352,8 +419,8 @@ export function ProposalsPage({
   };
 
   const handleSave = async (shouldClose = true) => {
-    if (selectedProposal?.status === "APPROVED") {
-      toast.error("OrÃƒÂ§amentos aprovados nÃƒÂ£o podem ser editados.");
+    if (selectedProposal?.status === "APPROVED" || selectedProposal?.status === "INVOICED") {
+      toast.error("Orcamentos faturados nao podem ser editados.");
       return;
     }
 
@@ -914,7 +981,7 @@ export function ProposalsPage({
 
   // Tela de Grid Principal (Primeiro Anexo)
   return (
-    <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
+    <div className="relative h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
       <div className="bg-slate-800/50 text-white px-4 py-2 flex items-center justify-between border-b-2 border-teal-500">
         <h1 className="text-lg font-bold text-teal-400">{pageTitle}</h1>
         <button
@@ -967,8 +1034,8 @@ export function ProposalsPage({
                     className={`cursor-pointer transition-colors ${selectedProposal?.id === p.id ? "bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500" : "text-slate-300 hover:bg-slate-800/50 border-b border-slate-800"}`}
                     onClick={() => loadProposalDetails(p.id)}
                     onDoubleClick={() => {
-                      if (isSalesMode || p.status === "APPROVED") {
-                        toast.info("OrÃƒÂ§amentos aprovados nÃƒÂ£o podem ser editados.");
+                      if (isSalesMode || p.status === "APPROVED" || p.status === "INVOICED") {
+                        toast.info("Orcamentos faturados nao podem ser editados.");
                         return;
                       }
                       setIsEditing(true);
@@ -1022,7 +1089,8 @@ export function ProposalsPage({
                       <span className="text-slate-500 mr-2">Status:</span>{" "}
                       <strong
                         className={
-                          selectedProposal.status === "APPROVED"
+                          selectedProposal.status === "APPROVED" ||
+                          selectedProposal.status === "INVOICED"
                             ? "text-teal-400"
                             : "text-blue-400"
                         }
@@ -1053,7 +1121,7 @@ export function ProposalsPage({
                     <button
                       className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
                       onClick={() => handleApprove(selectedProposal.id)}
-                      disabled={selectedProposal.status === "APPROVED"}
+                      disabled={selectedProposal.status === "APPROVED" || selectedProposal.status === "INVOICED"}
                     >
                       Aprovar (Faturar)
                     </button>
@@ -1062,13 +1130,13 @@ export function ProposalsPage({
                     <button
                       className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
                       onClick={() => {
-                        if (selectedProposal.status === "APPROVED") {
+                        if (selectedProposal.status === "APPROVED" || selectedProposal.status === "INVOICED") {
                           toast.info("Orcamentos aprovados nao podem ser editados.");
                           return;
                         }
                         setIsEditing(true);
                       }}
-                      disabled={selectedProposal.status === "APPROVED"}
+                      disabled={selectedProposal.status === "APPROVED" || selectedProposal.status === "INVOICED"}
                     >
                       Editar Orcamento
                     </button>
@@ -1268,6 +1336,205 @@ export function ProposalsPage({
           <span>Sair</span>
         </button>
       </div>
+
+      {billingDialog.open && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Faturar Orcamento</h3>
+                <p className="text-sm text-slate-400">
+                  Defina se a venda deve seguir so no comercial ou ja preparar os documentos fiscais.
+                </p>
+              </div>
+              <button
+                className="text-slate-500 transition-colors hover:text-white"
+                onClick={() =>
+                  setBillingDialog({
+                    open: false,
+                    loading: false,
+                    submitting: false,
+                    readiness: null,
+                    emitFiscal: false,
+                    issueProducts: false,
+                    issueServices: false,
+                  })
+                }
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+              {billingDialog.loading ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-6 text-sm text-slate-300">
+                  Verificando prontidao fiscal...
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-200">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          name="billing-mode"
+                          checked={!billingDialog.emitFiscal}
+                          onChange={() =>
+                            setBillingDialog((prev: any) => ({
+                              ...prev,
+                              emitFiscal: false,
+                            }))
+                          }
+                        />
+                        <div>
+                          <div className="font-semibold text-white">Nao emitir agora</div>
+                          <div className="mt-1 text-slate-400">
+                            Fatura a venda, move para Vendas e deixa o fiscal como rascunho.
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="rounded-xl border border-teal-900/40 bg-teal-950/20 p-4 text-sm text-slate-200">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          name="billing-mode"
+                          checked={billingDialog.emitFiscal}
+                          onChange={() =>
+                            setBillingDialog((prev: any) => ({
+                              ...prev,
+                              emitFiscal: true,
+                            }))
+                          }
+                        />
+                        <div>
+                          <div className="font-semibold text-white">Emitir nota fiscal</div>
+                          <div className="mt-1 text-slate-400">
+                            Valida os dados fiscais e prepara os documentos para transmissao conforme o tipo dos itens.
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {billingDialog.readiness && (
+                    <div className="space-y-3">
+                      <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                        <div className="flex flex-wrap gap-3 text-sm">
+                          <span className="rounded-full border border-slate-700 px-3 py-1 text-slate-300">
+                            Produtos: {billingDialog.readiness.hasProducts ? "Sim" : "Nao"}
+                          </span>
+                          <span className="rounded-full border border-slate-700 px-3 py-1 text-slate-300">
+                            Servicos: {billingDialog.readiness.hasServices ? "Sim" : "Nao"}
+                          </span>
+                          <span className="rounded-full border border-slate-700 px-3 py-1 text-slate-300">
+                            NF-e: {billingDialog.readiness.canIssueNfe ? "Pronta" : "Pendente"}
+                          </span>
+                          <span className="rounded-full border border-slate-700 px-3 py-1 text-slate-300">
+                            NFS-e: {billingDialog.readiness.canIssueNfse ? "Pronta" : "Pendente"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {billingDialog.emitFiscal && (
+                        <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                          <div className="mb-3 text-sm font-semibold text-white">
+                            Documentos a preparar
+                          </div>
+                          <div className="space-y-2 text-sm text-slate-300">
+                            {billingDialog.readiness.hasProducts && (
+                              <label className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={billingDialog.issueProducts}
+                                  onChange={(e) =>
+                                    setBillingDialog((prev: any) => ({
+                                      ...prev,
+                                      issueProducts: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>Emitir NF-e dos produtos</span>
+                              </label>
+                            )}
+                            {billingDialog.readiness.hasServices && (
+                              <label className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={billingDialog.issueServices}
+                                  onChange={(e) =>
+                                    setBillingDialog((prev: any) => ({
+                                      ...prev,
+                                      issueServices: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>Emitir NFS-e dos servicos</span>
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {billingDialog.readiness.issues?.length > 0 && (
+                        <div className="rounded-xl border border-amber-800/60 bg-amber-950/20 p-4">
+                          <div className="mb-2 text-sm font-semibold text-amber-300">
+                            Pendencias fiscais encontradas
+                          </div>
+                          <div className="space-y-1 text-sm text-amber-100">
+                            {billingDialog.readiness.issues.map((issue: any, index: number) => (
+                              <div key={`${issue.field}-${index}`}>
+                                [{issue.scope}] {issue.message}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-800 px-5 py-4">
+              <button
+                className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700"
+                onClick={() =>
+                  setBillingDialog({
+                    open: false,
+                    loading: false,
+                    submitting: false,
+                    readiness: null,
+                    emitFiscal: false,
+                    issueProducts: false,
+                    issueServices: false,
+                  })
+                }
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-lg border border-teal-700 bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  billingDialog.loading ||
+                  billingDialog.submitting ||
+                  (billingDialog.emitFiscal &&
+                    billingDialog.readiness?.issues?.length > 0 &&
+                    ((billingDialog.issueProducts && !billingDialog.readiness?.canIssueNfe) ||
+                      (billingDialog.issueServices && !billingDialog.readiness?.canIssueNfse))) ||
+                  (billingDialog.emitFiscal &&
+                    !billingDialog.issueProducts &&
+                    !billingDialog.issueServices)
+                }
+                onClick={handleBillProposal}
+              >
+                {billingDialog.submitting ? "Processando..." : "Confirmar Faturamento"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

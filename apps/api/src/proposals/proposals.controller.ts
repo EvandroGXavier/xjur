@@ -41,4 +41,13 @@ export class ProposalsController {
   ) {
     return this.proposalsService.updateStatus(user.tenantId, id, status);
   }
+
+  @Post(':id/bill')
+  bill(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.proposalsService.bill(user.tenantId, id, body);
+  }
 }

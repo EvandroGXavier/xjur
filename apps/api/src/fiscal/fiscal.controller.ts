@@ -1,31 +1,74 @@
-import { Controller, Post, UseInterceptors, UploadedFile, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FiscalService } from './fiscal.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserData,
+} from '../common/decorators/current-user.decorator';
 
 @Controller('fiscal')
 @UseGuards(JwtAuthGuard)
 export class FiscalController {
   constructor(private readonly fiscalService: FiscalService) {}
 
+  @Get('config')
+  getConfig(@CurrentUser() user: CurrentUserData) {
+    return this.fiscalService.getConfig(user.tenantId);
+  }
+
+  @Put('config')
+  updateConfig(
+    @Body() body: any,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.fiscalService.updateConfig(user.tenantId, body);
+  }
+
+  @Get('invoices')
+  listInvoices(@CurrentUser() user: CurrentUserData) {
+    return this.fiscalService.listInvoices(user.tenantId);
+  }
+
+  @Get('invoices/:id')
+  findInvoice(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.fiscalService.findInvoice(user.tenantId, id);
+  }
+
+  @Get('proposals/:id/readiness')
+  getProposalReadiness(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.fiscalService.getProposalReadiness(user.tenantId, id);
+  }
+
   @Post('import-xml')
   @UseInterceptors(FileInterceptor('file'))
-  async importXml(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: CurrentUserData) {
+  async importXml(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     if (!file) {
       throw new BadRequestException('Nenhum arquivo de XML enviado.');
     }
-    
+
     if (!user || !user.tenantId) {
-      throw new BadRequestException('Erro de contexto: Tenant inválido.');
+      throw new BadRequestException('Erro de contexto: tenant invalido.');
     }
 
-    try {
-      const xmlContent = file.buffer.toString('utf-8');
-      const result = await this.fiscalService.processXml(user.tenantId, xmlContent);
-      return result;
-    } catch (error: any) {
-      throw new BadRequestException(`Erro ao processar o XML: ${error.message}`);
-    }
+    const xmlContent = file.buffer.toString('utf-8');
+    return this.fiscalService.processXml(user.tenantId, xmlContent);
   }
 }

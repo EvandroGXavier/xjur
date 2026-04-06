@@ -21,25 +21,25 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  plan                Plan?               @relation(fields: [planId], references: [id])
-  users               User[]
-  trustedDevices      TrustedDevice[]
-  contacts            Contact[]
+  plan                     Plan?                    @relation(fields: [planId], references: [id])
+  users                    User[]
+  trustedDevices           TrustedDevice[]
+  contacts                 Contact[]
   contactChannelIdentities ContactChannelIdentity[]
-  processes           Process[]
-  categories          DocumentCategory[]
-  templates           DocumentTemplate[]
-  communicationLogs   CommunicationLog[]
-  documentHistory     DocumentHistory[]
-  financialRecords    FinancialRecord[]
-  bankAccounts        BankAccount[]
-  relationTypes       RelationType[]
-  contactRelations    ContactRelation[]
-  assetTypes          AssetType[]
-  contactAssets       ContactAsset[]
-  financialParties    FinancialParty[]
-  transactionSplits   TransactionSplit[]
-  financialCategories FinancialCategory[]
+  processes                Process[]
+  categories               DocumentCategory[]
+  templates                DocumentTemplate[]
+  communicationLogs        CommunicationLog[]
+  documentHistory          DocumentHistory[]
+  financialRecords         FinancialRecord[]
+  bankAccounts             BankAccount[]
+  relationTypes            RelationType[]
+  contactRelations         ContactRelation[]
+  assetTypes               AssetType[]
+  contactAssets            ContactAsset[]
+  financialParties         FinancialParty[]
+  transactionSplits        TransactionSplit[]
+  financialCategories      FinancialCategory[]
 
   // Integração Microsoft 365 (OneDrive/SharePoint)
   msTenantId      String?
@@ -101,24 +101,24 @@ model Plan {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  tenantId     String
-  name         String
-  email        String   @unique
-  password     String
-  role         String // OWNER, ADMIN, MEMBER
-  permissions  Json?
-  theme        String   @default("SYSTEM") // SYSTEM, LIGHT, DARK
-  soundEnabled Boolean  @default(true)
+  id               String  @id @default(uuid())
+  tenantId         String
+  name             String
+  email            String  @unique
+  password         String
+  role             String // OWNER, ADMIN, MEMBER
+  permissions      Json?
+  theme            String  @default("SYSTEM") // SYSTEM, LIGHT, DARK
+  soundEnabled     Boolean @default(true)
   sidebarCollapsed Boolean @default(false)
 
   // Preferences (centralizadas por usuÃ¡rio)
-  startupModuleMode String @default("LAST") // LAST ou HOME
-  homeModuleId      String @default("dashboard")
-  lastModuleId      String @default("dashboard")
+  startupModuleMode String   @default("LAST") // LAST ou HOME
+  homeModuleId      String   @default("dashboard")
+  lastModuleId      String   @default("dashboard")
   preferences       Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   tenant                     Tenant              @relation(fields: [tenantId], references: [id])
   trustedDevices             TrustedDevice[]
@@ -130,17 +130,17 @@ model User {
 }
 
 model TrustedDevice {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   tenantId   String
   userId     String
   name       String
-  tokenHash  String   @unique
+  tokenHash  String    @unique
   userAgent  String?
   ip         String?
-  lastSeenAt DateTime @default(now())
+  lastSeenAt DateTime  @default(now())
   revokedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -157,20 +157,20 @@ model Contact {
   personType String @default("PF") // PF ou PJ
 
   // Campos Gerais
-  document      String? // CPF/CNPJ (Mantido para busca rápida/compatibilidade)
-  whatsapp      String?
+  document       String? // CPF/CNPJ (Mantido para busca rápida/compatibilidade)
+  whatsapp       String?
   // Canonical WhatsApp identity (digits only, E.164 without '+'). Ex: 5531199999999
-  whatsappE164  String?
+  whatsappE164   String?
   // Canonical WhatsApp thread id used by Evolution/Baileys. Ex: 5531199999999@s.whatsapp.net
   whatsappFullId String?
-  email         String?
-  phone         String?
-  notes         String?
-  category      String? // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
-  password      String? // Senha para acesso ao sistema
-  profilePicUrl String? // URL da foto de perfil
-  metadata      Json?
-  active        Boolean @default(true)
+  email          String?
+  phone          String?
+  notes          String?
+  category       String? // Cliente, Fornecedor, Parte Contrária, Perito, Funcionário
+  password       String? // Senha para acesso ao sistema
+  profilePicUrl  String? // URL da foto de perfil
+  metadata       Json?
+  active         Boolean @default(true)
 
   // Detalhes Específicos (1:1)
   pfDetails PersonDetailPF?
@@ -191,9 +191,9 @@ model Contact {
   // New Modules Relationships
   tags                      ContactTag[]
   appointmentParticipations AppointmentParticipant[]
-  proposals                 Proposal[]            @relation("ProposalClient")
-  proposalsAsSeller         Proposal[]            @relation("ProposalSeller")
-  inventoryConfigAsSeller   InventoryConfig[]     @relation("InventoryConfigDefaultSeller")
+  proposals                 Proposal[]               @relation("ProposalClient")
+  proposalsAsSeller         Proposal[]               @relation("ProposalSeller")
+  inventoryConfigAsSeller   InventoryConfig[]        @relation("InventoryConfigDefaultSeller")
   invoices                  Invoice[]
   tickets                   Ticket[]
   processParties            ProcessParty[]
@@ -221,9 +221,9 @@ model ContactChannelIdentity {
   id         String   @id @default(uuid())
   tenantId   String
   contactId  String
-  channel    String   // WHATSAPP, TELEGRAM, EMAIL, ...
-  provider   String?  // EVOLUTION, BAILEYS, META, ...
-  externalId String   // ex: 5531...@s.whatsapp.net, ...@lid, group jid, etc.
+  channel    String // WHATSAPP, TELEGRAM, EMAIL, ...
+  provider   String? // EVOLUTION, BAILEYS, META, ...
+  externalId String // ex: 5531...@s.whatsapp.net, ...@lid, group jid, etc.
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -273,11 +273,11 @@ model PersonDetailPJ {
   id        String @id @default(uuid())
   contactId String @unique
 
-  cnpj                   String?
-  companyName            String? // Razão Social
-  tradingName            String? // Nome Fantasia
-  stateRegistration      String? // Inscrição Estadual
-  municipalRegistration  String? // Inscrição Municipal
+  cnpj                  String?
+  companyName           String? // Razão Social
+  tradingName           String? // Nome Fantasia
+  stateRegistration     String? // Inscrição Estadual
+  municipalRegistration String? // Inscrição Municipal
 
   // Dados Expandidos PJ (Receita Federal)
   openingDate       DateTime?
@@ -390,9 +390,9 @@ model AdditionalContact {
 
 // 2.2 MÓDULOS JURÍDICOS E FINANCEIROS
 model Process {
-  id        String  @id @default(uuid())
-  tenantId  String
-  cnj       String? // Opcional para Casos/Consultivo
+  id       String  @id @default(uuid())
+  tenantId String
+  cnj      String? // Opcional para Casos/Consultivo
 
   // Identificação Interna
   category    String  @default("JUDICIAL") // JUDICIAL | EXTRAJUDICIAL
@@ -446,8 +446,8 @@ model Process {
   agentMessageLinks           AgentMessageLink[]
   documents                   DocumentHistory[]
 
-  workflowId                  String?
-  workflow                    Workflow? @relation(fields: [workflowId], references: [id])
+  workflowId String?
+  workflow   Workflow? @relation(fields: [workflowId], references: [id])
 
   @@unique([tenantId, code])
   @@unique([tenantId, cnj])
@@ -569,11 +569,11 @@ model ProcessTimeline {
 
   process           Process            @relation(fields: [processId], references: [id], onDelete: Cascade)
   agentMessageLinks AgentMessageLink[]
-  documents        DocumentHistory[]
+  documents         DocumentHistory[]
 
-  workflowStepId    String?
-  workflowStep      WorkflowStep?      @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
-  tags              ProcessTimelineTag[]
+  workflowStepId String?
+  workflowStep   WorkflowStep?        @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
+  tags           ProcessTimelineTag[]
 
   @@index([processId, date])
   @@index([workflowStepId])
@@ -787,17 +787,17 @@ model DocumentTemplate {
   categoryId String?
 
   // Biblioteca Mestre do Sistema (global) vs Modelos do Escritório (por tenant)
-  isSystemTemplate  Boolean @default(false)
-  systemKey         String? @unique // Identificador estável para upsert de templates do sistema (ex: PETICAO_INICIAL_GENERIC)
-  sourceTemplateId  String? // ID do template de origem (ex: cópia de um System Template)
+  isSystemTemplate Boolean @default(false)
+  systemKey        String? @unique // Identificador estável para upsert de templates do sistema (ex: PETICAO_INICIAL_GENERIC)
+  sourceTemplateId String? // ID do template de origem (ex: cópia de um System Template)
 
-  description       String?
-  tags              Json?   // ex: ["Cível","CPC","DrX"]
-  preferredStorage  String? // WORD_ONLINE | GOOGLE_DOCS
-  metadata          Json?   // Visual Law, seções, comentários internos (não impressos)
+  description      String?
+  tags             Json? // ex: ["Cível","CPC","DrX"]
+  preferredStorage String? // WORD_ONLINE | GOOGLE_DOCS
+  metadata         Json? // Visual Law, seções, comentários internos (não impressos)
 
-  category DocumentCategory? @relation(fields: [categoryId], references: [id])
-  tenant   Tenant?           @relation(fields: [tenantId], references: [id])
+  category DocumentCategory?     @relation(fields: [categoryId], references: [id])
+  tenant   Tenant?               @relation(fields: [tenantId], references: [id])
   history  DocumentHistory[]
   tagLinks DocumentTemplateTag[]
 
@@ -877,11 +877,11 @@ model Tag {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  tenant           Tenant               @relation(fields: [tenantId], references: [id])
-  contacts         ContactTag[]
-  processes        ProcessTag[]
-  financialRecords FinancialRecordTag[]
-  timelines        ProcessTimelineTag[]
+  tenant            Tenant                @relation(fields: [tenantId], references: [id])
+  contacts          ContactTag[]
+  processes         ProcessTag[]
+  financialRecords  FinancialRecordTag[]
+  timelines         ProcessTimelineTag[]
   documentTemplates DocumentTemplateTag[]
 
   @@map("tags")
@@ -990,21 +990,37 @@ model AppointmentParticipant {
 
 // 7. MÓDULO ESTOQUE (PRODUTOS & MOVIMENTAÇÕES)
 model Product {
-  id           String   @id @default(uuid())
-  tenantId     String
-  name         String
-  description  String?
-  sku          String? // Código de estoque
-  barcode      String?
-  ncm          String? // Classificação Fiscal
-  cest         String? // Substituição Tributária
-  unit         String   @default("UN") // UN, KG, LT, H (serviço)
-  type         String   @default("PRODUCT") // PRODUCT ou SERVICE
-  minStock     Int      @default(0)
-  currentStock Int      @default(0)
-  costPrice    Decimal? @db.Decimal(10, 2)
-  sellPrice    Decimal? @db.Decimal(10, 2)
-  isActive     Boolean  @default(true)
+  id                   String   @id @default(uuid())
+  tenantId             String
+  name                 String
+  description          String?
+  sku                  String? // Código de estoque
+  barcode              String?
+  ncm                  String? // Classificação Fiscal
+  cest                 String? // Substituição Tributária
+  unit                 String   @default("UN") // UN, KG, LT, H (serviço)
+  type                 String   @default("PRODUCT") // PRODUCT ou SERVICE
+  originCode           String?
+  defaultCfopSale      String?
+  cstIcms              String?
+  csosn                String?
+  cstPis               String?
+  cstCofins            String?
+  cstIpi               String?
+  icmsRate             Decimal? @db.Decimal(8, 4)
+  pisRate              Decimal? @db.Decimal(8, 4)
+  cofinsRate           Decimal? @db.Decimal(8, 4)
+  ipiRate              Decimal? @db.Decimal(8, 4)
+  serviceCode          String?
+  serviceCodeMunicipal String?
+  serviceNature        String?
+  nbs                  String?
+  issRate              Decimal? @db.Decimal(8, 4)
+  minStock             Int      @default(0)
+  currentStock         Int      @default(0)
+  costPrice            Decimal? @db.Decimal(10, 2)
+  sellPrice            Decimal? @db.Decimal(10, 2)
+  isActive             Boolean  @default(true)
 
   // E-commerce & Logistics
   images      String[] // URLs das imagens do produto
@@ -1022,6 +1038,7 @@ model Product {
   movements          InventoryMovement[]
   proposalItems      ProposalItem[]
   purchaseOrderItems PurchaseOrderItem[]
+  invoiceItems       InvoiceItem[]       @relation("ProductInvoiceItems")
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
@@ -1334,7 +1351,7 @@ model Proposal {
   paymentConditionRel PaymentCondition? @relation(fields: [paymentConditionId], references: [id])
 
   items            ProposalItem[]
-  invoice          Invoice?
+  invoices         Invoice[]
   financialRecords FinancialRecord[]
   contact          Contact           @relation("ProposalClient", fields: [contactId], references: [id])
   sellerId         String? // Quem está vendendo (Vendedor/Emissor)
@@ -1361,36 +1378,149 @@ model ProposalItem {
 }
 
 model Invoice {
-  id              String           @id @default(uuid())
-  tenantId        String
-  proposalId      String?          @unique
-  purchaseOrderId String?          @unique
-  contactId       String
-  number          String?
-  accessKey       String?          @unique
-  xmlContent      String?          @db.Text
-  type            String // INPUT (Compra) ou OUTPUT (Venda)
-  status          String // PENDING, AUTHORIZED, CANCELLED
-  financialId     String?          @unique
-  proposal        Proposal?        @relation(fields: [proposalId], references: [id])
-  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
-  contact         Contact          @relation(fields: [contactId], references: [id])
-  financial       FinancialRecord? @relation(fields: [financialId], references: [id])
-  tenant          Tenant           @relation(fields: [tenantId], references: [id])
-  createdAt       DateTime         @default(now())
+  id                    String           @id @default(uuid())
+  tenantId              String
+  proposalId            String?
+  purchaseOrderId       String?          @unique
+  contactId             String
+  documentModel         String           @default("NFE") // NFE, NFSE
+  direction             String           @default("OUTPUT") // INPUT, OUTPUT
+  scope                 String           @default("FULL") // FULL, PRODUCTS, SERVICES
+  environment           String?          @default("HOMOLOGATION")
+  provider              String?
+  providerCityCode      String?
+  series                Int?
+  number                String?
+  accessKey             String?          @unique
+  receiptNumber         String?
+  batchNumber           String?
+  operationNature       String?
+  issueDate             DateTime?
+  authorizationProtocol String?
+  authorizationDate     DateTime?
+  rejectionCode         String?
+  rejectionMessage      String?          @db.Text
+  cancelReason          String?          @db.Text
+  cancelProtocol        String?
+  xmlContent            String?          @db.Text
+  xmlDraft              String?          @db.Text
+  xmlAuthorized         String?          @db.Text
+  xmlCancelled          String?          @db.Text
+  pdfUrl                String?
+  requestPayload        Json?
+  responsePayload       Json?
+  readinessIssues       Json?
+  type                  String // INPUT (Compra) ou OUTPUT (Venda)
+  status                String // DRAFT, READY, VALIDATING, TRANSMITTING, AUTHORIZED, REJECTED, CANCELLED, PARTIALLY_AUTHORIZED
+  financialId           String?          @unique
+  proposal              Proposal?        @relation(fields: [proposalId], references: [id])
+  purchaseOrder         PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
+  contact               Contact          @relation(fields: [contactId], references: [id])
+  financial             FinancialRecord? @relation(fields: [financialId], references: [id])
+  tenant                Tenant           @relation(fields: [tenantId], references: [id])
+  items                 InvoiceItem[]
+  events                InvoiceEvent[]
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @default(now()) @updatedAt
 
+  @@index([tenantId, proposalId])
+  @@index([tenantId, documentModel, status])
   @@map("invoices")
 }
 
 model FiscalConfig {
-  id              String  @id @default(uuid())
-  tenantId        String  @unique
-  certificatePfx  String? @db.Text
-  certificatePass String?
-  environment     String  @default("HOMOLOGATION")
-  tenant          Tenant  @relation(fields: [tenantId], references: [id])
+  id                         String    @id @default(uuid())
+  tenantId                   String    @unique
+  razaoSocialEmitente        String?
+  nomeFantasiaEmitente       String?
+  cnpjEmitente               String?
+  ieEmitente                 String?
+  imEmitente                 String?
+  crt                        String?
+  regimeTributario           String?
+  serieNfe                   Int       @default(1)
+  serieNfse                  Int       @default(1)
+  proximoNumeroNfe           Int       @default(1)
+  proximoNumeroNfse          Int       @default(1)
+  proximoNumeroRps           Int       @default(1)
+  codigoMunicipioIbge        String?
+  codigoMunicipioNfse        String?
+  provedorNfse               String?
+  webserviceUf               String?
+  environment                String    @default("HOMOLOGATION")
+  certificatePfx             String?   @db.Text
+  certificatePass            String?
+  certificateStorageProvider String?
+  certificateFileUrl         String?
+  certificateLastSyncAt      DateTime?
+  certificateExpiresAt       DateTime?
+  certificateSerialNumber    String?
+  securitySecretId           String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @default(now()) @updatedAt
+  tenant                     Tenant    @relation(fields: [tenantId], references: [id])
 
   @@map("fiscal_configs")
+}
+
+model InvoiceItem {
+  id                   String   @id @default(uuid())
+  invoiceId            String
+  productId            String?
+  description          String
+  quantity             Int
+  unit                 String?
+  unitPrice            Decimal  @db.Decimal(10, 2)
+  grossAmount          Decimal  @db.Decimal(15, 2)
+  discountAmount       Decimal? @db.Decimal(15, 2)
+  netAmount            Decimal  @db.Decimal(15, 2)
+  cfop                 String?
+  ncm                  String?
+  cest                 String?
+  serviceCode          String?
+  serviceCodeMunicipal String?
+  nbs                  String?
+  origin               String?
+  cst                  String?
+  csosn                String?
+  icmsBase             Decimal? @db.Decimal(15, 2)
+  icmsRate             Decimal? @db.Decimal(8, 4)
+  icmsAmount           Decimal? @db.Decimal(15, 2)
+  ipiRate              Decimal? @db.Decimal(8, 4)
+  ipiAmount            Decimal? @db.Decimal(15, 2)
+  pisCst               String?
+  pisRate              Decimal? @db.Decimal(8, 4)
+  pisAmount            Decimal? @db.Decimal(15, 2)
+  cofinsCst            String?
+  cofinsRate           Decimal? @db.Decimal(8, 4)
+  cofinsAmount         Decimal? @db.Decimal(15, 2)
+  issRate              Decimal? @db.Decimal(8, 4)
+  issAmount            Decimal? @db.Decimal(15, 2)
+  metadata             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product? @relation("ProductInvoiceItems", fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model InvoiceEvent {
+  id              String   @id @default(uuid())
+  invoiceId       String
+  type            String
+  status          String
+  payload         Json?
+  externalCode    String?
+  externalMessage String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, createdAt])
+  @@map("invoice_events")
 }
 
 model PurchaseOrder {
@@ -1496,21 +1626,21 @@ model InventoryConfig {
 }
 
 model SecuritySecret {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   entityType  String // BANK_ACCOUNT, CONTACT, PROCESS, etc.
   expiresAt   DateTime?
-  fileUrl     String?  // Caminho do arquivo criptografado
+  fileUrl     String? // Caminho do arquivo criptografado
   entityId    String
   description String
   username    String?
   password    String? // Encrypted / Hash
   link        String?
-  privateKey  String?  @db.Text
-  publicKey   String?  @db.Text
-  details     String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  privateKey  String?   @db.Text
+  publicKey   String?   @db.Text
+  details     String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -1542,36 +1672,36 @@ model Workflow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant      Tenant         @relation(fields: [tenantId], references: [id])
-  steps       WorkflowStep[]
-  processes   Process[]
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  steps     WorkflowStep[]
+  processes Process[]
 
   @@unique([tenantId, name])
   @@map("workflows")
 }
 
 model WorkflowStep {
-  id                  String   @id @default(uuid())
-  workflowId          String
-  order               Int
-  
-  taskTitle           String
-  description         String?  @db.Text
-  taskCategory        String   @default("ACAO") // REGISTRO, ACAO, AGENDA
-  taskPriority        String   @default("MEDIA") // BAIXA, MEDIA, ALTA, URGENTE
-  
+  id         String @id @default(uuid())
+  workflowId String
+  order      Int
+
+  taskTitle    String
+  description  String? @db.Text
+  taskCategory String  @default("ACAO") // REGISTRO, ACAO, AGENDA
+  taskPriority String  @default("MEDIA") // BAIXA, MEDIA, ALTA, URGENTE
+
   daysToInternal      Int?
   daysToFatal         Int?
   defaultAssigneeRole String? // Tipo de parte (Role) ou ID do Usuário
-  
-  // Next step trigger - store as JSON array of taskTitles or IDs if needed, keeping simple string[] for PostgreSQL
-  nextStepIds         String[] 
-  
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
 
-  workflow            Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  timelines           ProcessTimeline[]
+  // Next step trigger - store as JSON array of taskTitles or IDs if needed, keeping simple string[] for PostgreSQL
+  nextStepIds String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workflow  Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  timelines ProcessTimeline[]
 
   @@unique([workflowId, order, taskTitle])
   @@map("workflow_steps")
