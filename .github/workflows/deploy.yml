@@ -64,13 +64,14 @@ jobs:
             df -h
 
             echo "4️⃣ Construindo Imagens (OTIMIZADO)..."
-            # Removido --no-cache global para evitar travamento da VPS
             # O Turbo cuidará de reconstruir o que mudou
             docker compose -f docker-compose.prod.yml build --pull api web
 
-            echo "5️⃣ Subindo Aplicação (FORÇANDO ATUALIZAÇÃO)..."
-            # --force-recreate garante que os novos arquivos compilados entrem em vigor
-            docker compose -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
+            echo "5️⃣ Subindo Aplicação (APENAS APPS)..."
+            # --force-recreate apenas para API e WEB, evitando conflito no Banco de Dados
+            docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate api web
+            # Garante que todo o resto esteja up (sem forçar recriação do DB)
+            docker compose -f docker-compose.prod.yml up -d
 
             echo "6️⃣ Limpeza de Disco..."
             docker image prune -f
