@@ -28,7 +28,8 @@ RUN npx turbo run db:generate
 FROM deps AS builder
 # Build only necessary apps for VPS (api and web)
 # Also build @drx/database since they depend on it
-RUN npx turbo run build --filter=api --filter=web
+# --force garante que o Turbo não pule o build caso encontre cache antigo no volume
+RUN npx turbo run build --filter=api --filter=web --force
 
 # === RUNNER (API) ===
 FROM node:20-slim AS runner-api

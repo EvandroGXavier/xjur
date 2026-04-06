@@ -58,12 +58,18 @@ jobs:
               npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
             }
 
-            echo "4️⃣ Construindo Imagens (FORÇANDO BUILD FRESCO)..."
-            # Adicionado --no-cache para garantir que as alterações no SRC sejam compiladas
-            docker compose -f docker-compose.prod.yml build --pull --no-cache api web
+            echo "3.5️⃣ Limpando Espaço em Disco (SISTEMA CHEIO?)..."
+            # Limpar imagens órfãs ANTES do build para garantir espaço na VPS
+            docker image prune -af --filter "until=24h"
+            df -h
 
-            echo "5️⃣ Subindo Aplicação (FORÇANDO RECRIAÇÃO)..."
-            # Adicionado --force-recreate para garantir que a imagem nova seja ativada
+            echo "4️⃣ Construindo Imagens (OTIMIZADO)..."
+            # Removido --no-cache global para evitar travamento da VPS
+            # O Turbo cuidará de reconstruir o que mudou
+            docker compose -f docker-compose.prod.yml build --pull api web
+
+            echo "5️⃣ Subindo Aplicação (FORÇANDO ATUALIZAÇÃO)..."
+            # --force-recreate garante que os novos arquivos compilados entrem em vigor
             docker compose -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
 
             echo "6️⃣ Limpeza de Disco..."
