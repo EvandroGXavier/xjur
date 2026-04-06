@@ -1,5 +1,8 @@
 # === BASE STAGE (Debian Slim) ===
 FROM node:20-slim AS base
+# Cache bust forcing total fresh rebuild
+ARG CACHE_BUST=1
+RUN echo "FORCE_BUILD=$CACHE_BUST"
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable

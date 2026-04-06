@@ -67,9 +67,12 @@ jobs:
             docker image prune -af --filter "until=24h"
             df -h
 
-            echo "4️⃣ Construindo Imagens (OTIMIZADO)..."
-            # O Turbo cuidará de reconstruir o que mudou
-            docker compose -f docker-compose.prod.yml build --pull api web
+            echo "4️⃣ Construindo Imagens (FORÇANDO REFRESH TOTAL)..."
+            # Remover imagens antigas explicitamente antes de construir
+            docker image prune -af --filter "until=2h"
+            
+            # Passando o timestamp atual como ARG para quebrar o cache de build do Docker
+            docker compose -f docker-compose.prod.yml build --pull --build-arg CACHE_BUST=$(date +%s) api web
 
             echo "5️⃣ Subindo Aplicação (APENAS APPS)..."
             # --force-recreate apenas para API e WEB, evitando conflito no Banco de Dados
