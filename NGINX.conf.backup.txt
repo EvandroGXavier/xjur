@@ -1,0 +1,102 @@
+# ----------------------------------------------------
+# BACKUP DE SEGURANÇA - NGINX aaPanel (Dr.X)
+# ----------------------------------------------------
+# Conteúdo para ser copiado na aba "Config" do aaPanel
+# Caso por algum motivo o painel limpe as rotas Docker.
+# ----------------------------------------------------
+
+server
+{
+    listen 80;
+    server_name dr-x.xtd.com.br www.dr-x.xtd.com.br 185.202.223.115;
+    
+    # Redirecionar HTTP para HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+    
+    # Manter acessível para renovação de SSL
+    location ~ \.well-known {
+        allow all;
+    }
+}
+
+server
+{
+    listen 443 ssl http2;
+    server_name dr-x.xtd.com.br www.dr-x.xtd.com.br 185.202.223.115;
+    
+    # Certificados SSL (Caminhos originais preservados)
+    ssl_certificate /etc/letsencrypt/live/dr-x.xtd.com.br-0001/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dr-x.xtd.com.br-0001/privkey.pem;
+    
+    # Configurações de Performance e Segurança SSL
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+    ssl_prefer_server_ciphers off;
+    
+    # Configurações de Log
+    access_log /www/wwwlogs/www.dr-x.xtd.com.br.log;
+    error_log  /www/wwwlogs/www.dr-x.xtd.com.br.error.log;
+    
+    # Includes do aaPanel (importante manter extensões)
+    include /www/server/panel/vhost/nginx/extension/www.dr-x.xtd.com.br/*.conf;
+
+    # ----------------------------------------------------
+    # 1. API (Backend Principal) - Porta 3000 no Docker
+    # ----------------------------------------------------
+    location /api {
+        proxy_pass http://127.0.0.1:3000;
+        
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # ----------------------------------------------------
+    # 2. WebSockets (Comunicação em Tempo Real)
+    # ----------------------------------------------------
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:3000;
+        
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    # ----------------------------------------------------
+    # 3. Frontend (Site/SPA) - Porta 8080 no Docker
+    # ----------------------------------------------------
+    location / {
+        # O Site vem do Docker porta 8080!
+        proxy_pass http://127.0.0.1:8080;
+        
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+    
+    # Bloqueio de arquivos sensíveis
+    location ~ ^/(\.user.ini|\.htaccess|\.git|\.env|\.svn|\.project|LICENSE|README.md)
+    {
+        return 404;
+    }
+
+    location ~ \.well-known {
+        allow all;
+    }
+}

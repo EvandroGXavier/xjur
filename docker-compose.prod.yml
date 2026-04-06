@@ -66,6 +66,9 @@ services:
       EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-JaJyX0tc3DvmPScDDRojSsguMSddVGeO}"
       # URL interna para webhook (Evolution → API dentro do Docker)
       WEBHOOK_INTERNAL_URL: "http://api:3000"
+    volumes:
+      - drx_prod_uploads:/app/apps/api/uploads
+      - drx_prod_secrets:/app/apps/api/secrets
     ports:
       - "3000:3000"
     networks:
@@ -156,6 +159,8 @@ volumes:
   drx_prod_redis:
   drx_prod_evolution_instances:
   drx_prod_evolution_store:
+  drx_prod_uploads:
+  drx_prod_secrets:
 
 networks:
   drx_prod_net:
