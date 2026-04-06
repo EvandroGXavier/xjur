@@ -4,6 +4,8 @@ import { XMLParser } from 'fast-xml-parser';
 import { StockService } from '../stock/stock.service';
 import { isValidCnpj, normalizeDigits } from '../common/validation-utils';
 import { SecurityService } from '../security/security.service';
+import { NfeGatewayService } from './nfe-gateway.service';
+import { BhNfseGatewayService } from './providers/bh-nfse/bh-nfse.gateway';
 
 @Injectable()
 export class FiscalService {
@@ -11,6 +13,8 @@ export class FiscalService {
     private readonly prisma: PrismaService,
     private readonly stockService: StockService,
     private readonly securityService: SecurityService,
+    private readonly nfeGatewayService: NfeGatewayService,
+    private readonly bhNfseGatewayService: BhNfseGatewayService,
   ) {}
 
   async getConfig(tenantId: string) {
@@ -199,6 +203,136 @@ export class FiscalService {
 
     const config = await this.getConfig(tenantId);
     return this.evaluateProposalReadinessFromData(config, proposal);
+  }
+
+  async transmitProposalInvoices(
+    tenantId: string,
+    proposalId: string,
+    options?: { issueProducts?: boolean; issueServices?: boolean },
+  ) {
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        tenantId,
+        proposalId,
+        status: 'READY',
+      },
+      include: {
+        items: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const results: any[] = [];
+
+    for (const invoice of invoices) {
+      if (invoice.scope === 'PRODUCTS' && options?.issueProducts === false) {
+        continue;
+      }
+
+      if (invoice.scope === 'SERVICES' && options?.issueServices === false) {
+        continue;
+      }
+
+      try {
+        const transmitting = await this.prisma.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: 'TRANSMITTING',
+            events: {
+              create: {
+                type: 'TRANSMISSION',
+                status: 'TRANSMITTING',
+                payload: {
+                  documentModel: invoice.documentModel,
+                  scope: invoice.scope,
+                },
+              },
+            },
+          },
+        });
+
+        let authorized;
+        if (transmitting.documentModel === 'NFE') {
+          authorized = await this.nfeGatewayService.authorizeInvoice(
+            tenantId,
+            transmitting.id,
+          );
+        } else if (transmitting.documentModel === 'NFSE') {
+          authorized = await this.bhNfseGatewayService.authorizeInvoice(
+            tenantId,
+            transmitting.id,
+          );
+        } else {
+          throw new Error('Modelo fiscal nao suportado para transmissao.');
+        }
+
+        results.push({
+          invoiceId: authorized.id,
+          documentModel: authorized.documentModel,
+          scope: authorized.scope,
+          status: authorized.status,
+        });
+      } catch (error: any) {
+        const rejected = await this.prisma.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: 'REJECTED',
+            rejectionMessage: error.message,
+            events: {
+              create: {
+                type: 'TRANSMISSION',
+                status: 'REJECTED',
+                externalMessage: error.message,
+              },
+            },
+          },
+        });
+
+        results.push({
+          invoiceId: rejected.id,
+          documentModel: rejected.documentModel,
+          scope: rejected.scope,
+          status: rejected.status,
+          error: error.message,
+        });
+      }
+    }
+
+    const finalInvoices = await this.prisma.invoice.findMany({
+      where: { tenantId, proposalId },
+    });
+
+    const allAuthorized =
+      finalInvoices.length > 0 &&
+      finalInvoices.every((invoice) => invoice.status === 'AUTHORIZED');
+    const anyAuthorized = finalInvoices.some(
+      (invoice) => invoice.status === 'AUTHORIZED',
+    );
+    const anyRejected = finalInvoices.some(
+      (invoice) => invoice.status === 'REJECTED',
+    );
+
+    if (allAuthorized) {
+      await this.prisma.proposal.update({
+        where: { id: proposalId },
+        data: { status: 'INVOICED' },
+      });
+    } else if (anyAuthorized || anyRejected) {
+      await this.prisma.proposal.update({
+        where: { id: proposalId },
+        data: { status: 'APPROVED' },
+      });
+    }
+
+    return {
+      invoices: results,
+      proposalStatus: allAuthorized ? 'INVOICED' : 'APPROVED',
+      transmissionMode: allAuthorized
+        ? 'AUTHORIZED'
+        : anyAuthorized
+          ? 'PARTIAL'
+          : 'REJECTED',
+    };
   }
 
   evaluateProposalReadinessFromData(config: any, proposal: any) {

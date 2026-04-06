@@ -52,10 +52,15 @@ jobs:
 
             echo "3️⃣ Sincronizando Schema (Prisma DB Push)..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public"
-            echo "3.2️⃣ Limpeza profunda de pastas residuais..."
-            # Deletar dist e node_modules antes do build para garantir que o Docker receba apenas código fonte
-            rm -rf apps/web/dist apps/api/dist node_modules
-            npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
+            echo "3.2️⃣ Limpeza de pastas de build..."
+            # Deletar apenas as pastas dist para forçar o Docker a recompilar
+            rm -rf apps/web/dist apps/api/dist
+            
+            npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss || {
+              echo "⚠️ npx falhou ou versão incompatível. Tentando instalar versão do projeto..."
+              npm install prisma@5.20.0 --no-save
+              npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
+            }
 
             echo "3.5️⃣ Limpando Espaço em Disco (SISTEMA CHEIO?)..."
             # Limpar imagens órfãs ANTES do build para garantir espaço na VPS

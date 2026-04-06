@@ -187,8 +187,7 @@ export class ProposalsService {
 
   async bill(tenantId: string, id: string, data: any) {
     const emitFiscal = Boolean(data?.emitFiscal);
-
-    return this.prisma.$transaction(async (tx) => {
+    const billingResult = await this.prisma.$transaction(async (tx) => {
       const proposal = await tx.proposal.findFirst({
         where: { id, tenantId },
         include: {
@@ -308,6 +307,42 @@ export class ProposalsService {
         transmissionMode: emitFiscal ? "PREPARED" : "SKIPPED",
       };
     });
+
+    if (emitFiscal) {
+      const transmissionOptions = {
+        issueProducts:
+          data?.issueProducts !== undefined
+            ? Boolean(data.issueProducts)
+            : Boolean(billingResult.readiness?.hasProducts),
+        issueServices:
+          data?.issueServices !== undefined
+            ? Boolean(data.issueServices)
+            : Boolean(billingResult.readiness?.hasServices),
+      };
+
+      const transmission = await this.fiscalService.transmitProposalInvoices(
+        tenantId,
+        id,
+        transmissionOptions,
+      );
+
+      const refreshed = await this.findOne(tenantId, id);
+
+      return {
+        ...billingResult,
+        proposal: refreshed,
+        transmissionMode: transmission.transmissionMode,
+        transmission,
+        message:
+          transmission.transmissionMode === 'AUTHORIZED'
+            ? 'Venda faturada e documentos fiscais autorizados.'
+            : transmission.transmissionMode === 'PARTIAL'
+              ? 'Venda faturada com autorizacao parcial dos documentos fiscais.'
+              : 'Venda faturada, mas a transmissao fiscal retornou rejeicoes.',
+      };
+    }
+
+    return billingResult;
   }
 
   async updateStatus(tenantId: string, id: string, status: string) {
