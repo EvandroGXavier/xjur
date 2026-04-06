@@ -12,6 +12,7 @@ export class ProposalsService {
   async create(tenantId: string, data: any) {
     const {
       contactId,
+      sellerId,
       totalAmount,
       notes,
       validUntil,
@@ -27,6 +28,7 @@ export class ProposalsService {
       data: {
         tenantId,
         contactId,
+        sellerId,
         status: "DRAFT",
         totalAmount,
         notes,
@@ -54,7 +56,10 @@ export class ProposalsService {
   async findAll(tenantId: string) {
     return this.prisma.proposal.findMany({
       where: { tenantId },
-      include: { contact: true },
+      include: { 
+        contact: true,
+        seller: true,
+      },
       orderBy: { createdAt: "desc" },
     });
   }
@@ -65,6 +70,7 @@ export class ProposalsService {
       include: {
         items: { include: { product: true } },
         contact: true,
+        seller: true,
         invoice: true,
         financialRecords: true,
       },
@@ -105,7 +111,8 @@ export class ProposalsService {
       return tx.proposal.update({
         where: { id },
         data: {
-          contactId,
+          contactId: data.contactId,
+          sellerId: data.sellerId,
           totalAmount,
           notes,
           validUntil: validUntil ? new Date(validUntil) : null,

@@ -442,3 +442,14 @@ export const helpTelegram: HelpSection[] = [
     content: '<ul><li><b>F1</b>: Abre este manual de ajuda em qualquer tela.</li><li><b>Botão de "Connect"</b>: Força a reinicialização do Webhook caso o bot pare de responder.</li><li><b>Whitelisting</b>: Você pode configurar no DrX-Claw quais usuários ou grupos de chat o bot tem permissão para responder.</li></ul>',
   }
 ];
+
+export const helpSigilo: HelpSection = {
+  title: '🛡️ Módulo Sigilo (Cofre de Segurança)',
+  content: 'Recurso exclusivo para <b>Administradores</b> para armazenamento de informações sensíveis com criptografia.<br/><br/>' +
+    '<b>Como acessar:</b> Pressione <b>CTRL + F8</b> em qualquer tela para abrir a autenticação. Após confirmar sua senha, a aba <b>SIGILO</b> ficará visível por 5 minutos nos formulários.<br/><br/>' +
+    '<b>O que você pode fazer:</b><ul>' +
+    '<li><b>Senhas e PINs:</b> Guarde senhas de bancos, certificados e sistemas externos.</li>' +
+    '<li><b>Certificados Digitais (A1):</b> Faça o upload do arquivo .pfx/.p12 e controle a data de validade.</li>' +
+    '<li><b>Upload de Arquivos:</b> Anexe instaladores ou chaves sensíveis diretamente no registro.</li>' +
+    '</ul>',
+};

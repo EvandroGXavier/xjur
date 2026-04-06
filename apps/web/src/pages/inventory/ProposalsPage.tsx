@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { api } from "../../services/api";
 import { Plus, Search, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +8,12 @@ import { useHotkeys } from "../../hooks/useHotkeys";
 import { embeddedContentColor } from "../../utils/themeColors";
 import { CreatableSelect } from "../../components/ui/CreatableSelect";
 
-export function ProposalsPage() {
+export function ProposalsPage({
+  mode = "open",
+}: {
+  mode?: "open" | "approved";
+}) {
+  const isSalesMode = mode === "approved";
   const [proposals, setProposals] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -23,6 +28,7 @@ export function ProposalsPage() {
   // Form State
   const [formData, setFormData] = useState<any>({
     contactId: "",
+    sellerId: "", // Added
     salesperson: "",
     validUntil: "",
     deliveryDate: "",
@@ -34,6 +40,11 @@ export function ProposalsPage() {
     financialInstallments: [],
   });
 
+  const [defaultSeller, setDefaultSeller] = useState<any>(null);
+  const [defaultConfigs, setDefaultConfigs] = useState<any>(null);
+  const pageTitle = isSalesMode ? "Vendas" : "Orcamentos / Pedidos";
+  const selectedItemLabel = isSalesMode ? "uma venda" : "um orcamento";
+
   useEffect(() => {
     loadProposals();
     loadDependencies();
@@ -41,29 +52,61 @@ export function ProposalsPage() {
     loadUsers();
   }, []);
 
+  const searchPlaceholder = isSalesMode
+    ? "Buscar vendas..."
+    : "Buscar orcamentos...";
+
   const loadUsers = async () => {
     try {
       const res = await api.get("/users");
       setUsers(res.data);
     } catch {
-      console.error("Erro ao carregar usuários");
+      console.error("Erro ao carregar usuÃ¡rios");
     }
   };
 
-  const handleNovaProposta = () => {
+  const handleNovaProposta = async () => {
     setSelectedProposal(null);
+    
+    let initialSellerId = "";
+    let initialSeller = null;
+    let initialNotes = "";
+    let initialValidity = "";
+    let initialConditionId = "";
+
+    try {
+      const res = await api.get("/stock/config");
+      const config = res.data;
+      if (config) {
+        initialSellerId = config.defaultSellerId || "";
+        initialSeller = config.defaultSeller || null;
+        initialNotes = config.defaultNotes || "";
+        initialConditionId = config.defaultPaymentConditionId || "";
+        
+        if (config.defaultValidityDays) {
+          const d = new Date();
+          d.setDate(d.getDate() + Number(config.defaultValidityDays));
+          initialValidity = d.toISOString().split("T")[0];
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao buscar configuracoes de estoque", err);
+    }
+
     setFormData({
       contactId: "",
+      sellerId: initialSellerId,
       salesperson: "",
-      validUntil: "",
+      validUntil: initialValidity,
       deliveryDate: "",
       special: false,
-      paymentConditionId: "",
+      paymentConditionId: initialConditionId,
       paymentCondition: "",
-      notes: "",
+      notes: initialNotes,
       items: [],
       financialInstallments: [],
     });
+    setDefaultSeller(initialSeller);
     setIsEditing(true);
   };
 
@@ -73,7 +116,7 @@ export function ProposalsPage() {
     const printContents = `
       <html>
         <head>
-          <title>Orçamento #${String(proposal.code).padStart(6, "0")}</title>
+          <title>OrÃ§amento #${String(proposal.code).padStart(6, "0")}</title>
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: ${embeddedContentColor.text}; }
             .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${embeddedContentColor.text}; padding-bottom: 20px; margin-bottom: 30px; }
@@ -99,8 +142,8 @@ export function ProposalsPage() {
         <body>
           <div class="header">
             <div>
-              <h1 class="title">Orçamento / Proposta</h1>
-              <div class="subtitle">Nº ${String(proposal.code).padStart(6, "0")}</div>
+              <h1 class="title">OrÃ§amento / Proposta</h1>
+              <div class="subtitle">NÂº ${String(proposal.code).padStart(6, "0")}</div>
             </div>
             <div style="text-align: right;">
               <div class="subtitle">Data: ${new Date(proposal.createdAt).toLocaleDateString()}</div>
@@ -124,11 +167,12 @@ export function ProposalsPage() {
               </div>
             </div>
             <div class="info-box" style="grid-column: span 2; margin-top: 10px;">
-              <strong>Informações Comerciais</strong>
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
-                <div class="info-row"><span>Vendedor:</span> <span>${proposal.salesperson || "-"}</span></div>
+              <strong>InformaÃ§Ãµes Comerciais</strong>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="info-row"><span>Vendedor / Atendimento:</span> <span>${proposal.seller?.name || proposal.salesperson || "-"}</span></div>
                 <div class="info-row"><span>Validade:</span> <span>${proposal.validUntil ? new Date(proposal.validUntil).toLocaleDateString() : "-"}</span></div>
-                <div class="info-row"><span>Entrega:</span> <span>${proposal.deliveryDate ? new Date(proposal.deliveryDate).toLocaleDateString() : "-"}</span></div>
+                <div class="info-row"><span>CondiÃ§Ã£o Pagto:</span> <span>${proposal.paymentConditionId ? proposal.paymentCondition : "-"}</span></div>
+                <div class="info-row"><span>PrevisÃ£o Entrega:</span> <span>${proposal.deliveryDate ? new Date(proposal.deliveryDate).toLocaleDateString() : "-"}</span></div>
               </div>
             </div>
           </div>
@@ -136,8 +180,8 @@ export function ProposalsPage() {
           <table>
             <thead>
               <tr>
-                <th>Código</th>
-                <th>Descrição</th>
+                <th>CÃ³digo</th>
+                <th>DescriÃ§Ã£o</th>
                 <th class="text-right">Qtd</th>
                 <th class="text-right">V. Unit</th>
                 <th class="text-right">Total</th>
@@ -158,14 +202,14 @@ export function ProposalsPage() {
 
           <div class="totals">
             <div class="total-row grand-total">
-              <span>Total do Orçamento:</span>
+              <span>Total do OrÃ§amento:</span>
               <span>R$ ${Number(proposal.totalAmount).toFixed(2)}</span>
             </div>
           </div>
           <div class="clear"></div>
 
           ${proposal.financialRecords && proposal.financialRecords.length > 0 ? `
-            <h4 style="margin-bottom: 10px; color: ${embeddedContentColor.text};">Previsão Financeira</h4>
+            <h4 style="margin-bottom: 10px; color: ${embeddedContentColor.text};">PrevisÃ£o Financeira</h4>
             <table class="financial-table" style="width: 50%;">
               <thead>
                 <tr>
@@ -188,7 +232,7 @@ export function ProposalsPage() {
 
           ${proposal.notes ? `
             <div class="notes">
-              <strong>Observações:</strong><br/>
+              <strong>ObservaÃ§Ãµes:</strong><br/>
               ${proposal.notes.replace(/\n/g, '<br/>')}
             </div>
           ` : ''}
@@ -214,7 +258,11 @@ export function ProposalsPage() {
   };
 
   useHotkeys({
-    onNew: () => handleNovaProposta(),
+    onNew: () => {
+      if (!isSalesMode) {
+        handleNovaProposta();
+      }
+    },
     onCancel: () => {
       if (isEditing) setIsEditing(false);
     },
@@ -222,7 +270,7 @@ export function ProposalsPage() {
       if (selectedProposal && !isEditing) {
         printProposal(selectedProposal);
       } else if (!isEditing) {
-        toast.warning("Selecione um orçamento para imprimir.");
+        toast.warning("Selecione um orÃ§amento para imprimir.");
       }
     }
   });
@@ -232,7 +280,7 @@ export function ProposalsPage() {
       const res = await api.get("/proposals");
       setProposals(res.data);
     } catch {
-      toast.error("Erro ao buscar orçamentos");
+      toast.error("Erro ao buscar orÃ§amentos");
     }
   };
 
@@ -266,33 +314,36 @@ export function ProposalsPage() {
           : [],
         notes: res.data.notes || "",
         items: res.data.items || [],
+        sellerId: res.data.sellerId || "",
       });
+      setDefaultSeller(res.data.seller || null);
     } catch {
-      toast.error("Erro ao carregar detalhes do orçamento");
+      toast.error("Erro ao carregar detalhes do orÃ§amento");
     }
   };
 
   const handleApprove = async (id: string) => {
     if (selectedProposal?.status === "APPROVED") {
-      toast.info("Este orÃ§amento jÃ¡ foi aprovado.");
+      toast.info("Este orÃƒÂ§amento jÃƒÂ¡ foi aprovado.");
       return;
     }
 
     try {
       await api.patch(`/proposals/${id}/status`, { status: "APPROVED" });
-      toast.success("Orçamento aprovado. Financeiro e estoque atualizados!");
+      toast.success("OrÃ§amento aprovado. Financeiro e estoque atualizados!");
+      setSelectedProposal(null);
+      setIsEditing(false);
       loadProposals();
-      loadProposalDetails(id);
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Erro ao aprovar");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Deseja realmente excluir este orçamento?")) return;
+    if (!confirm("Deseja realmente excluir este orÃ§amento?")) return;
     try {
       await api.delete(`/proposals/${id}`);
-      toast.success("Orçamento excluído com sucesso");
+      toast.success("OrÃ§amento excluÃ­do com sucesso");
       setSelectedProposal(null);
       loadProposals();
     } catch (error: any) {
@@ -302,7 +353,7 @@ export function ProposalsPage() {
 
   const handleSave = async (shouldClose = true) => {
     if (selectedProposal?.status === "APPROVED") {
-      toast.error("OrÃ§amentos aprovados nÃ£o podem ser editados.");
+      toast.error("OrÃƒÂ§amentos aprovados nÃƒÂ£o podem ser editados.");
       return;
     }
 
@@ -318,23 +369,24 @@ export function ProposalsPage() {
           0,
         );
         if (Math.abs(totalAmount - totalInstallments) > 0.05) {
-          toast.warning(`A soma das parcelas (R$ ${totalInstallments.toFixed(2)}) não pode ser diferente do total do pedido (R$ ${totalAmount.toFixed(2)}).`);
+          toast.warning(`A soma das parcelas (R$ ${totalInstallments.toFixed(2)}) nÃ£o pode ser diferente do total do pedido (R$ ${totalAmount.toFixed(2)}).`);
           return;
         }
       }
 
       const payload = {
         ...formData,
+        sellerId: formData.sellerId,
         paymentCondition: JSON.stringify(formData.financialInstallments),
         totalAmount,
       };
 
       if (selectedProposal && selectedProposal.id) {
         await api.put(`/proposals/${selectedProposal.id}`, payload);
-        toast.success("Orçamento atualizado");
+        toast.success("OrÃ§amento atualizado");
       } else {
         await api.post("/proposals", payload);
-        toast.success("Orçamento criado com sucesso");
+        toast.success("OrÃ§amento criado com sucesso");
       }
       if (shouldClose) {
         setIsEditing(false);
@@ -355,7 +407,7 @@ export function ProposalsPage() {
       ...prev,
       items: newItems,
     }));
-    // Se tiver condiÃ§Ã£o de pgto, recalcula parcelas
+    // Se tiver condiÃƒÂ§ÃƒÂ£o de pgto, recalcula parcelas
     if (formData.paymentConditionId) {
        setTimeout(() => handlePaymentConditionChange(formData.paymentConditionId, newItems), 0);
     }
@@ -365,7 +417,7 @@ export function ProposalsPage() {
     const newItems = [...formData.items];
     newItems.splice(index, 1);
     setFormData((prev: any) => ({ ...prev, items: newItems }));
-    // Se tiver condiÃ§Ã£o de pgto, recalcula parcelas
+    // Se tiver condiÃƒÂ§ÃƒÂ£o de pgto, recalcula parcelas
     if (formData.paymentConditionId) {
        setTimeout(() => handlePaymentConditionChange(formData.paymentConditionId, newItems), 0);
     }
@@ -394,7 +446,7 @@ export function ProposalsPage() {
 
     setFormData((prev: any) => ({ ...prev, items: newItems }));
     
-    // Se tiver condiÃ§Ã£o de pgto, recalcula parcelas
+    // Se tiver condiÃƒÂ§ÃƒÂ£o de pgto, recalcula parcelas
     if (formData.paymentConditionId) {
        setTimeout(() => handlePaymentConditionChange(formData.paymentConditionId, newItems), 0);
     }
@@ -442,14 +494,25 @@ export function ProposalsPage() {
     }
   };
 
-  const filteredProposals = proposals.filter(
-    (p) =>
-      p.contact?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.code.toString().includes(searchQuery),
-  );
+  const filteredProposals = proposals.filter((p) => {
+    const proposalStatus = String(p.status || "").toUpperCase();
+    const matchesMode = isSalesMode
+      ? proposalStatus === "APPROVED" || proposalStatus === "INVOICED"
+      : proposalStatus !== "APPROVED" && proposalStatus !== "INVOICED";
+
+    if (!matchesMode) {
+      return false;
+    }
+
+    const contactName = String(p.contact?.name || "").toLowerCase();
+    return (
+      contactName.includes(searchQuery.toLowerCase()) ||
+      String(p.code || "").includes(searchQuery)
+    );
+  });
 
   if (isEditing) {
-    // Tela de Inclusão/Edição Padrão Vencedor (Segundo Anexo)
+    // Tela de InclusÃ£o/EdiÃ§Ã£o PadrÃ£o Vencedor (Segundo Anexo)
     const productItems = formData.items;
     const totalItemsAmount = productItems.reduce(
       (acc: number, item: any) => acc + Number(item.total),
@@ -460,7 +523,7 @@ export function ProposalsPage() {
       <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
         <div className="bg-slate-800/50 text-white px-4 py-3 flex items-center justify-between">
           <h2 className="text-lg font-bold text-teal-400">
-            Novo Orçamento / Pedido
+            Novo OrÃ§amento / Pedido
           </h2>
           <button
             onClick={() => setIsEditing(false)}
@@ -470,15 +533,46 @@ export function ProposalsPage() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 text-sm">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 text-sm scrollbar-hide">
           {/* Top Panel - Info do Pedido */}
-          <div className="bg-slate-800/50 border text-xs sm:text-sm border-slate-800 p-3 rounded shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-800/80 border text-xs sm:text-sm border-slate-700/50 p-4 rounded-xl shadow-xl grid grid-cols-1 md:grid-cols-3 gap-6 relative overflow-hidden backdrop-blur-md">
+            {/* Background Accent */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 blur-3xl rounded-full -mr-16 -mt-16 pointer-events-none"></div>
+            
+            {/* Linha 0: Fornecedor / Emissor (NOVO - ACIMA DO CLIENTE) */}
+            <div className="md:col-span-3 flex flex-col gap-2 bg-slate-900/40 p-4 rounded-lg border border-slate-700/30">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
+                <label className="font-bold text-slate-300 text-[10px] uppercase tracking-widest">
+                  Fornecedor / Emissor da Venda
+                </label>
+              </div>
+              <div className="flex-1 w-full relative z-[50] bg-slate-950/80 rounded-lg border border-slate-700/50 pointer-events-auto shadow-inner hover:border-purple-500/50 transition-all group">
+                <ContactPickerGlobal
+                  onAdd={async () => {}}
+                  hideRole={true}
+                  hideQualification={true}
+                  showAction={false}
+                  hideContactLabel={true}
+                  onSelectContact={(id) =>
+                    setFormData({ ...formData, sellerId: id })
+                  }
+                  defaultContact={defaultSeller}
+                  className="!p-1 !bg-transparent !border-none !shadow-none"
+                  placeholder="Selecione o Fornecedor/Vendedor..."
+                />
+              </div>
+            </div>
+
             {/* Linha 1: Cliente (Destaque Total) */}
-            <div className="md:col-span-3 flex items-center gap-2 bg-slate-900/50 p-2 rounded border border-slate-700/50 mb-1">
-              <label className="font-semibold text-teal-400 w-20 shrink-0">
-                Cliente:
-              </label>
-              <div className="flex-1 w-full relative z-40 bg-slate-950 rounded border border-slate-700 pointer-events-auto shadow-sm">
+            <div className="md:col-span-3 flex flex-col gap-2 bg-slate-900/40 p-4 rounded-lg border border-slate-700/30">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-teal-500"></div>
+                <label className="font-bold text-slate-300 text-[10px] uppercase tracking-widest">
+                  Cliente / DestinatÃ¡rio
+                </label>
+              </div>
+              <div className="flex-1 w-full relative z-[45] bg-slate-950/80 rounded-lg border border-slate-700/50 pointer-events-auto shadow-inner hover:border-teal-500/40 transition-all">
                 <ContactPickerGlobal
                   onAdd={async () => {}}
                   hideRole={true}
@@ -497,7 +591,8 @@ export function ProposalsPage() {
                         }
                       : null
                   }
-                  className="!p-0 !bg-transparent !border-none !shadow-none"
+                  className="!p-1 !bg-transparent !border-none !shadow-none"
+                  placeholder="Selecione o Cliente..."
                 />
               </div>
             </div>
@@ -598,7 +693,7 @@ export function ProposalsPage() {
               {/* Produtos */}
               <div className="flex-1 bg-slate-800/50 border border-slate-800 rounded shadow-sm flex flex-col">
                 <div className="bg-slate-900 border-b border-slate-800 px-2 py-1 font-semibold text-slate-300 flex justify-between items-center">
-                  Produtos / Serviços
+                  Produtos / ServiÃ§os
                   <button
                     onClick={handleAddItem}
                     className="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-0.5 rounded text-xs flex items-center gap-1 text-slate-300"
@@ -707,10 +802,10 @@ export function ProposalsPage() {
                 </div>
               </div>
 
-              {/* Observações */}
+              {/* ObservaÃ§Ãµes */}
               <div className="h-32 bg-slate-800/50 border border-slate-800 rounded shadow-sm flex flex-col">
                 <div className="bg-slate-900 border-b border-slate-800 px-2 py-1 font-semibold text-slate-300">
-                  Observações
+                  ObservaÃ§Ãµes
                 </div>
                 <textarea
                   className="flex-1 w-full p-2 outline-none resize-none bg-transparent text-white"
@@ -738,7 +833,7 @@ export function ProposalsPage() {
               {/* Instllments / Faturamento */}
               <div className="bg-teal-900/20 border border-teal-800/50 p-4 rounded shadow-sm flex flex-col gap-2">
                 <h4 className="text-teal-400 font-semibold mb-2">
-                  Previsão Financeira
+                  PrevisÃ£o Financeira
                 </h4>
                 {formData.financialInstallments.length > 0 ? (
                   <div className="flex flex-col gap-2">
@@ -784,7 +879,7 @@ export function ProposalsPage() {
                   </div>
                 ) : (
                   <div className="text-xs text-slate-500">
-                    Nenhuma parcela. Valor será à vista.
+                    Nenhuma parcela. Valor serÃ¡ Ã  vista.
                   </div>
                 )}
               </div>
@@ -821,9 +916,7 @@ export function ProposalsPage() {
   return (
     <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
       <div className="bg-slate-800/50 text-white px-4 py-2 flex items-center justify-between border-b-2 border-teal-500">
-        <h1 className="text-lg font-bold text-teal-400">
-          Orçamentos / Pedidos
-        </h1>
+        <h1 className="text-lg font-bold text-teal-400">{pageTitle}</h1>
         <button
           className="text-slate-400 hover:text-white"
           onClick={() => window.history.back()}
@@ -839,7 +932,7 @@ export function ProposalsPage() {
           <input
             type="text"
             className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 pr-8 text-sm text-white outline-none focus:border-teal-500"
-            placeholder="Buscar orçamentos..."
+            placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -874,8 +967,8 @@ export function ProposalsPage() {
                     className={`cursor-pointer transition-colors ${selectedProposal?.id === p.id ? "bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500" : "text-slate-300 hover:bg-slate-800/50 border-b border-slate-800"}`}
                     onClick={() => loadProposalDetails(p.id)}
                     onDoubleClick={() => {
-                      if (p.status === "APPROVED") {
-                        toast.info("OrÃ§amentos aprovados nÃ£o podem ser editados.");
+                      if (isSalesMode || p.status === "APPROVED") {
+                        toast.info("OrÃƒÂ§amentos aprovados nÃƒÂ£o podem ser editados.");
                         return;
                       }
                       setIsEditing(true);
@@ -902,7 +995,7 @@ export function ProposalsPage() {
               <div className="flex gap-4">
                 <div className="flex-1 bg-slate-800/50 border border-slate-800 p-4 shadow-sm rounded-lg">
                   <h3 className="text-slate-400 font-semibold mb-3 pb-2 border-b border-slate-700 text-xs uppercase tracking-wider">
-                    Informações do Pedido/Orçamento
+                    InformaÃ§Ãµes do Pedido/OrÃ§amento
                   </h3>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-white">
                     <div>
@@ -956,37 +1049,43 @@ export function ProposalsPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 w-48">
-                  <button
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
-                    onClick={() => handleApprove(selectedProposal.id)}
-                    disabled={selectedProposal.status === "APPROVED"}
-                  >
-                    Aprovar (Faturar)
-                  </button>
-                  <button
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
-                    onClick={() => {
-                      if (selectedProposal.status === "APPROVED") {
-                        toast.info("OrÃ§amentos aprovados nÃ£o podem ser editados.");
-                        return;
-                      }
-                      setIsEditing(true);
-                    }}
-                    disabled={selectedProposal.status === "APPROVED"}
-                  >
-                    Editar Orçamento
-                  </button>
-                  <button
-                    className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 hover:text-red-400 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
-                    onClick={() => handleDelete(selectedProposal.id)}
-                  >
-                    Excluir Orçamento
-                  </button>
+                  {!isSalesMode && (
+                    <button
+                      className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
+                      onClick={() => handleApprove(selectedProposal.id)}
+                      disabled={selectedProposal.status === "APPROVED"}
+                    >
+                      Aprovar (Faturar)
+                    </button>
+                  )}
+                  {!isSalesMode && (
+                    <button
+                      className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
+                      onClick={() => {
+                        if (selectedProposal.status === "APPROVED") {
+                          toast.info("Orcamentos aprovados nao podem ser editados.");
+                          return;
+                        }
+                        setIsEditing(true);
+                      }}
+                      disabled={selectedProposal.status === "APPROVED"}
+                    >
+                      Editar Orcamento
+                    </button>
+                  )}
+                  {!isSalesMode && (
+                    <button
+                      className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 hover:text-red-400 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
+                      onClick={() => handleDelete(selectedProposal.id)}
+                    >
+                      Excluir Orcamento
+                    </button>
+                  )}
                   <button 
                     onClick={() => printProposal(selectedProposal)}
                     className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
                   >
-                    Imprimir Orçamento
+                    Imprimir OrÃ§amento
                   </button>
                   {selectedProposal.financialRecords && selectedProposal.financialRecords.length > 0 && (
                      <button
@@ -1002,17 +1101,17 @@ export function ProposalsPage() {
               {/* Grids Bottom */}
               <div className="flex-1 bg-slate-800/50 border border-slate-800 shadow-sm rounded-lg flex flex-col overflow-hidden">
                 <h3 className="text-slate-400 font-semibold px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wider bg-slate-900/50 text-left">
-                  Produtos / Serviços da Proposta
+                  Produtos / ServiÃ§os da Proposta
                 </h3>
                 <div className="p-0 overflow-auto flex-1">
                   <table className="w-full text-left text-sm border-collapse">
                     <thead className="bg-blue-600 text-white">
                       <tr>
                         <th className="px-3 py-2 border-b border-blue-800">
-                          Código
+                          CÃ³digo
                         </th>
                         <th className="px-3 py-2 border-b border-blue-800">
-                          Descrição
+                          DescriÃ§Ã£o
                         </th>
                         <th className="px-3 py-2 border-b border-blue-800 w-24 text-right">
                           Qtd
@@ -1069,7 +1168,7 @@ export function ProposalsPage() {
               {/* Grids Bottom - Financeiro (Contas a Receber geradas) */}
               <div className="flex-[0.8] bg-slate-800/50 border border-slate-800 shadow-sm rounded-lg flex flex-col overflow-hidden">
                 <h3 className="text-slate-400 font-semibold px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wider bg-slate-900/50 text-left">
-                  Títulos a Receber (Financeiro)
+                  TÃ­tulos a Receber (Financeiro)
                 </h3>
                 <div className="p-0 overflow-auto flex-1">
                   <table className="w-full text-left text-sm border-collapse">
@@ -1088,7 +1187,7 @@ export function ProposalsPage() {
                             className="border-b border-slate-800 hover:bg-slate-800 transition-colors"
                           >
                             <td className="px-3 py-2 font-mono">
-                              {fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Única'}
+                              {fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Ãšnica'}
                             </td>
                             <td className="px-3 py-2">
                               {new Date(fin.dueDate).toLocaleDateString()}
@@ -1111,8 +1210,8 @@ export function ProposalsPage() {
                         <tr>
                           <td colSpan={4} className="text-center p-8 text-slate-500">
                             {selectedProposal.status === 'APPROVED' 
-                                ? 'Nenhum lançamento financeiro encontrado.'
-                                : 'Contas a Receber serão geradas ao Aprovar este orçamento.'}
+                                ? 'Nenhum lanÃ§amento financeiro encontrado.'
+                                : 'Contas a Receber serÃ£o geradas ao Aprovar este orÃ§amento.'}
                           </td>
                         </tr>
                       )}
@@ -1123,7 +1222,7 @@ export function ProposalsPage() {
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-slate-500">
-              Selecione um pedido/orçamento à esquerda para visualizar detalhes
+              Selecione {selectedItemLabel} a esquerda para visualizar detalhes
             </div>
           )}
         </div>
@@ -1145,12 +1244,14 @@ export function ProposalsPage() {
             &gt;|
           </button>
         </div>
-        <button
-          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
-          onClick={handleNovaProposta}
-        >
-          <span>Incluir (F2)</span>
-        </button>
+        {!isSalesMode && (
+          <button
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
+            onClick={handleNovaProposta}
+          >
+            <span>Incluir (F2)</span>
+          </button>
+        )}
         <button 
           onClick={() => printProposal(selectedProposal)}
           className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
@@ -1170,3 +1271,4 @@ export function ProposalsPage() {
     </div>
   );
 }
+

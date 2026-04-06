@@ -191,7 +191,9 @@ model Contact {
   // New Modules Relationships
   tags                      ContactTag[]
   appointmentParticipations AppointmentParticipant[]
-  proposals                 Proposal[]
+  proposals                 Proposal[]            @relation("ProposalClient")
+  proposalsAsSeller         Proposal[]            @relation("ProposalSeller")
+  inventoryConfigAsSeller   InventoryConfig[]     @relation("InventoryConfigDefaultSeller")
   invoices                  Invoice[]
   tickets                   Ticket[]
   processParties            ProcessParty[]
@@ -1334,7 +1336,9 @@ model Proposal {
   items            ProposalItem[]
   invoice          Invoice?
   financialRecords FinancialRecord[]
-  contact          Contact           @relation(fields: [contactId], references: [id])
+  contact          Contact           @relation("ProposalClient", fields: [contactId], references: [id])
+  sellerId         String? // Quem está vendendo (Vendedor/Emissor)
+  seller           Contact?          @relation("ProposalSeller", fields: [sellerId], references: [id])
   tenant           Tenant            @relation(fields: [tenantId], references: [id])
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -1448,6 +1452,7 @@ model PaymentCondition {
   proposals        Proposal[]
   purchaseOrders   PurchaseOrder[]
   financialRecords FinancialRecord[]
+  inventoryConfigs InventoryConfig[]
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
@@ -1474,6 +1479,15 @@ model InventoryConfig {
   tenantId     String  @unique
   profitMargin Decimal @default(30) @db.Decimal(5, 2)
 
+  // Configurações Padrão de Orçamento
+  defaultSellerId           String?
+  defaultPaymentConditionId String?
+  defaultNotes              String? @db.Text
+  defaultValidityDays       Int     @default(7)
+
+  defaultSeller           Contact?          @relation("InventoryConfigDefaultSeller", fields: [defaultSellerId], references: [id])
+  defaultPaymentCondition PaymentCondition? @relation(fields: [defaultPaymentConditionId], references: [id])
+
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1485,6 +1499,8 @@ model SecuritySecret {
   id          String   @id @default(uuid())
   tenantId    String
   entityType  String // BANK_ACCOUNT, CONTACT, PROCESS, etc.
+  expiresAt   DateTime?
+  fileUrl     String?  // Caminho do arquivo criptografado
   entityId    String
   description String
   username    String?

@@ -5,11 +5,14 @@ import {
   Check,
   DollarSign,
   PackageSearch,
-  Settings,
   TrendingUp,
   X,
+  FileText,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ContactPickerGlobal } from "../../components/contacts/ContactPickerGlobal";
+import { usePaymentConditions } from "../../hooks/usePaymentConditions";
 
 export function InventoryDashboard() {
   const [stats, setStats] = useState({
@@ -22,9 +25,18 @@ export function InventoryDashboard() {
   const [profitMargin, setProfitMargin] = useState(30);
   const [isLoading, setIsLoading] = useState(true);
 
+  // New Budget Presets
+  const [defaultSeller, setDefaultSeller] = useState<any>(null);
+  const [defaultPaymentConditionId, setDefaultPaymentConditionId] = useState("");
+  const [defaultNotes, setDefaultNotes] = useState("");
+  const [defaultValidityDays, setDefaultValidityDays] = useState(7);
+
+  const { conditions: paymentConditions, fetchConditions } = usePaymentConditions();
+
   useEffect(() => {
     loadDashboardData();
     loadConfig();
+    fetchConditions();
   }, []);
 
   const loadDashboardData = async () => {
@@ -57,8 +69,15 @@ export function InventoryDashboard() {
   const loadConfig = async () => {
     try {
       const res = await api.get("/stock/config");
-      if (res.data?.profitMargin !== undefined && res.data?.profitMargin !== null) {
-        setProfitMargin(Number(res.data.profitMargin));
+      if (res.data) {
+        if (res.data.profitMargin !== undefined && res.data.profitMargin !== null) {
+          setProfitMargin(Number(res.data.profitMargin));
+        }
+        
+        setDefaultSeller(res.data.defaultSeller || null);
+        setDefaultPaymentConditionId(res.data.defaultPaymentConditionId || "");
+        setDefaultNotes(res.data.defaultNotes || "");
+        setDefaultValidityDays(res.data.defaultValidityDays || 7);
       }
     } catch (err) {
       console.error("Erro ao carregar configuracoes.", err);
@@ -72,7 +91,13 @@ export function InventoryDashboard() {
     }
 
     try {
-      await api.post("/stock/config", { profitMargin });
+      await api.post("/stock/config", { 
+        profitMargin,
+        defaultSellerId: defaultSeller?.id,
+        defaultPaymentConditionId,
+        defaultNotes,
+        defaultValidityDays: Number(defaultValidityDays) || 7
+      });
       toast.success("Configuracoes salvas com sucesso!");
       setShowConfigModal(false);
     } catch {
@@ -217,29 +242,93 @@ export function InventoryDashboard() {
               </button>
             </div>
 
-            <div className="p-6 text-slate-300 space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-                  Margem de Lucro Padrao (%)
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 outline-none text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-bold text-lg"
-                    value={profitMargin}
-                    onChange={(e) => setProfitMargin(Number(e.target.value))}
-                  />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">
-                    %
+            <div className="p-6 text-slate-300 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="space-y-4">
+                <h3 className="text-teal-400 font-bold border-b border-slate-700 pb-2 flex items-center gap-2">
+                  <TrendingUp size={18} /> Gerais
+                </h3>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Margem de Lucro Padrao (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 outline-none text-teal-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all font-bold text-lg"
+                      value={profitMargin}
+                      onChange={(e) => setProfitMargin(Number(e.target.value))}
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">
+                      %
+                    </div>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed mt-2">
-                  Esta margem e utilizada para definir automaticamente o{" "}
-                  <strong>Preco de Venda</strong> com base no{" "}
-                  <strong>Custo</strong>, especialmente ao dar entrada rapida
-                  de produtos via importacao de XML fiscal.
-                </p>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <h3 className="text-purple-400 font-bold border-b border-slate-700 pb-2 flex items-center gap-2">
+                  <FileText size={18} /> Pre-definicoes de Orcamento
+                </h3>
+                
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Vendedor / Emissor Padrao
+                  </label>
+                  <div className="bg-slate-950 border border-slate-700 rounded-lg p-1">
+                    <ContactPickerGlobal 
+                      onAdd={async () => {}}
+                      hideRole={true}
+                      hideQualification={true}
+                      showAction={false}
+                      hideContactLabel={true}
+                      onSelectContact={(_id, contact) => setDefaultSeller(contact)}
+                      defaultContact={defaultSeller}
+                      className="!bg-transparent !p-0 !border-none !shadow-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Cond. de Pagamento
+                    </label>
+                    <select
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 outline-none text-white focus:border-purple-500"
+                      value={defaultPaymentConditionId}
+                      onChange={(e) => setDefaultPaymentConditionId(e.target.value)}
+                    >
+                      <option value="">Selecione...</option>
+                      {paymentConditions.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Validade (Dias)
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 outline-none text-white focus:border-purple-500"
+                      value={defaultValidityDays}
+                      onChange={(e) => setDefaultValidityDays(Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Observacao Padrao
+                  </label>
+                  <textarea
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 outline-none text-white focus:border-purple-500 min-h-[100px] resize-none"
+                    value={defaultNotes}
+                    onChange={(e) => setDefaultNotes(e.target.value)}
+                    placeholder="Ex: Entrega em 5 dias uteis..."
+                  />
+                </div>
               </div>
             </div>
 

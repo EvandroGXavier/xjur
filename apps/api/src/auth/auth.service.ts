@@ -200,4 +200,16 @@ export class AuthService {
     });
     return { ok: true };
   }
+
+  async verifyPassword(userId: string, pass: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (user && (await bcrypt.compare(pass, user.password))) {
+      return true;
+    }
+
+    return false;
+  }
 }

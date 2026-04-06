@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Building2, Clock, LogOut, Menu, User, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Building2, Clock, LogOut, Menu, User, Sun, Moon, Monitor, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getAuthPersistence, getUser, logoutLocal, setUser as authSetUser } from '../auth/authStorage';
 import { useIdleLogout } from '../hooks/useIdleLogout';
@@ -9,6 +9,8 @@ import { api } from '../services/api';
 import { InventoryHelpModal } from './inventory/InventoryHelpModal';
 import { Sidebar } from './Sidebar';
 import { getModuleIdFromPath } from '../utils/userPreferences';
+import { useSigilo } from '../contexts/SigiloContext';
+import { SigiloAuthModal } from './SigiloAuthModal';
 
 declare const __APP_VERSION__: string;
 
@@ -24,6 +26,7 @@ const StatusBar = ({
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
   const [user, setUser] = useState<any>(null);
+  const { isSigiloActive, timeLeft } = useSigilo();
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -60,6 +63,12 @@ const StatusBar = ({
     }
   };
 
+  const formatTimeLeft = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   if (!user) return null;
 
   return (
@@ -84,6 +93,13 @@ const StatusBar = ({
       >
         {isSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
       </button>
+
+      {isSigiloActive && (
+        <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 border border-red-500/30 rounded-full animate-pulse">
+          <ShieldCheck size={14} className="text-red-400" />
+          <span className="text-red-200 font-bold tracking-tighter">SIGILO ATIVO: {formatTimeLeft(timeLeft)}</span>
+        </div>
+      )}
 
       <div className="hidden md:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium tracking-wide text-emerald-200">
         <span className="text-emerald-400/80">Versao</span>
@@ -240,6 +256,7 @@ export function Layout() {
       </main>
 
       <InventoryHelpModal />
+      <SigiloAuthModal />
     </div>
   );
 }

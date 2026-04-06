@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { 
-  Package, 
-  ShoppingCart, 
-  FileText, 
+import {
+  Package,
+  ShoppingCart,
+  FileText,
   Receipt,
-  LayoutDashboard
+  LayoutDashboard,
+  Landmark,
+  ClipboardList,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { InventoryDashboard } from "./InventoryDashboard";
@@ -15,12 +17,17 @@ import { FiscalPage } from "./FiscalPage";
 
 export function Inventory() {
   const [view, setView] = useState<
-    "dashboard" | "products" | "proposals" | "purchases" | "fiscal"
+    | "dashboard"
+    | "products"
+    | "proposals"
+    | "sales"
+    | "quotes"
+    | "purchases"
+    | "fiscal"
   >("dashboard");
 
   return (
     <div className="flex flex-col h-full space-y-4">
-      {/* Header com Abas */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-teal-600/20 rounded-lg flex items-center justify-center text-teal-400 border border-teal-600/30">
@@ -28,7 +35,9 @@ export function Inventory() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Estoque</h1>
-            <p className="text-slate-500 text-xs">Gestão de produtos e suprimentos</p>
+            <p className="text-slate-500 text-xs">
+              Gestao de produtos, suprimentos, compras e vendas
+            </p>
           </div>
         </div>
 
@@ -39,7 +48,7 @@ export function Inventory() {
               "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "dashboard"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
             )}
           >
             <LayoutDashboard size={16} />
@@ -51,7 +60,7 @@ export function Inventory() {
               "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "products"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
             )}
           >
             <Package size={16} />
@@ -63,11 +72,35 @@ export function Inventory() {
               "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "proposals"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
             )}
           >
             <FileText size={16} />
-            Orçamentos
+            Orcamentos
+          </button>
+          <button
+            onClick={() => setView("sales")}
+            className={clsx(
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              view === "sales"
+                ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
+            )}
+          >
+            <Landmark size={16} />
+            Vendas
+          </button>
+          <button
+            onClick={() => setView("quotes")}
+            className={clsx(
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              view === "quotes"
+                ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
+            )}
+          >
+            <ClipboardList size={16} />
+            Cotacao
           </button>
           <button
             onClick={() => setView("purchases")}
@@ -75,7 +108,7 @@ export function Inventory() {
               "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "purchases"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
             )}
           >
             <ShoppingCart size={16} />
@@ -87,7 +120,7 @@ export function Inventory() {
               "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "fiscal"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-800"
+                : "text-slate-400 hover:text-white hover:bg-slate-800",
             )}
           >
             <Receipt size={16} />
@@ -96,12 +129,13 @@ export function Inventory() {
         </div>
       </div>
 
-      {/* Conteúdo Dinâmico */}
       <div className="flex-1 overflow-hidden">
         {view === "dashboard" && <InventoryDashboard />}
         {view === "products" && <ProductsList />}
-        {view === "proposals" && <ProposalsPage />}
-        {view === "purchases" && <PurchasesPage />}
+        {view === "proposals" && <ProposalsPage mode="open" />}
+        {view === "sales" && <ProposalsPage mode="approved" />}
+        {view === "quotes" && <PurchasesPage mode="quotation" />}
+        {view === "purchases" && <PurchasesPage mode="received" />}
         {view === "fiscal" && <FiscalPage />}
       </div>
     </div>

@@ -7,11 +7,15 @@ import { api, getApiUrl } from '../../services/api';
 import { openProtectedMedia } from '../../services/protectedMedia';
 import { isValidCnpj, isValidCpf, masks } from '../../utils/masks';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
-import { helpContacts } from '../../data/helpManuals';
+import { helpContacts, helpSigilo } from '../../data/helpManuals';
+import { getUser } from '../../auth/authStorage';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { AttachmentPreview } from '../../components/ui/AttachmentPreview';
 
 import { PJTab } from './PJTab';
+import { useSigilo } from '../../contexts/SigiloContext';
+import { SecurityTab } from '../../components/ui/SecurityTab';
+import { ShieldAlert } from 'lucide-react';
 
 // Interface matching Backend DTO
 interface ContactData {
@@ -342,6 +346,7 @@ export function ContactForm() {
   const returnTo = searchParams.get('returnTo');
   
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'contact');
+  const { isSigiloActive } = useSigilo();
   const [formData, setFormData] = useState<ContactData>({
     name: '',
     personType: 'LEAD',
@@ -394,8 +399,12 @@ export function ContactForm() {
         { id: 'adm', label: 'ADM', icon: Settings }
     ];
 
+    if (isSigiloActive) {
+      commonTabs.push({ id: 'sigilo', label: 'SIGILO', icon: ShieldAlert });
+    }
+
     return [...baseTabs, ...commonTabs];
-  }, [formData.personType]);
+  }, [formData.personType, isSigiloActive]);
 
   useEffect(() => {
     if (!TABS.some(tab => tab.id === activeTab)) {
@@ -407,6 +416,11 @@ export function ContactForm() {
   const [enriching, setEnriching] = useState(false);
   const [requireOneInfo, setRequireOneInfo] = useState(true);
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+  const manualSections = useMemo(() => {
+    const user = getUser();
+    const isAdmin = user && ['ADMIN', 'OWNER'].includes(user.role);
+    return isAdmin ? [...helpContacts, helpSigilo] : helpContacts;
+  }, []);
   
   // Address form states
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -4067,7 +4081,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'adm' && (
-                <div className="space-y-6 max-w-2xl animate-fadeIn">
+                <div className="space-y-6 max-w-2xl animate-fadeIn p-8">
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                              <Settings size={20} className="text-indigo-400" /> Configurações Administrativas
@@ -4102,9 +4116,14 @@ export function ContactForm() {
                 </div>
             )}
 
-
+            {activeTab === 'sigilo' && isSigiloActive && id && id !== 'new' && (
+                <div className="animate-in fade-in zoom-in-95 duration-500 p-8">
+                    <SecurityTab entityType="CONTACT" entityId={id} />
+                </div>
+            )}
         </div>
       </div>
+
       {/* Botão Flutuante de Retorno */}
       {returnTo && (
         <button
@@ -4115,7 +4134,7 @@ export function ContactForm() {
           <span>Voltar para o Local Anterior</span>
         </button>
       )}
-      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Contatos" sections={helpContacts} />
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Contatos" sections={manualSections} />
     </div>
   );
 }

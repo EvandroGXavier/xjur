@@ -563,23 +563,16 @@ export class PurchasesService {
 
       if (existing.status === "RECEIVED") {
         for (const item of existing.items) {
-          const product = await tx.product.findUnique({
-            where: { id: item.productId },
+          await this.stockService.applyMovement(tx, {
+            tenantId,
+            productId: item.productId,
+            type: "OUT",
+            quantity: item.quantity,
+            unitPrice: Number(item.unitCost),
+            totalPrice: Number(item.total),
+            reason: `Estorno de entrada - Compra removida #${existing.code}`,
+            skipIfService: true,
           });
-
-          if (product && product.type === "PRODUCT") {
-            await tx.product.update({
-              where: { id: product.id },
-              data: { currentStock: product.currentStock - item.quantity },
-            });
-            await tx.inventoryMovement.deleteMany({
-              where: {
-                tenantId,
-                productId: product.id,
-                reason: { contains: existing.code.toString() },
-              },
-            });
-          }
         }
       }
 
@@ -761,10 +754,25 @@ export class PurchasesService {
     if (emit?.CNPJ) {
       await this.contactsService.enrichContactPJ(contact.id, tenantId, supplierDocument);
       if (emit?.IM) {
-        await this.prisma.personDetailPJ.update({
+        const existingPJ = await this.prisma.personDetailPJ.findUnique({
           where: { contactId: contact.id },
-          data: { municipalRegistration: String(emit.IM) }
         });
+
+        if (existingPJ) {
+          await this.prisma.personDetailPJ.update({
+            where: { contactId: contact.id },
+            data: { municipalRegistration: String(emit.IM) }
+          });
+        } else {
+          await this.prisma.personDetailPJ.create({
+            data: {
+              contactId: contact.id,
+              cnpj: supplierDocument,
+              companyName: supplierName,
+              municipalRegistration: String(emit.IM),
+            },
+          });
+        }
       }
     }
 

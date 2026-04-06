@@ -43,7 +43,7 @@ interface ContactPickerGlobalProps {
     hideContactLabel?: boolean;
     showAction?: boolean;
     className?: string;
-    onSelectContact?: (id: string) => void;
+    onSelectContact?: (id: string, contact?: ContactOption) => void;
     showAmount?: boolean;
     amount?: string;
     rolePlaceholder?: string;
@@ -250,7 +250,7 @@ export function ContactPickerGlobal({
                                     <button 
                                         onClick={() => {
                                             setSelectedContact(null);
-                                            if (onSelectContact) onSelectContact('');
+                                            if (onSelectContact) onSelectContact('', undefined);
                                         }}
                                         className="p-1 hover:bg-indigo-500/20 rounded-full transition text-indigo-400"
                                     >
@@ -298,7 +298,7 @@ export function ContactPickerGlobal({
                                                             setSelectedContact(contact);
                                                             setSearchResults([]);
                                                             setSearchTerm('');
-                                                            if (onSelectContact) onSelectContact(contact.id);
+                                                            if (onSelectContact) onSelectContact(contact.id, contact);
                                                         }}
                                                         className="w-full text-left px-4 py-3 hover:bg-slate-800 transition flex items-center justify-between group border-b border-slate-800 last:border-0"
                                                     >

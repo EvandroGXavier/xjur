@@ -18,6 +18,7 @@ export class ProductsService {
 
   async create(createProductDto: CreateProductDto, tenantId: string) {
     const { supplierId, ...rest } = this.normalizeProductPayload(createProductDto);
+    await this.validateSupplier(tenantId, supplierId);
     const createData: Prisma.ProductUncheckedCreateInput = {
       ...rest,
       name: (rest.name || '').trim(),
@@ -73,6 +74,7 @@ export class ProductsService {
     await this.findOne(id, tenantId);
 
     const { supplierId, ...rest } = this.normalizeProductPayload(updateProductDto);
+    await this.validateSupplier(tenantId, supplierId);
     const updateData: Prisma.ProductUncheckedUpdateInput = {
       ...rest,
       ...(supplierId !== undefined ? { supplierId: supplierId || null } : {}),
@@ -103,11 +105,12 @@ export class ProductsService {
     }
 
     if (
+      product._count.movements > 0 ||
       product._count.proposalItems > 0 ||
       product._count.purchaseOrderItems > 0
     ) {
       throw new BadRequestException(
-        'Nao e possivel excluir um item ja utilizado em compras ou orcamentos.',
+        'Nao e possivel excluir um item com historico de estoque, compras ou orcamentos.',
       );
     }
 
@@ -163,6 +166,19 @@ export class ProductsService {
       brand: data.brand?.trim() || undefined,
       images: (data.images || []).filter(Boolean),
     };
+  }
+
+  private async validateSupplier(tenantId: string, supplierId?: string) {
+    if (!supplierId) return;
+
+    const supplier = await this.prisma.contact.findFirst({
+      where: { id: supplierId, tenantId },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      throw new BadRequestException('Fornecedor invalido para este tenant.');
+    }
   }
 
   private normalizeIntegerField(

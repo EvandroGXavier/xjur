@@ -29,7 +29,8 @@ import { DataGrid } from '../../components/ui/DataGrid';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
-import { helpContacts } from '../../data/helpManuals';
+import { helpContacts, helpSigilo } from '../../data/helpManuals';
+import { getUser } from '../../auth/authStorage';
 import { clsx } from 'clsx';
 import { useHotkeys } from '../../hooks/useHotkeys';
 
@@ -90,6 +91,11 @@ export function ContactList() {
   const [activeCardFilter, setActiveCardFilter] = useState<CardFilter>('ALL');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Contact | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+  const manualSections = useMemo(() => {
+    const user = getUser();
+    const isAdmin = user && ['ADMIN', 'OWNER'].includes(user.role);
+    return isAdmin ? [...helpContacts, helpSigilo] : helpContacts;
+  }, []);
   
   const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('LIST'); // New state for view mode
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -691,7 +697,7 @@ export function ContactList() {
             ]}
           />
       </div>
-      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Contatos" sections={helpContacts} />
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Contatos" sections={manualSections} />
     </div>
   );
 }

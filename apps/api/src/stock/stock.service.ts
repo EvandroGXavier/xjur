@@ -98,6 +98,8 @@ export class StockService {
     executor: PrismaExecutor,
     data: StockMovementInput,
   ): Promise<StockMovementResult> {
+    await this.lockProductRow(executor, data.tenantId, data.productId);
+
     const product = await this.getProductOrThrow(
       executor,
       data.tenantId,
@@ -197,30 +199,69 @@ export class StockService {
   async getConfig(tenantId: string) {
     let config = await this.prisma.inventoryConfig.findUnique({
       where: { tenantId },
+      include: {
+        defaultSeller: true,
+        defaultPaymentCondition: true,
+      }
     });
 
     if (!config) {
       config = await this.prisma.inventoryConfig.create({
         data: { tenantId, profitMargin: 30 },
+        include: {
+          defaultSeller: true,
+          defaultPaymentCondition: true,
+        }
       });
     }
 
     return config;
   }
 
-  async updateConfig(tenantId: string, data: { profitMargin: number }) {
-    const profitMargin = Number(data.profitMargin);
+  async updateConfig(tenantId: string, data: any) {
+    if (data.defaultSellerId) {
+      const seller = await this.prisma.contact.findFirst({
+        where: { id: data.defaultSellerId, tenantId },
+        select: { id: true },
+      });
 
-    if (!Number.isFinite(profitMargin) || profitMargin < 0) {
-      throw new BadRequestException(
-        'A margem de lucro deve ser um numero maior ou igual a zero.',
-      );
+      if (!seller) {
+        throw new BadRequestException('Vendedor padrao invalido para este tenant.');
+      }
+    }
+
+    if (data.defaultPaymentConditionId) {
+      const paymentCondition = await this.prisma.paymentCondition.findFirst({
+        where: { id: data.defaultPaymentConditionId, tenantId },
+        select: { id: true },
+      });
+
+      if (!paymentCondition) {
+        throw new BadRequestException('Condicao de pagamento invalida para este tenant.');
+      }
     }
 
     return this.prisma.inventoryConfig.upsert({
       where: { tenantId },
-      update: { profitMargin },
-      create: { tenantId, profitMargin },
+      update: {
+        profitMargin: data.profitMargin !== undefined ? Number(data.profitMargin) : undefined,
+        defaultSellerId: data.defaultSellerId,
+        defaultPaymentConditionId: data.defaultPaymentConditionId,
+        defaultNotes: data.defaultNotes,
+        defaultValidityDays: data.defaultValidityDays !== undefined ? Number(data.defaultValidityDays) : undefined,
+      },
+      create: {
+        tenantId,
+        profitMargin: data.profitMargin !== undefined ? Number(data.profitMargin) : 30,
+        defaultSellerId: data.defaultSellerId,
+        defaultPaymentConditionId: data.defaultPaymentConditionId,
+        defaultNotes: data.defaultNotes,
+        defaultValidityDays: data.defaultValidityDays !== undefined ? Number(data.defaultValidityDays) : 7,
+      },
+      include: {
+        defaultSeller: true,
+        defaultPaymentCondition: true,
+      }
     });
   }
 
@@ -238,6 +279,16 @@ export class StockService {
     }
 
     return product;
+  }
+
+  private async lockProductRow(
+    executor: PrismaExecutor,
+    tenantId: string,
+    productId: string,
+  ) {
+    await executor.$queryRaw(
+      Prisma.sql`SELECT id FROM "products" WHERE id = ${productId} AND "tenantId" = ${tenantId} FOR UPDATE`,
+    );
   }
 
   private normalizeQuantity(type: StockMovementType, rawQuantity: number) {

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class SecurityService {
@@ -110,6 +112,31 @@ export class SecurityService {
     return plaintext.toString('utf8');
   }
 
+  private encryptBuffer(data: Buffer) {
+    const key = this.getSecretsKey();
+    if (!key) return data;
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ciphertext = Buffer.concat([cipher.update(data), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, ciphertext]);
+  }
+
+  private decryptBuffer(data: Buffer) {
+    const key = this.getSecretsKey();
+    if (!key || data.length < 28) return data;
+    try {
+      const iv = data.slice(0, 12);
+      const tag = data.slice(12, 28);
+      const ciphertext = data.slice(28);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    } catch {
+      return data;
+    }
+  }
+
   private encode(text?: string | null) {
     if (!text) return text as any;
     return this.encrypt(text);
@@ -188,6 +215,45 @@ export class SecurityService {
     return this.prisma.securitySecret.delete({
       where: { id },
     });
+  }
+
+  async uploadSecretFile(id: string, tenantId: string, file: any) {
+    const secret = await this.prisma.securitySecret.findFirst({
+      where: { id, tenantId },
+    });
+    if (!secret) throw new NotFoundException('Segredo não encontrado');
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'security');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const fileName = `${id}-${Date.now()}-${file.originalname}`;
+    const filePath = path.join(uploadDir, fileName);
+
+    const encrypted = this.encryptBuffer(file.buffer);
+    fs.writeFileSync(filePath, encrypted);
+
+    return this.prisma.securitySecret.update({
+      where: { id },
+      data: { fileUrl: fileName },
+    });
+  }
+
+  async downloadSecretFile(id: string, tenantId: string) {
+    const secret = await this.prisma.securitySecret.findFirst({
+      where: { id, tenantId },
+    });
+    if (!secret || !secret.fileUrl) throw new NotFoundException('Arquivo não encontrado');
+
+    const filePath = path.join(process.cwd(), 'uploads', 'security', secret.fileUrl);
+    if (!fs.existsSync(filePath)) throw new NotFoundException('Arquivo não encontrado em disco');
+
+    const encrypted = fs.readFileSync(filePath);
+    const decrypted = this.decryptBuffer(encrypted);
+
+    return {
+      buffer: decrypted,
+      originalName: secret.fileUrl.split('-').slice(2).join('-'),
+    };
   }
 }
 

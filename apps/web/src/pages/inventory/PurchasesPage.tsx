@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { api } from "../../services/api";
 import { Plus, Search, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +7,12 @@ import { usePaymentConditions } from "../../hooks/usePaymentConditions";
 import { useHotkeys } from "../../hooks/useHotkeys";
 import { embeddedContentColor } from "../../utils/themeColors";
 
-export function PurchasesPage() {
+export function PurchasesPage({
+  mode = "quotation",
+}: {
+  mode?: "quotation" | "received";
+}) {
+  const isReceivedMode = mode === "received";
   const [purchases, setPurchases] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
 
@@ -31,6 +36,11 @@ export function PurchasesPage() {
     xmlData: null,
     supplierName: "",
   });
+  const pageTitle = isReceivedMode ? "Compras / Entradas" : "Cotacao";
+  const selectedItemLabel = isReceivedMode ? "uma compra" : "uma cotacao";
+  const searchPlaceholder = isReceivedMode
+    ? "Buscar compras..."
+    : "Buscar cotacoes...";
 
   useEffect(() => {
     loadPurchases();
@@ -87,29 +97,29 @@ export function PurchasesPage() {
       </head>
       <body>
         <div class="header">
-          <h2>PEDIDO DE COMPRA Nº ${String(purchase.code).padStart(6, '0')}</h2>
+          <h2>PEDIDO DE COMPRA NÂº ${String(purchase.code).padStart(6, '0')}</h2>
           <p>DATA: ${new Date(purchase.createdAt).toLocaleDateString()}</p>
         </div>
 
         <div class="info-box">
           <h3>DADOS DO FORNECEDOR / EMITENTE</h3>
-          <p><strong>Nome/Razão Social:</strong> ${purchase.contact?.name || ''}</p>
+          <p><strong>Nome/RazÃ£o Social:</strong> ${purchase.contact?.name || ''}</p>
           <p><strong>CNPJ/CPF:</strong> ${purchase.contact?.document || ''}</p>
         </div>
 
         <div class="info-box">
-          <h3>INFORMAÇÕES DA COMPRA</h3>
-          <p><strong>Previsão de Entrega:</strong> ${purchase.deliveryDate ? new Date(purchase.deliveryDate).toLocaleDateString() : 'N/A'}</p>
+          <h3>INFORMAÃ‡Ã•ES DA COMPRA</h3>
+          <p><strong>PrevisÃ£o de Entrega:</strong> ${purchase.deliveryDate ? new Date(purchase.deliveryDate).toLocaleDateString() : 'N/A'}</p>
           <p><strong>Status do Pedido:</strong> ${purchase.status}</p>
-          <p><strong>Comprador Responsável:</strong> ${purchase.buyer?.name || 'Não Informado'}</p>
+          <p><strong>Comprador ResponsÃ¡vel:</strong> ${purchase.buyer?.name || 'NÃ£o Informado'}</p>
         </div>
 
         <h3>ITENS DO PEDIDO</h3>
         <table>
           <thead>
             <tr>
-              <th>CÓDIGO</th>
-              <th>DESCRIÇÃO</th>
+              <th>CÃ“DIGO</th>
+              <th>DESCRIÃ‡ÃƒO</th>
               <th class="text-right">QTD</th>
               <th class="text-right">CUSTO UN ($)</th>
               <th class="text-right">TOTAL ($)</th>
@@ -142,7 +152,7 @@ export function PurchasesPage() {
             <tbody>
               ${purchase.financialRecords.map((fin: any) => `
                 <tr>
-                  <td>${fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Única'}</td>
+                  <td>${fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Ãšnica'}</td>
                   <td>${new Date(fin.dueDate).toLocaleDateString()}</td>
                   <td class="text-right">${Number(fin.amount).toFixed(2)}</td>
                   <td>${fin.status}</td>
@@ -158,7 +168,7 @@ export function PurchasesPage() {
 
         ${purchase.notes ? `
           <div class="info-box" style="margin-top: 20px;">
-            <h3>OBSERVAÇÕES</h3>
+            <h3>OBSERVAÃ‡Ã•ES</h3>
             <p>${purchase.notes}</p>
           </div>
         ` : ''}
@@ -175,7 +185,11 @@ export function PurchasesPage() {
   };
 
   useHotkeys({
-    onNew: () => handleNovoPedido(),
+    onNew: () => {
+      if (!isReceivedMode) {
+        handleNovoPedido();
+      }
+    },
     onCancel: () => {
       if (isEditing) setIsEditing(false);
     },
@@ -183,7 +197,7 @@ export function PurchasesPage() {
       if (selectedPurchase && !isEditing) {
         printPurchaseOrder(selectedPurchase);
       } else if (!isEditing) {
-        toast.warning("Selecione um pedido para imprimir.");
+        toast.warning("Selecione um registro para imprimir.");
       }
     }
   });
@@ -234,21 +248,22 @@ export function PurchasesPage() {
 
   const handleApprove = async (id: string) => {
     if (selectedPurchase?.status === "RECEIVED") {
-      toast.info("Este pedido jÃ¡ foi recebido.");
+      toast.info("Este pedido jÃƒÂ¡ foi recebido.");
       return;
     }
 
     if (
       !confirm(
-        "Dar entrada/receber este pedido? O estoque será atualizado e um contas-a-pagar será gerado.",
+        "Dar entrada/receber este pedido? O estoque serÃ¡ atualizado e um contas-a-pagar serÃ¡ gerado.",
       )
     )
       return;
     try {
       await api.patch(`/purchases/${id}/status`, { status: "RECEIVED" });
-      toast.success("Entrada concluída! Financeiro e estoque atualizados!");
+      toast.success("Entrada concluÃ­da! Financeiro e estoque atualizados!");
+      setSelectedPurchase(null);
+      setIsEditing(false);
       loadPurchases();
-      loadPurchaseDetails(id);
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Erro ao processar");
     }
@@ -258,7 +273,7 @@ export function PurchasesPage() {
     if (!confirm("Deseja realmente excluir este pedido?")) return;
     try {
       await api.delete(`/purchases/${id}`);
-      toast.success("Pedido excluído com sucesso");
+      toast.success("Pedido excluÃ­do com sucesso");
       setSelectedPurchase(null);
       loadPurchases();
     } catch (error: any) {
@@ -268,7 +283,7 @@ export function PurchasesPage() {
 
   const handleSave = async (shouldClose = true) => {
     if (selectedPurchase?.status === "RECEIVED") {
-      toast.error("Pedidos recebidos nÃ£o podem ser editados.");
+      toast.error("Pedidos recebidos nÃƒÂ£o podem ser editados.");
       return;
     }
 
@@ -284,7 +299,7 @@ export function PurchasesPage() {
           0,
         );
         if (Math.abs(totalAmount - totalInstallments) > 0.05) {
-          toast.warning(`A soma das parcelas (R$ ${totalInstallments.toFixed(2)}) não pode ser diferente do total do pedido (R$ ${totalAmount.toFixed(2)}).`);
+          toast.warning(`A soma das parcelas (R$ ${totalInstallments.toFixed(2)}) nÃ£o pode ser diferente do total do pedido (R$ ${totalAmount.toFixed(2)}).`);
           return;
         }
       }
@@ -334,7 +349,7 @@ export function PurchasesPage() {
         const res = await api.post("/purchases/parse-xml", { xml: xmlStr });
         const data = res.data;
         
-        // Ativa o modo de edição para mostrar os dados importados
+        // Ativa o modo de ediÃ§Ã£o para mostrar os dados importados
         setIsEditing(true);
         setSelectedPurchase(null);
 
@@ -452,11 +467,22 @@ export function PurchasesPage() {
     }
   };
 
-  const filteredPurchases = purchases.filter(
-    (p) =>
-      p.contact?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.code.toString().includes(searchQuery),
-  );
+  const filteredPurchases = purchases.filter((p) => {
+    const purchaseStatus = String(p.status || "").toUpperCase();
+    const matchesMode = isReceivedMode
+      ? purchaseStatus === "RECEIVED"
+      : purchaseStatus !== "RECEIVED";
+
+    if (!matchesMode) {
+      return false;
+    }
+
+    const contactName = String(p.contact?.name || "").toLowerCase();
+    return (
+      contactName.includes(searchQuery.toLowerCase()) ||
+      String(p.code || "").includes(searchQuery)
+    );
+  });
 
   if (isEditing) {
     const productItems = formData.items;
@@ -470,7 +496,7 @@ export function PurchasesPage() {
         <div className="bg-slate-800/50 text-white px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-bold text-teal-400">
-              Novo Pedido de Compra / Cotação
+              Novo Pedido de Compra / CotaÃ§Ã£o
             </h2>
             {!selectedPurchase && (
               <>
@@ -592,7 +618,7 @@ export function PurchasesPage() {
 
             <div className="flex items-center gap-2">
               <label className="font-semibold text-slate-400 w-20">
-                Previsão:
+                PrevisÃ£o:
               </label>
               <input
                 autoFocus
@@ -764,10 +790,10 @@ export function PurchasesPage() {
                 </div>
               </div>
 
-              {/* Observações */}
+              {/* ObservaÃ§Ãµes */}
               <div className="h-32 bg-slate-800/50 border border-slate-800 rounded shadow-sm flex flex-col">
                 <div className="bg-slate-900 border-b border-slate-800 px-2 py-1 font-semibold text-slate-300">
-                  Observações do Pedido
+                  ObservaÃ§Ãµes do Pedido
                 </div>
                 <textarea
                   className="flex-1 w-full p-2 outline-none resize-none bg-transparent text-white"
@@ -794,7 +820,7 @@ export function PurchasesPage() {
               {/* Instllments / Faturamento */}
               <div className="bg-teal-900/20 border border-teal-800/50 p-4 rounded shadow-sm flex flex-col gap-2">
                 <h4 className="text-teal-400 font-semibold mb-2">
-                  Previsão Financeira
+                  PrevisÃ£o Financeira
                 </h4>
                 {formData.financialInstallments.length > 0 ? (
                   <div className="flex flex-col gap-2">
@@ -840,7 +866,7 @@ export function PurchasesPage() {
                   </div>
                 ) : (
                   <div className="text-xs text-slate-500">
-                    Nenhuma parcela. Valor será à vista.
+                    Nenhuma parcela. Valor serÃ¡ Ã  vista.
                   </div>
                 )}
               </div>
@@ -880,20 +906,24 @@ export function PurchasesPage() {
     <div className="h-[calc(100vh-80px)] flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
       <div className="bg-slate-800/50 text-white px-4 py-2 flex items-center justify-between border-b-2 border-teal-500">
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-bold text-teal-400">Compras / Entradas</h1>
-          <input
-            type="file"
-            accept=".xml"
-            id="importXmlListInput"
-            className="hidden"
-            onChange={handleImportXmlFile}
-          />
-          <button
-            onClick={() => document.getElementById("importXmlListInput")?.click()}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-sm rounded flex items-center gap-2 shadow-lg shadow-purple-900/20 transition-all font-bold"
-          >
-            <Plus size={16} /> Nova Compra / Importar XML
-          </button>
+          <h1 className="text-lg font-bold text-teal-400">{pageTitle}</h1>
+          {!isReceivedMode && (
+            <>
+              <input
+                type="file"
+                accept=".xml"
+                id="importXmlListInput"
+                className="hidden"
+                onChange={handleImportXmlFile}
+              />
+              <button
+                onClick={() => document.getElementById("importXmlListInput")?.click()}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-sm rounded flex items-center gap-2 shadow-lg shadow-purple-900/20 transition-all font-bold"
+              >
+                <Plus size={16} /> Nova Compra / Importar XML
+              </button>
+            </>
+          )}
         </div>
         <button
           className="text-slate-400 hover:text-white"
@@ -910,7 +940,7 @@ export function PurchasesPage() {
           <input
             type="text"
             className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 pr-8 text-sm text-white outline-none focus:border-teal-500"
-            placeholder="Buscar pedidos..."
+            placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -943,8 +973,8 @@ export function PurchasesPage() {
                     className={`cursor-pointer transition-colors ${selectedPurchase?.id === p.id ? "bg-teal-600/20 text-teal-400 border-l-2 border-l-teal-500" : "text-slate-300 hover:bg-slate-800/50 border-b border-slate-800"}`}
                     onClick={() => loadPurchaseDetails(p.id)}
                     onDoubleClick={() => {
-                      if (p.status === "RECEIVED") {
-                        toast.info("Pedidos recebidos nÃ£o podem ser editados.");
+                      if (isReceivedMode || p.status === "RECEIVED") {
+                        toast.info("Pedidos recebidos nÃƒÂ£o podem ser editados.");
                         return;
                       }
                       setIsEditing(true);
@@ -971,18 +1001,18 @@ export function PurchasesPage() {
               <div className="flex gap-4">
                 <div className="flex-1 bg-slate-800/50 border border-slate-800 p-4 shadow-sm rounded-lg">
                   <h3 className="text-slate-400 font-semibold mb-3 pb-2 border-b border-slate-700 text-xs uppercase tracking-wider">
-                    Informações da Compra
+                    InformaÃ§Ãµes da Compra
                   </h3>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-white">
                     <div>
-                      <span className="text-slate-500 mr-2">Data Cotação:</span>{" "}
+                      <span className="text-slate-500 mr-2">Data CotaÃ§Ã£o:</span>{" "}
                       {new Date(
                         selectedPurchase.createdAt,
                       ).toLocaleDateString()}
                     </div>
                     <div>
                       <span className="text-slate-500 mr-2">
-                        Data Previsão:
+                        Data PrevisÃ£o:
                       </span>{" "}
                       {selectedPurchase.expectedDate
                         ? new Date(
@@ -1004,7 +1034,7 @@ export function PurchasesPage() {
                         {selectedPurchase.status === "RECEIVED"
                           ? "RECEBIDO (ENTRADA)"
                           : selectedPurchase.status === "QUOTATION"
-                            ? "COTAÇÃO"
+                            ? "COTAÃ‡ÃƒO"
                             : selectedPurchase.status}
                       </strong>
                     </div>
@@ -1019,17 +1049,17 @@ export function PurchasesPage() {
 
                 <div className="flex flex-col gap-2 w-48">
                   <button
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
+                    className={`bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50 ${isReceivedMode ? "hidden" : ""}`}
                     onClick={() => handleApprove(selectedPurchase.id)}
                     disabled={selectedPurchase.status === "RECEIVED"}
                   >
                     Dar Entrada (Receber)
                   </button>
                   <button
-                    className="bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50"
+                    className={`bg-slate-800 hover:bg-slate-700 border border-slate-700 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors disabled:opacity-50 ${isReceivedMode ? "hidden" : ""}`}
                     onClick={() => {
                       if (selectedPurchase.status === "RECEIVED") {
-                        toast.info("Pedidos recebidos nÃ£o podem ser editados.");
+                        toast.info("Pedidos recebidos nÃƒÂ£o podem ser editados.");
                         return;
                       }
                       setIsEditing(true);
@@ -1039,7 +1069,7 @@ export function PurchasesPage() {
                     Editar Pedido
                   </button>
                   <button
-                    className="bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 hover:text-red-400 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors"
+                    className={`bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-800 hover:text-red-400 shadow-sm py-2 text-sm font-semibold text-slate-300 rounded transition-colors ${isReceivedMode ? "hidden" : ""}`}
                     onClick={() => handleDelete(selectedPurchase.id)}
                   >
                     Excluir Pedido
@@ -1071,10 +1101,10 @@ export function PurchasesPage() {
                     <thead className="bg-blue-600 text-white">
                       <tr>
                         <th className="px-3 py-2 border-b border-blue-800 w-24">
-                          Código
+                          CÃ³digo
                         </th>
                         <th className="px-3 py-2 border-b border-blue-800">
-                          Descrição
+                          DescriÃ§Ã£o
                         </th>
                         <th className="px-3 py-2 border-b border-blue-800 w-24 text-right">
                           Qtd
@@ -1131,7 +1161,7 @@ export function PurchasesPage() {
               {/* Grids Bottom - Financeiro (Contas a Pagar geradas) */}
               <div className="flex-[0.8] bg-slate-800/50 border border-slate-800 shadow-sm rounded-lg flex flex-col overflow-hidden">
                 <h3 className="text-slate-400 font-semibold px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wider bg-slate-900/50 text-left">
-                  Títulos a Pagar (Financeiro)
+                  TÃ­tulos a Pagar (Financeiro)
                 </h3>
                 <div className="p-0 overflow-auto flex-1">
                   <table className="w-full text-left text-sm border-collapse">
@@ -1150,7 +1180,7 @@ export function PurchasesPage() {
                             className="border-b border-slate-800 hover:bg-slate-800 transition-colors"
                           >
                             <td className="px-3 py-2 font-mono">
-                              {fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Única'}
+                              {fin.installmentNumber ? `${fin.installmentNumber}/${fin.totalInstallments || 1}` : 'Ãšnica'}
                             </td>
                             <td className="px-3 py-2">
                               {new Date(fin.dueDate).toLocaleDateString()}
@@ -1173,8 +1203,8 @@ export function PurchasesPage() {
                         <tr>
                           <td colSpan={4} className="text-center p-8 text-slate-500">
                             {selectedPurchase.status === 'RECEIVED' 
-                                ? 'Nenhum lançamento financeiro encontrado.'
-                                : 'Contas a Pagar serão geradas ao Dar Entrada neste pedido.'}
+                                ? 'Nenhum lanÃ§amento financeiro encontrado.'
+                                : 'Contas a Pagar serÃ£o geradas ao Dar Entrada neste pedido.'}
                           </td>
                         </tr>
                       )}
@@ -1185,7 +1215,7 @@ export function PurchasesPage() {
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-slate-500">
-              Selecione um pedido de compra à esquerda para visualizar detalhes
+              Selecione {selectedItemLabel} a esquerda para visualizar detalhes
             </div>
           )}
         </div>
@@ -1207,12 +1237,14 @@ export function PurchasesPage() {
             &gt;|
           </button>
         </div>
-        <button
-          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
-          onClick={handleNovoPedido}
-        >
-          <span>Incluir (F2)</span>
-        </button>
+        {!isReceivedMode && (
+          <button
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
+            onClick={handleNovoPedido}
+          >
+            <span>Incluir (F2)</span>
+          </button>
+        )}
         <button 
           onClick={() => printPurchaseOrder(selectedPurchase)}
           className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white px-5 py-1.5 font-medium text-sm rounded shadow-sm flex flex-col items-center transition-colors"
@@ -1231,3 +1263,4 @@ export function PurchasesPage() {
     </div>
   );
 }
+

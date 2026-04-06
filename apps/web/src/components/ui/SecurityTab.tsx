@@ -17,6 +17,8 @@ interface Secret {
   privateKey?: string;
   publicKey?: string;
   details?: string;
+  expiresAt?: string;
+  fileUrl?: string;
 }
 
 export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
@@ -27,6 +29,7 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
   
   // New secret form state
   const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [newSecret, setNewSecret] = useState<Partial<Secret>>({
     description: '',
     username: '',
@@ -34,7 +37,9 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
     link: '',
     privateKey: '',
     publicKey: '',
-    details: ''
+    details: '',
+    expiresAt: '',
+    fileUrl: ''
   });
 
   useEffect(() => {
@@ -57,6 +62,17 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
     }
   };
 
+  const getExpiryStatus = (date?: string) => {
+    if (!date) return null;
+    const expiry = new Date(date);
+    const now = new Date();
+    const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return { label: 'VENCIDO', color: 'text-red-500 bg-red-500/10 border-red-500/20' };
+    if (diffDays <= 30) return { label: `VENCE EM ${diffDays} DIAS`, color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' };
+    return { label: 'VÁLIDO', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
+  };
+
   const handleSaveObservation = async () => {
     try {
       await api.post('/security/setting', {
@@ -76,17 +92,60 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
       return;
     }
     try {
-      await api.post('/security/secrets', {
+      const res = await api.post('/security/secrets', {
         ...newSecret,
         entityType,
         entityId
       });
-      toast.success('Segredo adicionado');
+      
+      const createdSecretId = res.data.id;
+      
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        await api.post(`/security/secrets/${createdSecretId}/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+
+      toast.success('Segredo adicionado com sucesso');
       setShowAddForm(false);
-      setNewSecret({ description: '', username: '', password: '', link: '', privateKey: '', publicKey: '', details: '' });
+      setNewSecret({ description: '', username: '', password: '', link: '', privateKey: '', publicKey: '', details: '', expiresAt: '', fileUrl: '' });
+      setSelectedFile(null);
       fetchData();
     } catch (e) {
       toast.error('Erro ao criar segredo');
+    }
+  };
+
+  const handleFileUpload = async (id: string, file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      await api.post(`/security/secrets/${id}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success('Arquivo enviado com sucesso');
+      fetchData();
+    } catch (e) {
+      toast.error('Erro ao enviar arquivo');
+    }
+  };
+
+  const handleDownload = async (id: string, fileName: string) => {
+    try {
+      const response = await api.get(`/security/secrets/${id}/download`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName.split('-').slice(2).join('-') || 'arquivo');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e) {
+      toast.error('Erro ao baixar arquivo');
     }
   };
 
@@ -182,11 +241,36 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
               onChange={e => setNewSecret({...newSecret, privateKey: e.target.value})}
             />
             <textarea 
-              placeholder="Detalhes Adicionais"
+              placeholder="Detalhes Adicionais (ex: Unidade Certificadora, Token ID)"
               className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white md:col-span-2 min-h-[80px]"
               value={newSecret.details}
               onChange={e => setNewSecret({...newSecret, details: e.target.value})}
             />
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-500 uppercase font-bold ml-1">Data de Validade (Opcional)</label>
+              <input 
+                type="date"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white"
+                value={newSecret.expiresAt}
+                onChange={e => setNewSecret({...newSecret, expiresAt: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-500 uppercase font-bold ml-1">Anexar Arquivo (PFX, P12, Chaves)</label>
+              <div className="relative group/field">
+                <input 
+                  type="file" 
+                  onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                />
+                <div className="flex items-center gap-2 w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-400">
+                  <Plus size={16} className="text-indigo-400" />
+                  <span className="truncate">
+                    {selectedFile ? selectedFile.name : 'Clique para selecionar arquivo...'}
+                  </span>
+                </div>
+              </div>
+            </div>
             <div className="md:col-span-2 flex justify-end gap-2">
               <button 
                 onClick={() => setShowAddForm(false)}
@@ -210,8 +294,9 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
               <tr>
                 <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider">Descrição</th>
                 <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider">Usuário</th>
-                <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider">Senha</th>
-                <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider">Link / Chaves</th>
+                <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider">Senha / PIN</th>
+                <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider">Status / Validade</th>
+                <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider">Link / Arquivo</th>
                 <th className="px-6 py-4 font-bold uppercase text-[10px] tracking-wider text-right">Ações</th>
               </tr>
             </thead>
@@ -237,11 +322,61 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
                     </div>
                   </td>
                   <td className="px-6 py-4">
+                    {s.expiresAt ? (
+                      <div className="space-y-1">
+                        {(() => {
+                           const status = getExpiryStatus(s.expiresAt);
+                           return status && (
+                             <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold ${status.color}`}>
+                               {status.label}
+                             </span>
+                           );
+                        })()}
+                        <div className="text-xs text-slate-400 font-mono">
+                          {new Date(s.expiresAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-600 text-xs">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-2">
                       {s.link && (
-                        <a href={s.link} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-slate-800 hover:bg-indigo-600/20 text-indigo-400 rounded transition-all" title="Abrir Link">
+                        <a 
+                          href={s.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="p-1.5 bg-slate-800 hover:bg-indigo-600/20 text-indigo-400 rounded transition-all" 
+                          title="Abrir Link"
+                        >
                           <LinkIcon size={14} />
                         </a>
+                      )}
+                      {s.fileUrl ? (
+                         <button 
+                           onClick={() => handleDownload(s.id, s.fileUrl!)}
+                           className="flex items-center gap-2 p-1.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 rounded-lg border border-emerald-500/20 transition-all" 
+                           title="Baixar Arquivo Criptografado"
+                         >
+                           <Save size={14} />
+                           <span className="text-[10px] font-bold">BAIXAR</span>
+                         </button>
+                      ) : (
+                        <div className="relative group/upload">
+                          <input 
+                            type="file" 
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleFileUpload(s.id, file);
+                            }}
+                          />
+                          <button className="flex items-center gap-2 p-1.5 bg-slate-800 hover:bg-indigo-600/20 text-slate-300 rounded-lg border border-slate-700 transition-all" title="Upload de Arquivo">
+                            <Plus size={14} className="text-indigo-400" />
+                            <span className="text-[10px] font-bold">SUBIR ARQUIVO</span>
+                          </button>
+                        </div>
                       )}
                       {(s.publicKey || s.privateKey) && (
                         <div className="p-1.5 bg-slate-800 text-yellow-500 rounded flex items-center gap-1 cursor-help" title="Possui Chaves PKI">
