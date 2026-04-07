@@ -1,0 +1,42 @@
+<svg width="1200" height="760" viewBox="0 0 1200 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="760" rx="24" fill="#020617"/>
+  <rect x="28" y="28" width="1144" height="704" rx="20" fill="#0F172A" stroke="#1E293B"/>
+  <text x="60" y="78" fill="#E2E8F0" font-size="28" font-family="Arial, sans-serif" font-weight="700">Banco Inter: passo a passo operacional</text>
+  <text x="60" y="108" fill="#94A3B8" font-size="16" font-family="Arial, sans-serif">Da criacao da integracao no banco ate o primeiro sync no Dr.X</text>
+
+  <rect x="60" y="150" width="500" height="520" rx="20" fill="#111827" stroke="#334155"/>
+  <text x="95" y="190" fill="#34D399" font-size="22" font-family="Arial, sans-serif" font-weight="700">No Banco Inter</text>
+  <text x="95" y="235" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">1. Fazer login no Internet Banking.</text>
+  <text x="95" y="270" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">2. Ir em Solucoes para sua empresa &gt; Nova Integracao.</text>
+  <text x="95" y="305" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">3. Escolher os servicos que o Dr.X vai usar.</text>
+  <text x="95" y="340" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">4. Baixar chaves e certificado da integracao.</text>
+  <text x="95" y="375" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">5. Ativar a integracao.</text>
+  <text x="95" y="410" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">6. Validar primeiro no ambiente Sandbox.</text>
+  <rect x="95" y="455" width="430" height="160" rx="14" fill="#0B1220" stroke="#1E293B"/>
+  <text x="118" y="485" fill="#F8FAFC" font-size="15" font-family="Arial, sans-serif" font-weight="700">Dados que voce deve sair do banco com eles em maos</text>
+  <text x="118" y="520" fill="#CBD5E1" font-size="15" font-family="Arial, sans-serif">• Client ID</text>
+  <text x="118" y="548" fill="#CBD5E1" font-size="15" font-family="Arial, sans-serif">• Client Secret</text>
+  <text x="118" y="576" fill="#CBD5E1" font-size="15" font-family="Arial, sans-serif">• Certificado A1 (PFX/P12)</text>
+  <text x="118" y="604" fill="#CBD5E1" font-size="15" font-family="Arial, sans-serif">• Senha do certificado</text>
+
+  <rect x="640" y="150" width="500" height="520" rx="20" fill="#111827" stroke="#334155"/>
+  <text x="675" y="190" fill="#38BDF8" font-size="22" font-family="Arial, sans-serif" font-weight="700">No Dr.X</text>
+  <text x="675" y="235" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">1. Abrir Financeiro &gt; Banking Hub.</text>
+  <text x="675" y="270" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">2. Clicar em Conectar Banco Inter.</text>
+  <text x="675" y="305" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">3. Preencher ambiente, conta interna e dados do titular.</text>
+  <text x="675" y="340" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">4. Colar Client ID, Client Secret e certificado em Base64.</text>
+  <text x="675" y="375" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">5. Salvar Integracao.</text>
+  <text x="675" y="410" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">6. Rodar Testar.</text>
+  <text x="675" y="445" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">7. Rodar Sincronizar.</text>
+  <text x="675" y="480" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">8. Conferir transacoes, status e conciliacoes.</text>
+  <rect x="675" y="525" width="430" height="90" rx="14" fill="#0B1220" stroke="#1E293B"/>
+  <text x="698" y="555" fill="#F8FAFC" font-size="15" font-family="Arial, sans-serif" font-weight="700">Dica pratica</text>
+  <text x="698" y="585" fill="#CBD5E1" font-size="15" font-family="Arial, sans-serif">Nao pule do cadastro direto para a operacao. Sempre teste antes.</text>
+
+  <path d="M565 300H635" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <path d="M624 288L642 300L624 312" stroke="#475569" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="60" y="690" width="1080" height="22" rx="11" fill="#1E293B"/>
+  <rect x="60" y="690" width="760" height="22" rx="11" fill="#10B981"/>
+  <text x="70" y="680" fill="#94A3B8" font-size="13" font-family="Arial, sans-serif">Sandbox e healthcheck primeiro. Producao somente apos homologacao controlada.</text>
+</svg>

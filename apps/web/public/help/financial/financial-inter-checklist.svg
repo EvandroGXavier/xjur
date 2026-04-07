@@ -1,0 +1,35 @@
+<svg width="1200" height="700" viewBox="0 0 1200 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="700" rx="24" fill="#020617"/>
+  <rect x="28" y="28" width="1144" height="644" rx="20" fill="#0F172A" stroke="#1E293B"/>
+  <text x="60" y="78" fill="#E2E8F0" font-size="28" font-family="Arial, sans-serif" font-weight="700">Checklist de implantacao: Banco Inter no Dr.X</text>
+  <text x="60" y="108" fill="#94A3B8" font-size="16" font-family="Arial, sans-serif">Use este quadro antes de liberar a equipe para operar o Banking Hub</text>
+
+  <rect x="60" y="150" width="520" height="450" rx="18" fill="#111827" stroke="#334155"/>
+  <text x="95" y="190" fill="#34D399" font-size="22" font-family="Arial, sans-serif" font-weight="700">Checklist tecnico</text>
+  <text x="95" y="235" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Integracao criada no banco</text>
+  <text x="95" y="270" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Client ID e Client Secret confirmados</text>
+  <text x="95" y="305" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Certificado A1 disponivel</text>
+  <text x="95" y="340" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Conta interna do Xjur vinculada</text>
+  <text x="95" y="375" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Ambiente correto: Sandbox ou Producao</text>
+  <text x="95" y="410" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Healthcheck executado e registrado</text>
+  <text x="95" y="445" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Sync executado sem erros criticos</text>
+  <text x="95" y="480" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Transacoes visiveis no Banking Hub</text>
+  <text x="95" y="515" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Conciliacao de teste realizada</text>
+  <text x="95" y="550" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Responsavel interno definido</text>
+
+  <rect x="620" y="150" width="520" height="450" rx="18" fill="#111827" stroke="#334155"/>
+  <text x="655" y="190" fill="#38BDF8" font-size="22" font-family="Arial, sans-serif" font-weight="700">Checklist operacional</text>
+  <text x="655" y="235" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Manual F1 revisado pela equipe</text>
+  <text x="655" y="270" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Procedimento de sandbox documentado</text>
+  <text x="655" y="305" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Credenciais guardadas em local seguro</text>
+  <text x="655" y="340" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Quem pode editar integracao definido</text>
+  <text x="655" y="375" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Quem faz healthcheck e sync definido</text>
+  <text x="655" y="410" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Rotina de conciliacao diaria definida</text>
+  <text x="655" y="445" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Mudanca para producao aprovada</text>
+  <text x="655" y="480" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Contabilidade/TI informados</text>
+  <text x="655" y="515" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">☑ Plano de contingencia registrado</text>
+
+  <rect x="60" y="625" width="1080" height="24" rx="12" fill="#0B1220" stroke="#1E293B"/>
+  <text x="84" y="642" fill="#F8FAFC" font-size="14" font-family="Arial, sans-serif" font-weight="700">Objetivo:</text>
+  <text x="152" y="642" fill="#CBD5E1" font-size="14" font-family="Arial, sans-serif">operacao simples, segura e auditavel. Sem liberar a equipe enquanto qualquer item essencial estiver pendente.</text>
+</svg>

@@ -1,0 +1,43 @@
+<svg width="1200" height="640" viewBox="0 0 1200 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="640" rx="24" fill="#020617"/>
+  <rect x="28" y="28" width="1144" height="584" rx="20" fill="#0F172A" stroke="#1E293B"/>
+  <text x="60" y="78" fill="#E2E8F0" font-size="28" font-family="Arial, sans-serif" font-weight="700">Financeiro / Banking Hub / Banco Inter</text>
+  <text x="60" y="108" fill="#94A3B8" font-size="16" font-family="Arial, sans-serif">Fluxo operacional recomendado dentro do Dr.X</text>
+
+  <rect x="60" y="150" width="300" height="360" rx="18" fill="#111827" stroke="#334155"/>
+  <text x="90" y="190" fill="#34D399" font-size="22" font-family="Arial, sans-serif" font-weight="700">1. Banco Inter</text>
+  <text x="90" y="230" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Login no Internet Banking</text>
+  <text x="90" y="260" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Criar nova integracao</text>
+  <text x="90" y="290" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Ativar chaves e certificado</text>
+  <text x="90" y="320" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Priorizar Sandbox antes da Producao</text>
+  <text x="90" y="350" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Preparar dados de conta e titular</text>
+  <text x="90" y="395" fill="#94A3B8" font-size="14" font-family="Arial, sans-serif">Referencia oficial:</text>
+  <text x="90" y="420" fill="#60A5FA" font-size="14" font-family="Arial, sans-serif">developers.inter.co</text>
+
+  <rect x="450" y="150" width="300" height="360" rx="18" fill="#111827" stroke="#334155"/>
+  <text x="480" y="190" fill="#38BDF8" font-size="22" font-family="Arial, sans-serif" font-weight="700">2. Dr.X</text>
+  <text x="480" y="230" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Financeiro &gt; Banking Hub</text>
+  <text x="480" y="260" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Conectar Banco Inter</text>
+  <text x="480" y="290" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Salvar Integracao</text>
+  <text x="480" y="320" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Testar (healthcheck)</text>
+  <text x="480" y="350" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Sincronizar saldo e extrato</text>
+  <text x="480" y="380" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Conciliar transacoes</text>
+  <text x="480" y="410" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Monitorar status e webhooks</text>
+
+  <rect x="840" y="150" width="280" height="360" rx="18" fill="#111827" stroke="#334155"/>
+  <text x="870" y="190" fill="#A78BFA" font-size="22" font-family="Arial, sans-serif" font-weight="700">3. Resultado</text>
+  <text x="870" y="230" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Extrato carregado</text>
+  <text x="870" y="260" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Saldos atualizados</text>
+  <text x="870" y="290" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Conciliacao mais rapida</text>
+  <text x="870" y="320" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Historico operacional auditavel</text>
+  <text x="870" y="350" fill="#CBD5E1" font-size="16" font-family="Arial, sans-serif">• Preparacao para cobrancas e Pix</text>
+
+  <path d="M370 330H430" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <path d="M420 318L438 330L420 342" stroke="#475569" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M760 330H820" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <path d="M810 318L828 330L810 342" stroke="#475569" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="60" y="540" width="1060" height="42" rx="12" fill="#0B1220" stroke="#1E293B"/>
+  <text x="88" y="567" fill="#F8FAFC" font-size="15" font-family="Arial, sans-serif" font-weight="700">Regra de ouro:</text>
+  <text x="214" y="567" fill="#CBD5E1" font-size="15" font-family="Arial, sans-serif">homologue primeiro no Sandbox, documente as credenciais e teste Healthcheck + Sync antes de liberar a equipe.</text>
+</svg>

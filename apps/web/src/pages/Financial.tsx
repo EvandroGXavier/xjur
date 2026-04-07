@@ -59,7 +59,7 @@ import {
 import { api } from "../services/api";
 import { toast } from "sonner";
 import { HelpModal, useHelpModal } from "../components/HelpModal";
-import { helpFinancial } from "../data/helpManuals";
+import { helpFinancialBankingHubDetailed } from "../data/helpFinancialBankingHubDetailed";
 import { ContactPickerGlobal } from "../components/contacts/ContactPickerGlobal";
 import { PaymentConditions } from "./PaymentConditions";
 import { InlineTags } from "../components/ui/InlineTags";
@@ -6272,7 +6272,7 @@ export function Financial(props: FinancialProps = {}) {
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
         title="Financeiro"
-        sections={helpFinancial}
+        sections={helpFinancialBankingHubDetailed}
       />
     </div>
   );
