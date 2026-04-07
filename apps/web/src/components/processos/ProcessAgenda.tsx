@@ -97,9 +97,9 @@ export function ProcessAgenda({ processId }: ProcessAgendaProps) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-xl border border-slate-800">
-        <div>
+    <div className="w-full space-y-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
            <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Calendar className="text-indigo-500" size={20} />
               Agenda do Processo
@@ -114,7 +114,7 @@ export function ProcessAgenda({ processId }: ProcessAgendaProps) {
         </button>
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden min-h-[300px]">
+      <div className="min-h-[320px] w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
              <DataGrid<Appointment>
                 data={appointments}
                 totalItems={appointments.length}

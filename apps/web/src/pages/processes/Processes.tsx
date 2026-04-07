@@ -31,7 +31,7 @@ export function Processes() {
   );
 
   return (
-    <div className="flex flex-col h-full space-y-4">
+    <div className="flex h-full min-h-0 flex-col space-y-4">
       <ModuleHeader
         title="Processos"
         subtitle="Gestão jurídica e andamentos"
@@ -45,10 +45,10 @@ export function Processes() {
       />
 
       {/* Conteúdo Dinâmico */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {view === "list" && <ProcessList />}
         {view === "tasks" && (
-            <div className="p-6 md:p-10 animate-in fade-in slide-in-from-bottom-3 duration-500">
+            <div className="h-full min-h-0 p-4 md:p-6 xl:p-8 animate-in fade-in slide-in-from-bottom-3 duration-500">
                 <ProcessTasks />
             </div>
         )}

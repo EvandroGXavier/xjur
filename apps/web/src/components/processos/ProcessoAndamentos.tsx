@@ -425,15 +425,15 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     });
 
     return (
-        <div className="space-y-4 animate-in fade-in relative">
+        <div className="relative w-full space-y-4 animate-in fade-in">
             {/* Header Actions */}
-            <div className="flex flex-col gap-4 bg-slate-900/50 p-4 rounded-lg border border-slate-800 shadow-xl">
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-4 rounded-lg border border-slate-800 bg-slate-900/50 p-4 shadow-xl">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-2">
                         <h2 className="text-lg font-semibold text-slate-200">Andamentos & Prazos</h2>
                         <Badge variant="info">{timelines.length}</Badge>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 self-start sm:self-auto">
                         <button 
                             onClick={() => {
                                 resetForm();
@@ -455,8 +455,8 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                 </div>
 
                 {/* Tabs & Search */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center border-t border-slate-800 pt-3">
-                    <div className="flex gap-1">
+                <div className="flex flex-col gap-4 border-t border-slate-800 pt-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0">
                         {(['REGISTRO', 'ACAO', 'AGENDA'] as const).map(tab => (
                             <button
                                 key={tab}
@@ -473,7 +473,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                         ))}
                     </div>
 
-                    <div className="relative w-full sm:w-72">
+                    <div className="relative w-full lg:w-80">
                         <input
                             type="text"
                             placeholder="Pesquisar nos andamentos..."
@@ -628,7 +628,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                     </div>
                                                 )}
 
-                                                <div className="flex gap-3 mt-auto pt-2 opacity-0 group-hover:opacity-100 transition-opacity items-center">
+                                                <div className="flex items-center gap-3 mt-auto pt-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                                                     <button onClick={() => openEdit(item)} className="text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-0.5 font-bold" title="Editar">
                                                         <Edit3 size={10} /> EDITAR
                                                     </button>
@@ -715,7 +715,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                     );
                                                 })}
                                                 
-                                                <div className="flex gap-2 mt-2 w-full pt-2 border-t border-slate-100 group-hover:opacity-100 opacity-20 transition-opacity">
+                                                <div className="flex w-full gap-2 mt-2 border-t border-slate-100 pt-2 opacity-100 transition-opacity md:opacity-20 md:group-hover:opacity-100">
                                                     <button 
                                                         onClick={() => {
                                                             setTargetTimelineId(item.id);

@@ -843,13 +843,13 @@ export function ProcessParties({ processId, onPartiesChange }: ProcessPartiesPro
     );
 
     return (
-        <div className="animate-in fade-in space-y-6">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 flex items-center justify-between gap-4">
-                <div>
+        <div className="w-full animate-in fade-in space-y-6">
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-300">Partes e Procuradores</div>
                     <div className="mt-1 text-[11px] text-slate-500">Clique em Autor ou Reu para selecionar a coluna. Use F2 para incluir mais rapido.</div>
                 </div>
-                <div className="text-[11px] text-slate-500 shrink-0">{loading ? 'Atualizando...' : `${parties.length} registro(s)`}</div>
+                <div className="shrink-0 text-[11px] text-slate-500">{loading ? 'Atualizando...' : `${parties.length} registro(s)`}</div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

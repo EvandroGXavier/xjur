@@ -257,21 +257,21 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
 
     if (isEditorOpen) {
         return (
-            <div className="h-[calc(100vh-220px)] flex flex-col bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
-                <div className="border-b border-slate-800 p-4 flex items-center justify-between bg-slate-900 gap-4">
-                    <div className="flex items-center gap-3">
+            <div className="flex min-h-[70vh] w-full flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 lg:min-h-[calc(100vh-220px)]">
+                <div className="flex flex-col gap-4 border-b border-slate-800 bg-slate-900 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
                         <button
                             onClick={() => setIsEditorOpen(false)}
                             className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition"
                         >
                             <ArrowLeft size={20} />
                         </button>
-                        <div>
+                        <div className="min-w-0 flex-1">
                             <input
                                 value={editorTitle}
                                 onChange={(e) => setEditorTitle(e.target.value)}
                                 placeholder="Título do Documento"
-                                className="bg-transparent text-lg font-bold text-white focus:outline-none placeholder-slate-600 w-[520px] max-w-[70vw]"
+                                className="w-full max-w-full bg-transparent text-base font-bold text-white placeholder-slate-600 focus:outline-none sm:text-lg lg:max-w-[70vw]"
                                 autoFocus
                             />
                             <div className="text-xs text-slate-500 mt-1">
@@ -280,7 +280,7 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                             </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         {editingDoc?.msFileUrl && (
                             <button
                                 onClick={() => window.open(String(editingDoc.msFileUrl), '_blank')}
@@ -359,9 +359,9 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                <div>
+        <div className="w-full space-y-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                         <FileText size={18} className="text-indigo-400" /> Documentos do Processo
                     </h3>
@@ -369,12 +369,12 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                         Modelos gerados/editáveis do processo. Documentos criados nos Andamentos também aparecem aqui.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                     <input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         placeholder="Buscar por título/modelo..."
-                        className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white w-72 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-72 lg:w-80"
                     />
                     <button
                         onClick={() => {
@@ -418,7 +418,7 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                                     {doc.timelineId ? ' • Andamento' : ''}
                                 </div>
                             </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                            <div className="flex gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                                 {doc.msFileUrl && (
                                     <button
                                         onClick={() => window.open(String(doc.msFileUrl), '_blank')}

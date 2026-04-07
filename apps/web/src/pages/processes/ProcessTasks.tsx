@@ -446,9 +446,9 @@ export function ProcessTasks() {
   const displayedCount = items.length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div className="flex h-full min-h-0 flex-col space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold text-white">Andamentos / Tarefas</h1>
           <p className="text-slate-400 mt-1">
             Visualize e execute seus andamentos sem entrar em cada processo.
@@ -558,7 +558,7 @@ export function ProcessTasks() {
         </div>
       </div>
 
-      <div className="h-[62vh]">
+      <div className="min-h-0 flex-1">
         <DataGrid
           data={items}
           columns={columns as any}
