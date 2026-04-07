@@ -9,7 +9,9 @@ import {
   isBefore,
   isSameDay,
   isSameMonth,
+  isValid,
   isWithinInterval,
+  parse,
   parseISO,
   startOfMonth,
   startOfWeek,
@@ -17,7 +19,7 @@ import {
   subMonths,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, ChevronLeft, ChevronRight, X, Clock } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Portal } from './Portal';
 
@@ -33,17 +35,45 @@ type Preset = {
 };
 
 const toISODate = (d: Date) => format(d, 'yyyy-MM-dd');
+const toDisplayDate = (d: Date) => format(d, 'dd/MM/yyyy');
 
-const parseISODateOrNull = (value?: string) => {
+const normalizeDateRange = (from: Date, to: Date) =>
+  isAfter(from, to) ? { from: to, to: from } : { from, to };
+
+const parseFlexibleDateOrNull = (value?: string) => {
   const raw = String(value || '').trim();
   if (!raw) return null;
-  try {
-    const dt = parseISO(raw);
-    return Number.isFinite(dt.getTime()) ? dt : null;
-  } catch {
-    return null;
+
+  const candidates: Date[] = [];
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    candidates.push(parse(raw, 'yyyy-MM-dd', new Date()));
   }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    candidates.push(parse(raw, 'dd/MM/yyyy', new Date()));
+  }
+
+  if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
+    candidates.push(parse(raw, 'dd-MM-yyyy', new Date()));
+  }
+
+  try {
+    candidates.push(parseISO(raw));
+  } catch {
+    // ignore malformed values
+  }
+
+  for (const candidate of candidates) {
+    if (isValid(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 };
+
+const isInputReadyForValidation = (value: string) => String(value || '').trim().length >= 8;
 
 const DEFAULT_PRESETS: Preset[] = [
   { key: 'today', label: 'Hoje', getRange: (t) => ({ from: t, to: t }) },
@@ -74,12 +104,22 @@ function buildMonthGrid(month: Date) {
 }
 
 function formatRangeLabel(value?: DateRangeValue, placeholder?: string) {
-  const from = parseISODateOrNull(value?.from);
-  const to = parseISODateOrNull(value?.to);
-  if (!from || !to) return placeholder || 'Selecionar período';
-  const left = format(from, 'dd/MM/yyyy');
-  const right = format(to, 'dd/MM/yyyy');
-  return `${left} até ${right}`;
+  const from = parseFlexibleDateOrNull(value?.from);
+  const to = parseFlexibleDateOrNull(value?.to);
+
+  if (from && to) {
+    return `${toDisplayDate(from)} até ${toDisplayDate(to)}`;
+  }
+
+  if (from) {
+    return `A partir de ${toDisplayDate(from)}`;
+  }
+
+  if (to) {
+    return `Até ${toDisplayDate(to)}`;
+  }
+
+  return placeholder || 'Selecionar período';
 }
 
 export function DateRangePicker({
@@ -104,48 +144,68 @@ export function DateRangePicker({
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   const [open, setOpen] = useState(false);
-  const [monthStart, setMonthStart] = useState<Date>(() => startOfMonth(today));
-  const [draftFrom, setDraftFrom] = useState<Date | null>(() => parseISODateOrNull(value?.from));
-  const [draftTo, setDraftTo] = useState<Date | null>(() => parseISODateOrNull(value?.to));
-  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0, width: 0 });
+  const [leftMonth, setLeftMonth] = useState<Date>(() => startOfMonth(today));
+  const [rightMonth, setRightMonth] = useState<Date>(() => startOfMonth(addMonths(today, 1)));
+  const [draftFrom, setDraftFrom] = useState<Date | null>(() => parseFlexibleDateOrNull(value?.from));
+  const [draftTo, setDraftTo] = useState<Date | null>(() => parseFlexibleDateOrNull(value?.to));
+  const [fromInput, setFromInput] = useState(() => (draftFrom ? toDisplayDate(draftFrom) : ''));
+  const [toInput, setToInput] = useState(() => (draftTo ? toDisplayDate(draftTo) : ''));
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 16, width: 640 });
 
-  const hasValue = Boolean(value?.from && value?.to);
+  const hasValue = Boolean(value?.from || value?.to);
 
-  useEffect(() => {
-    if (!open || !triggerRef.current) return;
-    
-    // Atualiza o rascunho com o valor real ao abrir
-    const from = parseISODateOrNull(value?.from);
-    const to = parseISODateOrNull(value?.to);
-    setDraftFrom(from);
-    setDraftTo(to);
-    setMonthStart(startOfMonth(from || today));
+  const updatePopoverPosition = () => {
+    if (!triggerRef.current) return;
 
-    // Calcula posição para o Portal
     const rect = triggerRef.current.getBoundingClientRect();
-    const dropdownWidth = 640; // Reduzido para 640px
-    const dropdownHeight = 360; // Altura aproximada do calendário + presets
-    
-    let top = rect.bottom + window.scrollY + 8;
+    const dropdownWidth = Math.min(window.innerWidth - 32, 860);
+    const dropdownHeight = window.innerWidth < 768 ? 650 : 560;
+
+    let top = rect.bottom + 8;
     let left = align === 'left' ? rect.left : rect.right - dropdownWidth;
-    
-    // Ajuste se sair da tela (viewport check horizontal)
+
     if (left < 16) left = 16;
     if (left + dropdownWidth > window.innerWidth - 16) {
       left = window.innerWidth - dropdownWidth - 16;
     }
 
-    // Ajuste se sair da tela (viewport check vertical)
-    if (rect.bottom + dropdownHeight > window.innerHeight - 16) {
-      top = rect.top + window.scrollY - dropdownHeight - 8;
+    if (top + dropdownHeight > window.innerHeight - 16) {
+      top = Math.max(16, rect.top - dropdownHeight - 8);
     }
 
     setPopoverPos({ top, left, width: dropdownWidth });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, align]);
+  };
 
   useEffect(() => {
     if (!open) return;
+
+    const from = parseFlexibleDateOrNull(value?.from);
+    const to = parseFlexibleDateOrNull(value?.to);
+    const nextLeft = startOfMonth(from || today);
+    const nextRight = startOfMonth(to || addMonths(nextLeft, 1));
+
+    setDraftFrom(from);
+    setDraftTo(to);
+    setFromInput(from ? toDisplayDate(from) : '');
+    setToInput(to ? toDisplayDate(to) : '');
+    setLeftMonth(nextLeft);
+    setRightMonth(nextRight);
+
+    updatePopoverPosition();
+
+    const handleReposition = () => updatePopoverPosition();
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+
+    return () => {
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [open, value?.from, value?.to, today, align]);
+
+  useEffect(() => {
+    if (!open) return;
+
     const handleDown = (e: MouseEvent) => {
       const target = e.target as Node | null;
       if (!target) return;
@@ -153,75 +213,174 @@ export function DateRangePicker({
       if (triggerRef.current?.contains(target)) return;
       setOpen(false);
     };
+
     window.addEventListener('mousedown', handleDown);
     return () => window.removeEventListener('mousedown', handleDown);
   }, [open]);
 
-  const leftMonth = monthStart;
-  const rightMonth = addMonths(monthStart, 1);
   const leftGrid = useMemo(() => buildMonthGrid(leftMonth), [leftMonth]);
   const rightGrid = useMemo(() => buildMonthGrid(rightMonth), [rightMonth]);
 
   const selectedInterval =
-    draftFrom && draftTo
-      ? {
-          start: isBefore(draftFrom, draftTo) ? draftFrom : draftTo,
-          end: isAfter(draftFrom, draftTo) ? draftFrom : draftTo,
-        }
-      : null;
+    draftFrom && draftTo ? normalizeDateRange(draftFrom, draftTo) : null;
+
+  const parsedFromInput = parseFlexibleDateOrNull(fromInput);
+  const parsedToInput = parseFlexibleDateOrNull(toInput);
+  const fromInputInvalid = Boolean(fromInput.trim()) && isInputReadyForValidation(fromInput) && !parsedFromInput;
+  const toInputInvalid = Boolean(toInput.trim()) && isInputReadyForValidation(toInput) && !parsedToInput;
+  const canApplyDraft = Boolean(parsedFromInput && parsedToInput);
+
+  const syncInputFromDate = (field: 'from' | 'to', date: Date | null) => {
+    const formatted = date ? toDisplayDate(date) : '';
+    if (field === 'from') {
+      setFromInput(formatted);
+      return;
+    }
+    setToInput(formatted);
+  };
+
+  const clear = () => {
+    setDraftFrom(null);
+    setDraftTo(null);
+    setFromInput('');
+    setToInput('');
+    onChange({ from: '', to: '' });
+  };
 
   const applyPreset = (preset: Preset) => {
-    const range = preset.getRange(new Date());
+    const range = normalizeDateRange(...Object.values(preset.getRange(new Date())));
+    setDraftFrom(range.from);
+    setDraftTo(range.to);
+    setFromInput(toDisplayDate(range.from));
+    setToInput(toDisplayDate(range.to));
+    setLeftMonth(startOfMonth(range.from));
+    setRightMonth(startOfMonth(range.to));
     onChange({ from: toISODate(range.from), to: toISODate(range.to) });
     setOpen(false);
   };
 
-  const clear = () => {
-    onChange({ from: '', to: '' });
+  const handleManualInputChange = (field: 'from' | 'to', raw: string) => {
+    if (field === 'from') {
+      setFromInput(raw);
+    } else {
+      setToInput(raw);
+    }
+
+    const parsed = parseFlexibleDateOrNull(raw);
+
+    if (!raw.trim()) {
+      if (field === 'from') {
+        setDraftFrom(null);
+      } else {
+        setDraftTo(null);
+      }
+      return;
+    }
+
+    if (!parsed) {
+      if (field === 'from') {
+        setDraftFrom(null);
+      } else {
+        setDraftTo(null);
+      }
+      return;
+    }
+
+    if (field === 'from') {
+      setDraftFrom(parsed);
+      setLeftMonth(startOfMonth(parsed));
+    } else {
+      setDraftTo(parsed);
+      setRightMonth(startOfMonth(parsed));
+    }
+  };
+
+  const handleManualInputBlur = (field: 'from' | 'to') => {
+    const raw = field === 'from' ? fromInput : toInput;
+    const parsed = parseFlexibleDateOrNull(raw);
+    if (!raw.trim() || !parsed) return;
+    syncInputFromDate(field, parsed);
   };
 
   const onDayClick = (day: Date) => {
     if (!draftFrom || (draftFrom && draftTo)) {
       setDraftFrom(day);
       setDraftTo(null);
+      syncInputFromDate('from', day);
+      syncInputFromDate('to', null);
       return;
     }
 
     if (isSameDay(day, draftFrom)) {
       setDraftTo(day);
+      syncInputFromDate('to', day);
       return;
     }
 
     if (isBefore(day, draftFrom)) {
       setDraftTo(draftFrom);
       setDraftFrom(day);
+      syncInputFromDate('from', day);
+      syncInputFromDate('to', draftFrom);
       return;
     }
 
     setDraftTo(day);
+    syncInputFromDate('to', day);
   };
 
   const applyDraft = () => {
-    if (!draftFrom || !draftTo) return;
-    onChange({ from: toISODate(draftFrom), to: toISODate(draftTo) });
+    if (!parsedFromInput || !parsedToInput) return;
+    const normalized = normalizeDateRange(parsedFromInput, parsedToInput);
+    setDraftFrom(normalized.from);
+    setDraftTo(normalized.to);
+    setFromInput(toDisplayDate(normalized.from));
+    setToInput(toDisplayDate(normalized.to));
+    onChange({ from: toISODate(normalized.from), to: toISODate(normalized.to) });
     setOpen(false);
   };
 
-  const renderMonth = (month: Date, days: Date[]) => {
+  const renderMonth = ({
+    month,
+    days,
+    onPrev,
+    onNext,
+  }: {
+    month: Date;
+    days: Date[];
+    onPrev: () => void;
+    onNext: () => void;
+  }) => {
     const monthLabel = format(month, "MMMM 'de' yyyy", { locale: ptBR });
-    const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+    const weekDays = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
 
     return (
-      <div className="w-[210px]">
-        <div className="flex items-center justify-between mb-3 px-1">
-          <div className="text-[13px] font-black uppercase text-slate-100 tracking-wider">
+      <div className="w-full min-w-0 md:w-[248px]">
+        <div className="mb-3 flex items-center justify-between gap-2 px-1">
+          <button
+            type="button"
+            onClick={onPrev}
+            className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            title="Mês anterior"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <div className="truncate text-center text-[13px] font-black uppercase tracking-wider text-slate-100">
             {monthLabel}
           </div>
+          <button
+            type="button"
+            onClick={onNext}
+            className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            title="Próximo mês"
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-[10px] font-bold text-slate-500 mb-1">
+        <div className="mb-1 grid grid-cols-7 gap-1 text-[10px] font-bold text-slate-500">
           {weekDays.map((w, idx) => (
-            <div key={idx} className="text-center py-1">
+            <div key={`${monthLabel}-${idx}`} className="py-1 text-center">
               {w}
             </div>
           ))}
@@ -230,12 +389,14 @@ export function DateRangePicker({
         <div className="grid grid-cols-7 gap-0.5">
           {days.map((d) => {
             const inMonth = isSameMonth(d, month);
-            const isStart = Boolean(selectedInterval && isSameDay(d, selectedInterval.start));
-            const isEnd = Boolean(selectedInterval && isSameDay(d, selectedInterval.end));
+            const isStart = Boolean(selectedInterval && isSameDay(d, selectedInterval.from));
+            const isEnd = Boolean(selectedInterval && isSameDay(d, selectedInterval.to));
             const inRange = Boolean(
-              selectedInterval && isWithinInterval(d, { start: selectedInterval.start, end: selectedInterval.end }),
+              selectedInterval &&
+                isWithinInterval(d, { start: selectedInterval.from, end: selectedInterval.to }),
             );
-            const isSingle = Boolean(draftFrom && draftTo && isSameDay(draftFrom, draftTo) && isSameDay(d, draftFrom));
+            const isSingle =
+              Boolean(draftFrom && draftTo && isSameDay(draftFrom, draftTo) && isSameDay(d, draftFrom));
 
             return (
               <button
@@ -243,11 +404,12 @@ export function DateRangePicker({
                 type="button"
                 onClick={() => onDayClick(d)}
                 className={clsx(
-                  'h-7 w-7 rounded-lg text-[11px] transition-all flex items-center justify-center font-bold',
-                  !inMonth && 'text-slate-700 opacity-30 hover:opacity-100',
+                  'flex h-9 w-full items-center justify-center rounded-lg text-[11px] font-bold transition-all',
+                  !inMonth && 'text-slate-700 opacity-35 hover:opacity-100',
                   inMonth && 'text-slate-300 hover:bg-slate-800',
                   inRange && 'bg-indigo-500/10 text-indigo-300',
-                  (isStart || isEnd || isSingle) && 'bg-indigo-600 text-white hover:bg-indigo-600 shadow-lg shadow-indigo-500/20',
+                  (isStart || isEnd || isSingle) &&
+                    'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-600',
                 )}
                 title={format(d, 'dd/MM/yyyy')}
               >
@@ -270,18 +432,18 @@ export function DateRangePicker({
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          'w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 flex items-center justify-between gap-3 shadow-inner hover:border-slate-700 transition-all',
-          disabled && 'opacity-60 cursor-not-allowed',
+          'flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-white shadow-inner transition-all hover:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+          disabled && 'cursor-not-allowed opacity-60',
         )}
         aria-label="Selecionar período"
         title={label}
       >
-        <span className={clsx('flex items-center gap-2 min-w-0 text-sm font-medium', !hasValue && 'text-slate-500')}>
+        <span className={clsx('flex min-w-0 items-center gap-2 text-sm font-medium', !hasValue && 'text-slate-500')}>
           <Calendar size={16} className={clsx(hasValue ? 'text-indigo-400' : 'text-slate-500')} />
           <span className="truncate">{label}</span>
         </span>
 
-        <span className="flex items-center gap-2 shrink-0">
+        <span className="flex shrink-0 items-center gap-2">
           {hasValue && !disabled && (
             <button
               type="button"
@@ -290,7 +452,7 @@ export function DateRangePicker({
                 e.stopPropagation();
                 clear();
               }}
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors"
+              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white"
               title="Limpar período"
             >
               <X size={14} />
@@ -309,96 +471,157 @@ export function DateRangePicker({
               top: popoverPos.top,
               left: popoverPos.left,
               width: popoverPos.width,
+              maxWidth: 'calc(100vw - 32px)',
             }}
-            className="z-[9999] bg-slate-900 border border-slate-700/50 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            className="z-[9999] overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 duration-200"
           >
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
-              <div className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <Clock size={12} className="text-indigo-400" />
-                Definir Faixa de Tempo
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setMonthStart((m) => subMonths(m, 1))}
-                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthStart((m) => addMonths(m, 1))}
-                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                >
-                  <ChevronRight size={18} />
-                </button>
-                <div className="w-px h-4 bg-slate-800 mx-1" />
+            <div className="border-b border-slate-800 bg-slate-900/60 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
+                  <Clock size={12} className="text-indigo-400" />
+                  Definir Faixa de Tempo
+                </div>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="p-2 rounded-xl hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                  className="self-start rounded-xl p-2 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                  title="Fechar"
                 >
                   <X size={18} />
                 </button>
               </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Data inicial
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={fromInput}
+                    onChange={(e) => handleManualInputChange('from', e.target.value)}
+                    onBlur={() => handleManualInputBlur('from')}
+                    placeholder="dd/mm/aaaa ou aaaa-mm-dd"
+                    className={clsx(
+                      'w-full rounded-xl border bg-slate-950 px-3 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-indigo-500/20',
+                      fromInputInvalid
+                        ? 'border-red-500/50 focus:border-red-500'
+                        : 'border-slate-800 focus:border-indigo-500',
+                    )}
+                  />
+                  {fromInputInvalid && (
+                    <p className="text-[11px] text-red-300">Informe uma data inicial válida.</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Data final
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={toInput}
+                    onChange={(e) => handleManualInputChange('to', e.target.value)}
+                    onBlur={() => handleManualInputBlur('to')}
+                    placeholder="dd/mm/aaaa ou aaaa-mm-dd"
+                    className={clsx(
+                      'w-full rounded-xl border bg-slate-950 px-3 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-indigo-500/20',
+                      toInputInvalid
+                        ? 'border-red-500/50 focus:border-red-500'
+                        : 'border-slate-800 focus:border-indigo-500',
+                    )}
+                  />
+                  {toInputInvalid && (
+                    <p className="text-[11px] text-red-300">Informe uma data final válida.</p>
+                  )}
+                </div>
+              </div>
+
+              <p className="mt-3 text-[11px] text-slate-500">
+                Você pode digitar manualmente as datas ou usar os calendários abaixo. Os meses agora navegam de forma independente.
+              </p>
             </div>
 
-            <div className="flex">
-              <div className="w-[160px] border-r border-slate-700 bg-slate-900/50 p-3 space-y-1">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 px-1">Atalhos</div>
-                {presets.map((p) => (
-                  <button
-                    key={p.key}
-                    type="button"
-                    onClick={() => applyPreset(p)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-bold text-slate-300 hover:bg-indigo-500/10 hover:text-indigo-400 hover:border-indigo-500/30 transition-all text-left"
-                  >
-                    {p.label}
-                  </button>
-                ))}
+            <div className="flex max-h-[70vh] flex-col overflow-y-auto md:flex-row">
+              <div className="border-b border-slate-800 bg-slate-900/50 p-3 md:w-[180px] md:border-b-0 md:border-r">
+                <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Atalhos
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 md:grid-cols-1">
+                  {presets.map((preset) => (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => applyPreset(preset)}
+                      className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-left text-[11px] font-bold text-slate-300 transition-all hover:border-indigo-500/30 hover:bg-indigo-500/10 hover:text-indigo-400"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex-1 p-4">
-                <div className="flex gap-4 items-start">
-                  {renderMonth(leftMonth, leftGrid)}
-                  <div className="w-[210px] hidden md:block">
-                    {renderMonth(rightMonth, rightGrid)}
+                <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                  {renderMonth({
+                    month: leftMonth,
+                    days: leftGrid,
+                    onPrev: () => setLeftMonth((current) => subMonths(current, 1)),
+                    onNext: () => setLeftMonth((current) => addMonths(current, 1)),
+                  })}
+                  <div className="hidden md:block">
+                    {renderMonth({
+                      month: rightMonth,
+                      days: rightGrid,
+                      onPrev: () => setRightMonth((current) => subMonths(current, 1)),
+                      onNext: () => setRightMonth((current) => addMonths(current, 1)),
+                    })}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="px-5 py-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between gap-4">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                {draftFrom && draftTo ? (
-                  <span className="flex items-center gap-2">
-                    <span className="text-emerald-500">De {format(draftFrom, 'dd/MM/yyyy')}</span>
+            <div className="flex flex-col gap-4 border-t border-slate-800 bg-slate-950/50 px-5 py-4 md:flex-row md:items-center md:justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                {selectedInterval ? (
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-emerald-500">De {toDisplayDate(selectedInterval.from)}</span>
                     <ArrowRight size={10} />
-                    <span className="text-emerald-500">Até {format(draftTo, 'dd/MM/yyyy')}</span>
+                    <span className="text-emerald-500">Até {toDisplayDate(selectedInterval.to)}</span>
                   </span>
                 ) : draftFrom ? (
-                  <span>Selecione a data final...</span>
+                  <span>Selecione ou digite a data final.</span>
                 ) : (
-                  <span>Aguardando seleção...</span>
+                  <span>Aguardando seleção ou digitação...</span>
                 )}
               </div>
-              <div className="flex gap-2">
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={clear}
+                  className="rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-colors hover:text-white"
+                >
+                  Limpar
+                </button>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors"
+                  className="rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition-colors hover:text-white"
                 >
                   Fechar
                 </button>
                 <button
                   type="button"
                   onClick={applyDraft}
-                  disabled={!draftFrom || !draftTo}
+                  disabled={!canApplyDraft}
                   className={clsx(
-                    'px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg',
-                    (!draftFrom || !draftTo) 
-                      ? 'bg-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
-                      : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20 active:scale-95',
+                    'rounded-xl px-6 py-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg',
+                    !canApplyDraft
+                      ? 'cursor-not-allowed bg-slate-800 text-slate-600 opacity-50'
+                      : 'bg-emerald-600 text-white shadow-emerald-500/20 hover:bg-emerald-500 active:scale-95',
                   )}
                 >
                   Confirmar Período
@@ -413,19 +636,18 @@ export function DateRangePicker({
 }
 
 const ArrowRight = ({ size, className }: { size: number; className?: string }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="3" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     className={className}
   >
     <path d="M5 12h14" />
     <path d="m12 5 7 7-7 7" />
   </svg>
 );
-
