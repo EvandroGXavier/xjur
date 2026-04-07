@@ -33,6 +33,13 @@ model Tenant {
   documentHistory          DocumentHistory[]
   financialRecords         FinancialRecord[]
   bankAccounts             BankAccount[]
+  bankIntegrations         BankIntegration[]
+  bankTransactions         BankTransaction[]
+  bankWebhookEvents        BankWebhookEvent[]
+  bankReconciliations      BankReconciliation[]
+  bankCharges              BankCharge[]
+  bankPaymentRequests      BankPaymentRequest[]
+  bankSyncJobs             BankSyncJob[]
   relationTypes            RelationType[]
   contactRelations         ContactRelation[]
   assetTypes               AssetType[]
@@ -635,6 +642,9 @@ model FinancialRecord {
   paymentCondition  PaymentCondition?  @relation(fields: [paymentConditionId], references: [id])
   parties           FinancialParty[]
   splits            TransactionSplit[]
+  bankReconciliations BankReconciliation[]
+  bankCharges         BankCharge[]
+  bankPaymentRequests BankPaymentRequest[]
 
   // Auto-relacionamento (Parcelas / Residuais)
   parent   FinancialRecord?  @relation("Installments", fields: [parentId], references: [id])
@@ -668,9 +678,217 @@ model BankAccount {
   tenant           Tenant            @relation(fields: [tenantId], references: [id])
   contact          Contact?          @relation("BankAccounts", fields: [contactId], references: [id])
   financialRecords FinancialRecord[]
+  bankIntegrations BankIntegration[]
+  bankTransactions BankTransaction[]
+  bankCharges      BankCharge[]
+  bankPaymentRequests BankPaymentRequest[]
 
   @@index([contactId])
   @@map("bank_accounts")
+}
+
+model BankIntegration {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  bankAccountId         String?
+  provider              String
+  displayName           String
+  environment           String   @default("SANDBOX")
+  status                String   @default("DRAFT")
+  isActive              Boolean  @default(true)
+  credentialSecretId    String?
+  certificateSecretId   String?
+  webhookSecretId       String?
+  webhookUrl            String?
+  webhookEnabled        Boolean  @default(false)
+  externalAccountId     String?
+  accountHolderDocument String?
+  accountHolderName     String?
+  branchCode            String?
+  accountNumber         String?
+  metadata              Json?
+  lastHealthcheckAt     DateTime?
+  lastHealthcheckStatus String?
+  lastHealthcheckError  String?  @db.Text
+  lastSyncAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant              Tenant                @relation(fields: [tenantId], references: [id])
+  bankAccount         BankAccount?          @relation(fields: [bankAccountId], references: [id])
+  bankTransactions    BankTransaction[]
+  webhookEvents       BankWebhookEvent[]
+  reconciliations     BankReconciliation[]
+  charges             BankCharge[]
+  paymentRequests     BankPaymentRequest[]
+  syncJobs            BankSyncJob[]
+
+  @@index([tenantId, provider, isActive])
+  @@index([bankAccountId])
+  @@map("bank_integrations")
+}
+
+model BankTransaction {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  bankIntegrationId     String
+  bankAccountId         String?
+  externalTransactionId String
+  direction             String
+  entryType             String
+  status                String   @default("CAPTURED")
+  occurredAt            DateTime
+  postedAt              DateTime?
+  amount                Decimal  @db.Decimal(15, 2)
+  feeAmount             Decimal? @db.Decimal(15, 2)
+  description           String
+  counterpartyName      String?
+  counterpartyDocument  String?
+  txid                  String?
+  endToEndId            String?
+  reconciliationStatus  String   @default("PENDING")
+  rawPayload            Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id])
+  bankIntegration BankIntegration     @relation(fields: [bankIntegrationId], references: [id], onDelete: Cascade)
+  bankAccount     BankAccount?        @relation(fields: [bankAccountId], references: [id])
+  reconciliations BankReconciliation[]
+
+  @@unique([bankIntegrationId, externalTransactionId])
+  @@index([tenantId, occurredAt])
+  @@index([bankAccountId])
+  @@map("bank_transactions")
+}
+
+model BankWebhookEvent {
+  id              String   @id @default(uuid())
+  tenantId        String
+  bankIntegrationId String
+  provider        String
+  eventType       String
+  externalEventId String?
+  status          String   @default("RECEIVED")
+  receivedAt      DateTime @default(now())
+  processedAt     DateTime?
+  processingError String?  @db.Text
+  rawPayload      Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  bankIntegration BankIntegration @relation(fields: [bankIntegrationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, provider, status])
+  @@index([bankIntegrationId, receivedAt])
+  @@map("bank_webhook_events")
+}
+
+model BankReconciliation {
+  id                String   @id @default(uuid())
+  tenantId          String
+  bankIntegrationId String
+  bankTransactionId String
+  financialRecordId String
+  matchType         String
+  status            String   @default("MATCHED")
+  matchedBy         String?
+  notes             String?  @db.Text
+  matchedAt         DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  bankIntegration BankIntegration @relation(fields: [bankIntegrationId], references: [id], onDelete: Cascade)
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+  financialRecord FinancialRecord @relation(fields: [financialRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([bankTransactionId, financialRecordId])
+  @@index([tenantId, status])
+  @@map("bank_reconciliations")
+}
+
+model BankCharge {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  bankIntegrationId  String
+  bankAccountId      String?
+  financialRecordId  String
+  provider           String
+  chargeType         String
+  status             String   @default("DRAFT")
+  externalChargeId   String?
+  txid               String?
+  barcode            String?
+  digitableLine      String?
+  pixQrCode          String?  @db.Text
+  pixCopyPaste       String?  @db.Text
+  dueDate            DateTime?
+  amount             Decimal  @db.Decimal(15, 2)
+  rawRequest         Json?
+  rawResponse        Json?
+  paidAt             DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  bankIntegration BankIntegration @relation(fields: [bankIntegrationId], references: [id], onDelete: Cascade)
+  bankAccount     BankAccount?    @relation(fields: [bankAccountId], references: [id])
+  financialRecord FinancialRecord @relation(fields: [financialRecordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, provider])
+  @@map("bank_charges")
+}
+
+model BankPaymentRequest {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  bankIntegrationId   String
+  bankAccountId       String?
+  financialRecordId   String
+  provider            String
+  paymentType         String
+  status              String   @default("DRAFT")
+  externalPaymentId   String?
+  approvedByUserId    String?
+  beneficiaryName     String?
+  beneficiaryDocument String?
+  amount              Decimal  @db.Decimal(15, 2)
+  executedAt          DateTime?
+  approvedAt          DateTime?
+  rawRequest          Json?
+  rawResponse         Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  bankIntegration BankIntegration @relation(fields: [bankIntegrationId], references: [id], onDelete: Cascade)
+  bankAccount     BankAccount?    @relation(fields: [bankAccountId], references: [id])
+  financialRecord FinancialRecord @relation(fields: [financialRecordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, provider])
+  @@map("bank_payment_requests")
+}
+
+model BankSyncJob {
+  id                String   @id @default(uuid())
+  tenantId          String
+  bankIntegrationId String
+  jobType           String
+  status            String   @default("PENDING")
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  summary           String?  @db.Text
+  rawResult         Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  bankIntegration BankIntegration @relation(fields: [bankIntegrationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, jobType])
+  @@map("bank_sync_jobs")
 }
 
 model FinancialParty {

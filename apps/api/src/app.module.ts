@@ -32,6 +32,7 @@ import { TelegramModule } from "./telegram/telegram.module";
 import { InboxModule } from "./inbox/inbox.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { WorkflowsModule } from "./workflows/workflows.module";
+import { BankingModule } from "./banking/banking.module";
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { WorkflowsModule } from "./workflows/workflows.module";
     InboxModule,
     DashboardModule,
     WorkflowsModule,
+    BankingModule,
   ],
   controllers: [AppController],
   providers: [

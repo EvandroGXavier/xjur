@@ -165,6 +165,94 @@ interface BankAccount {
   };
 }
 
+interface BankIntegration {
+  id: string;
+  displayName: string;
+  provider: "INTER";
+  environment: "SANDBOX" | "PRODUCTION";
+  status: string;
+  isActive: boolean;
+  webhookEnabled: boolean;
+  webhookUrl?: string | null;
+  externalAccountId?: string | null;
+  accountHolderDocument?: string | null;
+  accountHolderName?: string | null;
+  branchCode?: string | null;
+  accountNumber?: string | null;
+  metadata?: Record<string, any> | null;
+  lastSyncAt?: string | null;
+  lastHealthcheckAt?: string | null;
+  lastHealthcheckStatus?: string | null;
+  lastHealthcheckError?: string | null;
+  bankAccountId?: string | null;
+  bankAccount?: {
+    id: string;
+    title: string;
+    bankName: string;
+    balance: number;
+  } | null;
+  syncJobs?: Array<{
+    id: string;
+    jobType: string;
+    status: string;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+  }>;
+  _count?: {
+    bankTransactions: number;
+    reconciliations: number;
+    webhookEvents: number;
+  };
+}
+
+interface BankTransaction {
+  id: string;
+  bankIntegrationId: string;
+  externalTransactionId: string;
+  direction: "IN" | "OUT";
+  entryType: string;
+  status: string;
+  occurredAt: string;
+  postedAt?: string | null;
+  amount: number;
+  feeAmount?: number | null;
+  description: string;
+  counterpartyName?: string | null;
+  counterpartyDocument?: string | null;
+  txid?: string | null;
+  endToEndId?: string | null;
+  bankAccount?: {
+    id: string;
+    title: string;
+    bankName: string;
+  } | null;
+  reconciliations?: Array<{
+    id: string;
+    matchType: string;
+    financialRecord?: {
+      id: string;
+      description: string;
+      amount: number;
+      dueDate: string;
+      status: string;
+      type: string;
+    } | null;
+  }>;
+}
+
+interface BankingHealthcheckResult {
+  success: boolean;
+  mode: "MOCK" | "LIVE";
+  configured: boolean;
+  checks: Array<{
+    key: string;
+    label: string;
+    status: "success" | "warning" | "error";
+    details: string;
+  }>;
+  message: string;
+}
+
 interface Contact {
   id: string;
   name: string;
@@ -428,10 +516,13 @@ export function Financial(props: FinancialProps = {}) {
   const isEmbeddedInProcess = Boolean(lockedProcessId);
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [bankIntegrations, setBankIntegrations] = useState<BankIntegration[]>([]);
+  const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
+  const [reconcileRecords, setReconcileRecords] = useState<FinancialRecord[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<
-    "dashboard" | "records" | "accounts" | "conditions"
+    "dashboard" | "records" | "accounts" | "conditions" | "banking"
   >("records");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -440,6 +531,8 @@ export function Financial(props: FinancialProps = {}) {
     onCancel: () => {
       if (showModal) setShowModal(false);
       if (showBankModal) setShowBankModal(false);
+      if (showIntegrationModal) setShowIntegrationModal(false);
+      if (showReconcileModal) setShowReconcileModal(false);
       if (showSettleModal) setShowSettleModal(false);
       if (showConditionSubModal) setShowConditionSubModal(false);
     },
@@ -448,9 +541,17 @@ export function Financial(props: FinancialProps = {}) {
 
   const [showModal, setShowModal] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
+  const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [showReconcileModal, setShowReconcileModal] = useState(false);
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [selectedBankAccount, setSelectedBankAccount] =
     useState<BankAccount | null>(null);
+  const [editingIntegration, setEditingIntegration] =
+    useState<BankIntegration | null>(null);
+  const [selectedBankTransaction, setSelectedBankTransaction] =
+    useState<BankTransaction | null>(null);
+  const [lastHealthcheck, setLastHealthcheck] =
+    useState<BankingHealthcheckResult | null>(null);
   const [settlingRecord, setSettlingRecord] = useState<FinancialRecord | null>(
     null,
   );
@@ -644,6 +745,31 @@ export function Financial(props: FinancialProps = {}) {
     agency: "",
     balance: "",
     contactId: "",
+    notes: "",
+  });
+
+  const [integrationFormData, setIntegrationFormData] = useState({
+    displayName: "",
+    environment: "SANDBOX" as "SANDBOX" | "PRODUCTION",
+    bankAccountId: "",
+    externalAccountId: "",
+    accountHolderDocument: "",
+    accountHolderName: "",
+    branchCode: "",
+    accountNumber: "",
+    webhookEnabled: false,
+    webhookUrl: "",
+    clientId: "",
+    clientSecret: "",
+    certificatePassword: "",
+    certificateBase64: "",
+    webhookSecret: "",
+    tokenUrl: "",
+  });
+
+  const [reconcileFormData, setReconcileFormData] = useState({
+    financialRecordId: "",
+    matchType: "MANUAL",
     notes: "",
   });
 
@@ -1175,6 +1301,27 @@ export function Financial(props: FinancialProps = {}) {
           `/financial/bank-accounts?tenantId=${tenantId}`,
         );
         setBankAccounts(accountsRes.data);
+      } else if (view === "banking") {
+        const [accountsRes, integrationsRes, transactionsRes, recordsRes] =
+          await Promise.all([
+            api.get(`/financial/bank-accounts?tenantId=${tenantId}`),
+            api.get("/banking/integrations"),
+            api.get("/banking/transactions"),
+            api.get(
+              `/financial/records?tenantId=${tenantId}&showInstallments=false`,
+            ),
+          ]);
+
+        setBankAccounts(accountsRes.data);
+        setBankIntegrations(integrationsRes.data);
+        setBankTransactions(transactionsRes.data);
+        setReconcileRecords(
+          Array.isArray(recordsRes.data)
+            ? recordsRes.data.filter((record: FinancialRecord) =>
+                ["PENDING", "PARTIAL", "OVERDUE"].includes(record.status),
+              )
+            : [],
+        );
       }
     } catch (error) {
       toast.error("Erro ao carregar dados financeiros");
@@ -1354,6 +1501,210 @@ export function Financial(props: FinancialProps = {}) {
       });
     }
     setShowBankModal(true);
+  };
+
+  const handleOpenIntegrationModal = (integration?: BankIntegration) => {
+    setLastHealthcheck(null);
+
+    if (integration) {
+      setEditingIntegration(integration);
+      setIntegrationFormData({
+        displayName: integration.displayName,
+        environment: integration.environment || "SANDBOX",
+        bankAccountId: integration.bankAccountId || "",
+        externalAccountId: integration.externalAccountId || "",
+        accountHolderDocument: integration.accountHolderDocument || "",
+        accountHolderName: integration.accountHolderName || "",
+        branchCode: integration.branchCode || "",
+        accountNumber: integration.accountNumber || "",
+        webhookEnabled: Boolean(integration.webhookEnabled),
+        webhookUrl: integration.webhookUrl || "",
+        clientId: "",
+        clientSecret: "",
+        certificatePassword: "",
+        certificateBase64: "",
+        webhookSecret: "",
+        tokenUrl: "",
+      });
+    } else {
+      setEditingIntegration(null);
+      setIntegrationFormData({
+        displayName: "Banco Inter",
+        environment: "SANDBOX",
+        bankAccountId: "",
+        externalAccountId: "",
+        accountHolderDocument: "",
+        accountHolderName: "",
+        branchCode: "",
+        accountNumber: "",
+        webhookEnabled: false,
+        webhookUrl: "",
+        clientId: "",
+        clientSecret: "",
+        certificatePassword: "",
+        certificateBase64: "",
+        webhookSecret: "",
+        tokenUrl: "",
+      });
+    }
+
+    setShowIntegrationModal(true);
+  };
+
+  const handleSubmitIntegration = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!integrationFormData.displayName.trim()) {
+      toast.error("Informe o nome da integração bancária");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        displayName: integrationFormData.displayName.trim(),
+        provider: "INTER",
+        environment: integrationFormData.environment,
+        bankAccountId: integrationFormData.bankAccountId || undefined,
+        externalAccountId: integrationFormData.externalAccountId || undefined,
+        accountHolderDocument:
+          integrationFormData.accountHolderDocument || undefined,
+        accountHolderName: integrationFormData.accountHolderName || undefined,
+        branchCode: integrationFormData.branchCode || undefined,
+        accountNumber: integrationFormData.accountNumber || undefined,
+        webhookEnabled: integrationFormData.webhookEnabled,
+        webhookUrl: integrationFormData.webhookUrl || undefined,
+        credentials: {
+          clientId: integrationFormData.clientId || undefined,
+          clientSecret: integrationFormData.clientSecret || undefined,
+          certificatePassword:
+            integrationFormData.certificatePassword || undefined,
+          certificateBase64: integrationFormData.certificateBase64 || undefined,
+          webhookSecret: integrationFormData.webhookSecret || undefined,
+          tokenUrl: integrationFormData.tokenUrl || undefined,
+        },
+      };
+
+      if (editingIntegration) {
+        await api.patch(`/banking/integrations/${editingIntegration.id}`, payload);
+        toast.success("Integração bancária atualizada");
+      } else {
+        await api.post("/banking/integrations", payload);
+        toast.success("Integração bancária criada");
+      }
+
+      setShowIntegrationModal(false);
+      await fetchData();
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message || "Erro ao salvar integração bancária",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleHealthcheckIntegration = async (integration: BankIntegration) => {
+    try {
+      const response = await api.post(
+        `/banking/integrations/${integration.id}/health`,
+      );
+      setLastHealthcheck(response.data);
+      toast.success("Healthcheck executado");
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Erro ao testar integração");
+    }
+  };
+
+  const handleSyncIntegration = async (integration: BankIntegration) => {
+    try {
+      const response = await api.post(`/banking/integrations/${integration.id}/sync`, {
+        forceMockData: integration.environment === "SANDBOX",
+      });
+
+      if (response.data?.success) {
+        toast.success(response.data.message || "Sincronização concluída");
+      } else {
+        toast.error(response.data?.message || "Sincronização não concluída");
+      }
+
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Erro ao sincronizar banco");
+    }
+  };
+
+  const handleDeleteIntegration = async (id: string) => {
+    if (!confirm("Deseja realmente excluir esta integração bancária?")) return;
+
+    try {
+      await api.delete(`/banking/integrations/${id}`);
+      toast.success("Integração bancária excluída");
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Erro ao excluir integração");
+    }
+  };
+
+  const getSuggestedRecords = (transaction: BankTransaction) => {
+    const expectedType = transaction.direction === "IN" ? "INCOME" : "EXPENSE";
+    const transactionAmount = Math.abs(transaction.amount);
+    const transactionDate = parseISO(transaction.occurredAt);
+
+    return reconcileRecords
+      .filter(
+        (record) =>
+          record.type === expectedType &&
+          Math.abs(record.amount - transactionAmount) < 0.01,
+      )
+      .sort((a, b) => {
+        const aDiff = Math.abs(
+          new Date(a.dueDate).getTime() - transactionDate.getTime(),
+        );
+        const bDiff = Math.abs(
+          new Date(b.dueDate).getTime() - transactionDate.getTime(),
+        );
+        return aDiff - bDiff;
+      })
+      .slice(0, 5);
+  };
+
+  const handleOpenReconcileModal = (transaction: BankTransaction) => {
+    const suggested = getSuggestedRecords(transaction);
+    setSelectedBankTransaction(transaction);
+    setReconcileFormData({
+      financialRecordId: suggested[0]?.id || "",
+      matchType: suggested.length > 0 ? "SUGGESTED" : "MANUAL",
+      notes: "",
+    });
+    setShowReconcileModal(true);
+  };
+
+  const handleSubmitReconciliation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBankTransaction) return;
+
+    if (!reconcileFormData.financialRecordId) {
+      toast.error("Selecione um lançamento financeiro para conciliar");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.post(
+        `/banking/transactions/${selectedBankTransaction.id}/reconcile`,
+        reconcileFormData,
+      );
+      toast.success("Transação conciliada");
+      setShowReconcileModal(false);
+      setSelectedBankTransaction(null);
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Erro ao conciliar transação");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmit = async (
@@ -2177,6 +2528,17 @@ export function Financial(props: FinancialProps = {}) {
                 Contas Bancárias
               </button>
               <button
+                onClick={() => setView("banking")}
+                className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+                  view === "banking"
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <Globe size={16} />
+                Banking Hub
+              </button>
+              <button
                 onClick={() => setView("conditions")}
                 className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
                   view === "conditions"
@@ -2191,11 +2553,17 @@ export function Financial(props: FinancialProps = {}) {
           )}
           <div className="w-px h-6 bg-slate-800 mx-1 hidden sm:block" />
           <button
-            onClick={() => (view === "accounts" ? handleOpenBankModal() : handleOpenModal())}
+            onClick={() =>
+              view === "accounts"
+                ? handleOpenBankModal()
+                : view === "banking"
+                  ? handleOpenIntegrationModal()
+                  : handleOpenModal()
+            }
             className="min-h-[44px] px-4 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-base sm:text-sm font-bold transition-colors flex items-center gap-2 shadow-lg shadow-emerald-500/20"
           >
             <Plus size={20} />
-            <span>Novo</span>
+            <span>{view === "banking" ? "Nova Integração" : "Novo"}</span>
           </button>
         </div>
       </div>
@@ -3409,6 +3777,342 @@ export function Financial(props: FinancialProps = {}) {
       )}
 
       {/* Bank Accounts View */}
+      {view === "banking" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            {bankIntegrations.map((integration) => {
+              const lastJob = integration.syncJobs?.[0];
+              return (
+                <div
+                  key={integration.id}
+                  className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/10 space-y-4"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-bold uppercase tracking-wider">
+                          <Building2 size={12} />
+                          {integration.provider}
+                        </span>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold">
+                          {integration.environment}
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-bold text-white mt-3">
+                        {integration.displayName}
+                      </h3>
+                      <p className="text-sm text-slate-400 mt-1 break-words">
+                        {integration.bankAccount
+                          ? `${integration.bankAccount.title} • ${integration.bankAccount.bankName}`
+                          : "Sem conta interna vinculada"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleHealthcheckIntegration(integration)}
+                        className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold flex items-center gap-2"
+                      >
+                        <CheckCircle2 size={15} />
+                        Testar
+                      </button>
+                      <button
+                        onClick={() => handleSyncIntegration(integration)}
+                        className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold flex items-center gap-2"
+                      >
+                        <RefreshCw size={15} />
+                        Sincronizar
+                      </button>
+                      <button
+                        onClick={() => handleOpenIntegrationModal(integration)}
+                        className="p-2 rounded-lg text-indigo-300 hover:bg-indigo-500/10"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteIntegration(integration.id)}
+                        className="p-2 rounded-lg text-red-300 hover:bg-red-500/10"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                      <p className="text-slate-500 text-xs uppercase tracking-wider font-bold">
+                        Status
+                      </p>
+                      <p className="text-white font-semibold mt-1">{integration.status}</p>
+                      {integration.lastSyncAt && (
+                        <p className="text-slate-400 text-xs mt-2">
+                          Último sync: {formatDate(integration.lastSyncAt)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                      <p className="text-slate-500 text-xs uppercase tracking-wider font-bold">
+                        Saúde
+                      </p>
+                      <p className="text-white font-semibold mt-1">
+                        {integration.lastHealthcheckStatus || "Ainda não testado"}
+                      </p>
+                      {integration.lastHealthcheckError && (
+                        <p className="text-amber-300 text-xs mt-2">
+                          {integration.lastHealthcheckError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+                      <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold">
+                        Transações
+                      </p>
+                      <p className="text-lg font-bold text-white mt-1">
+                        {integration._count?.bankTransactions || 0}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+                      <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold">
+                        Conciliações
+                      </p>
+                      <p className="text-lg font-bold text-white mt-1">
+                        {integration._count?.reconciliations || 0}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+                      <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold">
+                        Webhooks
+                      </p>
+                      <p className="text-lg font-bold text-white mt-1">
+                        {integration._count?.webhookEvents || 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  {lastJob && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3 text-sm">
+                      <p className="text-slate-500 text-xs uppercase tracking-wider font-bold">
+                        Último job
+                      </p>
+                      <p className="text-white font-semibold mt-1">
+                        {lastJob.jobType} • {lastJob.status}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {bankIntegrations.length === 0 && (
+              <div className="xl:col-span-3 rounded-3xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-300 flex items-center justify-center mx-auto mb-4">
+                  <Globe size={28} />
+                </div>
+                <h3 className="text-xl font-bold text-white">
+                  Banco Inter ainda não conectado
+                </h3>
+                <p className="text-slate-400 mt-2 max-w-2xl mx-auto">
+                  Cadastre a integração para sincronizar saldo, extrato e iniciar
+                  a conciliação automática do Financeiro com o Banking Hub.
+                </p>
+                <button
+                  onClick={() => handleOpenIntegrationModal()}
+                  className="mt-5 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold inline-flex items-center gap-2"
+                >
+                  <Plus size={16} />
+                  Conectar Banco Inter
+                </button>
+              </div>
+            )}
+          </div>
+
+          {lastHealthcheck && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div
+                  className={clsx(
+                    "w-10 h-10 rounded-xl flex items-center justify-center",
+                    lastHealthcheck.success
+                      ? "bg-emerald-500/10 text-emerald-300"
+                      : "bg-amber-500/10 text-amber-300",
+                  )}
+                >
+                  {lastHealthcheck.success ? (
+                    <CheckCircle2 size={18} />
+                  ) : (
+                    <AlertTriangle size={18} />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">
+                    Resultado do Healthcheck
+                  </h3>
+                  <p className="text-sm text-slate-400">
+                    {lastHealthcheck.message}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {lastHealthcheck.checks.map((check) => (
+                  <div
+                    key={check.key}
+                    className="rounded-xl border border-slate-800 bg-slate-950/40 p-4"
+                  >
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      {check.label}
+                    </p>
+                    <p
+                      className={clsx(
+                        "text-sm font-semibold mt-2",
+                        check.status === "success" && "text-emerald-300",
+                        check.status === "warning" && "text-amber-300",
+                        check.status === "error" && "text-red-300",
+                      )}
+                    >
+                      {check.status.toUpperCase()}
+                    </p>
+                    <p className="text-sm text-slate-400 mt-2">{check.details}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-800 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">
+                  Extrato Sincronizado
+                </h3>
+                <p className="text-sm text-slate-400">
+                  Visualize transações importadas do Inter e faça a conciliação
+                  com os lançamentos financeiros do Xjur.
+                </p>
+              </div>
+              <div className="text-sm text-slate-400">
+                {bankTransactions.length} transações carregadas
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-950/70 text-slate-400">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-semibold">Data</th>
+                    <th className="text-left px-4 py-3 font-semibold">Descrição</th>
+                    <th className="text-left px-4 py-3 font-semibold">Conta</th>
+                    <th className="text-left px-4 py-3 font-semibold">Valor</th>
+                    <th className="text-left px-4 py-3 font-semibold">Conciliação</th>
+                    <th className="text-right px-4 py-3 font-semibold">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bankTransactions.map((transaction) => {
+                    const suggestions = getSuggestedRecords(transaction);
+                    const reconciled = (transaction.reconciliations?.length || 0) > 0;
+
+                    return (
+                      <tr
+                        key={transaction.id}
+                        className="border-t border-slate-800 align-top"
+                      >
+                        <td className="px-4 py-4 text-slate-300 whitespace-nowrap">
+                          {formatDate(transaction.occurredAt)}
+                        </td>
+                        <td className="px-4 py-4 min-w-[260px]">
+                          <div className="font-medium text-white">
+                            {transaction.description}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {transaction.counterpartyName || transaction.entryType}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-slate-300">
+                          {transaction.bankAccount?.title || "Sem conta"}
+                        </td>
+                        <td
+                          className={clsx(
+                            "px-4 py-4 font-bold whitespace-nowrap",
+                            transaction.direction === "IN"
+                              ? "text-emerald-300"
+                              : "text-red-300",
+                          )}
+                        >
+                          {formatCurrency(transaction.amount)}
+                        </td>
+                        <td className="px-4 py-4 min-w-[280px]">
+                          {reconciled ? (
+                            <div className="space-y-2">
+                              {transaction.reconciliations?.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2"
+                                >
+                                  <p className="text-emerald-200 font-medium">
+                                    {item.financialRecord?.description || "Registro vinculado"}
+                                  </p>
+                                  <p className="text-xs text-emerald-100/80 mt-1">
+                                    {item.matchType} •{" "}
+                                    {item.financialRecord
+                                      ? formatCurrency(item.financialRecord.amount)
+                                      : "Sem valor"}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : suggestions.length > 0 ? (
+                            <div className="space-y-2">
+                              {suggestions.slice(0, 2).map((record) => (
+                                <div
+                                  key={record.id}
+                                  className="rounded-lg border border-indigo-500/20 bg-indigo-500/10 px-3 py-2"
+                                >
+                                  <p className="text-white font-medium">{record.description}</p>
+                                  <p className="text-xs text-slate-300 mt-1">
+                                    {formatCurrency(record.amount)} • {formatDate(record.dueDate)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500">Sem sugestão automática</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex justify-end gap-2">
+                            {!reconciled && (
+                              <button
+                                onClick={() => handleOpenReconcileModal(transaction)}
+                                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold"
+                              >
+                                Conciliar
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {bankTransactions.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-6 py-12 text-center text-slate-500"
+                      >
+                        Nenhuma transação bancária sincronizada ainda.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {view === "accounts" && !selectedBankAccount && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {bankAccounts.map((account) => (
@@ -4323,6 +5027,452 @@ export function Financial(props: FinancialProps = {}) {
       )}
 
       {/* Modal de Conta Bancária */}
+      {showIntegrationModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <form onSubmit={handleSubmitIntegration}>
+              <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    {editingIntegration
+                      ? "Editar Integração Banco Inter"
+                      : "Nova Integração Banco Inter"}
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Configure conexão, credenciais e vínculo com a conta bancária
+                    interna do Xjur.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowIntegrationModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Nome da integração
+                    </span>
+                    <input
+                      value={integrationFormData.displayName}
+                      onChange={(e) =>
+                        setIntegrationFormData((prev) => ({
+                          ...prev,
+                          displayName: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                      placeholder="Banco Inter"
+                    />
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Ambiente
+                    </span>
+                    <select
+                      value={integrationFormData.environment}
+                      onChange={(e) =>
+                        setIntegrationFormData((prev) => ({
+                          ...prev,
+                          environment: e.target.value as "SANDBOX" | "PRODUCTION",
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    >
+                      <option value="SANDBOX">Sandbox</option>
+                      <option value="PRODUCTION">Produção</option>
+                    </select>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Conta bancária interna
+                    </span>
+                    <select
+                      value={integrationFormData.bankAccountId}
+                      onChange={(e) =>
+                        setIntegrationFormData((prev) => ({
+                          ...prev,
+                          bankAccountId: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    >
+                      <option value="">Selecionar depois</option>
+                      {bankAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.title} • {account.bankName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      External Account ID
+                    </span>
+                    <input
+                      value={integrationFormData.externalAccountId}
+                      onChange={(e) =>
+                        setIntegrationFormData((prev) => ({
+                          ...prev,
+                          externalAccountId: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Titular
+                    </span>
+                    <input
+                      value={integrationFormData.accountHolderName}
+                      onChange={(e) =>
+                        setIntegrationFormData((prev) => ({
+                          ...prev,
+                          accountHolderName: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    />
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Documento do titular
+                    </span>
+                    <input
+                      value={integrationFormData.accountHolderDocument}
+                      onChange={(e) =>
+                        setIntegrationFormData((prev) => ({
+                          ...prev,
+                          accountHolderDocument: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Agência
+                      </span>
+                      <input
+                        value={integrationFormData.branchCode}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            branchCode: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Conta
+                      </span>
+                      <input
+                        value={integrationFormData.accountNumber}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            accountNumber: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+                  <h3 className="text-lg font-bold text-white">Credenciais Inter</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Client ID
+                      </span>
+                      <input
+                        value={integrationFormData.clientId}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            clientId: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white"
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Client Secret
+                      </span>
+                      <input
+                        value={integrationFormData.clientSecret}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            clientSecret: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white"
+                      />
+                    </label>
+                    <label className="space-y-2 md:col-span-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Certificado A1 em Base64
+                      </span>
+                      <textarea
+                        value={integrationFormData.certificateBase64}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            certificateBase64: e.target.value,
+                          }))
+                        }
+                        rows={4}
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white"
+                        placeholder="Cole aqui o conteúdo Base64 do PFX/P12 quando quiser gravar no cofre"
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Senha do certificado
+                      </span>
+                      <input
+                        value={integrationFormData.certificatePassword}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            certificatePassword: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white"
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Token URL customizada
+                      </span>
+                      <input
+                        value={integrationFormData.tokenUrl}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            tokenUrl: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Webhook</h3>
+                      <p className="text-sm text-slate-400">
+                        Prepare a integração para liquidações e eventos futuros.
+                      </p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={integrationFormData.webhookEnabled}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            webhookEnabled: e.target.checked,
+                          }))
+                        }
+                      />
+                      Ativar
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        URL do webhook
+                      </span>
+                      <input
+                        value={integrationFormData.webhookUrl}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            webhookUrl: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white"
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-300">
+                        Segredo do webhook
+                      </span>
+                      <input
+                        value={integrationFormData.webhookSecret}
+                        onChange={(e) =>
+                          setIntegrationFormData((prev) => ({
+                            ...prev,
+                            webhookSecret: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-5 border-t border-slate-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowIntegrationModal(false)}
+                  className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-semibold"
+                >
+                  {submitting ? "Salvando..." : "Salvar Integração"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showReconcileModal && selectedBankTransaction && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <form onSubmit={handleSubmitReconciliation}>
+              <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    Conciliar Transação Bancária
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {selectedBankTransaction.description} •{" "}
+                    {formatCurrency(selectedBankTransaction.amount)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowReconcileModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold text-slate-300">
+                    Lançamento financeiro
+                  </span>
+                  <select
+                    value={reconcileFormData.financialRecordId}
+                    onChange={(e) =>
+                      setReconcileFormData((prev) => ({
+                        ...prev,
+                        financialRecordId: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                  >
+                    <option value="">Selecione</option>
+                    {getSuggestedRecords(selectedBankTransaction).length > 0 && (
+                      <optgroup label="Sugestões automáticas">
+                        {getSuggestedRecords(selectedBankTransaction).map((record) => (
+                          <option key={record.id} value={record.id}>
+                            {record.description} • {formatCurrency(record.amount)} •{" "}
+                            {formatDate(record.dueDate)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="Demais pendências">
+                      {reconcileRecords.map((record) => (
+                        <option key={record.id} value={record.id}>
+                          {record.description} • {formatCurrency(record.amount)} •{" "}
+                          {record.type}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </label>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Tipo de conciliação
+                    </span>
+                    <select
+                      value={reconcileFormData.matchType}
+                      onChange={(e) =>
+                        setReconcileFormData((prev) => ({
+                          ...prev,
+                          matchType: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    >
+                      <option value="MANUAL">Manual</option>
+                      <option value="SUGGESTED">Sugerida</option>
+                      <option value="AUTO">Automática validada</option>
+                    </select>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Observação
+                    </span>
+                    <input
+                      value={reconcileFormData.notes}
+                      onChange={(e) =>
+                        setReconcileFormData((prev) => ({
+                          ...prev,
+                          notes: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="px-6 py-5 border-t border-slate-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowReconcileModal(false)}
+                  className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-semibold"
+                >
+                  {submitting ? "Conciliando..." : "Confirmar Conciliação"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showBankModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-lg w-full max-w-lg">
