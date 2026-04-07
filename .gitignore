@@ -16,3 +16,4 @@ backups/
 *.db
 Exemplos/
 apps/api/storage/
+.deploy-state.json

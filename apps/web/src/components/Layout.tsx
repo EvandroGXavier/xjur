@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { getAuthPersistence, getUser, logoutLocal, setUser as authSetUser } from '../auth/authStorage';
 import { useIdleLogout } from '../hooks/useIdleLogout';
 import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, type ThemePreference } from '../utils/theme';
-import { api } from '../services/api';
+import { api, getApiUrl } from '../services/api';
 import { InventoryHelpModal } from './inventory/InventoryHelpModal';
 import { Sidebar } from './Sidebar';
 import { getModuleIdFromPath } from '../utils/userPreferences';
@@ -26,6 +26,7 @@ const StatusBar = ({
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
   const [user, setUser] = useState<any>(null);
+  const [runtimeVersion, setRuntimeVersion] = useState<any>(null);
   const { isSigiloActive, timeLeft } = useSigilo();
 
   useEffect(() => {
@@ -35,6 +36,30 @@ const StatusBar = ({
     if (stored) setUser(stored);
 
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadVersion = async () => {
+      try {
+        const response = await fetch(getApiUrl('/version'));
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        if (!cancelled) {
+          setRuntimeVersion(payload);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar versao publicada:', error);
+      }
+    };
+
+    loadVersion();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleLogout = () => {
@@ -68,6 +93,13 @@ const StatusBar = ({
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const displayedVersion = runtimeVersion?.displayVersion || __APP_VERSION__;
+  const displayedReleaseCounter = runtimeVersion?.displayReleaseCounter ?? null;
+  const displayedVersionText =
+    displayedReleaseCounter !== null && displayedReleaseCounter !== undefined
+      ? `${displayedVersion} #${displayedReleaseCounter}`
+      : displayedVersion;
 
   if (!user) return null;
 
@@ -103,7 +135,7 @@ const StatusBar = ({
 
       <div className="hidden md:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium tracking-wide text-emerald-200">
         <span className="text-emerald-400/80">Versao</span>
-        <span className="text-white">{__APP_VERSION__}</span>
+        <span className="text-white">{displayedVersionText}</span>
       </div>
 
       <div className="flex items-center gap-2 lg:gap-6 ml-auto">

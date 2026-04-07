@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { readRuntimeVersionInfo } from './common/version.util';
 
 @Controller()
 export class AppController {
@@ -12,7 +13,12 @@ export class AppController {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '1.0.0'
+      version: readRuntimeVersionInfo(),
     };
+  }
+
+  @Get('version')
+  getVersion() {
+    return readRuntimeVersionInfo();
   }
 }

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Versão Sincronizada 1.0.1.x
-set -e
+set -euo pipefail
 
 # DR.X - COMPLETE VPS INSTALLER
 # Local de Instalação: /www/wwwroot/DrX
@@ -138,3 +138,7 @@ echo "============================================="
 echo "   INSTALAÇÃO CONCLUÍDA!    "
 echo "============================================="
 echo "Para verificar os logs: pm2 logs"
+echo "Registrando versao publicada da instalacao..."
+DEPLOY_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "local-install")
+node scripts/write-deploy-state.mjs --commit "$DEPLOY_COMMIT"
+echo "${DEPLOY_COMMIT}" > "${PROJECT_DIR}/.deploy-version"
