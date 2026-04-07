@@ -58,10 +58,16 @@ export function readRuntimeVersionInfo() {
     typeof deployState.releaseCounter === 'number'
       ? deployState.releaseCounter
       : fallbackReleaseCounter(deployedVersion);
+  const sourceReleaseCounter =
+    typeof deployState.sourceReleaseCounter === 'number'
+      ? deployState.sourceReleaseCounter
+      : typeof releaseManifest.releaseCounter === 'number'
+        ? releaseManifest.releaseCounter
+        : fallbackReleaseCounter(sourceVersion);
 
   return {
     sourceVersion,
-    sourceReleaseCounter: sourceCounter,
+    sourceReleaseCounter,
     sourceUpdatedAt: releaseManifest.updatedAt || null,
     deployedVersion,
     deployedReleaseCounter: deployedCounter,

@@ -167,12 +167,12 @@ export function ConfiguracoesWhatsapp() {
   }
 
   return (
-    <div className="flex-1 bg-slate-950 p-6 md:p-8 animate-in fade-in zoom-in-95 duration-300 h-full overflow-y-auto custom-scrollbar">
-      <div className="max-w-6xl mx-auto">
+    <div className="flex-1 bg-slate-950 p-4 md:p-6 xl:p-8 animate-in fade-in zoom-in-95 duration-300 h-full overflow-y-auto custom-scrollbar">
+      <div className="w-full min-w-0">
         
         {/* Header Premium DR.X */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mb-8">
-          <div className="bg-gradient-to-r from-slate-900 via-blue-800/40 to-slate-900 p-8 border-b border-slate-800 flex items-center gap-6">
+          <div className="bg-gradient-to-r from-slate-900 via-blue-800/40 to-slate-900 p-4 md:p-6 lg:p-8 border-b border-slate-800 flex flex-col items-start gap-4 md:flex-row md:items-center md:gap-6">
             <div className="w-16 h-16 bg-blue-600/20 rounded-2xl flex items-center justify-center border border-blue-500/30 shadow-lg shadow-blue-500/10">
               <Shield className="text-blue-400" size={36} />
             </div>
@@ -182,10 +182,10 @@ export function ConfiguracoesWhatsapp() {
             </div>
           </div>
 
-          <div className="p-8 md:p-10">
+          <div className="p-4 md:p-6 lg:p-10">
             <div className="flex flex-col lg:flex-row gap-12">
               {/* Sidebar de Seleção de Conexão */}
-              <div className="lg:w-80 shrink-0">
+              <div className="lg:w-80 shrink-0 min-w-0">
                 <h3 className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] mb-6">Instância de Operação</h3>
                 <div className="space-y-3">
                   {connections.map(conn => (

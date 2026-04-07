@@ -14,6 +14,9 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const releaseManifest = fs.existsSync(releaseManifestPath)
   ? JSON.parse(fs.readFileSync(releaseManifestPath, 'utf8'))
   : null;
+const previousDeployState = fs.existsSync(deployStatePath)
+  ? JSON.parse(fs.readFileSync(deployStatePath, 'utf8'))
+  : null;
 
 const commitArgIndex = process.argv.indexOf('--commit');
 const commit =
@@ -22,11 +25,28 @@ const commit =
     : process.env.DEPLOY_COMMIT || null;
 
 const now = new Date().toISOString();
+const previousReleaseCounter =
+  typeof previousDeployState?.releaseCounter === 'number'
+    ? previousDeployState.releaseCounter
+    : typeof releaseManifest?.releaseCounter === 'number'
+      ? releaseManifest.releaseCounter
+      : 0;
+const isSameSuccessfulDeployment =
+  previousDeployState?.status === 'active' &&
+  previousDeployState?.version === (packageJson.version || '0.0.0') &&
+  previousDeployState?.commit &&
+  commit &&
+  previousDeployState.commit === commit;
+const nextReleaseCounter = isSameSuccessfulDeployment
+  ? previousReleaseCounter
+  : previousReleaseCounter + 1;
+
 const deployState = {
   schemaVersion: 1,
   status: 'active',
   version: packageJson.version || '0.0.0',
-  releaseCounter:
+  releaseCounter: nextReleaseCounter,
+  sourceReleaseCounter:
     typeof releaseManifest?.releaseCounter === 'number'
       ? releaseManifest.releaseCounter
       : null,

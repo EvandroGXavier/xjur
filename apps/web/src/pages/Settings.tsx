@@ -1080,7 +1080,7 @@ export function Settings() {
             ) : (
               <form
                 onSubmit={handleSaveMyTenant}
-                className="space-y-6 max-w-4xl"
+                className="space-y-6 w-full min-w-0"
               >
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                   <div className="md:col-span-8">
@@ -1272,8 +1272,8 @@ export function Settings() {
         {/* === TENANTS TAB === */}
         {activeTab === "tenants" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="relative w-64">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="relative w-full md:w-64">
                 <Search
                   className="absolute left-3 top-2.5 text-slate-500"
                   size={18}
@@ -1294,7 +1294,8 @@ export function Settings() {
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-              <table className="w-full text-left text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
                   <tr>
                     <th className="px-6 py-3 font-medium">Empresa</th>
@@ -1363,6 +1364,7 @@ export function Settings() {
                     ))}
                 </tbody>
               </table>
+              </div>
             </div>
             <p className="text-xs text-slate-500 text-right mt-2">
               * Dê um duplo clique na linha para editar.
@@ -1461,14 +1463,14 @@ export function Settings() {
 
         {/* === HELP TAB === */}
         {activeTab === "help" && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 md:p-8 text-center">
             <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
               <HelpCircle size={32} className="text-indigo-500" />
             </div>
             <h2 className="text-xl font-bold text-white mb-2">
               Central de Ajuda
             </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto mb-6">
+            <p className="text-slate-400 mb-6">
               Centralize manuais, passos de configuracao e testes guiados. A documentacao da integracao Microsoft 365 agora inclui Azure, Drive ID, pasta raiz, teste de criacao de pasta e checklist de validacao.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
@@ -1487,7 +1489,7 @@ export function Settings() {
 
         {/* === WHITELABEL TAB === */}
         {activeTab === "whitelabel" && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center relative overflow-hidden group">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 md:p-8 lg:p-12 text-center relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
             <div className="relative z-10">
@@ -1497,13 +1499,13 @@ export function Settings() {
               <h2 className="text-xl font-bold text-white mb-2">
                 Personalização Whitelabel
               </h2>
-              <p className="text-slate-400 max-w-lg mx-auto mb-8">
+              <p className="text-slate-400 mb-8">
                 Personalize a plataforma com a sua marca. Altere cores,
                 logotipo, domínio e muito mais para oferecer uma experiência
                 exclusiva aos seus clientes.
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-8 text-left">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 text-left">
                 <div className="p-4 bg-slate-950 border border-slate-800 rounded-lg">
                   <div className="w-8 h-8 rounded bg-indigo-500/20 flex items-center justify-center mb-3">
                     <Palette size={16} className="text-indigo-400" />

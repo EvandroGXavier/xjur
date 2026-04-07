@@ -147,7 +147,7 @@ export function ProductsList() {
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full md:max-w-xl">
+        <div className="relative flex-1 w-full">
           <Search
             size={18}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"

@@ -1754,8 +1754,8 @@ export function ContactForm() {
   return (
     <div className="space-y-6">
       {/* Header and Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 min-w-0 sm:flex-row sm:items-center sm:gap-4">
             <button
               onClick={() => {
                 if (returnTo) {
@@ -1769,11 +1769,11 @@ export function ContactForm() {
             >
                 <ArrowLeft size={16} /> Voltar
             </button>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-white break-words">
                 {id === 'new' ? 'Novo Contato' : `Editar Contato: ${formData.name}`}
             </h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
             <button
                 onClick={handleOpenPhone}
                 className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-sm border border-slate-700"
@@ -1803,7 +1803,7 @@ export function ContactForm() {
       </div>
 
       {/* Main Content Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col min-h-[600px]">
+      <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col min-h-[600px] w-full min-w-0">
         {/* Tabs */}
         <div className="flex overflow-x-auto border-b border-slate-800 bg-slate-900/50">
             {TABS.map(tab => (
@@ -1825,7 +1825,7 @@ export function ContactForm() {
 
             
             {activeTab === 'pj_create' && (
-                <div className="space-y-6 max-w-4xl">
+                <div className="space-y-6 w-full min-w-0">
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                              <Briefcase size={20} className="text-indigo-400" /> Dados Empresariais (PJ)
@@ -1882,9 +1882,9 @@ export function ContactForm() {
                 </div>
             )}
         {/* Tab Content */}
-        <div className="p-8">
+        <div className="w-full min-w-0 px-4 py-6 md:px-6 lg:px-8">
             {activeTab === 'contact' && (
-                <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl">
+                <form onSubmit={handleSubmit} className="space-y-6 w-full min-w-0">
                      {/* General Information */}
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
@@ -2053,7 +2053,7 @@ export function ContactForm() {
                          </div>
                      </div>
 
-                     <div className="flex justify-end pt-4 gap-3 bg-slate-900 border-t border-slate-800 -mx-6 -mb-6 p-6 mt-8 rounded-b-lg">
+                     <div className="flex flex-col-reverse gap-3 border-t border-slate-800 bg-slate-900 p-4 mt-8 rounded-b-lg sm:-mx-6 sm:-mb-6 sm:flex-row sm:justify-end sm:p-6">
                           <button 
                              type="button"
                              onClick={() => {
@@ -2088,7 +2088,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'pf_details' && (
-                <div className="space-y-6 max-w-4xl">
+                <div className="space-y-6 w-full min-w-0">
                      <div className="flex justify-end">
                         <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium mb-4">
                             Salvar Alterações
@@ -2323,7 +2323,7 @@ export function ContactForm() {
 
 
             {activeTab === 'addresses' && (
-                <div className="space-y-6 max-w-4xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                             <MapPin size={20} className="text-indigo-400" /> Endereços Cadastrados
@@ -2591,7 +2591,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'relations' && (
-                <div className="space-y-6 max-w-4xl">
+                <div className="space-y-6 w-full min-w-0">
                      <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                             <Lock size={20} className="text-indigo-400" /> Vínculos e Relacionamentos
@@ -2754,7 +2754,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'contacts' && (
-                <div className="space-y-6 max-w-4xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                             <Users size={20} className="text-indigo-400" /> Contatos Adicionais
@@ -2883,7 +2883,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'attachments' && (
-                <div className="space-y-6 max-w-5xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -3076,7 +3076,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'whatsapp' && (
-                <div className="space-y-6 max-w-6xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -3237,7 +3237,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'agenda' && (
-                <div className="space-y-6 max-w-5xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -3317,7 +3317,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'processes' && (
-                <div className="space-y-6 max-w-6xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -3398,7 +3398,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'assets' && (
-                <div className="space-y-6 max-w-5xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex items-center justify-between">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -3559,7 +3559,8 @@ export function ContactForm() {
 
                              {/* Assets List Table */}
                              <div className="bg-slate-800/30 border border-slate-700 rounded-lg overflow-hidden">
-                                <table className="w-full text-left border-collapse">
+                                <div className="overflow-x-auto">
+                                <table className="w-full min-w-[760px] text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-800/50 border-b border-slate-700 text-slate-400 text-sm">
                                             <th className="p-4 font-medium">Tipo</th>
@@ -3616,6 +3617,7 @@ export function ContactForm() {
                                         )}
                                     </tbody>
                                 </table>
+                                </div>
                              </div>
                         </>
                     )}
@@ -3625,7 +3627,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'contracts' && (
-                <div className="space-y-6 max-w-6xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -3866,7 +3868,8 @@ export function ContactForm() {
                             )}
 
                             <div className="bg-slate-800/30 border border-slate-700 rounded-lg overflow-hidden">
-                                <table className="w-full text-left border-collapse">
+                                <div className="overflow-x-auto">
+                                <table className="w-full min-w-[980px] text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-800/50 border-b border-slate-700 text-slate-400 text-sm">
                                             <th className="p-4 font-medium">Tipo</th>
@@ -3940,6 +3943,7 @@ export function ContactForm() {
                                         )}
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                         </>
                     )}
@@ -3947,7 +3951,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'financial' && (
-                <div className="space-y-6 max-w-6xl">
+                <div className="space-y-6 w-full min-w-0">
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -4007,7 +4011,8 @@ export function ContactForm() {
                             </div>
 
                             <div className="bg-slate-800/30 border border-slate-700 rounded-lg overflow-hidden">
-                                <table className="w-full text-left border-collapse">
+                                <div className="overflow-x-auto">
+                                <table className="w-full min-w-[900px] text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-800/50 border-b border-slate-700 text-slate-400 text-sm">
                                             <th className="p-4 font-medium">Tipo</th>
@@ -4074,6 +4079,7 @@ export function ContactForm() {
                                         )}
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                         </>
                     )}
@@ -4081,7 +4087,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'adm' && (
-                <div className="space-y-6 max-w-2xl animate-fadeIn p-8">
+                <div className="space-y-6 w-full min-w-0 animate-fadeIn px-4 py-6 md:px-0 md:py-0">
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                              <Settings size={20} className="text-indigo-400" /> Configurações Administrativas
@@ -4117,7 +4123,7 @@ export function ContactForm() {
             )}
 
             {activeTab === 'sigilo' && isSigiloActive && id && id !== 'new' && (
-                <div className="animate-in fade-in zoom-in-95 duration-500 p-8">
+                <div className="animate-in fade-in zoom-in-95 duration-500 w-full min-w-0">
                     <SecurityTab entityType="CONTACT" entityId={id} />
                 </div>
             )}

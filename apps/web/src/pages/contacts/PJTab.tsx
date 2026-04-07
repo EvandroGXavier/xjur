@@ -55,7 +55,7 @@ export function PJTab({ formData, setFormData, onSave }: PJTabProps) {
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn max-w-5xl">
+    <div className="space-y-6 animate-fadeIn w-full min-w-0">
       <div className="flex justify-end">
         <button onClick={onSave} className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium mb-4 transition shadow-lg hover:shadow-green-900/20">
             <Save size={18} /> Salvar Alterações
@@ -256,7 +256,7 @@ export function PJTab({ formData, setFormData, onSave }: PJTabProps) {
                               <div key={idx} className="flex items-center gap-2 p-2 bg-slate-900/50 border border-slate-800 rounded hover:bg-slate-800 transition group">
                                   <span className="font-mono text-slate-400 text-xs w-20 px-2 py-1 bg-slate-950 rounded">{activity.code}</span>
                                   <span className="text-slate-300 text-sm flex-1">{activity.text}</span>
-                                  <button onClick={() => removeSideActivity(idx)} className="p-1 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">
+                                  <button onClick={() => removeSideActivity(idx)} className="p-1 text-slate-500 hover:text-red-400 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
                                       <Trash2 size={16} />
                                   </button>
                               </div>
@@ -306,7 +306,7 @@ export function PJTab({ formData, setFormData, onSave }: PJTabProps) {
                         <div key={idx} className="bg-slate-900 p-4 rounded-lg border border-slate-800 flex items-start gap-3 relative group">
                             <button 
                                 onClick={() => removePartner(idx)}
-                                className="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                        className="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
                             >
                                 <Trash2 size={14} />
                             </button>

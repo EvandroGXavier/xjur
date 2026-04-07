@@ -120,18 +120,18 @@ export function Agenda() {
   });
 
   return (
-    <div className="p-6 md:p-8 space-y-6 h-full flex flex-col animate-in fade-in duration-500">
+    <div className="p-4 md:p-6 xl:p-8 space-y-6 h-full flex flex-col animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-           <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+        <div className="min-w-0">
+           <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-3 break-words">
               <Calendar className="text-indigo-500" size={32} />
               Agenda & Prazos
            </h1>
            <p className="text-slate-400 mt-1">Controle audiências, reuniões e prazos fatais.</p>
         </div>
         
-        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg">
+        <div className="flex w-full flex-wrap items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg md:w-auto">
             <button 
                 onClick={() => setViewMode('LIST')}
                 className={`p-2 rounded-md transition ${viewMode === 'LIST' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}

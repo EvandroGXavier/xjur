@@ -390,9 +390,9 @@ export function ProcessConfig() {
   ];
 
   return (
-    <div className="min-h-screen p-6 md:p-8 animate-in fade-in duration-500 text-slate-200">
-      <div className="mb-8 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+    <div className="min-h-full p-4 md:p-6 xl:p-8 animate-in fade-in duration-500 text-slate-200">
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-4 min-w-0">
           <button
             onClick={() => (view === "cards" ? navigate("/processes") : setView("cards"))}
             className="p-2.5 hover:bg-slate-800 rounded-xl transition-all border border-slate-800 group"
@@ -467,7 +467,7 @@ export function ProcessConfig() {
       )}
 
       {view === "bulk" && (
-        <div className="space-y-6 max-w-5xl">
+        <div className="space-y-6 w-full min-w-0">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
               <div className="flex items-center gap-3"><Tags className="text-indigo-400" size={20} /><h3 className="text-lg font-semibold text-white">Etiquetas</h3></div>

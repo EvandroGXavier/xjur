@@ -141,10 +141,10 @@ export function ContactConfig() {
   ];
 
   return (
-    <div className="min-h-screen p-6 md:p-8 animate-in fade-in duration-500 text-slate-200">
+    <div className="min-h-full p-4 md:p-6 xl:p-8 animate-in fade-in duration-500 text-slate-200">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-4 min-w-0">
           <button
             onClick={() => {
               if (view === 'bulk') setView('cards');
@@ -172,7 +172,7 @@ export function ContactConfig() {
       </div>
 
       {view === 'bulk' ? (
-        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 max-w-5xl">
+        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 w-full min-w-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* TAGS */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-700 transition-colors">
@@ -316,7 +316,7 @@ export function ContactConfig() {
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <Settings className="text-indigo-400 w-5 h-5" /> Configurações Gerais
             </h2>
-            <div className="flex items-center justify-between p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg">
               <div>
                 <h3 className="font-medium text-white">Exigir ao menos 1 meio de contato</h3>
                 <p className="text-sm text-slate-400 mt-1">

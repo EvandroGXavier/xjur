@@ -102,9 +102,9 @@ export function AtendimentoSettings() {
     ];
 
     return (
-        <div className="flex-1 flex flex-col bg-slate-950 p-6 md:p-8 animate-in fade-in zoom-in-95 duration-300 h-full overflow-hidden">
-            <div className="flex justify-between items-center mb-6">
-                <div>
+        <div className="flex-1 flex flex-col bg-slate-950 p-4 md:p-6 xl:p-8 animate-in fade-in zoom-in-95 duration-300 h-full overflow-hidden">
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
                     <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Sliders className="text-slate-400" />
                         Configurações do Atendimento
@@ -113,14 +113,14 @@ export function AtendimentoSettings() {
                 </div>
                 <button 
                     onClick={handleSave}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition shadow-lg shadow-indigo-500/20"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-500/20 w-full sm:w-auto"
                 >
                     <Save size={16} /> Salvar
                 </button>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 p-1 bg-slate-900 rounded-lg w-fit mb-6 border border-slate-800">
+            <div className="mb-6 flex gap-1 overflow-x-auto p-1 bg-slate-900 rounded-lg w-full border border-slate-800 sm:w-fit">
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
@@ -141,7 +141,7 @@ export function AtendimentoSettings() {
             {/* Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {activeTab === 'general' && (
-                    <div className="max-w-2xl space-y-6 animate-in fade-in">
+                    <div className="w-full min-w-0 space-y-6 animate-in fade-in">
                         {/* Auto Assign */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                             <div className="flex justify-between items-center">
@@ -216,9 +216,9 @@ export function AtendimentoSettings() {
                 )}
 
                 {activeTab === 'queues' && (
-                    <div className="max-w-2xl space-y-4 animate-in fade-in">
+                    <div className="w-full min-w-0 space-y-4 animate-in fade-in">
                         {/* Add Queue */}
-                        <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-5 flex gap-3">
+                        <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-5 flex flex-col sm:flex-row gap-3">
                             <input 
                                 value={newQueueName}
                                 onChange={(e) => setNewQueueName(e.target.value)}
@@ -246,7 +246,7 @@ export function AtendimentoSettings() {
                                 </div>
                                 <button 
                                     onClick={() => removeQueue(queue.id)}
-                                    className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                                    className="text-slate-600 hover:text-red-400 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
                                 >
                                     <Trash2 size={16} />
                                 </button>
@@ -256,7 +256,7 @@ export function AtendimentoSettings() {
                 )}
 
                 {activeTab === 'hours' && (
-                    <div className="max-w-2xl space-y-6 animate-in fade-in">
+                    <div className="w-full min-w-0 space-y-6 animate-in fade-in">
                         {/* Toggle */}
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                             <div className="flex justify-between items-center">
@@ -301,7 +301,7 @@ export function AtendimentoSettings() {
                                 {/* Days */}
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                                     <h3 className="text-sm font-bold text-white mb-3">Dias da Semana</h3>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap gap-2">
                                         {DAYS.map(day => (
                                             <button
                                                 key={day.value}
@@ -324,7 +324,7 @@ export function AtendimentoSettings() {
                 )}
 
                 {activeTab === 'notifications' && (
-                    <div className="max-w-2xl space-y-4 animate-in fade-in">
+                    <div className="w-full min-w-0 space-y-4 animate-in fade-in">
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                             <div className="flex justify-between items-center">
                                 <div>
