@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ExternalLink,
   Filter,
+  RotateCcw,
   Search,
   User,
 } from "lucide-react";
@@ -55,14 +56,18 @@ type TasksResponse = {
   };
 };
 
-const getCurrentUserEmail = () => {
+const getCurrentUserIdentity = () => {
   try {
     const raw = localStorage.getItem("user");
-    if (!raw) return "";
+    if (!raw) return { userId: "", name: "", email: "" };
     const user = JSON.parse(raw);
-    return String(user.email || "").trim();
+    return {
+      userId: String(user.id || user.userId || "").trim(),
+      name: String(user.name || "").trim(),
+      email: String(user.email || "").trim(),
+    };
   } catch {
-    return "";
+    return { userId: "", name: "", email: "" };
   }
 };
 
@@ -142,6 +147,10 @@ export function ProcessTasks() {
   const [category, setCategory] = useState<string>("");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [includeCompleted, setIncludeCompleted] = useState(false);
+  const normalizedStatus = String(status || "").trim().toUpperCase();
+  const effectiveIncludeCompleted =
+    includeCompleted || normalizedStatus === "CONCLUIDO";
+  const canUseOverdueFilter = normalizedStatus !== "CONCLUIDO";
 
   const fetchTasks = async () => {
     try {
@@ -149,7 +158,7 @@ export function ProcessTasks() {
       const params: any = {
         scope,
         overdue: overdueOnly ? "true" : "false",
-        includeCompleted: includeCompleted ? "true" : "false",
+        includeCompleted: effectiveIncludeCompleted ? "true" : "false",
       };
       if (search.trim()) params.q = search.trim();
       if (status) params.status = status;
@@ -174,7 +183,16 @@ export function ProcessTasks() {
     }, 250);
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, status, category, overdueOnly, includeCompleted, search]);
+  }, [scope, status, category, overdueOnly, effectiveIncludeCompleted, search]);
+
+  useEffect(() => {
+    if (normalizedStatus === "CONCLUIDO" && !includeCompleted) {
+      setIncludeCompleted(true);
+    }
+    if (!canUseOverdueFilter && overdueOnly) {
+      setOverdueOnly(false);
+    }
+  }, [normalizedStatus, includeCompleted, canUseOverdueFilter, overdueOnly]);
 
   const handleOpenProcess = (processId: string) => {
     navigate(`/processes/${processId}`);
@@ -187,7 +205,7 @@ export function ProcessTasks() {
   ) => {
     const data = new FormData();
     Object.entries(payload).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && String(v).length > 0) {
+      if (v !== undefined && v !== null) {
         data.append(k, String(v));
       }
     });
@@ -209,14 +227,17 @@ export function ProcessTasks() {
   };
 
   const handleAssume = async (item: TimelineTaskItem) => {
-    const email = getCurrentUserEmail();
-    if (!email) {
+    const identity = getCurrentUserIdentity();
+    const responsibleName = identity.name || identity.email;
+    if (!responsibleName) {
       toast.error("Usuário não encontrado. Faça login novamente.");
       return;
     }
     try {
       await patchTimeline(item.processId, item.id, {
-        responsibleName: email,
+        responsibleName,
+        responsibleUserId: identity.userId,
+        responsibleEmail: identity.email,
         status: item.status && item.status !== "CONCLUIDO" ? String(item.status) : "PENDENTE",
       });
       toast.success("Tarefa atribuída a você");
@@ -444,6 +465,14 @@ export function ProcessTasks() {
   ];
 
   const displayedCount = items.length;
+  const clearFilters = () => {
+    setSearch("");
+    setScope("mine");
+    setStatus("");
+    setCategory("");
+    setOverdueOnly(false);
+    setIncludeCompleted(false);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col space-y-6">
@@ -530,6 +559,15 @@ export function ProcessTasks() {
               <option value="AGENDA">Agenda</option>
               <option value="REGISTRO">Registro</option>
             </select>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 hover:text-white hover:border-slate-700 flex items-center justify-center gap-2"
+              title="Limpar filtros"
+            >
+              <RotateCcw size={16} />
+              Limpar
+            </button>
           </div>
         </div>
 
@@ -538,20 +576,26 @@ export function ProcessTasks() {
             <input
               type="checkbox"
               checked={overdueOnly}
+              disabled={!canUseOverdueFilter}
               onChange={(e) => setOverdueOnly(e.target.checked)}
-              className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500/20"
+              className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500/20 disabled:opacity-40"
             />
             Em atraso
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
-              checked={includeCompleted}
+              checked={effectiveIncludeCompleted}
               onChange={(e) => setIncludeCompleted(e.target.checked)}
               className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500/20"
             />
             Incluir concluídos
           </label>
+          {normalizedStatus === "CONCLUIDO" && (
+            <span className="text-xs text-indigo-300">
+              Status concluído ativa concluídos automaticamente.
+            </span>
+          )}
           <div className="ml-auto text-slate-500">
             {loading ? "Carregando..." : `${displayedCount} item(ns)`}
           </div>

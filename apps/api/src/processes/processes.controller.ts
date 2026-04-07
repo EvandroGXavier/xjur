@@ -209,7 +209,7 @@ export class ProcessesController {
 
     @Get('timelines/tasks')
     async listTimelineTasks(@CurrentUser() user: CurrentUserData, @Query() query: any) {
-        return this.timelinesService.listTasksForTenant(user.tenantId, user.email, query);
+        return this.timelinesService.listTasksForTenant(user, query);
     }
 
     @Public()
@@ -250,7 +250,7 @@ export class ProcessesController {
         @CurrentUser() currentUser: CurrentUserData,
     ) {
         const actor = req.user ? (req.user.name || req.user.email) : 'sistema';
-        return this.timelinesService.create(id, body, files, actor, currentUser?.tenantId);
+        return this.timelinesService.create(id, body, files, actor, currentUser);
     }
 
     @Patch(':id/timelines/:timelineId')
@@ -261,7 +261,7 @@ export class ProcessesController {
         @Body() body: any,
         @UploadedFiles() files?: Array<any>
     ) {
-        return this.timelinesService.update(timelineId, body, files, user.tenantId);
+        return this.timelinesService.update(timelineId, body, files, user);
     }
 
     @Delete(':id/timelines/:timelineId')

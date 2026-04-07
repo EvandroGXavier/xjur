@@ -14,6 +14,7 @@ interface Contact {
 interface ContactSelectInputProps {
     value: string;
     onChange: (name: string) => void;
+    onSelectContact?: (contact: Contact | null) => void;
     placeholder?: string;
     className?: string;
 }
@@ -21,6 +22,7 @@ interface ContactSelectInputProps {
 export function ContactSelectInput({ 
     value, 
     onChange, 
+    onSelectContact,
     placeholder = "Buscar responsável...",
     className
 }: ContactSelectInputProps) {
@@ -68,6 +70,7 @@ export function ContactSelectInput({
 
     const handleSelect = (contact: Contact) => {
         onChange(contact.name);
+        onSelectContact?.(contact);
         setSearchTerm(contact.name);
         setIsOpen(false);
         setResults([]);
@@ -77,6 +80,7 @@ export function ContactSelectInput({
         const val = e.target.value;
         setSearchTerm(val);
         onChange(val); // Permite manter como texto livre se desejar
+        onSelectContact?.(null);
         if (!isOpen) setIsOpen(true);
     };
 
@@ -99,6 +103,7 @@ export function ContactSelectInput({
                         onClick={() => {
                             setSearchTerm('');
                             onChange('');
+                            onSelectContact?.(null);
                             setResults([]);
                         }}
                         className="absolute right-3 top-2.5 text-slate-500 hover:text-white"

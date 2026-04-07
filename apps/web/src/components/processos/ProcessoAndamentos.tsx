@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api, getApiUrl } from '../../services/api';
 import { Badge } from '../ui/Badge';
 import { format } from 'date-fns';
@@ -105,8 +105,74 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         status: 'PENDENTE' as 'PENDENTE' | 'EM_TRATAMENTO' | 'CONCLUIDO',
         priority: 'MEDIA' as 'BAIXA' | 'MEDIA' | 'ALTA' | 'URGENTE',
         templateCode: '',
-        responsibleName: ''
+        responsibleName: '',
+        responsibleEmail: '',
+        responsibleContactId: '',
+        responsibleUserId: '',
     });
+
+    const getCurrentUserDisplayName = () => {
+        try {
+            const raw = localStorage.getItem('user');
+            if (!raw) return '';
+            const user = JSON.parse(raw);
+            return String(user.name || user.email || '').trim();
+        } catch {
+            return '';
+        }
+    };
+
+    const normalizeText = (value?: string | null) =>
+        String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+
+    const getEffectiveCategory = (item: TimelineItem): 'REGISTRO' | 'ACAO' | 'AGENDA' => {
+        const category = String(item.category || '').toUpperCase();
+        const hasResponsible =
+            String(item.responsibleName || '').trim() ||
+            String(item.metadata?.responsibleUserId || '').trim();
+
+        if (category === 'ACAO' || category === 'AGENDA' || category === 'REGISTRO') {
+            if (category === 'REGISTRO') {
+                if (item.fatalDate || item.internalDate) return 'AGENDA';
+                if (hasResponsible) return 'ACAO';
+            }
+            return category as 'REGISTRO' | 'ACAO' | 'AGENDA';
+        }
+
+        if (item.fatalDate || item.internalDate) return 'AGENDA';
+        if (hasResponsible) return 'ACAO';
+        return 'REGISTRO';
+    };
+
+    const buildSearchableText = (item: TimelineItem) => {
+        const attachmentNames = Array.isArray(item.metadata?.attachments)
+            ? item.metadata.attachments
+                  .map((attachment: any) => attachment?.originalName || attachment?.fileName || '')
+                  .join(' ')
+            : '';
+
+        const tagNames = item.tags?.map(tag => tag.tag.name).join(' ') || '';
+
+        return normalizeText(
+            [
+                item.title,
+                item.description,
+                item.responsibleName,
+                item.requesterName,
+                item.displayId,
+                item.aiSummary,
+                item.clientMessage,
+                item.origin,
+                item.type,
+                tagNames,
+                attachmentNames,
+            ].join(' '),
+        );
+    };
 
     useHotkeys({
         onNew: () => {
@@ -148,10 +214,13 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             status: 'PENDENTE',
             priority: 'MEDIA',
             templateCode: '',
-            responsibleName: ''
+            responsibleName: '',
+            responsibleEmail: '',
+            responsibleContactId: '',
+            responsibleUserId: '',
         });
         setConcludeData({
-            completedBy: '',
+            completedBy: getCurrentUserDisplayName(),
             completedAt: new Date().toISOString().slice(0, 16),
             conclusionNotes: ''
         });
@@ -193,7 +262,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
     }, [processId]);
 
     const handleSave = async (shouldClose: boolean) => {
-        if (!formData.title) {
+        if (!formData.title.trim()) {
             toast.error('Por favor, informe um título / resumo.');
             return;
         }
@@ -202,7 +271,9 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         try {
             const data = new FormData();
             Object.entries(formData).forEach(([key, value]) => {
-                if (value) data.append(key, value);
+                if (value !== undefined && value !== null) {
+                    data.append(key, String(value));
+                }
             });
             if (!editingItem) {
                  data.append('origin', 'INTERNO');
@@ -268,8 +339,9 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         setIsSaving(true);
         try {
             const data = new FormData();
+            const completedBy = concludeData.completedBy || getCurrentUserDisplayName();
             data.append('status', 'CONCLUIDO');
-            data.append('completedBy', concludeData.completedBy);
+            data.append('completedBy', completedBy);
             data.append('completedAt', concludeData.completedAt);
             data.append('conclusionNotes', concludeData.conclusionNotes);
 
@@ -310,11 +382,14 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
             internalDate: item.internalDate ? new Date(item.internalDate).toISOString().slice(0, 16) : '',
             fatalDate: item.fatalDate ? new Date(item.fatalDate).toISOString().slice(0, 16) : '',
             type: item.type,
-            category: item.category || 'REGISTRO',
+            category: getEffectiveCategory(item),
             status: item.status || 'PENDENTE',
             priority: item.priority || 'MEDIA',
             templateCode: item.templateCode || '',
-            responsibleName: item.responsibleName || ''
+            responsibleName: item.responsibleName || '',
+            responsibleEmail: String(item.metadata?.responsibleEmail || ''),
+            responsibleContactId: String(item.metadata?.responsibleContactId || ''),
+            responsibleUserId: String(item.metadata?.responsibleUserId || ''),
         });
         setIsFormOpen(true);
     };
@@ -402,27 +477,29 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
         }
     };
 
-    const filteredTimelines = timelines.filter(t => {
-        const matchesTab = (t.category || 'REGISTRO') === activeTab;
-        
-        // Tag filtering
-        const itemTagIds = t.tags?.map(at => at.tag.id) || [];
-        const matchesIncludedTags = includedTags.length === 0 || includedTags.every(id => itemTagIds.includes(id));
-        const matchesExcludedTags = excludedTags.length === 0 || !excludedTags.some(id => itemTagIds.includes(id));
+    const filteredTimelines = useMemo(() => {
+        const normalizedSearch = normalizeText(searchTerm);
 
-        if (!matchesTab || !matchesIncludedTags || !matchesExcludedTags) return false;
+        return timelines.filter((timeline) => {
+            const matchesTab = getEffectiveCategory(timeline) === activeTab;
 
-        if (!searchTerm) return true;
-        
-        const term = (searchTerm || '').toLowerCase();
-        const matchesSearch = 
-            (t.title || '').toLowerCase().includes(term) || 
-            (t.description?.toLowerCase() || '').includes(term) ||
-            (t.responsibleName?.toLowerCase() || '').includes(term) ||
-            (t.displayId?.toLowerCase() || '').includes(term);
-            
-        return matchesSearch;
-    });
+            const itemTagIds = timeline.tags?.map(assignment => assignment.tag.id) || [];
+            const matchesIncludedTags =
+                includedTags.length === 0 ||
+                includedTags.every(id => itemTagIds.includes(id));
+            const matchesExcludedTags =
+                excludedTags.length === 0 ||
+                !excludedTags.some(id => itemTagIds.includes(id));
+
+            if (!matchesTab || !matchesIncludedTags || !matchesExcludedTags) {
+                return false;
+            }
+
+            if (!normalizedSearch) return true;
+
+            return buildSearchableText(timeline).includes(normalizedSearch);
+        });
+    }, [timelines, activeTab, includedTags, excludedTags, searchTerm]);
 
     return (
         <div className="relative w-full space-y-4 animate-in fade-in">
@@ -435,6 +512,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                     </div>
                     <div className="flex gap-2 self-start sm:self-auto">
                         <button 
+                            type="button"
                             onClick={() => {
                                 resetForm();
                                 setIsFormOpen(true);
@@ -445,6 +523,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                             Novo
                         </button>
                         <button 
+                            type="button"
                             onClick={fetchTimelines} 
                             className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition"
                             title="Atualizar"
@@ -460,6 +539,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                         {(['REGISTRO', 'ACAO', 'AGENDA'] as const).map(tab => (
                             <button
                                 key={tab}
+                                type="button"
                                 onClick={() => setActiveTab(tab)}
                                 className={clsx(
                                     "px-4 py-1.5 text-xs font-bold rounded-full transition-all duration-200 whitespace-nowrap border",
@@ -484,6 +564,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
                         {searchTerm && (
                             <button 
+                                type="button"
                                 onClick={() => setSearchTerm('')}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
                             >
@@ -534,7 +615,7 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                         <div className="flex flex-col items-center gap-2">
                                             <Search size={32} className="text-slate-300" />
                                             <p className="font-medium">Nenhum andamento encontrado.</p>
-                                            {searchTerm && <button onClick={() => setSearchTerm('')} className="text-indigo-600 text-xs hover:underline mt-1">Limpar busca</button>}
+                                            {searchTerm && <button type="button" onClick={() => setSearchTerm('')} className="text-indigo-600 text-xs hover:underline mt-1">Limpar busca</button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -738,7 +819,14 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                                     </button>
                                                     {activeTab === 'ACAO' && item.status !== 'CONCLUIDO' && (
                                                         <button 
-                                                            onClick={() => setConcludeItemId(item.id)}
+                                                            onClick={() => {
+                                                                setConcludeData({
+                                                                    completedBy: getCurrentUserDisplayName(),
+                                                                    completedAt: new Date().toISOString().slice(0, 16),
+                                                                    conclusionNotes: '',
+                                                                });
+                                                                setConcludeItemId(item.id);
+                                                            }}
                                                             className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded"
                                                             title="Concluir"
                                                         >
@@ -930,7 +1018,24 @@ export function ProcessoAndamentos({ processId }: ProcessoAndamentosProps) {
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Responsável</label>
                                     <ContactSelectInput 
                                         value={formData.responsibleName}
-                                        onChange={val => setFormData({...formData, responsibleName: val})}
+                                        onChange={val =>
+                                            setFormData({
+                                                ...formData,
+                                                responsibleName: val,
+                                                responsibleEmail: '',
+                                                responsibleContactId: '',
+                                                responsibleUserId: '',
+                                            })
+                                        }
+                                        onSelectContact={contact =>
+                                            setFormData((prev) => ({
+                                                ...prev,
+                                                responsibleName: contact?.name || prev.responsibleName,
+                                                responsibleEmail: String(contact?.email || ''),
+                                                responsibleContactId: String(contact?.id || ''),
+                                                responsibleUserId: '',
+                                            }))
+                                        }
                                         placeholder="Buscar advogado ou colaborador..."
                                     />
                                 </div>

@@ -1,9 +1,206 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@drx/database';
+import { CurrentUserData } from '../common/decorators/current-user.decorator';
 
 @Injectable()
 export class ProcessTimelinesService {
     constructor(private prisma: PrismaService) {}
+
+    private normalizeIdentity(value?: string | null) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase();
+    }
+
+    private tokenizeIdentity(value?: string | null) {
+        return this.normalizeIdentity(value)
+            .split(/[^a-z0-9]+/i)
+            .map((token) => token.trim())
+            .filter(Boolean);
+    }
+
+    private namesPossiblyMatch(left?: string | null, right?: string | null) {
+        const leftTokens = this.tokenizeIdentity(left);
+        const rightTokens = this.tokenizeIdentity(right);
+
+        if (leftTokens.length === 0 || rightTokens.length === 0) return false;
+        if (leftTokens.join(' ') === rightTokens.join(' ')) return true;
+
+        const shorter = leftTokens.length <= rightTokens.length ? leftTokens : rightTokens;
+        const longer = shorter === leftTokens ? rightTokens : leftTokens;
+
+        let matched = 0;
+        for (const token of shorter) {
+            const hasMatch = longer.some((candidate) => {
+                if (candidate === token) return true;
+                if (token.length === 1) return candidate.startsWith(token);
+                if (candidate.length === 1) return token.startsWith(candidate);
+                return false;
+            });
+            if (hasMatch) matched += 1;
+        }
+
+        return matched >= Math.min(2, shorter.length) && matched === shorter.length;
+    }
+
+    private async buildResponsibleAliases(currentUser: CurrentUserData) {
+        const aliases = new Set<string>();
+        const pushAlias = (value?: string | null) => {
+            const next = String(value || '').trim();
+            if (next) aliases.add(next);
+        };
+
+        pushAlias(currentUser.email);
+        pushAlias(currentUser.name);
+
+        const [userRecord, matchingContacts] = await Promise.all([
+            this.prisma.user.findFirst({
+                where: { id: currentUser.userId, tenantId: currentUser.tenantId },
+                select: { id: true, name: true, email: true },
+            }),
+            this.prisma.contact.findMany({
+                where: {
+                    tenantId: currentUser.tenantId,
+                    OR: [
+                        ...(currentUser.email
+                            ? [{ email: { equals: currentUser.email, mode: 'insensitive' as const } }]
+                            : []),
+                        ...(currentUser.name
+                            ? [{ name: { equals: currentUser.name, mode: 'insensitive' as const } }]
+                            : []),
+                    ],
+                },
+                select: { id: true, name: true, email: true },
+                take: 10,
+            }),
+        ]);
+
+        pushAlias(userRecord?.email);
+        pushAlias(userRecord?.name);
+
+        for (const contact of matchingContacts) {
+            pushAlias(contact.name);
+            pushAlias(contact.email);
+        }
+
+        return Array.from(aliases);
+    }
+
+    private isTimelineAssignedToUser(
+        timeline: {
+            responsibleName?: string | null;
+            metadata?: any;
+        },
+        currentUser: CurrentUserData,
+        aliases: string[],
+    ) {
+        const metadata =
+            timeline?.metadata && typeof timeline.metadata === 'object'
+                ? timeline.metadata
+                : {};
+
+        if (String(metadata?.responsibleUserId || '') === String(currentUser.userId || '')) {
+            return true;
+        }
+
+        const responsibleName = String(timeline?.responsibleName || '').trim();
+        if (!responsibleName) return false;
+
+        const normalizedResponsible = this.normalizeIdentity(responsibleName);
+        if (!normalizedResponsible) return false;
+
+        return aliases.some((alias) => {
+            if (!alias) return false;
+            const normalizedAlias = this.normalizeIdentity(alias);
+            if (!normalizedAlias) return false;
+            if (normalizedResponsible === normalizedAlias) return true;
+            return this.namesPossiblyMatch(responsibleName, alias);
+        });
+    }
+
+    private isTimelineUnassigned(timeline: {
+        responsibleName?: string | null;
+        metadata?: any;
+    }) {
+        const metadata =
+            timeline?.metadata && typeof timeline.metadata === 'object'
+                ? timeline.metadata
+                : {};
+
+        return (
+            !String(timeline?.responsibleName || '').trim() &&
+            !String(metadata?.responsibleUserId || '').trim()
+        );
+    }
+
+    private getEffectiveTaskCategory(timeline: {
+        category?: string | null;
+        responsibleName?: string | null;
+        internalDate?: Date | string | null;
+        fatalDate?: Date | string | null;
+        metadata?: any;
+    }): 'REGISTRO' | 'ACAO' | 'AGENDA' {
+        const normalizedCategory = String(timeline?.category || '')
+            .trim()
+            .toUpperCase();
+
+        if (normalizedCategory === 'ACAO' || normalizedCategory === 'AGENDA') {
+            return normalizedCategory as 'ACAO' | 'AGENDA';
+        }
+
+        if (timeline?.fatalDate || timeline?.internalDate) {
+            return 'AGENDA';
+        }
+
+        if (
+            String(timeline?.responsibleName || '').trim() ||
+            String(timeline?.metadata?.responsibleUserId || '').trim()
+        ) {
+            return 'ACAO';
+        }
+
+        return 'REGISTRO';
+    }
+
+    private isTimelineOverdue(timeline: {
+        status?: string | null;
+        internalDate?: Date | string | null;
+        fatalDate?: Date | string | null;
+    }, now = new Date()) {
+        return (
+            String(timeline?.status || '').toUpperCase() !== 'CONCLUIDO' &&
+            ((timeline?.fatalDate && new Date(timeline.fatalDate) < now) ||
+                (timeline?.internalDate && new Date(timeline.internalDate) < now))
+        );
+    }
+
+    private buildTaskSearchableText(item: any) {
+        const attachmentNames = Array.isArray(item?.metadata?.attachments)
+            ? item.metadata.attachments
+                  .map((attachment: any) => attachment?.originalName || attachment?.fileName || '')
+                  .join(' ')
+            : '';
+
+        return this.normalizeIdentity(
+            [
+                item?.title,
+                item?.description,
+                item?.responsibleName,
+                item?.requesterName,
+                item?.displayId,
+                item?.aiSummary,
+                item?.clientMessage,
+                item?.origin,
+                item?.type,
+                item?.process?.title,
+                item?.process?.code,
+                item?.process?.cnj,
+                attachmentNames,
+            ].join(' '),
+        );
+    }
 
     private async getProcessContext(processId: string, tenantId?: string) {
         const process = await this.prisma.process.findFirst({
@@ -40,8 +237,7 @@ export class ProcessTimelinesService {
     }
 
     async listTasksForTenant(
-        tenantId: string,
-        currentUserEmail: string,
+        currentUser: CurrentUserData,
         query: {
             q?: string;
             scope?: 'mine' | 'all' | 'unassigned';
@@ -52,11 +248,18 @@ export class ProcessTimelinesService {
             limit?: string;
         } = {},
     ) {
+        const tenantId = currentUser.tenantId;
         const search = String(query.q || '').trim();
+        const normalizedStatus = String(query.status || '').trim().toUpperCase();
         const scope = (query.scope || 'mine') as 'mine' | 'all' | 'unassigned';
         const includeCompleted = String(query.includeCompleted || '').toLowerCase() === 'true';
+        const shouldIncludeCompleted =
+            includeCompleted || normalizedStatus === 'CONCLUIDO';
         const overdueOnly = String(query.overdue || '').toLowerCase() === 'true';
+        const shouldApplyOverdue = overdueOnly && normalizedStatus !== 'CONCLUIDO';
         const limit = Math.min(Math.max(parseInt(String(query.limit || '200'), 10) || 200, 1), 500);
+        const responsibleAliases = await this.buildResponsibleAliases(currentUser);
+        const fetchLimit = Math.min(Math.max(limit * 5, 500), 2000);
 
         const baseWhere: any = {
             process: { is: { tenantId } },
@@ -72,47 +275,19 @@ export class ProcessTimelinesService {
             ],
         };
 
-        if (!includeCompleted) {
+        if (!shouldIncludeCompleted) {
             baseWhere.AND.push({ status: { not: 'CONCLUIDO' } });
         }
 
-        if (query.category) {
-            baseWhere.AND.push({ category: String(query.category) });
+        if (normalizedStatus) {
+            baseWhere.AND.push({ status: normalizedStatus });
         }
 
-        if (query.status) {
-            baseWhere.AND.push({ status: String(query.status) });
-        }
-
-        if (scope === 'mine') {
-            baseWhere.AND.push({
-                responsibleName: { equals: currentUserEmail, mode: 'insensitive' },
-            });
-        } else if (scope === 'unassigned') {
-            baseWhere.AND.push({
-                OR: [{ responsibleName: null }, { responsibleName: '' }],
-            });
-        }
-
-        if (overdueOnly) {
+        if (shouldApplyOverdue) {
             const now = new Date();
             baseWhere.AND.push({ status: { not: 'CONCLUIDO' } });
             baseWhere.AND.push({
                 OR: [{ fatalDate: { lt: now } }, { internalDate: { lt: now } }],
-            });
-        }
-
-        if (search) {
-            baseWhere.AND.push({
-                OR: [
-                    { title: { contains: search, mode: 'insensitive' } },
-                    { description: { contains: search, mode: 'insensitive' } },
-                    { responsibleName: { contains: search, mode: 'insensitive' } },
-                    { requesterName: { contains: search, mode: 'insensitive' } },
-                    { process: { is: { title: { contains: search, mode: 'insensitive' } } } },
-                    { process: { is: { code: { contains: search, mode: 'insensitive' } } } },
-                    { process: { is: { cnj: { contains: search, mode: 'insensitive' } } } },
-                ],
             });
         }
 
@@ -135,8 +310,30 @@ export class ProcessTimelinesService {
                 { internalDate: 'asc' },
                 { date: 'desc' },
             ],
-            take: limit,
+            take: fetchLimit,
         });
+
+        const scopedItems = items.filter((item) => {
+            if (scope === 'mine') {
+                return this.isTimelineAssignedToUser(item, currentUser, responsibleAliases);
+            }
+            if (scope === 'unassigned') {
+                return this.isTimelineUnassigned(item);
+            }
+            return true;
+        });
+
+        const categoryFilteredItems = scopedItems.filter((item) => {
+            if (!query.category) return true;
+            return this.getEffectiveTaskCategory(item) === String(query.category).toUpperCase();
+        });
+
+        const searchFilteredItems = categoryFilteredItems.filter((item) => {
+            if (!search) return true;
+            return this.buildTaskSearchableText(item).includes(this.normalizeIdentity(search));
+        });
+
+        const finalItems = searchFilteredItems.slice(0, limit);
 
         const now = new Date();
         const summaryBaseWhere: any = {
@@ -149,20 +346,16 @@ export class ProcessTimelinesService {
             ],
         };
 
-        const [myOpen, myOverdue, openTotal, overdueTotal] = await Promise.all([
-            this.prisma.processTimeline.count({
-                where: {
-                    ...summaryBaseWhere,
-                    status: { not: 'CONCLUIDO' },
-                    responsibleName: { equals: currentUserEmail, mode: 'insensitive' },
-                },
-            }),
-            this.prisma.processTimeline.count({
-                where: {
-                    ...summaryBaseWhere,
-                    status: { not: 'CONCLUIDO' },
-                    responsibleName: { equals: currentUserEmail, mode: 'insensitive' },
-                    OR: [{ fatalDate: { lt: now } }, { internalDate: { lt: now } }],
+        const [summaryItems, openTotal, overdueTotal] = await Promise.all([
+            this.prisma.processTimeline.findMany({
+                where: summaryBaseWhere,
+                select: {
+                    id: true,
+                    status: true,
+                    internalDate: true,
+                    fatalDate: true,
+                    responsibleName: true,
+                    metadata: true,
                 },
             }),
             this.prisma.processTimeline.count({
@@ -180,15 +373,26 @@ export class ProcessTimelinesService {
             }),
         ]);
 
+        const myOpen = summaryItems.filter(
+            (item) =>
+                item.status !== 'CONCLUIDO' &&
+                this.isTimelineAssignedToUser(item, currentUser, responsibleAliases),
+        ).length;
+
+        const myOverdue = summaryItems.filter(
+            (item) =>
+                item.status !== 'CONCLUIDO' &&
+                this.isTimelineAssignedToUser(item, currentUser, responsibleAliases) &&
+                ((item.fatalDate && item.fatalDate < now) ||
+                    (item.internalDate && item.internalDate < now)),
+        ).length;
+
         return {
-            items: items.map((item) => ({
+            items: finalItems.map((item) => ({
                 ...item,
+                category: this.getEffectiveTaskCategory(item),
                 dueAt: item.fatalDate || item.internalDate || null,
-                isOverdue:
-                    item.status !== 'CONCLUIDO' &&
-                    ((item.fatalDate && item.fatalDate < now) ||
-                        (item.internalDate && item.internalDate < now)) &&
-                    true,
+                isOverdue: this.isTimelineOverdue(item, now),
             })),
             summary: {
                 myOpen,
@@ -199,8 +403,8 @@ export class ProcessTimelinesService {
         };
     }
 
-    async create(processId: string, data: any, files?: any[], user?: string, tenantId?: string) {
-        await this.getProcessContext(processId, tenantId);
+    async create(processId: string, data: any, files?: any[], user?: string, currentUser?: CurrentUserData) {
+        await this.getProcessContext(processId, currentUser?.tenantId);
         let metadata: any = data.metadata || {};
         
         if (typeof metadata === 'string') {
@@ -210,6 +414,24 @@ export class ProcessTimelinesService {
         // Add user to metadata if provided
         if (user) {
             metadata.user = user;
+        }
+
+        if (data.responsibleUserId) {
+            metadata.responsibleUserId = String(data.responsibleUserId);
+        } else if (!data.responsibleName) {
+            delete metadata.responsibleUserId;
+        }
+
+        if (data.responsibleEmail) {
+            metadata.responsibleEmail = String(data.responsibleEmail);
+        } else if (!data.responsibleName) {
+            delete metadata.responsibleEmail;
+        }
+
+        if (data.responsibleContactId) {
+            metadata.responsibleContactId = String(data.responsibleContactId);
+        } else if (!data.responsibleName) {
+            delete metadata.responsibleContactId;
         }
         
         const attachments = [];
@@ -275,9 +497,15 @@ export class ProcessTimelinesService {
                 parentTimelineId,
                 workflowStepId: data.workflowStepId || null,
                 requesterName: user || 'sistema',
-                responsibleName: data.responsibleName || null,
+                responsibleName: String(data.responsibleName || '').trim() || null,
                 completedAt: status === 'CONCLUIDO' ? new Date() : null,
-                responsibleHistory: data.responsibleName ? [{ name: data.responsibleName, date: new Date() }] : [],
+                responsibleHistory: String(data.responsibleName || '').trim() ? [{
+                    name: String(data.responsibleName).trim(),
+                    date: new Date(),
+                    userId: data.responsibleUserId || null,
+                    email: data.responsibleEmail || null,
+                    contactId: data.responsibleContactId || null,
+                }] : [],
             },
         });
 
@@ -400,8 +628,8 @@ export class ProcessTimelinesService {
         });
     }
 
-    async update(id: string, data: any, files?: any[], tenantId?: string) {
-        const existing = await this.getTimelineContext(id, tenantId);
+    async update(id: string, data: any, files?: any[], currentUser?: CurrentUserData) {
+        const existing = await this.getTimelineContext(id, currentUser?.tenantId);
         if (!existing) throw new NotFoundException('Andamento não encontrado.');
 
         let metadata: any = existing.metadata || {};
@@ -416,6 +644,24 @@ export class ProcessTimelinesService {
                  const newMeta = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata;
                  metadata = { ...metadata, ...newMeta };
              } catch {}
+        }
+
+        if (data.responsibleUserId) {
+            metadata.responsibleUserId = String(data.responsibleUserId);
+        } else if (data.responsibleName === '' || data.responsibleName === null) {
+            delete metadata.responsibleUserId;
+        }
+
+        if (data.responsibleEmail) {
+            metadata.responsibleEmail = String(data.responsibleEmail);
+        } else if (data.responsibleName === '' || data.responsibleName === null) {
+            delete metadata.responsibleEmail;
+        }
+
+        if (data.responsibleContactId) {
+            metadata.responsibleContactId = String(data.responsibleContactId);
+        } else if (data.responsibleName === '' || data.responsibleName === null) {
+            delete metadata.responsibleContactId;
         }
 
         if (files && files.length > 0) {
@@ -461,14 +707,23 @@ export class ProcessTimelinesService {
                 category: data.category,
                 status: data.status,
                 priority: data.priority,
-                responsibleName: data.responsibleName,
+                responsibleName:
+                    data.responsibleName !== undefined
+                        ? (String(data.responsibleName).trim() ? String(data.responsibleName).trim() : null)
+                        : undefined,
                 completedAt: (data.status === 'CONCLUIDO' && existing.status !== 'CONCLUIDO') 
                     ? (data.completedAt ? new Date(data.completedAt) : new Date()) 
                     : (data.status !== 'CONCLUIDO' ? null : existing.completedAt),
                 completedBy: (data.status === 'CONCLUIDO' && existing.status !== 'CONCLUIDO') ? data.completedBy : (data.status !== 'CONCLUIDO' ? null : existing.completedBy),
                 conclusionNotes: data.conclusionNotes,
-                responsibleHistory: (data.responsibleName && data.responsibleName !== existing.responsibleName) 
-                    ? [...(Array.isArray(existing.responsibleHistory) ? existing.responsibleHistory : []), { name: data.responsibleName, date: new Date() }]
+                responsibleHistory: (String(data.responsibleName || '').trim() && String(data.responsibleName).trim() !== String(existing.responsibleName || '').trim()) 
+                    ? [...(Array.isArray(existing.responsibleHistory) ? existing.responsibleHistory : []), {
+                        name: String(data.responsibleName).trim(),
+                        date: new Date(),
+                        userId: data.responsibleUserId || null,
+                        email: data.responsibleEmail || null,
+                        contactId: data.responsibleContactId || null,
+                    }]
                     : existing.responsibleHistory
             },
         });
