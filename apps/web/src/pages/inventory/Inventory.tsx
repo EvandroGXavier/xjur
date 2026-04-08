@@ -45,7 +45,7 @@ export function Inventory() {
           <button
             onClick={() => setView("dashboard")}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "dashboard"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800",
@@ -57,7 +57,7 @@ export function Inventory() {
           <button
             onClick={() => setView("products")}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "products"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800",
@@ -69,7 +69,7 @@ export function Inventory() {
           <button
             onClick={() => setView("proposals")}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "proposals"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800",
@@ -81,7 +81,7 @@ export function Inventory() {
           <button
             onClick={() => setView("sales")}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "sales"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800",
@@ -93,7 +93,7 @@ export function Inventory() {
           <button
             onClick={() => setView("quotes")}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "quotes"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800",
@@ -105,7 +105,7 @@ export function Inventory() {
           <button
             onClick={() => setView("purchases")}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "purchases"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800",
@@ -117,7 +117,7 @@ export function Inventory() {
           <button
             onClick={() => setView("fiscal")}
             className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap",
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap",
               view === "fiscal"
                 ? "bg-teal-600 text-white shadow-lg shadow-teal-900/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800",

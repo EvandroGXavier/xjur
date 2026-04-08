@@ -1315,12 +1315,10 @@ export function ContactForm() {
         const errorString = typeof errorDetail === 'object' ? JSON.stringify(errorDetail, null, 2) : String(errorDetail);
         
         let finalMessage = message;
-        if (err.response?.status === 409 && err.response?.data?.duplicateField) {
-            finalMessage = `Já existe um contato cadastrado com este ${err.response.data.duplicateField}.`;
-        }
+        if (Array.isArray(message)) finalMessage = message[0];
 
         toast.error(`Erro ao salvar contato`, {
-            description: message,
+            description: finalMessage,
             action: {
                 label: 'Copiar Erro',
                 onClick: () => {
@@ -1684,10 +1682,23 @@ export function ContactForm() {
   }, [filteredFinancialRecords]);
 
   const handleAddContact = async () => {
-    if (!id || id === 'new') {
-        toast.warning('Salve o contato antes de adicionar contatos extras');
+    if (!contactForm.value) {
+        toast.warning('Informe o valor do contato (e-mail, telefone, etc)');
         return;
     }
+
+    if (!id || id === 'new') {
+        const newContact = { ...contactForm, id: `temp-${Date.now()}` };
+        setFormData(prev => ({
+            ...prev,
+            additionalContacts: [...(prev.additionalContacts || []), newContact]
+        }));
+        setContactForm({ type: 'EMAIL', value: '', nomeContatoAdicional: '' });
+        setShowContactForm(false);
+        toast.success('Contato adicionado localmente! Lembre-se de salvar o cadastro principal.');
+        return;
+    }
+
     try {
         setLoading(true);
         await api.post(`/contacts/${id}/additional-contacts`, contactForm);
@@ -1707,7 +1718,20 @@ export function ContactForm() {
   };
 
   const handleUpdateContact = async () => {
-      if (!id || id === 'new' || !editingContact?.id) return;
+      if (!editingContact?.id) return;
+
+      if (!id || id === 'new') {
+          const updated = (formData.additionalContacts || []).map(c => 
+              c.id === editingContact.id ? { ...contactForm, id: c.id } : c
+          );
+          setFormData({ ...formData, additionalContacts: updated });
+          setContactForm({ type: 'EMAIL', value: '', nomeContatoAdicional: '' });
+          setEditingContact(null);
+          setShowContactForm(false);
+          toast.success('Contato atualizado localmente!');
+          return;
+      }
+
       try {
           setLoading(true);
           await api.patch(`/contacts/${id}/additional-contacts/${editingContact.id}`, contactForm);
@@ -1725,9 +1749,25 @@ export function ContactForm() {
   };
 
   const handleDeleteContact = async (contactId: string) => {
+      if (!window.confirm('Tem certeza que deseja excluir este contato adicional?')) return;
+
+      if (!id || id === 'new' || String(contactId).startsWith('temp-')) {
+          const updated = (formData.additionalContacts || []).filter(c => c.id !== contactId);
+          setFormData({ ...formData, additionalContacts: updated });
+          toast.success('Contato removido!');
+          return;
+      }
+
       try {
           setLoading(true);
           await api.delete(`/contacts/${id}/additional-contacts/${contactId}`);
+          
+          // Optimistic update to reflect immediately
+          setFormData(prev => ({
+              ...prev,
+              additionalContacts: (prev.additionalContacts || []).filter(c => c.id !== contactId)
+          }));
+
           await fetchContact();
           toast.success('Contato removido!');
       } catch (err) {

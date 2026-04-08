@@ -15,11 +15,10 @@ import {
     Edit,
     ChevronDown,
     ChevronUp,
-    ShieldCheck,
-    Briefcase,
-    Globe,
+
     MapPin,
-    FileText
+    FileText,
+    XCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -106,9 +105,40 @@ export function ContactList() {
       onPrint: () => window.print()
   });
 
+  // Initialize filters from sessionStorage if available
+  useEffect(() => {
+    const saved = sessionStorage.getItem('xjur_contact_filters');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.searchTerm) setSearchTerm(parsed.searchTerm);
+        if (parsed.statusFilter) setStatusFilter(parsed.statusFilter);
+        if (parsed.includedTags) setIncludedTags(parsed.includedTags);
+        if (parsed.excludedTags) setExcludedTags(parsed.excludedTags);
+        if (parsed.activeCardFilter) setActiveCardFilter(parsed.activeCardFilter);
+        if (parsed.showFilters !== undefined) setShowFilters(parsed.showFilters);
+      } catch (e) {
+        console.error('Failed to load filters from session', e);
+      }
+    }
+  }, []);
+
+  // Save filters to sessionStorage whenever they change
+  useEffect(() => {
+    const filters = {
+      searchTerm,
+      statusFilter,
+      includedTags,
+      excludedTags,
+      activeCardFilter,
+      showFilters
+    };
+    sessionStorage.setItem('xjur_contact_filters', JSON.stringify(filters));
+  }, [searchTerm, statusFilter, includedTags, excludedTags, activeCardFilter, showFilters]);
+
   useEffect(() => {
      fetchContacts();
-  }, [includedTags, excludedTags, statusFilter, searchTerm, birthDateStart, birthDateEnd, pfFilters, pjFilters, addressFilters, contractFilters, birthMonth]); // Added all filter dependencies
+  }, [includedTags, excludedTags, statusFilter, searchTerm, birthDateStart, birthDateEnd, pfFilters, pjFilters, addressFilters, contractFilters, birthMonth]);
 
   const fetchContacts = async () => {
     try {
@@ -249,6 +279,25 @@ export function ContactList() {
     return doc;
   };
 
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('true');
+    setIncludedTags([]);
+    setExcludedTags([]);
+    setActiveCardFilter('ALL');
+    setBirthDateStart('');
+    setBirthDateEnd('');
+    setBirthMonth('');
+    setPfFilters({
+      cpf: '', rg: '', motherName: '', fatherName: '', profession: '', nationality: '', naturality: '', gender: '', civilStatus: '', cnh: '', cnhCategory: '', nis: '', pis: '', ctps: '',
+    });
+    setPjFilters({ cnpj: '', companyName: '', stateRegistration: '' });
+    setAddressFilters({ city: '', state: '', district: '', zipCode: '', street: '' });
+    setContractFilters({ description: '', counterparty: '' });
+    sessionStorage.removeItem('xjur_contact_filters');
+    toast.info('Todos os filtros foram limpos');
+  };
+
   const statCards = [
     { id: 'ALL', label: 'Todos os Contatos', value: stats.total, icon: Users, colorClass: 'text-indigo-400', bgClass: 'bg-indigo-500/10', borderClass: 'border-indigo-500/50' },
     { id: 'LEADS', label: 'Leads (S/ Doc)', value: stats.leads, icon: Target, colorClass: 'text-emerald-400', bgClass: 'bg-emerald-500/10', borderClass: 'border-emerald-500/50' },
@@ -258,35 +307,35 @@ export function ContactList() {
   ];
 
   return (
-    <div className="space-y-6 h-full flex flex-col animate-in fade-in duration-700 p-6 md:p-10">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4 h-full flex flex-col animate-in fade-in duration-700 p-4 md:p-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-             <Users className="text-indigo-500" size={32} />
+          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+             <Users className="text-indigo-500" size={28} />
              Contatos
           </h1>
-          <p className="text-slate-400 mt-1">Gerencie e analise sua base de clientes, leads e parceiros.</p>
+          <p className="text-slate-400 text-xs mt-0.5">Gerencie sua base de clientes, leads e parceiros.</p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
             {selectedIds.length > 0 && (
-                <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-4 py-1.5 rounded-full text-sm font-semibold animate-in fade-in zoom-in-95 flex items-center gap-2">
-                    <CheckCircle2 size={16} />
+                <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 size={12} />
                     {selectedIds.length} selecionado{selectedIds.length > 1 ? 's' : ''}
                 </div>
             )}
             <button 
                 onClick={() => setIsHelpOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition border border-slate-700"
+                className="flex items-center gap-1 h-8 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition border border-slate-700 text-xs"
                 title="Ajuda (F1)"
             >
-                <HelpCircle size={20} /> Ajuda
+                <HelpCircle size={14} /> Ajuda
             </button>
             <button 
                 onClick={() => navigate('/contacts/new')} 
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap"
+                className="flex items-center gap-1 h-8 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition shadow-lg shadow-indigo-500/20 whitespace-nowrap text-xs"
             >
-                <Plus size={20} /> Novo Contato
+                <Plus size={16} /> Novo Contato
             </button>
         </div>
       </div>
@@ -322,50 +371,72 @@ export function ContactList() {
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-4">
-            <div className="flex flex-col md:flex-row gap-4 items-center">
-                <div className="relative flex-1 w-full md:max-w-xl">
-                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <div className="flex flex-col md:flex-row gap-3 items-center">
+                <div className="relative flex-1 w-full md:max-w-md">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input 
                         type="text" 
                         value={searchTerm} 
                         onChange={e => setSearchTerm(e.target.value)} 
-                        placeholder="Buscar por nome, documento, email ou telefone..." 
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-500 transition-all font-medium" 
+                        placeholder="Buscar contatos..." 
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-10 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-500 transition-all font-medium" 
                     />
+                    {searchTerm && (
+                        <button 
+                            onClick={() => {
+                                setSearchTerm('');
+                                const filters = JSON.parse(sessionStorage.getItem('xjur_contact_filters') || '{}');
+                                filters.searchTerm = '';
+                                sessionStorage.setItem('xjur_contact_filters', JSON.stringify(filters));
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                            title="Limpar busca"
+                        >
+                            <XCircle size={16} />
+                        </button>
+                    )}
                 </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
+                {(searchTerm || statusFilter !== 'true' || includedTags.length > 0 || excludedTags.length > 0 || activeCardFilter !== 'ALL') && (
+                    <button 
+                        onClick={clearAllFilters}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-bold transition whitespace-nowrap"
+                    >
+                        <Trash2 size={14} /> Limpar Tudo
+                    </button>
+                )}
+                <div className="flex items-center gap-2 w-full md:w-auto">
                     <select 
                         value={statusFilter} 
                         onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="bg-slate-800 border border-slate-700 rounded-lg text-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition font-medium"
+                        className="bg-slate-800 border border-slate-700 rounded-lg text-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition font-medium"
                     >
-                        <option value="ALL">Todos os Contatos</option>
-                        <option value="true">Somente Ativos</option>
-                        <option value="false">Somente Inativos</option>
+                        <option value="ALL">Todos</option>
+                        <option value="true">Ativos</option>
+                        <option value="false">Inativos</option>
                     </select>
                     
                     <button 
                         onClick={() => setShowFilters(!showFilters)}
                         className={clsx(
-                            "px-4 py-2 rounded-lg flex items-center gap-2 transition text-sm font-bold shadow-lg border",
+                            "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition text-xs font-bold shadow-lg border",
                             showFilters ? "bg-indigo-600 text-white border-indigo-500" : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
                         )}
                     >
-                        <Filter size={16} /> Filtros
+                        <Filter size={14} /> Filtros
                     </button>
                     
-                    <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
+                    <div className="flex bg-slate-800 p-0.5 rounded-lg border border-slate-700">
                         <button 
                             onClick={() => setViewMode('CARD')} 
-                            className={clsx("p-1.5 rounded-md transition", viewMode === 'CARD' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
+                            className={clsx("p-1 rounded-md transition", viewMode === 'CARD' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
                         >
-                            <LayoutGrid size={18} />
+                            <LayoutGrid size={16} />
                         </button>
                         <button 
                             onClick={() => setViewMode('LIST')} 
-                            className={clsx("p-1.5 rounded-md transition", viewMode === 'LIST' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
+                            className={clsx("p-1 rounded-md transition", viewMode === 'LIST' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
                         >
-                            <List size={18} />
+                            <List size={16} />
                         </button>
                     </div>
                 </div>
@@ -602,7 +673,15 @@ export function ContactList() {
             totalItems={sortedContacts.length}
             isLoading={loading}
             onSelect={setSelectedIds}
-            onRowClick={(c) => navigate(`/contacts/${c.id}`)}
+            onRowClick={(c) => {
+                const isSelected = selectedIds.includes(c.id);
+                if (isSelected) {
+                    setSelectedIds(prev => prev.filter(id => id !== c.id));
+                } else {
+                    setSelectedIds(prev => [...prev, c.id]);
+                }
+            }}
+            onRowDoubleClick={(c) => navigate(`/contacts/${c.id}`)}
             columns={[
                 { key: 'name', label: 'Nome / Razão Social', sortable: true, render: (c) => (
                           <div className="flex flex-col gap-0.5">

@@ -2771,12 +2771,12 @@ export function Financial(props: FinancialProps = {}) {
   }
 
   return (
-    <div className={clsx("flex flex-col h-full space-y-6 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30 animate-in fade-in duration-700", isEmbeddedInProcess ? "p-4" : "p-6 md:p-10")}>
+    <div className={clsx("flex flex-col h-full space-y-4 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30 animate-in fade-in duration-700", isEmbeddedInProcess ? "p-2" : "p-4 md:p-6")}>
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3 tracking-tight">
-            <DollarSign className="text-emerald-500" size={32} />
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3 tracking-tight">
+            <DollarSign className="text-emerald-500" size={28} />
             {isEmbeddedInProcess ? "Financeiro do Processo" : "Módulo Financeiro"}
           </h1>
           {isEmbeddedInProcess ? (
@@ -2792,56 +2792,56 @@ export function Financial(props: FinancialProps = {}) {
             </p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+        <div className="flex flex-wrap items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-lg">
           <button
             onClick={() => setView("records")}
-            className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+            className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
               view === "records"
                 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <FileText size={16} />
+            <FileText size={13} />
             Transações
           </button>
           {!isEmbeddedInProcess && (
             <>
               <button
                 onClick={() => setView("accounts")}
-                className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+                className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
                   view === "accounts"
                     ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
-                <Building2 size={16} />
-                Contas Bancárias
+                <Building2 size={13} />
+                Contas
               </button>
               <button
                 onClick={() => setView("banking")}
-                className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+                className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
                   view === "banking"
                     ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
-                <Globe size={16} />
-                Banking Hub
+                <Globe size={13} />
+                Banking
               </button>
               <button
                 onClick={() => setView("conditions")}
-                className={`min-h-[44px] px-4 py-2.5 sm:py-2 font-bold transition-all text-base sm:text-sm rounded-lg flex items-center gap-2 ${
+                className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
                   view === "conditions"
                     ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
-                <CreditCard size={16} />
-                Cond. Pagamento
+                <CreditCard size={13} />
+                Condições
               </button>
             </>
           )}
-          <div className="w-px h-6 bg-slate-800 mx-1 hidden sm:block" />
+          <div className="w-px h-5 bg-slate-800 mx-1 hidden sm:block" />
           <button
             onClick={() =>
               view === "accounts"
@@ -2850,10 +2850,10 @@ export function Financial(props: FinancialProps = {}) {
                   ? handleOpenIntegrationModal()
                   : handleOpenModal()
             }
-            className="min-h-[44px] px-4 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-base sm:text-sm font-bold transition-colors flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+            className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition-colors flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
           >
-            <Plus size={20} />
-            <span>{view === "banking" ? "Nova Integração" : "Novo"}</span>
+            <Plus size={14} />
+            <span>{view === "banking" ? "Integração" : "Novo"}</span>
           </button>
         </div>
       </div>
@@ -2899,21 +2899,21 @@ export function Financial(props: FinancialProps = {}) {
               </div>
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-indigo-500/30 transition-all group">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Fluxo</span>
-                <div className="p-2 bg-indigo-500/10 rounded-lg group-hover:bg-indigo-500/20 transition-colors">
-                  <DollarSign className="text-indigo-400" size={20} />
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 shadow-xl shadow-black/5 hover:border-indigo-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Fluxo</span>
+                <div className="p-1.5 bg-indigo-500/10 rounded group-hover:bg-indigo-500/20 transition-colors">
+                  <DollarSign className="text-indigo-400" size={16} />
                 </div>
               </div>
               <p
-                className={`text-2xl sm:text-3xl font-bold tracking-tight tabular-nums break-words ${dashboard.summary.balance >= 0 ? "text-white" : "text-red-400"}`}
+                className={`text-xl sm:text-2xl font-bold tracking-tight tabular-nums break-words ${dashboard.summary.balance >= 0 ? "text-white" : "text-red-400"}`}
               >
                 {formatCurrency(dashboard.summary.balance)}
               </p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 uppercase">Contas</span>
-                <span className="text-sm font-medium text-slate-400">
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 uppercase">Contas</span>
+                <span className="text-xs font-medium text-slate-400">
                   {formatCurrency(dashboard.summary.totalBalance)}
                 </span>
               </div>
@@ -2987,7 +2987,7 @@ export function Financial(props: FinancialProps = {}) {
                   placeholder="Buscar por descrição, contato, conta, categoria ou etiqueta..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-base sm:text-sm"
+                  className="w-full pl-12 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
                 />
               </div>
               <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
@@ -2999,7 +2999,7 @@ export function Financial(props: FinancialProps = {}) {
                       type: e.target.value,
                     }))
                   }
-                  className="min-h-[44px] px-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-base sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[140px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
+                  className="min-h-[38px] px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[130px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
                 >
                   <option value="">Todos os tipos</option>
                   <option value="INCOME">Receitas</option>
@@ -3013,7 +3013,7 @@ export function Financial(props: FinancialProps = {}) {
                       status: e.target.value,
                     }))
                   }
-                  className="min-h-[44px] px-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-base sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[140px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
+                  className="min-h-[38px] px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[130px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
                 >
                   <option value="">Todos os status</option>
                   <option value="PENDING">Pendente</option>
@@ -3024,12 +3024,12 @@ export function Financial(props: FinancialProps = {}) {
                 </select>
                 <button
                   onClick={openAdvancedFilterModal}
-                  className="min-h-[44px] px-5 py-3.5 bg-slate-900 border border-indigo-500/30 text-indigo-300 rounded-xl font-bold text-base sm:text-sm flex items-center justify-center gap-2 hover:bg-slate-800 hover:border-indigo-500 transition-all shadow-lg shadow-indigo-500/5 group"
+                  className="min-h-[38px] px-4 py-2 bg-slate-900 border border-indigo-500/30 text-indigo-300 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 hover:border-indigo-500 transition-all shadow-lg shadow-indigo-500/5 group"
                 >
-                  <Filter size={20} className="group-hover:scale-110 transition-transform" />
+                  <Filter size={16} className="group-hover:scale-110 transition-transform" />
                   <span>Filtros Avançados</span>
                   {activeAdvancedFilterCount > 0 && (
-                    <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-black rounded-full bg-indigo-500 text-white shadow-sm">
+                    <span className="flex items-center justify-center min-w-[18px] h-4.5 px-1 text-[9px] font-black rounded-full bg-indigo-500 text-white shadow-sm">
                       {activeAdvancedFilterCount}
                     </span>
                   )}
@@ -3037,10 +3037,10 @@ export function Financial(props: FinancialProps = {}) {
                 {totalActiveFilterCount > 0 && (
                   <button
                     onClick={resetAllFilters}
-                    className="min-h-[44px] min-w-[44px] grid place-items-center bg-slate-900 border border-slate-800 text-slate-400 rounded-xl font-bold hover:bg-slate-800 hover:text-white transition-all"
+                    className="min-h-[38px] min-w-[38px] grid place-items-center bg-slate-900 border border-slate-800 text-slate-400 rounded-lg font-bold hover:bg-slate-800 hover:text-white transition-all"
                     title="Limpar filtros"
                   >
-                    <RefreshCw size={20} />
+                    <RefreshCw size={16} />
                   </button>
                 )}
               </div>

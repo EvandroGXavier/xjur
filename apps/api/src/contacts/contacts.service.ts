@@ -739,6 +739,27 @@ export class ContactsService {
             : existingContact.pjDetails
               ? { delete: true }
               : undefined,
+        addresses: addresses ? {
+          deleteMany: {},
+          create: addresses.map((a: any) => ({
+            type: a.type,
+            street: a.street,
+            number: a.number,
+            complement: a.complement,
+            district: a.district,
+            city: a.city,
+            state: a.state,
+            zipCode: a.zipCode,
+          }))
+        } : undefined,
+        additionalContacts: additionalContacts ? {
+          deleteMany: {},
+          create: additionalContacts.map((c: any) => ({
+            type: c.type,
+            value: c.value,
+            nomeContatoAdicional: c.nomeContatoAdicional,
+          }))
+        } : undefined,
       },
       include: {
         pfDetails: true,

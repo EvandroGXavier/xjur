@@ -92,11 +92,14 @@ export function SecurityTab({ entityType, entityId }: SecurityTabProps) {
       return;
     }
     try {
-      const res = await api.post('/security/secrets', {
+      const payload = {
         ...newSecret,
         entityType,
-        entityId
-      });
+        entityId,
+        expiresAt: newSecret.expiresAt || null
+      };
+
+      const res = await api.post('/security/secrets', payload);
       
       const createdSecretId = res.data.id;
       

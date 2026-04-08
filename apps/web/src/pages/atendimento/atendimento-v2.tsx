@@ -746,8 +746,8 @@ export function AtendimentoPage() {
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-slate-950 text-white">
-      <aside className="flex min-h-0 w-full max-w-[340px] flex-col border-r border-white/10 bg-slate-950/80">
-        <div className="border-b border-white/10 px-4 py-4">
+      <aside className="flex min-h-0 w-full max-w-[280px] flex-col border-r border-white/10 bg-slate-950/80">
+        <div className="border-b border-white/10 px-3 py-2">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-emerald-300/70">Inbox DR.X</p>
@@ -758,24 +758,24 @@ export function AtendimentoPage() {
               <button onClick={() => setShowNewConversation(true)} className="rounded-xl bg-emerald-400 p-2 text-slate-950 hover:bg-emerald-300"><Plus size={16} /></button>
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-            <Search size={15} className="text-slate-500" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500" />
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5">
+            <Search size={14} className="text-slate-500" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar..." className="w-full bg-transparent text-xs outline-none placeholder:text-slate-500" />
           </div>
-          <div className="mt-4 grid gap-2">
+          <div className="mt-4 grid gap-1.5">
             {statusFilters.map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
                 className={clsx(
-                  'flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm font-semibold transition',
+                  'flex items-center justify-between rounded-xl border px-2.5 py-1.5 text-left text-xs font-semibold transition',
                   statusFilter === status
                     ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-100'
                     : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10',
                 )}
               >
                 <span>{getStatusLabel(status)}</span>
-                <span className={clsx('inline-flex min-w-8 items-center justify-center rounded-full px-2 py-0.5 text-xs', statusFilter === status ? 'bg-emerald-300 text-slate-950' : 'bg-white/10 text-slate-200')}>
+                <span className={clsx('inline-flex min-w-7 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px]', statusFilter === status ? 'bg-emerald-300 text-slate-950' : 'bg-white/10 text-slate-200')}>
                   {statusCounts[status]}
                 </span>
               </button>
@@ -851,7 +851,7 @@ export function AtendimentoPage() {
                               {message.mediaUrl && message.contentType !== 'IMAGE' && (
                                 <button
                                   onClick={() =>
-                                    openProtectedMedia(message.mediaUrl).catch(() =>
+                                    message.mediaUrl && openProtectedMedia(message.mediaUrl).catch(() =>
                                       toast.error('Sem permissão para baixar/abrir este arquivo.'),
                                     )
                                   }

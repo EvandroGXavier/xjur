@@ -182,12 +182,16 @@ export class SecurityService {
   }
 
   async createSecret(tenantId: string, data: any) {
+    const createData = { ...data };
+    if (createData.expiresAt === '') createData.expiresAt = null;
+    else if (createData.expiresAt) createData.expiresAt = new Date(createData.expiresAt);
+
     return this.prisma.securitySecret.create({
       data: {
-        ...data,
+        ...createData,
         tenantId,
-        password: this.encode(data.password),
-        privateKey: this.encode(data.privateKey),
+        password: this.encode(createData.password),
+        privateKey: this.encode(createData.privateKey),
       },
     });
   }
@@ -200,6 +204,9 @@ export class SecurityService {
     if (!secret) throw new NotFoundException('Segredo não encontrado');
 
     const updateData = { ...data };
+    if (updateData.expiresAt === '') updateData.expiresAt = null;
+    else if (updateData.expiresAt) updateData.expiresAt = new Date(updateData.expiresAt);
+
     if (typeof updateData.password === 'string') updateData.password = this.encode(updateData.password);
     if (typeof updateData.privateKey === 'string') updateData.privateKey = this.encode(updateData.privateKey);
 
