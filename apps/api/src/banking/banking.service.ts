@@ -122,6 +122,65 @@ export class BankingService {
     };
   }
 
+  private normalizeDocument(value?: string | null) {
+    const digits = String(value || '').replace(/\D/g, '').trim();
+    return digits.length > 0 ? digits : null;
+  }
+
+  private normalizeText(value?: string | null) {
+    const normalized = String(value || '').trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private calculateOutstandingAmount(record: {
+    amount?: number | string | { toString(): string } | null;
+    amountFinal?: number | string | { toString(): string } | null;
+    amountPaid?: number | string | { toString(): string } | null;
+  }) {
+    const baseAmount = Number(record.amountFinal ?? record.amount ?? 0);
+    const paidAmount = Number(record.amountPaid ?? 0);
+    return Math.max(0, Math.round((baseAmount - paidAmount) * 100) / 100);
+  }
+
+  private resolveChargePayer(financialRecord: any) {
+    const debtorParty =
+      financialRecord.parties?.find((party: any) => party.role === 'DEBTOR') ||
+      null;
+
+    if (!debtorParty?.contact) {
+      throw new BadRequestException(
+        'A cobrança exige um contato devedor vinculado ao lançamento.',
+      );
+    }
+
+    const contact = debtorParty.contact;
+    const address = Array.isArray(contact.addresses) ? contact.addresses[0] : null;
+    const payerDocument = this.normalizeDocument(
+      contact.document ||
+        contact.pfDetails?.cpf ||
+        contact.pjDetails?.cnpj ||
+        null,
+    );
+
+    return {
+      payerName: this.normalizeText(contact.name),
+      payerDocument,
+      payerEmail: this.normalizeText(contact.email),
+      payerPhone: this.normalizeDocument(contact.whatsapp || contact.phone || null),
+      payerAddress: address
+        ? {
+            zipCode: this.normalizeText(address.zipCode),
+            street: this.normalizeText(address.street),
+            number: this.normalizeText(address.number),
+            complement: this.normalizeText(address.complement),
+            district: this.normalizeText(address.district),
+            city: this.normalizeText(address.city),
+            state: this.normalizeText(address.state),
+          }
+        : null,
+    };
+  }
+
   async listIntegrations(tenantId: string) {
     return this.prisma.bankIntegration.findMany({
       where: { tenantId },
@@ -471,11 +530,84 @@ export class BankingService {
       throw new BadRequestException('Integração bancária não encontrada.');
     }
 
+    if (!integration.isActive) {
+      throw new BadRequestException(
+        'A integração bancária selecionada está inativa.',
+      );
+    }
+
     const financialRecord = await this.prisma.financialRecord.findFirst({
       where: { id: dto.financialRecordId, tenantId },
+      include: {
+        parties: {
+          include: {
+            contact: {
+              select: {
+                id: true,
+                name: true,
+                personType: true,
+                document: true,
+                email: true,
+                phone: true,
+                whatsapp: true,
+                pfDetails: {
+                  select: { cpf: true },
+                },
+                pjDetails: {
+                  select: { cnpj: true },
+                },
+                addresses: {
+                  select: {
+                    zipCode: true,
+                    street: true,
+                    number: true,
+                    complement: true,
+                    district: true,
+                    city: true,
+                    state: true,
+                  },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+      },
     });
     if (!financialRecord) {
       throw new BadRequestException('Lançamento financeiro não encontrado.');
+    }
+
+    if (financialRecord.type !== 'INCOME') {
+      throw new BadRequestException(
+        'A cobrança bancária só pode ser gerada para transações a receber.',
+      );
+    }
+
+    if (['PAID', 'CANCELLED'].includes(financialRecord.status)) {
+      throw new BadRequestException(
+        'Não é possível gerar cobrança para um lançamento já liquidado ou cancelado.',
+      );
+    }
+
+    const outstandingAmount = this.calculateOutstandingAmount(financialRecord);
+    if (outstandingAmount <= 0) {
+      throw new BadRequestException(
+        'O lançamento não possui saldo pendente para cobrança.',
+      );
+    }
+
+    const payer = this.resolveChargePayer(financialRecord);
+    if (!payer.payerName) {
+      throw new BadRequestException(
+        'O devedor vinculado precisa ter nome para gerar a cobrança.',
+      );
+    }
+
+    if (!payer.payerDocument) {
+      throw new BadRequestException(
+        'O devedor vinculado precisa ter CPF ou CNPJ para gerar a cobrança.',
+      );
     }
 
     const provider = this.getProvider(integration.provider);
@@ -484,13 +616,22 @@ export class BankingService {
       { integration, tenantId, credentials },
       {
         chargeType: dto.chargeType || 'PIX',
-        amount: Number(financialRecord.amount),
+        amount: outstandingAmount,
         dueDate: dto.dueDate || financialRecord.dueDate?.toISOString() || null,
-        payerName: null,
-        payerDocument: null,
+        payerName: payer.payerName,
+        payerDocument: payer.payerDocument,
+        payerEmail: payer.payerEmail,
+        payerPhone: payer.payerPhone,
+        payerAddress: payer.payerAddress,
         description: financialRecord.description,
       },
     );
+
+    if (!result.success) {
+      throw new BadRequestException(
+        result.message || 'Não foi possível gerar a cobrança bancária.',
+      );
+    }
 
     return this.prisma.bankCharge.create({
       data: {
@@ -510,7 +651,7 @@ export class BankingService {
         dueDate: dto.dueDate
           ? new Date(dto.dueDate)
           : financialRecord.dueDate || null,
-        amount: Number(financialRecord.amount),
+        amount: outstandingAmount,
         rawRequest: this.toJson(result.rawRequest),
         rawResponse: this.toJson(result.rawResponse),
       },

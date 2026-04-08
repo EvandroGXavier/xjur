@@ -16,6 +16,11 @@ export class WhatsappController {
       return this.whatsappService.getConnectionStatus(body.connectionId);
   }
 
+  @Get('check-number')
+  async checkNumber(@Body() body: { connectionId: string; number: string }) {
+      return this.whatsappService.checkNumber(body.connectionId, body.number);
+  }
+
   @Post('disconnect')
   async disconnect(@Body() body: { connectionId: string }) {
       await this.whatsappService.disconnect(body.connectionId);

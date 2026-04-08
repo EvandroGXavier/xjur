@@ -1281,6 +1281,11 @@ export class WhatsappService implements OnModuleInit {
     await this.evolutionService.deleteMessage(connectionId, jid, messageId, fromMe, evolutionConfig);
   }
 
+  async checkNumber(connectionId: string, number: string) {
+    const evolutionConfig = await this.getEvolutionConfig(connectionId);
+    return this.evolutionService.checkNumber(connectionId, number, evolutionConfig);
+  }
+
   async updateSettings(connectionId: string, settings: any) {
     const evolutionConfig = await this.getEvolutionConfig(connectionId);
     

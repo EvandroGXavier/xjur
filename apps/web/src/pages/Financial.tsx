@@ -31,6 +31,7 @@ import {
   Edit,
   Trash2,
   Download,
+  Copy,
   User,
   Percent,
   Calculator,
@@ -240,6 +241,51 @@ interface BankTransaction {
   }>;
 }
 
+interface BankCharge {
+  id: string;
+  chargeType: "PIX" | "BOLETO";
+  status: string;
+  amount: number | string;
+  dueDate?: string | null;
+  externalChargeId?: string | null;
+  txid?: string | null;
+  barcode?: string | null;
+  digitableLine?: string | null;
+  pixQrCode?: string | null;
+  pixCopyPaste?: string | null;
+  createdAt?: string;
+  bankIntegration?: {
+    id: string;
+    displayName: string;
+    provider: string;
+  } | null;
+  financialRecord?: {
+    id: string;
+    description: string;
+    amount: number;
+    dueDate?: string | null;
+  } | null;
+}
+
+interface BankPaymentRequest {
+  id: string;
+  paymentType: string;
+  status: string;
+  amount: number | string;
+  createdAt?: string;
+  bankIntegration?: {
+    id: string;
+    displayName: string;
+    provider: string;
+  } | null;
+  financialRecord?: {
+    id: string;
+    description: string;
+    amount: number;
+    dueDate?: string | null;
+  } | null;
+}
+
 interface BankingHealthcheckResult {
   success: boolean;
   mode: "MOCK" | "LIVE";
@@ -259,6 +305,10 @@ interface Contact {
   personType: string;
   cpf?: string;
   cnpj?: string;
+  document?: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
   category?: string;
 }
 
@@ -437,6 +487,50 @@ const hasPartiesToSettle = (record: FinancialRecord) => {
   return !!(hasCreditor && hasDebtor);
 };
 
+const getOutstandingAmount = (record: FinancialRecord) => {
+  const baseAmount = Number(record.amountFinal ?? record.amount ?? 0);
+  const paidAmount = Number(record.amountPaid ?? 0);
+  return Math.max(0, Math.round((baseAmount - paidAmount) * 100) / 100);
+};
+
+const getDebtorParty = (record: FinancialRecord) =>
+  record.parties?.find((party) => party.role === "DEBTOR") || null;
+
+const getContactDocument = (contact?: Contact | null) => {
+  const raw = String(
+    contact?.document || contact?.cpf || contact?.cnpj || "",
+  ).replace(/\D/g, "");
+  return raw || null;
+};
+
+const getChargeDisabledReason = (
+  record: FinancialRecord,
+  hasAnyIntegration: boolean,
+) => {
+  if (record.type !== "INCOME") {
+    return "Cobrança bancária só está disponível para receitas.";
+  }
+  if (!isOpenRecord(record)) {
+    return "A cobrança só pode ser gerada para lançamentos em aberto.";
+  }
+  if (record.children && record.children.length > 0) {
+    return "Selecione uma parcela/lançamento individual para cobrar.";
+  }
+  if (!getDebtorParty(record)?.contact) {
+    return "Defina um devedor na transação antes de gerar cobrança.";
+  }
+  if (!getContactDocument(getDebtorParty(record)?.contact)) {
+    return "O devedor precisa ter CPF ou CNPJ para gerar cobrança.";
+  }
+  if (!hasAnyIntegration) {
+    return "Cadastre uma integração bancária ativa antes de gerar cobrança.";
+  }
+  if (getOutstandingAmount(record) <= 0) {
+    return "O lançamento não possui saldo pendente para cobrança.";
+  }
+  return null;
+};
+
 const matchesDateRange = (
   value: string | undefined,
   from?: string,
@@ -518,6 +612,10 @@ export function Financial(props: FinancialProps = {}) {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [bankIntegrations, setBankIntegrations] = useState<BankIntegration[]>([]);
   const [bankTransactions, setBankTransactions] = useState<BankTransaction[]>([]);
+  const [bankCharges, setBankCharges] = useState<BankCharge[]>([]);
+  const [bankPaymentRequests, setBankPaymentRequests] = useState<
+    BankPaymentRequest[]
+  >([]);
   const [reconcileRecords, setReconcileRecords] = useState<FinancialRecord[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -533,6 +631,7 @@ export function Financial(props: FinancialProps = {}) {
       if (showBankModal) setShowBankModal(false);
       if (showIntegrationModal) setShowIntegrationModal(false);
       if (showReconcileModal) setShowReconcileModal(false);
+      if (showChargeModal) setShowChargeModal(false);
       if (showSettleModal) setShowSettleModal(false);
       if (showConditionSubModal) setShowConditionSubModal(false);
     },
@@ -543,6 +642,7 @@ export function Financial(props: FinancialProps = {}) {
   const [showBankModal, setShowBankModal] = useState(false);
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
   const [showReconcileModal, setShowReconcileModal] = useState(false);
+  const [showChargeModal, setShowChargeModal] = useState(false);
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [selectedBankAccount, setSelectedBankAccount] =
     useState<BankAccount | null>(null);
@@ -550,6 +650,9 @@ export function Financial(props: FinancialProps = {}) {
     useState<BankIntegration | null>(null);
   const [selectedBankTransaction, setSelectedBankTransaction] =
     useState<BankTransaction | null>(null);
+  const [selectedChargeRecord, setSelectedChargeRecord] =
+    useState<FinancialRecord | null>(null);
+  const [createdCharge, setCreatedCharge] = useState<BankCharge | null>(null);
   const [lastHealthcheck, setLastHealthcheck] =
     useState<BankingHealthcheckResult | null>(null);
   const [settlingRecord, setSettlingRecord] = useState<FinancialRecord | null>(
@@ -560,6 +663,16 @@ export function Financial(props: FinancialProps = {}) {
   );
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [chargeSubmitting, setChargeSubmitting] = useState(false);
+  const [chargeFormData, setChargeFormData] = useState<{
+    bankIntegrationId: string;
+    chargeType: "PIX" | "BOLETO";
+    dueDate: string;
+  }>({
+    bankIntegrationId: "",
+    chargeType: "BOLETO",
+    dueDate: "",
+  });
 
   const parseAmountPtBr = (raw: string) => {
     const normalized = String(raw || "")
@@ -765,6 +878,7 @@ export function Financial(props: FinancialProps = {}) {
     certificateBase64: "",
     webhookSecret: "",
     tokenUrl: "",
+    metadataJson: "",
   });
 
   const [reconcileFormData, setReconcileFormData] = useState({
@@ -1288,21 +1402,33 @@ export function Financial(props: FinancialProps = {}) {
       const processId = lockedProcessId;
 
       if (view === "dashboard" || view === "records") {
-        const [dashboardRes, recordsRes, accountsRes] = await Promise.all([
+        const [dashboardRes, recordsRes, accountsRes, integrationsRes] =
+          await Promise.all([
           api.get(`/financial/dashboard?tenantId=${tenantId}${processId ? `&processId=${processId}` : ""}`),
           api.get(`/financial/records?tenantId=${tenantId}${processId ? `&processId=${processId}` : ""}`),
           api.get(`/financial/bank-accounts?tenantId=${tenantId}`),
+          api.get("/banking/integrations"),
         ]);
         setDashboard(dashboardRes.data);
         setRecords(recordsRes.data);
         setBankAccounts(accountsRes.data);
+        setBankIntegrations(
+          Array.isArray(integrationsRes.data) ? integrationsRes.data : [],
+        );
       } else if (view === "accounts") {
         const accountsRes = await api.get(
           `/financial/bank-accounts?tenantId=${tenantId}`,
         );
         setBankAccounts(accountsRes.data);
       } else if (view === "banking") {
-        const [accountsRes, integrationsRes, transactionsRes, recordsRes] =
+        const [
+          accountsRes,
+          integrationsRes,
+          transactionsRes,
+          recordsRes,
+          chargesRes,
+          paymentRequestsRes,
+        ] =
           await Promise.all([
             api.get(`/financial/bank-accounts?tenantId=${tenantId}`),
             api.get("/banking/integrations"),
@@ -1310,11 +1436,17 @@ export function Financial(props: FinancialProps = {}) {
             api.get(
               `/financial/records?tenantId=${tenantId}&showInstallments=false`,
             ),
+            api.get("/banking/charges"),
+            api.get("/banking/payment-requests"),
           ]);
 
         setBankAccounts(accountsRes.data);
         setBankIntegrations(integrationsRes.data);
         setBankTransactions(transactionsRes.data);
+        setBankCharges(Array.isArray(chargesRes.data) ? chargesRes.data : []);
+        setBankPaymentRequests(
+          Array.isArray(paymentRequestsRes.data) ? paymentRequestsRes.data : [],
+        );
         setReconcileRecords(
           Array.isArray(recordsRes.data)
             ? recordsRes.data.filter((record: FinancialRecord) =>
@@ -1503,6 +1635,142 @@ export function Financial(props: FinancialProps = {}) {
     setShowBankModal(true);
   };
 
+  const loadBankingOperations = async () => {
+    const [integrationsRes, chargesRes, paymentRequestsRes] = await Promise.all([
+      api.get("/banking/integrations"),
+      api.get("/banking/charges"),
+      api.get("/banking/payment-requests"),
+    ]);
+
+    const integrations = Array.isArray(integrationsRes.data)
+      ? integrationsRes.data
+      : [];
+    setBankIntegrations(integrations);
+    setBankCharges(Array.isArray(chargesRes.data) ? chargesRes.data : []);
+    setBankPaymentRequests(
+      Array.isArray(paymentRequestsRes.data) ? paymentRequestsRes.data : [],
+    );
+
+    return integrations as BankIntegration[];
+  };
+
+  const getPreferredBankIntegration = (integrations: BankIntegration[]) =>
+    integrations.find(
+      (integration) =>
+        integration.provider === "INTER" &&
+        integration.isActive &&
+        integration.environment === "PRODUCTION",
+    ) ||
+    integrations.find(
+      (integration) => integration.provider === "INTER" && integration.isActive,
+    ) ||
+    integrations[0] ||
+    null;
+
+  const handleCopyChargeValue = async (
+    value: string | null | undefined,
+    label: string,
+  ) => {
+    if (!value) {
+      toast.error(`Nenhum valor de ${label.toLowerCase()} disponível.`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado.`);
+    } catch (error) {
+      toast.error(`Não foi possível copiar ${label.toLowerCase()}.`);
+    }
+  };
+
+  const handleOpenChargeModal = async (record: FinancialRecord) => {
+    const availableReason = getChargeDisabledReason(
+      record,
+      bankIntegrations.some(
+        (integration) => integration.provider === "INTER" && integration.isActive,
+      ),
+    );
+
+    if (availableReason && bankIntegrations.length > 0) {
+      toast.error(availableReason);
+      return;
+    }
+
+    try {
+      const integrations =
+        bankIntegrations.length > 0 ? bankIntegrations : await loadBankingOperations();
+      const activeIntegrations = integrations.filter(
+        (integration) => integration.provider === "INTER" && integration.isActive,
+      );
+
+      const reason = getChargeDisabledReason(record, activeIntegrations.length > 0);
+      if (reason) {
+        toast.error(reason);
+        return;
+      }
+
+      const preferredIntegration = getPreferredBankIntegration(activeIntegrations);
+      if (!preferredIntegration) {
+        toast.error("Nenhuma integração bancária ativa foi encontrada.");
+        return;
+      }
+
+      setSelectedChargeRecord(record);
+      setCreatedCharge(null);
+      setChargeFormData({
+        bankIntegrationId: preferredIntegration.id,
+        chargeType: "BOLETO",
+        dueDate: String(record.dueDate || "").split("T")[0] || "",
+      });
+      setShowChargeModal(true);
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message ||
+          "Erro ao preparar a cobrança bancária.",
+      );
+    }
+  };
+
+  const handleSubmitCharge = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedChargeRecord) {
+      toast.error("Selecione uma transação para gerar a cobrança.");
+      return;
+    }
+
+    if (!chargeFormData.bankIntegrationId) {
+      toast.error("Selecione uma integração bancária.");
+      return;
+    }
+
+    if (!chargeFormData.dueDate) {
+      toast.error("Informe a data de vencimento da cobrança.");
+      return;
+    }
+
+    setChargeSubmitting(true);
+    try {
+      const response = await api.post("/banking/charges", {
+        bankIntegrationId: chargeFormData.bankIntegrationId,
+        financialRecordId: selectedChargeRecord.id,
+        chargeType: chargeFormData.chargeType,
+        dueDate: chargeFormData.dueDate,
+      });
+
+      setCreatedCharge(response.data);
+      toast.success("Cobrança bancária gerada com sucesso.");
+      await loadBankingOperations();
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message || "Erro ao gerar cobrança bancária.",
+      );
+    } finally {
+      setChargeSubmitting(false);
+    }
+  };
+
   const handleOpenIntegrationModal = (integration?: BankIntegration) => {
     setLastHealthcheck(null);
 
@@ -1525,6 +1793,9 @@ export function Financial(props: FinancialProps = {}) {
         certificateBase64: "",
         webhookSecret: "",
         tokenUrl: "",
+        metadataJson: integration.metadata
+          ? JSON.stringify(integration.metadata, null, 2)
+          : "",
       });
     } else {
       setEditingIntegration(null);
@@ -1545,6 +1816,7 @@ export function Financial(props: FinancialProps = {}) {
         certificateBase64: "",
         webhookSecret: "",
         tokenUrl: "",
+        metadataJson: "",
       });
     }
 
@@ -1561,6 +1833,23 @@ export function Financial(props: FinancialProps = {}) {
 
     setSubmitting(true);
     try {
+      let parsedMetadata: Record<string, any> | undefined;
+      if (integrationFormData.metadataJson.trim()) {
+        try {
+          const candidate = JSON.parse(integrationFormData.metadataJson);
+          if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+            toast.error("A configuracao avancada do Banco Inter deve ser um objeto JSON");
+            setSubmitting(false);
+            return;
+          }
+          parsedMetadata = candidate;
+        } catch {
+          toast.error("A configuracao avancada do Banco Inter esta com JSON invalido");
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const payload = {
         displayName: integrationFormData.displayName.trim(),
         provider: "INTER",
@@ -1574,6 +1863,7 @@ export function Financial(props: FinancialProps = {}) {
         accountNumber: integrationFormData.accountNumber || undefined,
         webhookEnabled: integrationFormData.webhookEnabled,
         webhookUrl: integrationFormData.webhookUrl || undefined,
+        metadata: parsedMetadata ?? {},
         credentials: {
           clientId: integrationFormData.clientId || undefined,
           clientSecret: integrationFormData.clientSecret || undefined,
@@ -3589,6 +3879,43 @@ export function Financial(props: FinancialProps = {}) {
                           <div className="flex gap-1.5 justify-end">
                             {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
                               <button
+                                onClick={() => handleOpenChargeModal(record)}
+                                disabled={!!getChargeDisabledReason(
+                                  record,
+                                  bankIntegrations.some(
+                                    (integration) =>
+                                      integration.provider === "INTER" &&
+                                      integration.isActive,
+                                  ),
+                                )}
+                                className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
+                                  !getChargeDisabledReason(
+                                    record,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  )
+                                    ? "bg-amber-500/10 border-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-white"
+                                    : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
+                                }`}
+                                title={
+                                  getChargeDisabledReason(
+                                    record,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  ) || "Gerar cobrança bancária"
+                                }
+                              >
+                                <FileText size={14} />
+                              </button>
+                            )}
+                            {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
+                              <button
                                 onClick={() => handleOpenSettleModal(record)}
                                 disabled={!hasPartiesToSettle(record)}
                                 className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
@@ -3691,6 +4018,45 @@ export function Financial(props: FinancialProps = {}) {
                             className="px-6 py-2 whitespace-nowrap text-right"
                             onClick={(e) => e.stopPropagation()}
                           >
+                            {isOpenRecord(child as FinancialRecord) && (
+                              <button
+                                onClick={() =>
+                                  handleOpenChargeModal(child as FinancialRecord)
+                                }
+                                disabled={!!getChargeDisabledReason(
+                                  child as FinancialRecord,
+                                  bankIntegrations.some(
+                                    (integration) =>
+                                      integration.provider === "INTER" &&
+                                      integration.isActive,
+                                  ),
+                                )}
+                                className={`p-1.5 rounded transition-colors ${
+                                  !getChargeDisabledReason(
+                                    child as FinancialRecord,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  )
+                                    ? "text-amber-300 hover:bg-amber-500/10"
+                                    : "text-slate-600 cursor-not-allowed opacity-50"
+                                }`}
+                                title={
+                                  getChargeDisabledReason(
+                                    child as FinancialRecord,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  ) || "Gerar cobrança bancária"
+                                }
+                              >
+                                <FileText size={14} />
+                              </button>
+                            )}
                             {isOpenRecord(child as FinancialRecord) && (
                               <button
                                 onClick={() =>
@@ -4108,6 +4474,109 @@ export function Financial(props: FinancialProps = {}) {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-800">
+                <h3 className="text-lg font-bold text-white">
+                  Cobranças Geradas
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Últimas cobranças emitidas pelo hub bancário.
+                </p>
+              </div>
+              <div className="divide-y divide-slate-800">
+                {bankCharges.slice(0, 8).map((charge) => (
+                  <div
+                    key={charge.id}
+                    className="px-6 py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold truncate">
+                        {charge.financialRecord?.description || "Cobrança"}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {charge.bankIntegration?.displayName || "Sem integração"} •{" "}
+                        {charge.chargeType} • {charge.status}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <span className="text-sm font-bold text-emerald-300">
+                        {formatCurrency(Number(charge.amount))}
+                      </span>
+                      {charge.digitableLine && (
+                        <button
+                          onClick={() =>
+                            handleCopyChargeValue(
+                              charge.digitableLine,
+                              "Linha digitável",
+                            )
+                          }
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center gap-1"
+                        >
+                          <Copy size={12} />
+                          Linha
+                        </button>
+                      )}
+                      {charge.pixCopyPaste && (
+                        <button
+                          onClick={() =>
+                            handleCopyChargeValue(charge.pixCopyPaste, "PIX copia e cola")
+                          }
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center gap-1"
+                        >
+                          <Copy size={12} />
+                          PIX
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {bankCharges.length === 0 && (
+                  <div className="px-6 py-10 text-center text-slate-500">
+                    Nenhuma cobrança gerada ainda.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-800">
+                <h3 className="text-lg font-bold text-white">
+                  Pedidos de Pagamento
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Área preparada para PIX pagamento e futuras saídas bancárias.
+                </p>
+              </div>
+              <div className="divide-y divide-slate-800">
+                {bankPaymentRequests.slice(0, 8).map((request) => (
+                  <div
+                    key={request.id}
+                    className="px-6 py-4 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold truncate">
+                        {request.financialRecord?.description || "Pagamento"}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {request.bankIntegration?.displayName || "Sem integração"} •{" "}
+                        {request.paymentType} • {request.status}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-red-300">
+                      {formatCurrency(Number(request.amount))}
+                    </span>
+                  </div>
+                ))}
+                {bankPaymentRequests.length === 0 && (
+                  <div className="px-6 py-10 text-center text-slate-500">
+                    Nenhum pedido de pagamento gerado ainda.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -5026,6 +5495,226 @@ export function Financial(props: FinancialProps = {}) {
         </div>
       )}
 
+      {showChargeModal && selectedChargeRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <form onSubmit={handleSubmitCharge}>
+              <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    Gerar Cobrança Bancária
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {selectedChargeRecord.description} •{" "}
+                    {formatCurrency(getOutstandingAmount(selectedChargeRecord))}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowChargeModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-wider text-slate-500 font-bold">
+                    Devedor vinculado
+                  </p>
+                  <p className="text-white font-semibold mt-2">
+                    {getDebtorParty(selectedChargeRecord)?.contact?.name || "Não informado"}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Documento:{" "}
+                    {getContactDocument(getDebtorParty(selectedChargeRecord)?.contact) ||
+                      "Não informado"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Integração bancária
+                    </span>
+                    <select
+                      value={chargeFormData.bankIntegrationId}
+                      onChange={(e) =>
+                        setChargeFormData((prev) => ({
+                          ...prev,
+                          bankIntegrationId: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    >
+                      <option value="">Selecione</option>
+                      {bankIntegrations
+                        .filter(
+                          (integration) =>
+                            integration.provider === "INTER" && integration.isActive,
+                        )
+                        .map((integration) => (
+                          <option key={integration.id} value={integration.id}>
+                            {integration.displayName} • {integration.environment}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Tipo de cobrança
+                    </span>
+                    <select
+                      value={chargeFormData.chargeType}
+                      onChange={(e) =>
+                        setChargeFormData((prev) => ({
+                          ...prev,
+                          chargeType: e.target.value as "PIX" | "BOLETO",
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    >
+                      <option value="BOLETO">Boleto</option>
+                      <option value="PIX">Pix cobrança</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Vencimento
+                    </span>
+                    <input
+                      type="date"
+                      value={chargeFormData.dueDate}
+                      onChange={(e) =>
+                        setChargeFormData((prev) => ({
+                          ...prev,
+                          dueDate: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    />
+                  </label>
+                </div>
+
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                  <p className="text-sm text-amber-100">
+                    O Dr.X vai gerar a cobrança a partir da transação e salvar o
+                    retorno no Banking Hub. A geração de <b>PDF do boleto</b> e o
+                    envio automatizado ainda dependem da próxima etapa da
+                    integração.
+                  </p>
+                  {chargeFormData.chargeType === "PIX" && (
+                    <p className="mt-3 text-xs text-amber-200">
+                      Nesta etapa, o provider LIVE do Banco Inter foi fechado para
+                      <b> boleto/cobrança</b>. O fluxo de <b>Pix cobrança</b> entra
+                      na próxima onda da integração bancária.
+                    </p>
+                  )}
+                </div>
+
+                {createdCharge && (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-white">
+                          Cobrança Gerada
+                        </h3>
+                        <p className="text-sm text-slate-300 mt-1">
+                          Status: {createdCharge.status} •{" "}
+                          {createdCharge.chargeType}
+                        </p>
+                      </div>
+                      <span className="text-lg font-bold text-emerald-300">
+                        {formatCurrency(Number(createdCharge.amount))}
+                      </span>
+                    </div>
+
+                    {createdCharge.digitableLine && (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 font-bold">
+                          Linha digitável
+                        </p>
+                        <p className="text-white font-mono text-sm break-all mt-2">
+                          {createdCharge.digitableLine}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyChargeValue(
+                              createdCharge.digitableLine,
+                              "Linha digitável",
+                            )
+                          }
+                          className="mt-3 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 text-sm font-semibold inline-flex items-center gap-2"
+                        >
+                          <Copy size={14} />
+                          Copiar linha digitável
+                        </button>
+                      </div>
+                    )}
+
+                    {createdCharge.pixCopyPaste && (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 font-bold">
+                          PIX copia e cola
+                        </p>
+                        <p className="text-white font-mono text-sm break-all mt-2">
+                          {createdCharge.pixCopyPaste}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopyChargeValue(
+                              createdCharge.pixCopyPaste,
+                              "PIX copia e cola",
+                            )
+                          }
+                          className="mt-3 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 text-sm font-semibold inline-flex items-center gap-2"
+                        >
+                          <Copy size={14} />
+                          Copiar PIX
+                        </button>
+                      </div>
+                    )}
+
+                    {createdCharge.barcode && !createdCharge.digitableLine && (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 font-bold">
+                          Código de barras
+                        </p>
+                        <p className="text-white font-mono text-sm break-all mt-2">
+                          {createdCharge.barcode}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-4 border-t border-slate-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowChargeModal(false)}
+                  className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="submit"
+                  disabled={chargeSubmitting}
+                  className="px-4 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-white font-semibold"
+                >
+                  {chargeSubmitting ? "Gerando..." : "Gerar cobrança"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Conta Bancária */}
       {showIntegrationModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -5273,6 +5962,28 @@ export function Financial(props: FinancialProps = {}) {
                       />
                     </label>
                   </div>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Configuracao avancada do Inter (JSON opcional)
+                    </span>
+                    <textarea
+                      value={integrationFormData.metadataJson}
+                      onChange={(e) =>
+                        setIntegrationFormData((prev) => ({
+                          ...prev,
+                          metadataJson: e.target.value,
+                        }))
+                      }
+                      rows={7}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 font-mono text-sm text-white"
+                      placeholder={'{\n  "scope": "boleto-cobranca.read boleto-cobranca.write",\n  "apiBaseUrl": "https://cdpj-sandbox.partners.uatinter.co",\n  "chargePath": "/cobranca/v3/cobrancas",\n  "timeoutMs": 30000,\n  "numDaysAgenda": 60\n}'}
+                    />
+                    <p className="text-xs text-slate-500">
+                      Use apenas se precisar sobrescrever o padrao do provider para
+                      sandbox/producao, escopos ou paths do Banco Inter.
+                    </p>
+                  </label>
                 </div>
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 space-y-4">

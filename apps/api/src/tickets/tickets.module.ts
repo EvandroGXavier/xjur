@@ -12,7 +12,7 @@ import { AgentModule } from '../agent/agent.module';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [ConfigModule, AuthModule, ContactsModule, AgentModule, forwardRef(() => WhatsappModule), forwardRef(() => TelegramModule)],
+  imports: [ConfigModule, AuthModule, forwardRef(() => ContactsModule), AgentModule, forwardRef(() => WhatsappModule), forwardRef(() => TelegramModule)],
   controllers: [TicketsController],
   providers: [TicketsService, TicketsGateway, PrismaService],
   exports: [TicketsService, TicketsGateway],

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search, HelpCircle, Download, Upload, ExternalLink, Printer, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search, HelpCircle, Download, Upload, ExternalLink, Printer, CheckCircle2, XCircle } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
@@ -1311,9 +1311,13 @@ export function ContactForm() {
     } catch (err: any) {
         console.error(err);
         const message = err.response?.data?.message || err.message || 'Erro ao conectar com servidor';
-        
         const errorDetail = err.response?.data || err;
         const errorString = typeof errorDetail === 'object' ? JSON.stringify(errorDetail, null, 2) : String(errorDetail);
+        
+        let finalMessage = message;
+        if (err.response?.status === 409 && err.response?.data?.duplicateField) {
+            finalMessage = `Já existe um contato cadastrado com este ${err.response.data.duplicateField}.`;
+        }
 
         toast.error(`Erro ao salvar contato`, {
             description: message,
@@ -1896,7 +1900,7 @@ export function ContactForm() {
                              <div className="space-y-2 md:col-span-3">
                                  <label className="text-sm font-medium text-slate-400">
                                      {formData.personType === 'PJ' ? 'Nome Fantasia *' : 'Nome Completo *'}
-                                 </label>
+                                  </label>
                                  <input 
                                     autoFocus
                                     required
@@ -1913,27 +1917,77 @@ export function ContactForm() {
                                  <label className="text-sm font-medium text-slate-400">
                                      Celular / WhatsApp {requireOneInfo ? '*' : ''}
                                  </label>
-                                 <input 
-                                    value={formData.whatsapp || ''}
-                                    onChange={e => setFormData({...formData, whatsapp: masks.phone(e.target.value)})}
-                                    onBlur={e => handleBlurLookup('whatsapp', e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                    placeholder="(00) 00000-0000"
-                                    maxLength={15}
-                                 />
+                                 <div className="relative group">
+                                     <input 
+                                        value={formData.whatsapp || ''}
+                                        onChange={e => setFormData({...formData, whatsapp: masks.phone(e.target.value)})}
+                                        onBlur={e => handleBlurLookup('whatsapp', e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 pr-16"
+                                        placeholder="(00) 00000-0000"
+                                        maxLength={15}
+                                     />
+                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                         {formData.whatsapp && (
+                                             formData.metadata?.whatsappPresence?.[formData.whatsapp.replace(/\D/g, '')] === true ? (
+                                                 <button
+                                                     type="button"
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         const num = formData.whatsapp.replace(/\D/g, '');
+                                                         const waNum = num.length > 11 || num.startsWith('55') ? num : `55${num}`;
+                                                         window.open(`https://wa.me/${waNum}`, '_blank');
+                                                     }}
+                                                     className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 rounded text-emerald-500 transition-all"
+                                                     title="Chamar no WhatsApp"
+                                                 >
+                                                     <MessageSquare size={16} />
+                                                 </button>
+                                             ) : (
+                                                 <div className="p-1.5 text-slate-500">
+                                                     <Phone size={16} className={formData.metadata?.whatsappPresence?.[formData.whatsapp.replace(/\D/g, '')] === false ? "text-red-500/50" : ""} title={formData.metadata?.whatsappPresence?.[formData.whatsapp.replace(/\D/g, '')] === false ? "Não possui WhatsApp" : "Telefone"} />
+                                                 </div>
+                                             )
+                                         )}
+                                     </div>
+                                 </div>
                              </div>
 
                              {/* Telefone */}
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400">Telefone Fixo</label>
-                                 <input 
-                                    value={formData.phone || ''}
-                                    onChange={e => setFormData({...formData, phone: masks.phone(e.target.value)})}
-                                    onBlur={e => handleBlurLookup('phone', e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                    placeholder="(00) 0000-0000"
-                                    maxLength={14}
-                                 />
+                                 <div className="relative group">
+                                     <input 
+                                        value={formData.phone || ''}
+                                        onChange={e => setFormData({...formData, phone: masks.phone(e.target.value)})}
+                                        onBlur={e => handleBlurLookup('phone', e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 pr-16"
+                                        placeholder="(00) 0000-0000"
+                                        maxLength={14}
+                                     />
+                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                         {formData.phone && (
+                                             formData.metadata?.whatsappPresence?.[formData.phone.replace(/\D/g, '')] === true ? (
+                                                 <button
+                                                     type="button"
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         const num = formData.phone.replace(/\D/g, '');
+                                                         const waNum = num.length > 11 || num.startsWith('55') ? num : `55${num}`;
+                                                         window.open(`https://wa.me/${waNum}`, '_blank');
+                                                     }}
+                                                     className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 rounded text-emerald-500 transition-all"
+                                                     title="Chamar no WhatsApp"
+                                                 >
+                                                     <MessageSquare size={16} />
+                                                 </button>
+                                             ) : (
+                                                 <div className="p-1.5 text-slate-500">
+                                                     <Phone size={16} className={formData.metadata?.whatsappPresence?.[formData.phone.replace(/\D/g, '')] === false ? "text-red-500/50" : ""} title={formData.metadata?.whatsappPresence?.[formData.phone.replace(/\D/g, '')] === false ? "Não possui WhatsApp" : "Telefone"} />
+                                                 </div>
+                                             )
+                                         )}
+                                     </div>
+                                 </div>
                              </div>
 
                              {/* WhatsApp Full ID */}
@@ -1941,7 +1995,7 @@ export function ContactForm() {
                                  <label className="text-sm font-medium text-slate-400 flex items-center gap-1">
                                      WhatsApp ID (Sistema)
                                      <HelpCircle size={12} className="text-slate-500" title="Identificador técnico do WhatsApp (ex: 55... @s.whatsapp.net)" />
-                                 </label>
+                                  </label>
                                  <input 
                                     value={formData.whatsappFullId || ''}
                                     onChange={e => setFormData({...formData, whatsappFullId: e.target.value})}

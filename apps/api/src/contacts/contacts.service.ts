@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -10,12 +10,15 @@ import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto';
 import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class ContactsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly enrichmentService: EnrichmentService,
+    @Inject(forwardRef(() => WhatsappService))
+    private readonly whatsappService: WhatsappService,
   ) {}
 
   private async getContactOrThrow(contactId: string, tenantId: string, include?: Record<string, any>) {
@@ -231,11 +234,7 @@ export class ContactsService {
 
     const duplicate = await this.findDuplicateContact(tenantId, data);
     if (duplicate) {
-      throw new ConflictException({
-        message: 'Contato ja cadastrado com os mesmos dados unicos.',
-        contactId: duplicate.id,
-        duplicateField: duplicate.matchedField,
-      });
+      throw new ConflictException(`Já existe um contato cadastrado (${duplicate.name}) com este ${duplicate.matchedField}.`);
     }
 
     const {
@@ -347,7 +346,9 @@ export class ContactsService {
       },
     });
 
-    return this.flattenContact(contact);
+    const result = this.flattenContact(contact);
+    await this.syncAdditionalContacts(contact.id, tenantId);
+    return result;
   }
 
   async findAll(
@@ -607,11 +608,7 @@ export class ContactsService {
 
     const duplicate = await this.findDuplicateContact(tenantId, fieldsWithNewUniqueValues, id);
     if (duplicate) {
-      throw new ConflictException({
-        message: 'Atualizacao causaria duplicidade com outro contato baseada nas chaves unicas.',
-        contactId: duplicate.id,
-        duplicateField: duplicate.matchedField,
-      });
+      throw new ConflictException(`Já existe um contato cadastrado (${duplicate.name}) com este ${duplicate.matchedField}.`);
     }
 
     const {
@@ -751,7 +748,9 @@ export class ContactsService {
       },
     });
 
-    return this.flattenContact(contact);
+    const result = this.flattenContact(contact);
+    await this.syncAdditionalContacts(contact.id, tenantId);
+    return result;
   }
 
   // Helper to merge nested details back to flat structure for frontend compatibility
@@ -843,31 +842,31 @@ export class ContactsService {
       const hitName = this.normalizeText(hit.name);
 
       if (name && hitName === name) {
-        return { id: hit.id, matchedField: 'nome' };
+        return { id: hit.id, name: hit.name, matchedField: 'nome' };
       }
       if (email && !isPlaceholderEmail(email) && hitEmail === email) {
-        return { id: hit.id, matchedField: 'e-mail' };
+        return { id: hit.id, name: hit.name, matchedField: 'e-mail' };
       }
       if (
         whatsappMatch &&
         (hitWhatsappMatch === whatsappMatch || hitPhoneMatch === whatsappMatch)
       ) {
-        return { id: hit.id, matchedField: 'celular/whatsapp' };
+        return { id: hit.id, name: hit.name, matchedField: 'celular/whatsapp' };
       }
       if (
         phoneMatch &&
         (hitPhoneMatch === phoneMatch || hitWhatsappMatch === phoneMatch)
       ) {
-        return { id: hit.id, matchedField: 'telefone' };
+        return { id: hit.id, name: hit.name, matchedField: 'telefone' };
       }
       if (document && hitDocument === document) {
-        return { id: hit.id, matchedField: 'documento' };
+        return { id: hit.id, name: hit.name, matchedField: 'documento' };
       }
       if (cpf && hitCpf === cpf) {
-        return { id: hit.id, matchedField: 'cpf' };
+        return { id: hit.id, name: hit.name, matchedField: 'cpf' };
       }
       if (cnpj && hitCnpj === cnpj) {
-        return { id: hit.id, matchedField: 'cnpj' };
+        return { id: hit.id, name: hit.name, matchedField: 'cnpj' };
       }
     }
 
@@ -1977,6 +1976,107 @@ export class ContactsService {
       }
       return new Date(dateStr);
     } catch { return undefined; }
+  }
+
+  private async syncAdditionalContacts(contactId: string, tenantId: string) {
+    try {
+      const contact = await this.prisma.contact.findUnique({
+        where: { id: contactId },
+        include: { additionalContacts: true }
+      });
+
+      if (!contact) return;
+
+      const currentValues = new Set(contact.additionalContacts.map(ac => ac.value.trim().toLowerCase()));
+      const toCreate: { type: string; value: string; nomeContatoAdicional: string }[] = [];
+
+      // Check primary fields
+      if (contact.email && contact.email.trim() && !currentValues.has(contact.email.trim().toLowerCase())) {
+        toCreate.push({ type: 'EMAIL', value: contact.email, nomeContatoAdicional: 'E-mail Principal' });
+      }
+
+      if (contact.whatsapp && contact.whatsapp.trim() && !currentValues.has(contact.whatsapp.trim().toLowerCase())) {
+          toCreate.push({ type: 'WHATSAPP', value: contact.whatsapp, nomeContatoAdicional: 'WhatsApp Principal' });
+      }
+
+      if (contact.phone && contact.phone.trim() && !currentValues.has(contact.phone.trim().toLowerCase())) {
+          toCreate.push({ type: 'TELEFONE', value: contact.phone, nomeContatoAdicional: 'Telefone Principal' });
+      }
+
+      if (toCreate.length > 0) {
+        await this.prisma.additionalContact.createMany({
+          data: toCreate.map(ac => ({
+            ...ac,
+            contactId
+          }))
+        });
+      }
+
+      // Automatically trigger WhatsApp presence check if we have a connection
+      this.triggerWhatsAppCheck(contactId, tenantId).catch(err => {
+          console.warn(`WhatsApp check failed for contact ${contactId}: ${err.message}`);
+      });
+
+    } catch (e) {
+      console.error(`Error syncing additional contacts: ${e.message}`);
+    }
+  }
+
+  /**
+   * Triggers an asynchronous check for WhatsApp presence for all numbers in the contact.
+   * Updates contact metadata with the result.
+   */
+  private async triggerWhatsAppCheck(contactId: string, tenantId: string) {
+    const contact = await this.prisma.contact.findUnique({
+      where: { id: contactId },
+      include: { additionalContacts: true }
+    });
+    
+    if (!contact) return;
+
+    // Find an active connection for this tenant
+    const connections = await this.prisma.connection.findMany({
+        where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' }
+    });
+
+    if (connections.length === 0) return;
+    const connectionId = connections[0].id;
+
+    const numbersToCheck = new Set<string>();
+    if (contact.whatsapp) numbersToCheck.add(contact.whatsapp);
+    if (contact.phone) numbersToCheck.add(contact.phone);
+    contact.additionalContacts.forEach(ac => {
+        if (['WHATSAPP', 'TELEFONE', 'CELULAR'].includes(ac.type.toUpperCase())) {
+            numbersToCheck.add(ac.value);
+        }
+    });
+
+    const results: Record<string, boolean> = {};
+
+    for (const num of numbersToCheck) {
+        const cleanNum = num.replace(/\D/g, '');
+        if (!cleanNum) continue;
+
+        try {
+            const check = await this.whatsappService.checkNumber(connectionId, cleanNum);
+            results[cleanNum] = check.exists;
+        } catch (e) {
+            console.warn(`Failed to check WhatsApp for ${cleanNum}: ${e.message}`);
+        }
+    }
+
+    // Update contact metadata with WhatsApp presence info
+    const currentMetadata = this.parseContactMetadata(contact.metadata);
+    await this.prisma.contact.update({
+        where: { id: contactId },
+        data: {
+            metadata: {
+                ...currentMetadata,
+                whatsappPresence: results,
+                whatsappCheckedAt: new Date().toISOString()
+            }
+        }
+    });
   }
 
   private parseNumericValue(val: any) {

@@ -94,6 +94,17 @@ export interface BankingProvider {
       dueDate?: string | null;
       payerName?: string | null;
       payerDocument?: string | null;
+      payerEmail?: string | null;
+      payerPhone?: string | null;
+      payerAddress?: {
+        zipCode?: string | null;
+        street?: string | null;
+        number?: string | null;
+        complement?: string | null;
+        district?: string | null;
+        city?: string | null;
+        state?: string | null;
+      } | null;
       description: string;
     },
   ): Promise<BankingChargeResult>;

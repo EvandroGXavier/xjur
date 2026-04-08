@@ -461,4 +461,31 @@ export class EvolutionService {
       throw error;
     }
   }
+
+  /**
+   * Verifica se um número possui conta no WhatsApp.
+   */
+  async checkNumber(instanceName: string, number: string, config?: EvolutionConfig) {
+    try {
+      const client = this.getClient(config);
+      const formattedNumber = this.formatNumber(number);
+      const response = await client.post(`/chat/whatsappNumbers/${instanceName}`, {
+        numbers: [formattedNumber],
+      });
+      
+      const results = response.data;
+      if (Array.isArray(results) && results.length > 0) {
+        // Retorna o primeiro resultado formatado
+        return {
+          exists: results[0].exists || results[0].isWhatsApp || false,
+          jid: results[0].jid || results[0].number || null,
+          number: results[0].number
+        };
+      }
+      return { exists: false };
+    } catch (error) {
+      this.logger.error(`Error checking number ${number} via "${instanceName}": ${error.message}`);
+      return { exists: false, error: error.message };
+    }
+  }
 }
