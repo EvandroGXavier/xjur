@@ -43,7 +43,7 @@ import {
     type ProcessAdvancedFilterOptions,
 } from '../../components/processos/AdvancedProcessFilterModal';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
-import { helpProcesses } from '../../data/helpManuals';
+import { helpProcesses } from '../../data/helpProcesses';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';

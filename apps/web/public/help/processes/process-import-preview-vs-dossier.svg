@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" fill="none">
+  <defs>
+    <linearGradient id="bg2" x1="60" y1="40" x2="1140" y2="680" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#020617"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" rx="28" fill="url(#bg2)"/>
+  <text x="70" y="88" fill="#F8FAFC" font-size="34" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Escolha o fluxo certo</text>
+  <text x="70" y="124" fill="#94A3B8" font-size="18" font-family="Segoe UI, Arial, sans-serif">A mesma acao de importar tem dois objetivos diferentes</text>
+
+  <rect x="70" y="170" width="500" height="470" rx="28" fill="#0F172A" stroke="#6366F1" stroke-width="2"/>
+  <text x="108" y="224" fill="#C7D2FE" font-size="28" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Pre-cadastro</text>
+  <text x="108" y="260" fill="#A5B4FC" font-size="18" font-family="Segoe UI, Arial, sans-serif">Quando usar</text>
+  <text x="108" y="290" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Novo Processo &gt; Importar PDF</text>
+  <text x="108" y="340" fill="#A5B4FC" font-size="18" font-family="Segoe UI, Arial, sans-serif">Entrega principal</text>
+  <text x="108" y="370" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">CNJ, tribunal, sistema, classe, vara</text>
+  <text x="108" y="398" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Partes iniciais e dados de qualificacao</text>
+  <text x="108" y="426" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Resumo para revisao antes de salvar</text>
+  <text x="108" y="476" fill="#A5B4FC" font-size="18" font-family="Segoe UI, Arial, sans-serif">Nao faz nesta etapa</text>
+  <text x="108" y="506" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Nao deve depender do CNJ para repetir a capa</text>
+  <text x="108" y="534" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Nao precisa varrer o PDF inteiro sem ganho real</text>
+  <rect x="108" y="570" width="330" height="42" rx="14" fill="#312E81"/>
+  <text x="128" y="598" fill="#EEF2FF" font-size="16" font-family="Segoe UI, Arial, sans-serif">Objetivo: criar o cadastro rapido e bem revisado</text>
+
+  <rect x="630" y="170" width="500" height="470" rx="28" fill="#0F172A" stroke="#8B5CF6" stroke-width="2"/>
+  <text x="668" y="224" fill="#E9D5FF" font-size="28" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Dossie do processo</text>
+  <text x="668" y="260" fill="#D8B4FE" font-size="18" font-family="Segoe UI, Arial, sans-serif">Quando usar</text>
+  <text x="668" y="290" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Processo ja salvo &gt; Importar PDF do processo</text>
+  <text x="668" y="340" fill="#D8B4FE" font-size="18" font-family="Segoe UI, Arial, sans-serif">Entrega principal</text>
+  <text x="668" y="370" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Timeline e andamentos relevantes</text>
+  <text x="668" y="398" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Leitura operacional do PDF</text>
+  <text x="668" y="426" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Enriquecimento do caso e das partes</text>
+  <text x="668" y="476" fill="#D8B4FE" font-size="18" font-family="Segoe UI, Arial, sans-serif">Melhor momento</text>
+  <text x="668" y="506" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Depois que o cadastro minimo ja esta salvo</text>
+  <text x="668" y="534" fill="#E2E8F0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Quando voce precisa aprofundar a leitura do caso</text>
+  <rect x="668" y="570" width="334" height="42" rx="14" fill="#581C87"/>
+  <text x="688" y="598" fill="#FAE8FF" font-size="16" font-family="Segoe UI, Arial, sans-serif">Objetivo: enriquecer o processo e a sua operacao</text>
+
+  <path d="M590 404H610" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="600" cy="404" r="8" fill="#94A3B8"/>
+</svg>

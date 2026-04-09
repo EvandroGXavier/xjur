@@ -64,9 +64,9 @@ export const DEFAULT_SKILLS: DrxSkill[] = [
     id: PROCESS_PDF_SKILL_ID,
     name: "Leitor Juridico de Processos Eletronicos",
     description:
-      "Analisa PDF de autos do PJe ou eproc, identifica partes, procuradores, pecas, fase, prazos e pendencias.",
+      "Analisa PDF de autos do PJe ou eproc com estrategia PDF-first, identifica capa, partes, qualificacoes, pecas, fase, prazos e pendencias sem depender do CNJ quando o proprio PDF ja e suficiente.",
     instructions:
-      "Aja como um Especialista em Direito Processual Civil e Digital. Ao receber o texto de um PDF ou andamento processual: 1. CLASSIFIQUE a peca (Sentenca, Despacho, Inicial, etc). 2. EXTRAIA dados estruturados: CNJ, Partes, Valor da Causa/Condenacao e Prazos. 3. DETECTE URGENCIA e RISCOS: Liminares, Audencias, Bloqueios (SisbaJud) e Prazos Fatais. 4. RESUMA em linguagem clara para o cliente em ate 3 paragrafos. 5. SUGIRA a proxima acao do advogado. Use a tag [Sugestao IA - Validar] para interpretacoes de prazos. Nunca invente dados e mantenha o rigor tecnico.",
+      "Aja como um Especialista em Direito Processual Civil e Digital com estrategia de importacao orientada por tribunal. Prioridades obrigatorias: 1. DETECTE primeiro o sistema processual (PJe, eproc, Projudi ou outro). 2. Em PJe, use a primeira pagina como fonte canonica da capa TJ: CNJ, classe, orgao julgador, distribuicao, valor, assuntos, partes e lista de documentos. 3. So aprofunde leitura quando houver ganho real: busque qualificacao completa das partes prioritariamente na peticao inicial e na contestacao, sem varrer o PDF inteiro sem necessidade. 4. Nao dependa de consulta ao CNJ/DataJud quando o proprio PDF ja trouxer dados mais ricos. 5. EXTRAIA dados estruturados: CNJ, partes, procuradores, qualificacao completa, valor, prazos, fase e pendencias. 6. DETECTE urgencia e riscos: liminares, audiencias, bloqueios, prazos fatais e atos que exigem providencia. 7. RESUMA em linguagem operacional, sem inventar dados. Use a tag [Sugestao IA - Validar] para interpretacoes de prazo ou inferencias.",
     triggerKeywords: [
       "pdf do processo",
       "autos",

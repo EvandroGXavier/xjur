@@ -1,10 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { extractTextFromPdfBuffer } from '../common/pdf-parse.util';
+import { extractTextFromPdfBuffer, type PdfTextParseOptions } from '../common/pdf-parse.util';
 
 type LegacyImportedParty = {
     name: string;
     type: string;
     document?: string;
+    rg?: string;
+    birthDate?: string;
+    motherName?: string;
+    fatherName?: string;
+    profession?: string;
+    nationality?: string;
+    civilStatus?: string;
+    address?: string;
+    qualificationText?: string;
     email?: string;
     phone?: string;
     oab?: string;
@@ -168,11 +177,28 @@ const CNJ_PREFERRED_PATTERNS = [
     new RegExp(String.raw`N[\u00ba\u00b0o]\s*(?:do\s+processo)?\s*[:\-]?\s*${CNJ_CAPTURE_PATTERN}`, 'i'),
     new RegExp(String.raw`PROCESSO\s*N[\u00ba\u00b0o]?\s*[:\-]?\s*${CNJ_CAPTURE_PATTERN}`, 'i'),
 ];
+const PDF_PREVIEW_FIRST_PAGES = 12;
+const PDF_PREVIEW_PJE_PAGE_BUDGET = 16;
+const PDF_PREVIEW_OCR_PAGE_BUDGET = 5;
+const CIVIL_STATUS_TERMS = [
+    'SOLTEIRO',
+    'SOLTEIRA',
+    'CASADO',
+    'CASADA',
+    'DIVORCIADO',
+    'DIVORCIADA',
+    'VIUVO',
+    'VIUVA',
+    'SEPARADO',
+    'SEPARADA',
+    'UNIAO ESTAVEL',
+    'CONVIVENTE',
+];
 
 @Injectable()
 export class ProcessPdfService {
     async extractDataFromPdf(fileBuffer: Buffer): Promise<ExtractedProcessData> {
-        const analysis = await this.analyzeFullProcessPdf(fileBuffer);
+        const analysis = await this.analyzePreviewProcessPdf(fileBuffer);
 
         return {
             cnj: analysis.cnj,
@@ -209,10 +235,19 @@ export class ProcessPdfService {
         const processClass = this.extractProcessClassPreferred(normalizedText);
         const title = processClass && cnj ? `${processClass} - ${cnj}` : processClass || cnj || 'Processo importado via PDF';
         const documents = this.extractDocuments(lines, normalizedText, courtSystem);
-        const metadata = this.buildMetadataSummary(normalizedText, parsed.pageCount, parsed.textLength, courtSystem, documents);
+        const qualificationSources = this.collectPartyQualificationSources(normalizedText, documents, courtSystem);
+        const metadata = {
+            ...this.buildMetadataSummary(normalizedText, parsed.pageCount, parsed.textLength, courtSystem, documents),
+            analysisMode: 'FULL',
+            cnjConsulted: false,
+            qualificationSourceCount: qualificationSources.length,
+        };
         const deadlineCandidates = this.extractDeadlineCandidates(normalizedText, documents);
         const proceduralActs = documents.filter((document) => this.isProceduralAct(document));
-        const parts = this.extractPartiesPreferred(normalizedText, courtSystem);
+        const parts = this.enrichPartiesWithQualificationSources(
+            this.extractPartiesPreferred(normalizedText, courtSystem),
+            qualificationSources,
+        );
         const description = this.buildDescription(normalizedText, documents);
         const importSource = this.resolveImportSource(courtSystem);
         const timelineReferenceType = courtSystem === 'Eproc' ? 'EVENT' : 'DOCUMENT_ID';
@@ -247,18 +282,107 @@ export class ProcessPdfService {
         };
     }
 
-    private async extractPdfText(fileBuffer: Buffer): Promise<{ text: string; pageCount: number; textLength: number; ocrStatus: FullProcessPdfAnalysis['ocrStatus'] }> {
+    private async analyzePreviewProcessPdf(fileBuffer: Buffer): Promise<FullProcessPdfAnalysis> {
+        const coverParsed = await this.extractPdfText(fileBuffer, { first: 1 });
+        const coverText = this.normalizeExtractedText(coverParsed.text);
+        const courtSystem = this.detectCourtSystem(coverText);
+        const previewPageBudget = courtSystem === 'PJe' ? PDF_PREVIEW_PJE_PAGE_BUDGET : PDF_PREVIEW_FIRST_PAGES;
+        const selectedPageCount = Math.min(coverParsed.pageCount || previewPageBudget, previewPageBudget);
+        const parsed =
+            selectedPageCount <= 1
+                ? coverParsed
+                : await this.extractPdfText(fileBuffer, {
+                      first: selectedPageCount,
+                  });
+
+        let normalizedText = this.normalizeExtractedText(parsed.text);
+        let lines = normalizedText
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        let documents = this.extractDocuments(lines, normalizedText, courtSystem);
+        let parts = this.extractPartiesPreferred(normalizedText, courtSystem);
+        let ocrStatus = parsed.ocrStatus;
+
+        if (courtSystem === 'PJe' && this.shouldTryPreviewOcr(normalizedText, parts, selectedPageCount)) {
+            const extraOcrText = await this.tryPreviewOcr(fileBuffer, selectedPageCount);
+            if (extraOcrText) {
+                normalizedText = this.normalizeExtractedText(`${normalizedText}\n\n${extraOcrText}`);
+                lines = normalizedText
+                    .split(/\r?\n/)
+                    .map((line) => line.trim())
+                    .filter(Boolean);
+                documents = this.extractDocuments(lines, normalizedText, courtSystem);
+                parts = this.extractPartiesPreferred(normalizedText, courtSystem);
+                ocrStatus = 'SUCCESS';
+            }
+        }
+
+        const qualificationSources = this.collectPartyQualificationSources(normalizedText, documents, courtSystem);
+        const enrichedParts = this.enrichPartiesWithQualificationSources(parts, qualificationSources);
+        const coverSource = coverText || normalizedText;
+        const cnj = this.extractCnj(coverSource) || this.extractCnj(normalizedText);
+        const processClass = this.extractProcessClassPreferred(coverSource) || this.extractProcessClassPreferred(normalizedText);
+        const title = processClass && cnj ? `${processClass} - ${cnj}` : processClass || cnj || 'Processo importado via PDF';
+        const deadlineCandidates = this.extractDeadlineCandidates(normalizedText, documents);
+        const proceduralActs = documents.filter((document) => this.isProceduralAct(document));
+        const metadata = {
+            ...this.buildMetadataSummary(normalizedText, parsed.pageCount, normalizedText.length, courtSystem, documents),
+            analysisMode: 'PREVIEW',
+            cnjConsulted: false,
+            processedPageCount: selectedPageCount,
+            qualificationSourceCount: qualificationSources.length,
+            importStrategy:
+                courtSystem === 'PJe'
+                    ? 'PJE_FIRST_PAGE_PLUS_EARLY_QUALIFICATION'
+                    : courtSystem === 'Eproc'
+                      ? 'EPROC_EARLY_PAGES_PREVIEW'
+                      : 'PDF_PREVIEW_FIRST_PAGES',
+        };
+
+        return {
+            cnj,
+            title,
+            court: this.extractCourtEnhanced(coverSource) || this.extractCourtEnhanced(normalizedText),
+            courtSystem,
+            vars: this.extractCourtDivisionPreferred(coverSource) || this.extractCourtDivisionPreferred(normalizedText),
+            district: this.extractDistrictEnhanced(coverSource) || this.extractDistrictEnhanced(normalizedText),
+            status: this.extractStatus(coverSource || normalizedText),
+            area: this.extractArea(processClass, coverSource || normalizedText),
+            subject: this.extractSubjectPreferred(coverSource) || this.extractSubjectPreferred(normalizedText),
+            class: processClass,
+            distributionDate:
+                this.extractDistributionDateEnhanced(coverSource) || this.extractDistributionDateEnhanced(normalizedText),
+            judge: this.extractJudgePreferred(coverSource) || this.extractJudgePreferred(normalizedText),
+            value: this.extractValue(coverSource) ?? this.extractValue(normalizedText),
+            description: this.buildDescription(normalizedText, documents),
+            parts: enrichedParts,
+            pageCount: parsed.pageCount,
+            textLength: normalizedText.length,
+            hasSelectableText: parsed.textLength > 100,
+            ocrStatus,
+            rawTextExcerpt: normalizedText.slice(0, 4000),
+            documents,
+            proceduralActs,
+            deadlineCandidates,
+            importSource: this.resolveImportSource(courtSystem),
+            timelineReferenceType: courtSystem === 'Eproc' ? 'EVENT' : 'DOCUMENT_ID',
+            metadata,
+        };
+    }
+
+    private async extractPdfText(fileBuffer: Buffer, options: PdfTextParseOptions = {}): Promise<{ text: string; pageCount: number; textLength: number; ocrStatus: FullProcessPdfAnalysis['ocrStatus'] }> {
         let ocrStatus: FullProcessPdfAnalysis['ocrStatus'] = 'NOT_NEEDED';
 
         try {
-            const parsed = await extractTextFromPdfBuffer(fileBuffer);
+            const parsed = await extractTextFromPdfBuffer(fileBuffer, options);
             let text = parsed.text || '';
             const pageCount = parsed.pageCount || 0;
 
             if (text.trim().length < 100 && pageCount > 0) {
                 try {
                     // Tenta OCR nos primeiros 3 páginas (onde geralmente está a capa/partes)
-                    const ocrText = await this.performOcr(fileBuffer, Math.min(pageCount, 3));
+                    const ocrText = await this.performOcr(fileBuffer, this.resolveOcrPageSelection(pageCount, options, 3));
                     if (ocrText.trim().length > 50) {
                         text = ocrText;
                         ocrStatus = 'SUCCESS';
@@ -280,7 +404,7 @@ export class ProcessPdfService {
         } catch (err) {
             console.error('[ProcessPdfService] PDF Parse Error:', err);
             try {
-                const ocrText = await this.performOcr(fileBuffer, 3);
+                const ocrText = await this.performOcr(fileBuffer, this.resolveOcrPageSelection(0, options, 3));
                 if (ocrText.trim().length > 50) {
                     return {
                         text: ocrText,
@@ -309,14 +433,70 @@ export class ProcessPdfService {
         }
     }
 
-    private async performOcr(buffer: Buffer, limitPages: number): Promise<string> {
+    private resolveOcrPageSelection(pageCount: number, options: PdfTextParseOptions = {}, fallbackLimit = 3) {
+        if (Array.isArray(options.partial) && options.partial.length > 0) {
+            return options.partial.filter((page) => Number(page) > 0);
+        }
+
+        if (typeof options.first === 'number' && typeof options.last === 'number') {
+            const start = Math.max(1, options.first);
+            const end = Math.max(start, options.last);
+            return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+        }
+
+        if (typeof options.first === 'number' && options.first > 0) {
+            return Array.from({ length: options.first }, (_, index) => index + 1);
+        }
+
+        if (typeof options.last === 'number' && options.last > 0 && pageCount > 0) {
+            const start = Math.max(pageCount - options.last + 1, 1);
+            return Array.from({ length: pageCount - start + 1 }, (_, index) => start + index);
+        }
+
+        return Array.from({ length: fallbackLimit }, (_, index) => index + 1);
+    }
+
+    private shouldTryPreviewOcr(text: string, parties: LegacyImportedParty[], selectedPageCount: number) {
+        if (selectedPageCount <= 1) return false;
+        const nonLawyerParties = (parties || []).filter((party) => !this.isLawyerType(party.type));
+        if (nonLawyerParties.length === 0) return false;
+
+        const cpfMatches = text.match(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g) || [];
+        const richParties = nonLawyerParties.filter(
+            (party) => party.document || party.phone || party.email || party.qualificationText || party.address,
+        );
+
+        return richParties.length === 0 || cpfMatches.length < Math.min(nonLawyerParties.length, 2);
+    }
+
+    private async tryPreviewOcr(fileBuffer: Buffer, selectedPageCount: number) {
+        const ocrPages = Array.from({ length: Math.min(selectedPageCount, PDF_PREVIEW_OCR_PAGE_BUDGET) }, (_, index) => index + 2).filter(
+            (page) => page > 1,
+        );
+        if (ocrPages.length === 0) {
+            return '';
+        }
+
+        try {
+            const ocrText = await this.performOcr(fileBuffer, ocrPages);
+            return ocrText.trim().length > 120 ? ocrText : '';
+        } catch (error) {
+            console.error('[ProcessPdfService] Preview OCR Error:', error);
+            return '';
+        }
+    }
+
+    private async performOcr(buffer: Buffer, pageSelection: number | number[]): Promise<string> {
         const pdfImgConvert = require('pdf-img-convert');
         const { createWorker } = require('tesseract.js');
+        const pageNumbers = Array.isArray(pageSelection)
+            ? pageSelection.filter((page) => Number(page) > 0)
+            : Array.from({ length: Math.max(1, pageSelection) }, (_, index) => index + 1);
 
         // Converter PDF para imagens (array de Buffers)
         const images = await pdfImgConvert.convert(buffer, {
             width: 1200,
-            page_numbers: Array.from({ length: limitPages }, (_, i) => i + 1),
+            page_numbers: pageNumbers,
         });
 
         let fullText = '';
@@ -778,6 +958,175 @@ export class ProcessPdfService {
             });
     }
 
+    private collectPartyQualificationSources(text: string, documents: PdfProcessDocument[], courtSystem?: string | null) {
+        const preferredTypes =
+            courtSystem === 'PJe'
+                ? ['PETICAO INICIAL', 'CONTESTACAO', 'CERTIDAO', 'MANIFESTACAO']
+                : ['PETICAO INICIAL', 'CONTESTACAO', 'PETICAO', 'MANIFESTACAO'];
+        const sources = new Map<string, string>();
+
+        const pushSource = (value?: string | null) => {
+            const snippet = String(value || '').trim();
+            if (!snippet) return;
+            const key = this.normalizeLooseText(snippet.slice(0, 300));
+            if (!key || sources.has(key)) return;
+            sources.set(key, snippet);
+        };
+
+        for (const document of documents || []) {
+            const normalizedType = this.normalizeLooseText(`${document.documentType || ''} ${document.label || ''}`);
+            if (!document.contentText) continue;
+            if (preferredTypes.some((term) => normalizedType.includes(term))) {
+                pushSource(document.contentText.slice(0, 12000));
+            }
+        }
+
+        pushSource(String(text || '').slice(0, 16000));
+
+        return Array.from(sources.values()).slice(0, 8);
+    }
+
+    private enrichPartiesWithQualificationSources(parties: LegacyImportedParty[], sources: string[]) {
+        let enriched = [...(parties || [])];
+
+        for (const source of sources || []) {
+            enriched = enriched.map((party) => this.enrichPartyWithQualificationSource(party, source));
+        }
+
+        return this.compactImportedParties(enriched).slice(0, 50);
+    }
+
+    private enrichPartyWithQualificationSource(party: LegacyImportedParty, sourceText: string) {
+        if (!party?.name || !sourceText) {
+            return party;
+        }
+
+        const snippet = this.findPartyQualificationSnippet(party.name, sourceText);
+        if (!snippet) {
+            return party;
+        }
+
+        const details = this.extractPartyQualificationDetails(snippet);
+        if (!details.document && !details.rg && !details.phone && !details.email && !details.qualificationText && !details.address) {
+            return party;
+        }
+
+        return {
+            ...party,
+            document: party.document || details.document,
+            rg: party.rg || details.rg,
+            birthDate: party.birthDate || details.birthDate,
+            motherName: party.motherName || details.motherName,
+            fatherName: party.fatherName || details.fatherName,
+            profession: party.profession || details.profession,
+            nationality: party.nationality || details.nationality,
+            civilStatus: party.civilStatus || details.civilStatus,
+            address: party.address || details.address,
+            qualificationText: party.qualificationText || details.qualificationText,
+            phone: party.phone || details.phone,
+            email: party.email || details.email,
+        };
+    }
+
+    private findPartyQualificationSnippet(name: string, sourceText: string) {
+        const words = String(name || '')
+            .split(/\s+/)
+            .map((word) => word.trim())
+            .filter((word) => word.length >= 2);
+        if (words.length === 0) {
+            return '';
+        }
+
+        const pattern = words.slice(0, Math.min(words.length, 6)).map((word) => this.escapeRegex(word)).join('\\s+');
+        const match = sourceText.match(new RegExp(`${pattern}[\\s\\S]{0,520}`, 'i'));
+        if (!match?.[0]) {
+            return '';
+        }
+
+        const rawSnippet = match[0].replace(/\s+/g, ' ').trim();
+        const stopMatch = rawSnippet.match(
+            /\b(?:por seu advogado|vem(?:,|\s)|ajuizar|propor a presente|em face de|pede deferimento|assinado eletronicamente|documentos|num\.)\b/i,
+        );
+
+        if (stopMatch?.index && stopMatch.index > name.length + 30) {
+            return rawSnippet.slice(0, stopMatch.index).trim();
+        }
+
+        return rawSnippet;
+    }
+
+    private extractPartyQualificationDetails(snippet: string) {
+        const document = snippet.match(/\b(?:CPF|CNPJ)\s*(?:n[oº]\s*)?[:\-]?\s*([\d\.\-\/]+)/i)?.[1] ||
+            snippet.match(/\b(\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/)?.[1];
+        const rg = snippet.match(/\bRG\s*(?:n[oº]\s*)?[:\-]?\s*([\d\.\-A-Z]+)/i)?.[1];
+        const email = snippet.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0];
+        const phone = snippet.match(/((?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\d{4}[-.\s]?\d{4})/)?.[1];
+        const birthDate = snippet.match(/(?:nascid[oa]|nascimento)[^\d]{0,20}(\d{2}\/\d{2}\/\d{4})/i)?.[1];
+        const parentMatch = snippet.match(/filh[oa]\s+de\s+([^,.;]+?)(?:\s+e\s+([^,.;]+))?(?:[,.;]|$)/i);
+        const nationality = snippet.match(/\b(brasileir[oa]|argentin[oa]|portugues[ae]|italian[oa]|urugua[ií]a|paragua[ií]a)\b/i)?.[1];
+        const civilStatus = CIVIL_STATUS_TERMS.find((term) => this.normalizeLooseText(snippet).includes(term)) || undefined;
+        const address = snippet.match(
+            /(?:resident[ea]\s+e\s+domiciliad[oa]|resident[ea]\s+na?|domiciliad[oa]\s+na?)\s+([^.;]{8,180})/i,
+        )?.[1];
+        const profession = this.extractPartyProfession(snippet, civilStatus);
+
+        const qualificationText = [document, rg, nationality, civilStatus, profession, address, email, phone].some(Boolean)
+            ? snippet.slice(0, 500)
+            : undefined;
+
+        return {
+            document,
+            rg,
+            birthDate,
+            motherName: parentMatch?.[1]?.trim(),
+            fatherName: parentMatch?.[2]?.trim(),
+            profession: profession?.trim(),
+            nationality: nationality?.trim(),
+            civilStatus,
+            address: address?.trim(),
+            qualificationText,
+            phone: phone?.trim(),
+            email: email?.trim(),
+        };
+    }
+
+    private extractPartyProfession(snippet: string, civilStatus?: string) {
+        const segments = String(snippet || '')
+            .split(',')
+            .map((segment) => segment.trim())
+            .filter(Boolean);
+
+        let seenQualificationLead = false;
+
+        for (const segment of segments) {
+            const normalizedSegment = this.normalizeLooseText(segment);
+
+            if (
+                normalizedSegment.includes('BRASILEIR') ||
+                normalizedSegment.includes('ARGENTIN') ||
+                normalizedSegment.includes('PORTUGUES') ||
+                (civilStatus && normalizedSegment.includes(civilStatus))
+            ) {
+                seenQualificationLead = true;
+                continue;
+            }
+
+            if (!seenQualificationLead) {
+                continue;
+            }
+
+            if (/CPF|CNPJ|RG|RESIDENT|DOMICILIAD|EMAIL|TELEFONE|TEL\b/i.test(normalizedSegment)) {
+                break;
+            }
+
+            if (/^[A-ZÀ-ÿ][A-ZÀ-ÿ\s]{2,80}$/i.test(segment) && !CIVIL_STATUS_TERMS.some((term) => normalizedSegment.includes(term))) {
+                return segment;
+            }
+        }
+
+        return undefined;
+    }
+
     private extractPjePartyLawyerBlock(text: string): LegacyImportedParty[] {
         const lines = String(text || '')
             .split(/\r?\n/)
@@ -792,6 +1141,7 @@ export class ProcessPdfService {
         const parties = new Map<string, LegacyImportedParty>();
         let pendingPrincipalNames: string[] = [];
         let readingLawyerGroup = false;
+        let pendingSplitEntry: { name: string; document?: string } | null = null;
 
         const pushParty = (party: LegacyImportedParty) => {
             const normalizedName = this.normalizeLooseText(party.name);
@@ -821,8 +1171,39 @@ export class ProcessPdfService {
                 break;
             }
 
+            const roleOnlyMatch = line.match(/^\((.+)\)$/);
+            if (roleOnlyMatch && pendingSplitEntry) {
+                const splitType = this.normalizePartyType(String(roleOnlyMatch[1] || '').trim());
+                if (splitType) {
+                    pushParty({
+                        name: pendingSplitEntry.name,
+                        type: splitType,
+                        document: pendingSplitEntry.document,
+                    });
+
+                    if (this.isLawyerType(splitType)) {
+                        readingLawyerGroup = true;
+                    } else {
+                        pendingPrincipalNames = [pendingSplitEntry.name];
+                        readingLawyerGroup = false;
+                    }
+                }
+                pendingSplitEntry = null;
+                continue;
+            }
+
+            const splitEntryMatch = line.match(/^(.+?)\s+((?:\d{11}|\d{14}|\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}))$/);
+            if (splitEntryMatch && !line.includes('(')) {
+                pendingSplitEntry = {
+                    name: String(splitEntryMatch[1] || '').replace(/\s+/g, ' ').trim(),
+                    document: String(splitEntryMatch[2] || '').trim(),
+                };
+                continue;
+            }
+
             const entryMatch = line.match(/^(.*?)\s+\((.+)\)$/);
             if (!entryMatch) {
+                pendingSplitEntry = null;
                 continue;
             }
 

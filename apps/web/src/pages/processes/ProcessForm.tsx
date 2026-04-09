@@ -24,6 +24,7 @@ import {
     X,
     FolderOpen,
     Wand2,
+    HelpCircle,
 } from 'lucide-react';
 import { ContactPickerGlobal } from '../../components/contacts/ContactPickerGlobal';
 import { masks } from '../../utils/masks';
@@ -36,7 +37,9 @@ import { useHotkeys } from '../../hooks/useHotkeys';
 import { clsx } from 'clsx';
 import { getOfficeFolderDisplayPath } from '../../utils/officePath';
 import { Financial } from '../Financial';
-import { ImportedParty, CnjTimelineImportStatus, PdfDossierImportResult } from './types';
+import { ImportedParty, CnjTimelineImportStatus, PdfDossierImportResult, PdfPreviewImportResult } from './types';
+import { HelpModal, useHelpModal } from '../../components/HelpModal';
+import { helpProcesses } from '../../data/helpProcesses';
 
 const DEFAULT_AREAS = [
     { label: 'Civel', value: 'Civel' },
@@ -115,6 +118,18 @@ const normalizeLifecycleStatus = (value?: string | null, fallback = 'ATIVO') => 
 };
 
 const LAWYER_TERMS = ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'];
+const PDF_PREVIEW_PHASES = [
+    'Lendo a capa do PDF e detectando o tribunal...',
+    'Extraindo CNJ, classe, vara e dados do TJ...',
+    'Montando partes e qualificacoes iniciais sem consultar o CNJ...',
+    'Preparando a pre-visualizacao para revisao antes do salvamento...',
+];
+const PDF_DOSSIER_PHASES = [
+    'Lendo o PDF integral e identificando o sistema processual...',
+    'Separando documentos, atos e prazos relevantes...',
+    'Importando andamentos do proprio PDF sem depender do CNJ...',
+    'Consolidando partes, timeline e leitura operacional...',
+];
 
 const normalizeCnjDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
 
@@ -134,6 +149,7 @@ export function ProcessForm() {
     const { id } = useParams();
     const navigate = useNavigate();
     const isEditing = !!id && id !== 'new';
+    const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
     const [activeTab, setActiveTab] = useState('MAIN');
     const [loading, setLoading] = useState(false);
@@ -150,6 +166,8 @@ export function ProcessForm() {
     const [timelineRefreshToken, setTimelineRefreshToken] = useState(0);
     const [importingPdfDossier, setImportingPdfDossier] = useState(false);
     const [lastPdfImportSummary, setLastPdfImportSummary] = useState('');
+    const [pdfImportMode, setPdfImportMode] = useState<'PREVIEW' | 'DOSSIER'>('PREVIEW');
+    const [pdfImportPhaseIndex, setPdfImportPhaseIndex] = useState(0);
 
     const [dynamicOptions, setDynamicOptions] = useState({
         categories: DEFAULT_CATEGORIES,
@@ -160,6 +178,20 @@ export function ProcessForm() {
     const [lastConsultSummary, setLastConsultSummary] = useState('');
     const [form, setForm] = useState(EMPTY_FORM);
     const [workflows, setWorkflows] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (!importingPdfDossier) {
+            setPdfImportPhaseIndex(0);
+            return;
+        }
+
+        const phaseList = pdfImportMode === 'PREVIEW' ? PDF_PREVIEW_PHASES : PDF_DOSSIER_PHASES;
+        const interval = window.setInterval(() => {
+            setPdfImportPhaseIndex((current) => Math.min(current + 1, phaseList.length - 1));
+        }, 2200);
+
+        return () => window.clearInterval(interval);
+    }, [importingPdfDossier, pdfImportMode]);
 
     const loadDynamicOptions = async () => {
         try {
@@ -503,18 +535,60 @@ export function ProcessForm() {
         }
 
         try {
+            const previewMode = !isEditing;
             setImportingPdfDossier(true);
+            setPdfImportMode(previewMode ? 'PREVIEW' : 'DOSSIER');
+            setPdfImportPhaseIndex(0);
             const formData = new FormData();
             formData.append('file', file);
 
-            const endpoint = isEditing && id ? `/processes/${id}/pdf-dossier/import` : '/processes/pdf-dossier/import';
+            if (previewMode) {
+                const response = await api.post('/processes/import-pdf', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+                const result = response.data as PdfPreviewImportResult;
+                const mergedForm = mergeImportedDataIntoForm(result);
+                const importedPreviewParties = Array.isArray(result.parts) ? result.parts : [];
+                const richPartyCount = importedPreviewParties.filter(
+                    (party) => party.document || party.qualificationText || party.email || party.phone || party.address,
+                ).length;
+                const processedPageCount = Number(result.metadata?.processedPageCount || 0);
+
+                setForm((current) => ({
+                    ...current,
+                    ...mergedForm,
+                    category: result.cnj || result.court || result.courtSystem ? 'JUDICIAL' : current.category,
+                    metadata: result.metadata || current.metadata,
+                }));
+                setImportedParties(importedPreviewParties);
+                setImportedMovements([]);
+                setLastPdfImportSummary(
+                    [
+                        result.courtSystem ? `${result.courtSystem} identificado` : 'Tribunal identificado pelo PDF',
+                        processedPageCount > 0 ? `${processedPageCount} pagina(s) analisadas` : '',
+                        `${importedPreviewParties.length} parte(s) mapeada(s)`,
+                        richPartyCount > 0 ? `${richPartyCount} com qualificacao util` : '',
+                        'sem consulta ao CNJ nesta etapa',
+                    ]
+                        .filter(Boolean)
+                        .join(' • '),
+                );
+                setActiveTab(importedPreviewParties.length > 0 ? 'PARTIES' : 'MAIN');
+
+                toast.success('PDF lido com sucesso para pre-cadastro do processo.', {
+                    description: 'Revise a capa TJ e as partes importadas antes de salvar.',
+                });
+                return;
+            }
+
+            const endpoint = `/processes/${id}/pdf-dossier/import`;
             const response = await api.post(endpoint, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             const result = response.data as PdfDossierImportResult;
 
             setLastPdfImportSummary(
-                `${result.importedCount || 0} andamento(s) novo(s) a partir do PDF do processo, ${result.explicitFatalDateCount || 0} com prazo fatal expresso e ${result.cnjMovementCount || 0} movimento(s) oficiais considerados em paralelo.${formatMatchedSkillSummary(result.drxSummary)}`,
+                `${result.importedCount || 0} andamento(s) novo(s) a partir do PDF do processo, ${result.explicitFatalDateCount || 0} com prazo fatal expresso e ${result.cnjMovementCount || 0} movimento(s) oficiais considerados.${formatMatchedSkillSummary(result.drxSummary)}`,
             );
 
             toast.success(result.importedCount > 0 ? 'PDF do processo importado com sucesso.' : 'PDF analisado sem novos andamentos.', {
@@ -528,11 +602,6 @@ export function ProcessForm() {
                     description: `${result.drxSummary.answer.slice(0, 220)}${formatMatchedSkillSummary(result.drxSummary)}`.trim(),
                     duration: 10000,
                 });
-            }
-
-            if (!isEditing && result.processId) {
-                navigate(`/processes/${result.processId}`);
-                return;
             }
 
             setActiveTab('PARTIES');
@@ -714,6 +783,8 @@ export function ProcessForm() {
         : 'border-amber-500/30 bg-amber-500/15 text-amber-100';
     const pdfDossierInputId = isEditing ? `process-dossier-upload-${id}` : 'process-dossier-upload';
     const pdfDossierInputControlId = `${pdfDossierInputId}-control`;
+    const currentPdfImportPhases = pdfImportMode === 'PREVIEW' ? PDF_PREVIEW_PHASES : PDF_DOSSIER_PHASES;
+    const currentPdfImportPhase = currentPdfImportPhases[Math.min(pdfImportPhaseIndex, currentPdfImportPhases.length - 1)] || currentPdfImportPhases[0];
 
     const TabButton = ({ tabId, label, icon: Icon, hasIndicator }: any) => (
         <button
@@ -752,14 +823,25 @@ export function ProcessForm() {
                 className="hidden"
                 onChange={(event) => void handleImportProcessPdf(event)}
             />
-            <div className="mb-6 flex flex-wrap items-start gap-3 md:items-center md:gap-4">
-                <button onClick={() => navigate('/processes')} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
-                    <ArrowLeft size={20} />
-                </button>
-                <div className="min-w-0">
-                    <h1 className="text-xl font-bold text-white md:text-2xl">{isEditing ? 'Editar Processo' : 'Novo Processo'}</h1>
-                    <p className="text-slate-500 text-sm mt-0.5">{isEditing ? `ID: ${id?.substring(0, 8)}...` : 'Preencha os dados do processo'}</p>
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-3 md:items-center md:gap-4">
+                <div className="flex min-w-0 items-start gap-3 md:items-center md:gap-4">
+                    <button onClick={() => navigate('/processes')} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div className="min-w-0">
+                        <h1 className="text-xl font-bold text-white md:text-2xl">{isEditing ? 'Editar Processo' : 'Novo Processo'}</h1>
+                        <p className="text-slate-500 text-sm mt-0.5">{isEditing ? `ID: ${id?.substring(0, 8)}...` : 'Preencha os dados do processo'}</p>
+                    </div>
                 </div>
+                <button
+                    type="button"
+                    onClick={() => setIsHelpOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+                    title="Ajuda (F1)"
+                >
+                    <HelpCircle size={16} />
+                    Ajuda
+                </button>
             </div>
 
             {(isEditing || importedParties.length > 0 || importedMovements.length > 0) && (
@@ -791,8 +873,8 @@ export function ProcessForm() {
                                     <Upload size={28} />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition-colors">Importar PDF (IA)</h3>
-                                    <p className="text-slate-400 text-sm mt-1">Carregar petição inicial ou capa para extração automática.</p>
+                                    <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition-colors">Importar PDF (pre-cadastro)</h3>
+                                    <p className="text-slate-400 text-sm mt-1">Ler capa TJ, partes e qualificações iniciais direto do PDF, sem consultar o CNJ nesta etapa.</p>
                                 </div>
                             </div>
                         </div>
@@ -1143,8 +1225,21 @@ export function ProcessForm() {
                                                     <span className="text-sm font-semibold text-white">PDF Integral do Processo</span>
                                                 </div>
                                                 <p className="text-sm text-slate-200">
-                                                    Detecta `PJe` ou `Eproc`, cadastra ou atualiza o processo pelo CNJ e importa andamentos.
+                                                    {isEditing
+                                                        ? 'Detecta PJe ou Eproc, importa o dossie do proprio PDF e sincroniza andamentos no processo ja salvo.'
+                                                        : 'Faz o pre-cadastro pelo proprio PDF: capa TJ, CNJ, sistema, partes e qualificacoes iniciais, sem consultar o CNJ nesta etapa.'}
                                                 </p>
+                                                {importingPdfDossier && (
+                                                    <div className="rounded-lg border border-violet-400/20 bg-slate-950/40 px-3 py-3">
+                                                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-200">Etapa atual</p>
+                                                        <p className="mt-1 text-sm font-medium text-white">{currentPdfImportPhase}</p>
+                                                        <p className="mt-1 text-xs text-violet-100/80">
+                                                            {pdfImportMode === 'PREVIEW'
+                                                                ? 'Fluxo leve de pre-cadastro: o sistema prioriza capa e partes antes do salvamento.'
+                                                                : 'Fluxo integral: o sistema consolida timeline e leitura operacional do PDF ja vinculado ao processo.'}
+                                                        </p>
+                                                    </div>
+                                                )}
                                                 {lastPdfImportSummary && (
                                                     <p className="text-xs text-violet-100/90 font-medium">
                                                         {lastPdfImportSummary}
@@ -1161,7 +1256,13 @@ export function ProcessForm() {
                                                     ) : (
                                                         <FileText size={17} />
                                                     )}
-                                                    {importingPdfDossier ? 'Importando...' : 'Importar PDF do processo'}
+                                                    {importingPdfDossier
+                                                        ? pdfImportMode === 'PREVIEW'
+                                                            ? 'Lendo PDF...'
+                                                            : 'Importando dossie...'
+                                                        : isEditing
+                                                          ? 'Importar PDF do processo'
+                                                          : 'Ler PDF para pre-cadastro'}
                                                 </label>
                                             </div>
                                         </div>
@@ -1225,6 +1326,16 @@ export function ProcessForm() {
                                     {importedParties.map((party, idx) => {
                                         const partyType = String(party?.type || '').toUpperCase();
                                         const isLawyer = LAWYER_TERMS.some(term => partyType.includes(term));
+                                        const detailSummary = [
+                                            party.rg ? `RG ${party.rg}` : '',
+                                            party.civilStatus || '',
+                                            party.profession || '',
+                                            party.nationality || '',
+                                            party.phone || '',
+                                            party.email || '',
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' • ');
                                         return (
                                             <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition">
                                                 <div className="flex items-center gap-3">
@@ -1251,6 +1362,12 @@ export function ProcessForm() {
                                                     <div>
                                                         <div className="font-medium text-white">{party.name}</div>
                                                         <div className="text-xs text-slate-500">{party.type} {party.document && `| ${party.document}`}</div>
+                                                        {detailSummary && <div className="mt-1 text-[11px] text-slate-400">{detailSummary}</div>}
+                                                        {party.qualificationText && (
+                                                            <div className="mt-1 max-w-2xl text-[11px] text-slate-500">
+                                                                {party.qualificationText}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -1315,6 +1432,12 @@ export function ProcessForm() {
                     </div>
                 )}
             </div>
+            <HelpModal
+                isOpen={isHelpOpen}
+                onClose={() => setIsHelpOpen(false)}
+                title="Processos e Importacao por PDF"
+                sections={helpProcesses}
+            />
         </div>
     );
 }

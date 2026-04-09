@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" fill="none">
+  <rect width="1200" height="760" rx="28" fill="#020617"/>
+  <text x="72" y="88" fill="#F8FAFC" font-size="34" font-family="Segoe UI, Arial, sans-serif" font-weight="700">PJe: primeira pagina como fonte canonica</text>
+  <text x="72" y="124" fill="#94A3B8" font-size="18" font-family="Segoe UI, Arial, sans-serif">Exemplo de leitura objetiva da capa antes de aprofundar o restante do PDF</text>
+
+  <rect x="72" y="172" width="560" height="520" rx="24" fill="#F8FAFC"/>
+  <rect x="104" y="212" width="260" height="20" rx="8" fill="#CBD5E1"/>
+  <rect x="104" y="248" width="320" height="18" rx="8" fill="#E2E8F0"/>
+  <rect x="104" y="280" width="300" height="18" rx="8" fill="#E2E8F0"/>
+  <rect x="104" y="312" width="210" height="18" rx="8" fill="#E2E8F0"/>
+  <rect x="104" y="344" width="230" height="18" rx="8" fill="#E2E8F0"/>
+  <rect x="104" y="396" width="180" height="16" rx="8" fill="#CBD5E1"/>
+  <rect x="104" y="424" width="420" height="14" rx="7" fill="#E2E8F0"/>
+  <rect x="104" y="450" width="390" height="14" rx="7" fill="#E2E8F0"/>
+  <rect x="104" y="500" width="160" height="16" rx="8" fill="#CBD5E1"/>
+  <rect x="104" y="528" width="380" height="14" rx="7" fill="#E2E8F0"/>
+  <rect x="104" y="554" width="410" height="14" rx="7" fill="#E2E8F0"/>
+  <rect x="104" y="580" width="360" height="14" rx="7" fill="#E2E8F0"/>
+
+  <rect x="94" y="240" width="350" height="140" rx="18" stroke="#2563EB" stroke-width="4" stroke-dasharray="10 8"/>
+  <rect x="94" y="408" width="450" height="70" rx="18" stroke="#8B5CF6" stroke-width="4" stroke-dasharray="10 8"/>
+  <rect x="94" y="512" width="450" height="92" rx="18" stroke="#06B6D4" stroke-width="4" stroke-dasharray="10 8"/>
+
+  <rect x="694" y="208" width="434" height="126" rx="22" fill="#0F172A" stroke="#2563EB"/>
+  <text x="726" y="250" fill="#DBEAFE" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Bloco 1: capa TJ</text>
+  <text x="726" y="286" fill="#BFDBFE" font-size="17" font-family="Segoe UI, Arial, sans-serif">Numero, classe, orgao julgador, distribuicao,</text>
+  <text x="726" y="314" fill="#BFDBFE" font-size="17" font-family="Segoe UI, Arial, sans-serif">valor da causa, assuntos e sinais de urgencia.</text>
+
+  <rect x="694" y="372" width="434" height="126" rx="22" fill="#0F172A" stroke="#8B5CF6"/>
+  <text x="726" y="414" fill="#F5D0FE" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Bloco 2: partes e advogados</text>
+  <text x="726" y="450" fill="#E9D5FF" font-size="17" font-family="Segoe UI, Arial, sans-serif">Ajuda a iniciar cliente, contrario, procuradores</text>
+  <text x="726" y="478" fill="#E9D5FF" font-size="17" font-family="Segoe UI, Arial, sans-serif">e a classificacao inicial da aba Partes.</text>
+
+  <rect x="694" y="536" width="434" height="126" rx="22" fill="#0F172A" stroke="#06B6D4"/>
+  <text x="726" y="578" fill="#CFFAFE" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Bloco 3: documentos listados</text>
+  <text x="726" y="614" fill="#A5F3FC" font-size="17" font-family="Segoe UI, Arial, sans-serif">Mostra se vale aprofundar leitura na inicial,</text>
+  <text x="726" y="642" fill="#A5F3FC" font-size="17" font-family="Segoe UI, Arial, sans-serif">contestacao ou outras pecas com ganho real.</text>
+</svg>

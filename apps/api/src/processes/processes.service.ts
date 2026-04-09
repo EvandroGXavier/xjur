@@ -41,6 +41,15 @@ interface ImportedProcessPartyInput {
     name: string;
     type?: string;
     document?: string | null;
+    rg?: string | null;
+    birthDate?: string | null;
+    motherName?: string | null;
+    fatherName?: string | null;
+    profession?: string | null;
+    nationality?: string | null;
+    civilStatus?: string | null;
+    address?: string | null;
+    qualificationText?: string | null;
     phone?: string | null;
     email?: string | null;
     oab?: string | null;
@@ -565,7 +574,7 @@ export class ProcessesService {
 
     private shouldUsePdfOnlyAnalysis(analysis?: Partial<FullProcessPdfAnalysis> | null) {
         const courtSystem = this.normalizeText(analysis?.courtSystem);
-        return courtSystem.includes('EPROC');
+        return courtSystem.includes('EPROC') || courtSystem.includes('PJE');
     }
 
     private buildPdfReferenceLabel(document: PdfProcessDocument) {
@@ -1595,14 +1604,38 @@ export class ProcessesService {
         }
     }
 
+    private buildImportedContactNotes(currentNotes?: string | null, party?: ImportedProcessPartyInput) {
+        const fragments = [String(currentNotes || '').trim()].filter(Boolean);
+        const qualificationText = String(party?.qualificationText || '').trim();
+        const addressText = String(party?.address || '').trim();
+
+        if (qualificationText) {
+            const note = `Qualificacao importada via PDF: ${qualificationText}`;
+            if (!fragments.some((fragment) => fragment.includes(note))) {
+                fragments.push(note);
+            }
+        }
+
+        if (addressText) {
+            const note = `Endereco informado no PDF: ${addressText}`;
+            if (!fragments.some((fragment) => fragment.includes(note))) {
+                fragments.push(note);
+            }
+        }
+
+        if (fragments.length === 0) {
+            fragments.push('Importado automaticamente via processo');
+        }
+
+        return fragments.join('\n\n');
+    }
+
     private async updateExistingImportedContact(
         contactId: string,
         roleName: string,
-        document?: string | null,
-        phone?: string | null,
-        email?: string | null,
+        party?: ImportedProcessPartyInput,
     ) {
-        const cleanDoc = this.normalizeDocument(document);
+        const cleanDoc = this.normalizeDocument(party?.document);
         const category = roleName === 'MAGISTRADO' ? 'MAGISTRADO' : roleName;
         const current = await this.prisma.contact.findUnique({
             where: { id: contactId },
@@ -1614,18 +1647,44 @@ export class ProcessesService {
 
         if (!current) return;
 
+        const hasPfEnrichment = Boolean(
+            party?.rg || party?.birthDate || party?.motherName || party?.fatherName || party?.profession || party?.nationality || party?.civilStatus,
+        );
+        const notes = this.buildImportedContactNotes(current.notes, party);
+
         await this.prisma.contact.update({
             where: { id: contactId },
             data: {
                 document: current.document || cleanDoc || undefined,
-                phone: current.phone || String(phone || '').trim() || undefined,
-                email: current.email || String(email || '').trim() || undefined,
+                phone: current.phone || String(party?.phone || '').trim() || undefined,
+                email: current.email || String(party?.email || '').trim() || undefined,
                 category: current.category || category,
-                notes: current.notes || 'Importado automaticamente via processo',
-                pfDetails: cleanDoc && cleanDoc.length <= 11 && !current.pfDetails
+                notes,
+                pfDetails: (cleanDoc && cleanDoc.length <= 11) || hasPfEnrichment
                     ? {
-                        create: { cpf: cleanDoc },
-                    }
+                          upsert: {
+                              update: {
+                                  cpf: current.pfDetails?.cpf || cleanDoc || undefined,
+                                  rg: current.pfDetails?.rg || party?.rg || undefined,
+                                  birthDate: current.pfDetails?.birthDate || this.parseDate(party?.birthDate),
+                                  motherName: current.pfDetails?.motherName || party?.motherName || undefined,
+                                  fatherName: current.pfDetails?.fatherName || party?.fatherName || undefined,
+                                  profession: current.pfDetails?.profession || party?.profession || undefined,
+                                  nationality: current.pfDetails?.nationality || party?.nationality || undefined,
+                                  civilStatus: current.pfDetails?.civilStatus || party?.civilStatus || undefined,
+                              },
+                              create: {
+                                  cpf: cleanDoc || undefined,
+                                  rg: party?.rg || undefined,
+                                  birthDate: this.parseDate(party?.birthDate),
+                                  motherName: party?.motherName || undefined,
+                                  fatherName: party?.fatherName || undefined,
+                                  profession: party?.profession || undefined,
+                                  nationality: party?.nationality || undefined,
+                                  civilStatus: party?.civilStatus || undefined,
+                              },
+                          },
+                      }
                     : undefined,
                 pjDetails: cleanDoc && cleanDoc.length > 11 && !current.pjDetails
                     ? {
@@ -1638,30 +1697,31 @@ export class ProcessesService {
             },
         });
 
-        await this.ensureImportedAdditionalContact(contactId, 'PHONE', phone);
-        await this.ensureImportedAdditionalContact(contactId, 'EMAIL', email);
+        await this.ensureImportedAdditionalContact(contactId, 'PHONE', party?.phone);
+        await this.ensureImportedAdditionalContact(contactId, 'EMAIL', party?.email);
     }
 
     private async findOrCreateImportedContact(
         tenantId: string,
         name: string,
         roleName: string,
-        document?: string | null,
-        phone?: string | null,
-        email?: string | null,
+        party?: ImportedProcessPartyInput,
     ) {
         const trimmedName = String(name || '').trim().slice(0, 100);
         if (!trimmedName) return null;
 
-        const cleanDoc = this.normalizeDocument(document);
+        const cleanDoc = this.normalizeDocument(party?.document);
         const existing = await this.findExistingImportedContact(tenantId, trimmedName, cleanDoc);
         if (existing) {
-            await this.updateExistingImportedContact(existing.id, roleName, cleanDoc, phone, email);
+            await this.updateExistingImportedContact(existing.id, roleName, party);
             return existing.id;
         }
 
         const personType = cleanDoc && cleanDoc.length > 11 ? 'PJ' : 'PF';
         const category = roleName === 'MAGISTRADO' ? 'MAGISTRADO' : roleName;
+        const hasPfEnrichment = Boolean(
+            party?.rg || party?.birthDate || party?.motherName || party?.fatherName || party?.profession || party?.nationality || party?.civilStatus,
+        );
 
         const created = await this.prisma.contact.create({
             data: {
@@ -1669,13 +1729,22 @@ export class ProcessesService {
                 name: trimmedName,
                 personType,
                 document: cleanDoc || undefined,
-                phone: String(phone || '').trim() || undefined,
-                email: String(email || '').trim() || undefined,
+                phone: String(party?.phone || '').trim() || undefined,
+                email: String(party?.email || '').trim() || undefined,
                 category,
-                notes: 'Importado automaticamente via processo',
-                pfDetails: personType === 'PF' && cleanDoc
+                notes: this.buildImportedContactNotes(null, party),
+                pfDetails: personType === 'PF' && (cleanDoc || hasPfEnrichment)
                     ? {
-                        create: { cpf: cleanDoc },
+                        create: {
+                            cpf: cleanDoc || undefined,
+                            rg: party?.rg || undefined,
+                            birthDate: this.parseDate(party?.birthDate),
+                            motherName: party?.motherName || undefined,
+                            fatherName: party?.fatherName || undefined,
+                            profession: party?.profession || undefined,
+                            nationality: party?.nationality || undefined,
+                            civilStatus: party?.civilStatus || undefined,
+                        },
                     }
                     : undefined,
                 pjDetails: personType === 'PJ' && cleanDoc
@@ -1690,8 +1759,8 @@ export class ProcessesService {
             select: { id: true },
         });
 
-        await this.ensureImportedAdditionalContact(created.id, 'PHONE', phone);
-        await this.ensureImportedAdditionalContact(created.id, 'EMAIL', email);
+        await this.ensureImportedAdditionalContact(created.id, 'PHONE', party?.phone);
+        await this.ensureImportedAdditionalContact(created.id, 'EMAIL', party?.email);
 
         return created.id;
     }
@@ -1968,9 +2037,7 @@ export class ProcessesService {
                 tenantId,
                 name,
                 roleName,
-                party?.document,
-                party?.phone,
-                party?.email,
+                party,
             );
 
             if (!contactId) {

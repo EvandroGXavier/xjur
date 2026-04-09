@@ -3,6 +3,13 @@ export type ParsedPdfText = {
     pageCount: number;
 };
 
+export type PdfTextParseOptions = {
+    partial?: number[];
+    first?: number;
+    last?: number;
+    pageJoiner?: string;
+};
+
 type LegacyPdfParseFn = (buffer: Buffer) => Promise<any>;
 
 type ModernPdfParserInstance = {
@@ -69,7 +76,7 @@ function resolveModernParser(pdfModule: any) {
     return candidates.find((candidate) => isModernPdfParseCtor(candidate)) || null;
 }
 
-export async function extractTextFromPdfBuffer(fileBuffer: Buffer): Promise<ParsedPdfText> {
+export async function extractTextFromPdfBuffer(fileBuffer: Buffer, options: PdfTextParseOptions = {}): Promise<ParsedPdfText> {
     const pdfModule = require('pdf-parse');
     const legacyParser = resolveLegacyParser(pdfModule);
 
@@ -85,7 +92,12 @@ export async function extractTextFromPdfBuffer(fileBuffer: Buffer): Promise<Pars
     if (ModernParser) {
         const parser = new ModernParser({ data: fileBuffer });
         try {
-            const result = await parser.getText({ pageJoiner: DEFAULT_PAGE_JOINER });
+            const result = await parser.getText({
+                pageJoiner: options.pageJoiner ?? DEFAULT_PAGE_JOINER,
+                ...(Array.isArray(options.partial) && options.partial.length > 0 ? { partial: options.partial } : {}),
+                ...(typeof options.first === 'number' ? { first: options.first } : {}),
+                ...(typeof options.last === 'number' ? { last: options.last } : {}),
+            });
             return {
                 text: coercePdfText(result),
                 pageCount: coercePageCount(result),

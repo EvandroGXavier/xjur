@@ -31,7 +31,7 @@ import {
   ProcessImportPartyReview,
   type ImportedPartyClassification,
 } from "../../components/processos/ProcessImportPartyReview";
-import { helpProcesses } from "../../data/helpManuals";
+import { helpProcesses } from "../../data/helpProcesses";
 import { masks } from "../../utils/masks";
 
 type ViewMode = "cards" | "bulk" | "integrations";

@@ -214,4 +214,94 @@ describe('ProcessPdfService', () => {
         expect(analysis.documents.find((document) => document.documentId === '21')?.documentType).toBe('Peticao');
         expect(analysis.documents.find((document) => document.documentId === '29')?.documentType).toBe('Contrarrazoes');
     });
+
+    it('extracts preview data from the first PJe pages without depending on CNJ consultation', async () => {
+        mockedExtractTextFromPdfBuffer
+            .mockResolvedValueOnce({
+                pageCount: 131,
+                text: [
+                    '02/07/2025',
+                    'Numero: 5063155-40.2024.8.13.0024',
+                    'Classe: [CIVEL] CUMPRIMENTO DE SENTENCA',
+                    'Orgao julgador: 4a Unidade Jurisdicional Civel - 10o JD da Comarca de Belo Horizonte',
+                    'PJe - Processo Judicial Eletronico',
+                    'Partes Advogados',
+                    'VALERIA ALVES RAMOS MIRANDA (REQUERENTE)',
+                    'GILSON MIRANDA PRATA FILHO (REQUERENTE)',
+                    'CLEITON CASTRO COIMBRA 06150719618',
+                    '(REQUERIDO(A))',
+                ].join('\n'),
+            })
+            .mockResolvedValueOnce({
+                pageCount: 131,
+                text: [
+                    '02/07/2025',
+                    'Numero: 5063155-40.2024.8.13.0024',
+                    'Classe: [CIVEL] CUMPRIMENTO DE SENTENCA',
+                    'Orgao julgador: 4a Unidade Jurisdicional Civel - 10o JD da Comarca de Belo Horizonte',
+                    'PJe - Processo Judicial Eletronico',
+                    'Partes Advogados',
+                    'VALERIA ALVES RAMOS MIRANDA (REQUERENTE)',
+                    'GILSON MIRANDA PRATA FILHO (REQUERENTE)',
+                    'CLEITON CASTRO COIMBRA 06150719618',
+                    '(REQUERIDO(A))',
+                    'VALERIA ALVES RAMOS MIRANDA, brasileira, casada, comerciante, CPF: 111.222.333-44, RG MG-12.345.678, residente na Rua Alfa 10, Belo Horizonte/MG, email valeria@example.com, telefone (31) 99999-0001.',
+                ].join('\n'),
+            });
+
+        const analysis = await service.extractDataFromPdf(Buffer.from('pdf'));
+
+        expect(analysis.courtSystem).toBe('PJe');
+        expect(analysis.metadata?.analysisMode).toBe('PREVIEW');
+        expect(analysis.metadata?.cnjConsulted).toBe(false);
+        expect(analysis.metadata?.processedPageCount).toBe(16);
+        expect(analysis.parts.find((party) => party.name === 'CLEITON CASTRO COIMBRA')).toMatchObject({
+            type: 'REQUERIDO',
+            document: '06150719618',
+        });
+        expect(analysis.parts.find((party) => party.name === 'VALERIA ALVES RAMOS MIRANDA')).toMatchObject({
+            document: '111.222.333-44',
+            rg: 'MG-12.345.678',
+            civilStatus: 'CASADA',
+            profession: 'comerciante',
+            email: 'valeria@example.com',
+        });
+    });
+
+    it('enriches party qualifications from petition text when analyzing the full PDF', async () => {
+        mockedExtractTextFromPdfBuffer.mockResolvedValue({
+            pageCount: 18,
+            text: [
+                'Numero: 5012345-67.2025.8.13.0024',
+                'Classe: [CIVEL] PROCEDIMENTO COMUM CIVEL',
+                'PJe - Processo Judicial Eletronico',
+                'Partes Advogados',
+                'MARIA DE SOUZA (AUTOR)',
+                'JOAO PEREIRA (REU)',
+                '-- 1 of 18 --',
+                'Num. 9991112223 - Pag. 1',
+                'Peticao Inicial',
+                'MARIA DE SOUZA, brasileira, solteira, professora, CPF: 123.456.789-10, RG MG-11.222.333, residente na Rua das Flores 100, Belo Horizonte/MG.',
+                '-- 2 of 18 --',
+                'Num. 9991112224 - Pag. 1',
+                'Contestacao',
+                'JOAO PEREIRA, brasileiro, casado, comerciante, CPF: 987.654.321-00, residente na Avenida Central 200, Contagem/MG.',
+            ].join('\n'),
+        });
+
+        const analysis = await service.analyzeFullProcessPdf(Buffer.from('pdf'));
+
+        expect(analysis.parts.find((party) => party.name === 'MARIA DE SOUZA')).toMatchObject({
+            document: '123.456.789-10',
+            rg: 'MG-11.222.333',
+            civilStatus: 'SOLTEIRA',
+            profession: 'professora',
+        });
+        expect(analysis.parts.find((party) => party.name === 'JOAO PEREIRA')).toMatchObject({
+            document: '987.654.321-00',
+            civilStatus: 'CASADO',
+            profession: 'comerciante',
+            address: 'Avenida Central 200, Contagem/MG',
+        });
+    });
 });
