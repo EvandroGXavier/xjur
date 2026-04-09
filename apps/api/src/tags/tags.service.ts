@@ -206,4 +206,28 @@ export class TagsService {
       throw error;
     }
   }
+  async attachToTemplate(templateId: string, tagId: string) {
+    try {
+      return await (this.prisma as any).documentTemplateTag.upsert({
+        where: { templateId_tagId: { tagId, templateId } },
+        create: { tagId, templateId },
+        update: {},
+      });
+    } catch (error) {
+      this.logger.error(`Error attaching tag ${tagId} to template ${templateId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async detachFromTemplate(templateId: string, tagId: string) {
+    try {
+      return await (this.prisma as any).documentTemplateTag.delete({
+        where: { templateId_tagId: { tagId, templateId } },
+      });
+    } catch (error) {
+      this.logger.error(`Error detaching tag ${tagId} from template ${templateId}: ${error.message}`);
+      throw error;
+    }
+  }
 }
+

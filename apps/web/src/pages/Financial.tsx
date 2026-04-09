@@ -265,6 +265,7 @@ interface BankCharge {
     amount: number;
     dueDate?: string | null;
   } | null;
+  reusedExisting?: boolean;
 }
 
 interface BankPaymentRequest {
@@ -1760,7 +1761,11 @@ export function Financial(props: FinancialProps = {}) {
       });
 
       setCreatedCharge(response.data);
-      toast.success("Cobrança bancária gerada com sucesso.");
+      toast.success(
+        response.data?.reusedExisting
+          ? "Cobrança em aberto localizada e reutilizada."
+          : "Cobrança bancária gerada com sucesso.",
+      );
       await loadBankingOperations();
     } catch (error: any) {
       toast.error(
@@ -5574,17 +5579,11 @@ export function Financial(props: FinancialProps = {}) {
                       Tipo de cobrança
                     </span>
                     <select
+                      disabled
                       value={chargeFormData.chargeType}
-                      onChange={(e) =>
-                        setChargeFormData((prev) => ({
-                          ...prev,
-                          chargeType: e.target.value as "PIX" | "BOLETO",
-                        }))
-                      }
                       className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                     >
                       <option value="BOLETO">Boleto</option>
-                      <option value="PIX">Pix cobrança</option>
                     </select>
                   </label>
 
@@ -5608,18 +5607,11 @@ export function Financial(props: FinancialProps = {}) {
 
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
                   <p className="text-sm text-amber-100">
-                    O Dr.X vai gerar a cobrança a partir da transação e salvar o
-                    retorno no Banking Hub. A geração de <b>PDF do boleto</b> e o
-                    envio automatizado ainda dependem da próxima etapa da
-                    integração.
+                    O Dr.X vai gerar o boleto a partir da conta a receber e
+                    salvar o retorno no Banking Hub. Se já existir uma cobrança
+                    em aberto com o mesmo vencimento, o sistema reutiliza a
+                    cobrança existente para evitar duplicidade.
                   </p>
-                  {chargeFormData.chargeType === "PIX" && (
-                    <p className="mt-3 text-xs text-amber-200">
-                      Nesta etapa, o provider LIVE do Banco Inter foi fechado para
-                      <b> boleto/cobrança</b>. O fluxo de <b>Pix cobrança</b> entra
-                      na próxima onda da integração bancária.
-                    </p>
-                  )}
                 </div>
 
                 {createdCharge && (
@@ -5627,7 +5619,9 @@ export function Financial(props: FinancialProps = {}) {
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <h3 className="text-lg font-bold text-white">
-                          Cobrança Gerada
+                          {createdCharge.reusedExisting
+                            ? "Cobrança em Aberto"
+                            : "Cobrança Gerada"}
                         </h3>
                         <p className="text-sm text-slate-300 mt-1">
                           Status: {createdCharge.status} •{" "}

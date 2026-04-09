@@ -130,6 +130,23 @@ export class FinancialService {
             contactId: true,
             role: true,
             amount: true,
+            contact: {
+              select: {
+                id: true,
+                name: true,
+                personType: true,
+                document: true,
+                email: true,
+                phone: true,
+                whatsapp: true,
+                pfDetails: {
+                  select: { cpf: true },
+                },
+                pjDetails: {
+                  select: { cnpj: true },
+                },
+              },
+            },
           },
         },
         tags: {

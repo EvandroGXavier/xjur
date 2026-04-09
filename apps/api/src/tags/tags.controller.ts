@@ -42,6 +42,17 @@ export class TagsController {
     return this.tagsService.detachFromContact(contactId, tagId);
   }
 
+  // Vinculação em Biblioteca (Modelos/Templates)
+  @Post('library/:templateId/:tagId')
+  attachToTemplate(@Param('templateId') templateId: string, @Param('tagId') tagId: string) {
+    return this.tagsService.attachToTemplate(templateId, tagId);
+  }
+
+  @Delete('library/:templateId/:tagId')
+  detachFromTemplate(@Param('templateId') templateId: string, @Param('tagId') tagId: string) {
+    return this.tagsService.detachFromTemplate(templateId, tagId);
+  }
+
   // Vinculação em Processos
   @Post('process/:processId/:tagId')
   attachToProcess(@Param('processId') processId: string, @Param('tagId') tagId: string) {

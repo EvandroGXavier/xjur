@@ -17,6 +17,15 @@ import { BankingProvider } from './providers/banking-provider.interface';
 
 @Injectable()
 export class BankingService {
+  private readonly bankChargeInclude = {
+    bankIntegration: {
+      select: { id: true, displayName: true, provider: true },
+    },
+    financialRecord: {
+      select: { id: true, description: true, amount: true, dueDate: true },
+    },
+  } as const;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly securityService: SecurityService,
@@ -230,6 +239,21 @@ export class BankingService {
     const baseAmount = Number(record.amountFinal ?? record.amount ?? 0);
     const paidAmount = Number(record.amountPaid ?? 0);
     return Math.max(0, Math.round((baseAmount - paidAmount) * 100) / 100);
+  }
+
+  private normalizeDateOnly(value?: Date | string | null) {
+    if (!value) return null;
+
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+      return value.trim();
+    }
+
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed.toISOString().slice(0, 10);
   }
 
   private resolveChargePayer(financialRecord: any) {
@@ -673,14 +697,7 @@ export class BankingService {
   async listCharges(tenantId: string) {
     return this.prisma.bankCharge.findMany({
       where: { tenantId },
-      include: {
-        bankIntegration: {
-          select: { id: true, displayName: true, provider: true },
-        },
-        financialRecord: {
-          select: { id: true, description: true, amount: true, dueDate: true },
-        },
-      },
+      include: this.bankChargeInclude,
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -774,14 +791,67 @@ export class BankingService {
       );
     }
 
+    const chargeType = String(dto.chargeType || 'BOLETO').toUpperCase();
+    const chargeDueDate = dto.dueDate || financialRecord.dueDate?.toISOString() || null;
+    const existingActiveCharge = await this.prisma.bankCharge.findFirst({
+      where: {
+        tenantId,
+        bankIntegrationId: integration.id,
+        financialRecordId: financialRecord.id,
+        chargeType,
+        paidAt: null,
+        status: {
+          notIn: [
+            'PAID',
+            'RECEIVED',
+            'RECEBIDA',
+            'SETTLED',
+            'LIQUIDATED',
+            'CANCELLED',
+            'CANCELED',
+            'CANCELADO',
+            'CANCELADA',
+            'EXPIRED',
+            'EXPIRADO',
+            'EXPIRADA',
+            'FAILED',
+            'ERROR',
+            'REJECTED',
+          ],
+        },
+      },
+      include: this.bankChargeInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingActiveCharge) {
+      const requestedDueDate = this.normalizeDateOnly(chargeDueDate);
+      const existingDueDate = this.normalizeDateOnly(existingActiveCharge.dueDate);
+
+      if (
+        requestedDueDate &&
+        existingDueDate &&
+        requestedDueDate !== existingDueDate
+      ) {
+        throw new BadRequestException(
+          'Já existe uma cobrança bancária em aberto para este lançamento. Quite ou cancele a cobrança anterior antes de emitir outra com novo vencimento.',
+        );
+      }
+
+      return {
+        ...existingActiveCharge,
+        reusedExisting: true,
+      };
+    }
+
     const provider = this.getProvider(integration.provider);
     const credentials = await this.loadCredentials(tenantId, integration);
     const result = await provider.createCharge(
       { integration, tenantId, credentials },
       {
-        chargeType: dto.chargeType || 'PIX',
+        chargeType,
         amount: outstandingAmount,
-        dueDate: dto.dueDate || financialRecord.dueDate?.toISOString() || null,
+        dueDate: chargeDueDate,
         payerName: payer.payerName,
         payerDocument: payer.payerDocument,
         payerEmail: payer.payerEmail,
@@ -797,14 +867,14 @@ export class BankingService {
       );
     }
 
-    return this.prisma.bankCharge.create({
+    const createdCharge = await this.prisma.bankCharge.create({
       data: {
         tenantId,
         bankIntegrationId: integration.id,
         bankAccountId: dto.bankAccountId || integration.bankAccountId || null,
         financialRecordId: financialRecord.id,
         provider: integration.provider,
-        chargeType: dto.chargeType || 'PIX',
+        chargeType,
         status: result.status,
         externalChargeId: result.externalChargeId || null,
         txid: result.txid || null,
@@ -819,15 +889,13 @@ export class BankingService {
         rawRequest: this.toJson(result.rawRequest),
         rawResponse: this.toJson(result.rawResponse),
       },
-      include: {
-        bankIntegration: {
-          select: { id: true, displayName: true, provider: true },
-        },
-        financialRecord: {
-          select: { id: true, description: true, amount: true, dueDate: true },
-        },
-      },
+      include: this.bankChargeInclude,
     });
+
+    return {
+      ...createdCharge,
+      reusedExisting: false,
+    };
   }
 
   async listPaymentRequests(tenantId: string) {
