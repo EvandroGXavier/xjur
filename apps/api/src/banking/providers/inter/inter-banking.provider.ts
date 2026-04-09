@@ -122,10 +122,14 @@ export class InterBankingProvider implements BankingProvider {
   }
 
   private hasMainCredentials(ctx: BankingProviderContext) {
+    const hasCertificatePair = Boolean(
+      ctx.credentials.certificatePem && ctx.credentials.privateKeyPem,
+    );
+
     return Boolean(
       ctx.credentials.clientId &&
         ctx.credentials.clientSecret &&
-        ctx.credentials.certificateBase64,
+        (ctx.credentials.certificateBase64 || hasCertificatePair),
     );
   }
 
@@ -151,8 +155,20 @@ export class InterBankingProvider implements BankingProvider {
   }
 
   private createHttpsAgent(ctx: BankingProviderContext) {
+    if (ctx.credentials.certificatePem && ctx.credentials.privateKeyPem) {
+      return new https.Agent({
+        cert: ctx.credentials.certificatePem,
+        key: ctx.credentials.privateKeyPem,
+        passphrase: ctx.credentials.certificatePassword || undefined,
+        keepAlive: true,
+        rejectUnauthorized: true,
+      });
+    }
+
     if (!ctx.credentials.certificateBase64) {
-      throw new Error('Certificado A1 nao configurado para a integracao Inter.');
+      throw new Error(
+        'Certificado do Banco Inter nao configurado para a integracao.',
+      );
     }
 
     return new https.Agent({
@@ -536,11 +552,17 @@ export class InterBankingProvider implements BankingProvider {
       },
       {
         key: 'certificate',
-        label: 'Certificado',
-        status: ctx.credentials.certificateBase64 ? 'success' : 'warning',
-        details: ctx.credentials.certificateBase64
-          ? 'Certificado armazenado no cofre.'
-          : 'Certificado ainda nao configurado.',
+        label: 'Certificado / Chave',
+        status:
+          ctx.credentials.certificateBase64 ||
+          (ctx.credentials.certificatePem && ctx.credentials.privateKeyPem)
+            ? 'success'
+            : 'warning',
+        details:
+          ctx.credentials.certificateBase64 ||
+          (ctx.credentials.certificatePem && ctx.credentials.privateKeyPem)
+            ? 'Material criptografico armazenado no cofre.'
+            : 'Certificado e chave ainda nao configurados.',
       },
       {
         key: 'bank_account_link',
@@ -578,7 +600,7 @@ export class InterBankingProvider implements BankingProvider {
         label: 'Transporte Banco Inter',
         status: 'error',
         details:
-          'Faltam Client ID, Client Secret ou certificado A1 para operar em LIVE.',
+          'Faltam Client ID, Client Secret ou o conjunto certificado/chave para operar em LIVE.',
       });
 
       return {

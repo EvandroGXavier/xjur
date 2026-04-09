@@ -174,7 +174,25 @@ export class SecurityService {
       ...s,
       password: this.decode(s.password),
       privateKey: this.decode(s.privateKey),
+      publicKey: this.decode(s.publicKey),
     }));
+  }
+
+  async getSecretById(id: string, tenantId: string) {
+    const secret = await this.prisma.securitySecret.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!secret) {
+      throw new NotFoundException('Segredo não encontrado');
+    }
+
+    return {
+      ...secret,
+      password: this.decode(secret.password),
+      privateKey: this.decode(secret.privateKey),
+      publicKey: this.decode(secret.publicKey),
+    };
   }
 
   decodeSecretValue(value?: string | null) {
@@ -192,6 +210,7 @@ export class SecurityService {
         tenantId,
         password: this.encode(createData.password),
         privateKey: this.encode(createData.privateKey),
+        publicKey: this.encode(createData.publicKey),
       },
     });
   }
@@ -209,6 +228,7 @@ export class SecurityService {
 
     if (typeof updateData.password === 'string') updateData.password = this.encode(updateData.password);
     if (typeof updateData.privateKey === 'string') updateData.privateKey = this.encode(updateData.privateKey);
+    if (typeof updateData.publicKey === 'string') updateData.publicKey = this.encode(updateData.publicKey);
 
     return this.prisma.securitySecret.update({
       where: { id },

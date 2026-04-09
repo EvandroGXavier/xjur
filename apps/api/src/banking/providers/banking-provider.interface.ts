@@ -41,10 +41,15 @@ export interface BankingProviderContext {
   integration: any;
   tenantId: string;
   credentials: {
+    credentialSecretId?: string | null;
+    certificateSecretId?: string | null;
+    webhookSecretId?: string | null;
     clientId?: string | null;
     clientSecret?: string | null;
     certificatePassword?: string | null;
     certificateBase64?: string | null;
+    certificatePem?: string | null;
+    privateKeyPem?: string | null;
     webhookSecret?: string | null;
     tokenUrl?: string | null;
   };

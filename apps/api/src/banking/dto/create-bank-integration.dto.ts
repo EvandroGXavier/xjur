@@ -12,6 +12,18 @@ import {
 class BankCredentialDto {
   @IsOptional()
   @IsString()
+  credentialSecretId?: string;
+
+  @IsOptional()
+  @IsString()
+  certificateSecretId?: string;
+
+  @IsOptional()
+  @IsString()
+  webhookSecretId?: string;
+
+  @IsOptional()
+  @IsString()
   clientId?: string;
 
   @IsOptional()
@@ -25,6 +37,14 @@ class BankCredentialDto {
   @IsOptional()
   @IsString()
   certificateBase64?: string;
+
+  @IsOptional()
+  @IsString()
+  certificatePem?: string;
+
+  @IsOptional()
+  @IsString()
+  privateKeyPem?: string;
 
   @IsOptional()
   @IsString()

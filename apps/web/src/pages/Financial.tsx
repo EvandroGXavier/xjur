@@ -4145,6 +4145,13 @@ export function Financial(props: FinancialProps = {}) {
       {/* Bank Accounts View */}
       {view === "banking" && (
         <div className="space-y-6">
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-slate-300">
+            <div className="font-semibold text-white">Origem das credenciais</div>
+            <p className="mt-1 text-slate-400">
+              O fluxo preferencial agora é em <span className="text-emerald-200">Contato &gt; Sigilo</span>.
+              No Banking Hub ficam os testes, sincronizações e ações operacionais da integração.
+            </p>
+          </div>
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             {bankIntegrations.map((integration) => {
               const lastJob = integration.syncJobs?.[0];

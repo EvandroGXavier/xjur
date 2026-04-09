@@ -49,74 +49,164 @@ export class BankingService {
     return bankAccount;
   }
 
+  private buildInterSecretDescription(
+    displayName: string,
+    section: 'CREDENCIAIS' | 'CERTIFICADO' | 'WEBHOOK',
+  ) {
+    return `Banco Inter | ${displayName} | ${section}`;
+  }
+
+  private async resolveSecretReference(tenantId: string, secretId?: string | null) {
+    if (!secretId) return null;
+    return this.securityService.getSecretById(secretId, tenantId);
+  }
+
   private async storeSecrets(
     tenantId: string,
-    integrationId: string,
+    integration: {
+      id: string;
+      displayName: string;
+      credentialSecretId?: string | null;
+      certificateSecretId?: string | null;
+      webhookSecretId?: string | null;
+    },
     credentials?: CreateBankIntegrationDto['credentials'],
   ) {
-    if (!credentials) return;
+    if (!credentials) return {};
 
     const existing = await this.securityService.listSecrets(
       tenantId,
       'BANK_INTEGRATION',
-      integrationId,
+      integration.id,
     );
 
-    const upsertSecret = async (description: string, data: any) => {
-      const found = existing.find((item) => item.description === description);
+    const upsertSecret = async (params: {
+      currentId?: string | null;
+      fallbackKeys: string[];
+      description: string;
+      data: any;
+    }) => {
+      const linked = await this.resolveSecretReference(tenantId, params.currentId);
+      const found =
+        linked ||
+        existing.find((item) =>
+          params.fallbackKeys.some((key) => item.description === key),
+        ) ||
+        null;
+
+      const payload = {
+        ...params.data,
+        description: params.description,
+      };
+
       if (found) {
-        await this.securityService.updateSecret(found.id, tenantId, data);
+        await this.securityService.updateSecret(found.id, tenantId, payload);
         return found.id;
       }
 
       const created = await this.securityService.createSecret(tenantId, {
         entityType: 'BANK_INTEGRATION',
-        entityId: integrationId,
-        description,
-        ...data,
+        entityId: integration.id,
+        ...payload,
       });
       return created.id;
     };
 
+    const secretIds: {
+      credentialSecretId?: string;
+      certificateSecretId?: string;
+      webhookSecretId?: string;
+    } = {};
+
     if (credentials.clientId || credentials.clientSecret || credentials.tokenUrl) {
-      await upsertSecret('INTER_CLIENT', {
-        username: credentials.clientId,
-        password: credentials.clientSecret,
-        details: credentials.tokenUrl || null,
+      secretIds.credentialSecretId = await upsertSecret({
+        currentId: integration.credentialSecretId,
+        fallbackKeys: ['INTER_CLIENT'],
+        description: this.buildInterSecretDescription(
+          integration.displayName,
+          'CREDENCIAIS',
+        ),
+        data: {
+          username: credentials.clientId,
+          password: credentials.clientSecret,
+          details: credentials.tokenUrl || null,
+        },
       });
     }
 
-    if (credentials.certificateBase64 || credentials.certificatePassword) {
-      await upsertSecret('INTER_CERTIFICATE', {
-        privateKey: credentials.certificateBase64,
-        password: credentials.certificatePassword,
+    if (
+      credentials.certificateBase64 ||
+      credentials.certificatePem ||
+      credentials.privateKeyPem ||
+      credentials.certificatePassword
+    ) {
+      secretIds.certificateSecretId = await upsertSecret({
+        currentId: integration.certificateSecretId,
+        fallbackKeys: ['INTER_CERTIFICATE'],
+        description: this.buildInterSecretDescription(
+          integration.displayName,
+          'CERTIFICADO',
+        ),
+        data: {
+          publicKey: credentials.certificatePem || null,
+          privateKey:
+            credentials.privateKeyPem ||
+            credentials.certificateBase64 ||
+            null,
+          password: credentials.certificatePassword || null,
+        },
       });
     }
 
     if (credentials.webhookSecret) {
-      await upsertSecret('INTER_WEBHOOK', {
-        password: credentials.webhookSecret,
+      secretIds.webhookSecretId = await upsertSecret({
+        currentId: integration.webhookSecretId,
+        fallbackKeys: ['INTER_WEBHOOK'],
+        description: this.buildInterSecretDescription(
+          integration.displayName,
+          'WEBHOOK',
+        ),
+        data: {
+          password: credentials.webhookSecret,
+        },
       });
     }
+
+    return secretIds;
   }
 
-  private async loadCredentials(tenantId: string, integrationId: string) {
+  private async loadCredentials(tenantId: string, integration: any) {
     const secrets = await this.securityService.listSecrets(
       tenantId,
       'BANK_INTEGRATION',
-      integrationId,
+      integration.id,
     );
-    const client = secrets.find((item) => item.description === 'INTER_CLIENT');
-    const certificate = secrets.find(
-      (item) => item.description === 'INTER_CERTIFICATE',
-    );
-    const webhook = secrets.find((item) => item.description === 'INTER_WEBHOOK');
+    const client =
+      (await this.resolveSecretReference(tenantId, integration.credentialSecretId)) ||
+      secrets.find((item) => item.description === 'INTER_CLIENT') ||
+      null;
+    const certificate =
+      (await this.resolveSecretReference(
+        tenantId,
+        integration.certificateSecretId,
+      )) ||
+      secrets.find((item) => item.description === 'INTER_CERTIFICATE') ||
+      null;
+    const webhook =
+      (await this.resolveSecretReference(tenantId, integration.webhookSecretId)) ||
+      secrets.find((item) => item.description === 'INTER_WEBHOOK') ||
+      null;
 
     return {
+      credentialSecretId: integration.credentialSecretId || client?.id || null,
+      certificateSecretId: integration.certificateSecretId || certificate?.id || null,
+      webhookSecretId: integration.webhookSecretId || webhook?.id || null,
       clientId: client?.username || null,
       clientSecret: client?.password || null,
       tokenUrl: client?.details || null,
-      certificateBase64: certificate?.privateKey || null,
+      certificateBase64: certificate?.publicKey ? null : certificate?.privateKey || null,
+      certificatePem: certificate?.publicKey || null,
+      privateKeyPem: certificate?.publicKey ? certificate?.privateKey || null : null,
       certificatePassword: certificate?.password || null,
       webhookSecret: webhook?.password || null,
     };
@@ -239,7 +329,41 @@ export class BankingService {
       },
     });
 
-    await this.storeSecrets(tenantId, integration.id, dto.credentials);
+    const storedSecretIds = await this.storeSecrets(
+      tenantId,
+      integration,
+      dto.credentials,
+    );
+    const linkedSecretIds = {
+      credentialSecretId: dto.credentials?.credentialSecretId || null,
+      certificateSecretId: dto.credentials?.certificateSecretId || null,
+      webhookSecretId: dto.credentials?.webhookSecretId || null,
+    };
+    const resolvedSecretIds = {
+      credentialSecretId:
+        linkedSecretIds.credentialSecretId ||
+        storedSecretIds.credentialSecretId ||
+        null,
+      certificateSecretId:
+        linkedSecretIds.certificateSecretId ||
+        storedSecretIds.certificateSecretId ||
+        null,
+      webhookSecretId:
+        linkedSecretIds.webhookSecretId ||
+        storedSecretIds.webhookSecretId ||
+        null,
+    };
+
+    if (
+      resolvedSecretIds.credentialSecretId ||
+      resolvedSecretIds.certificateSecretId ||
+      resolvedSecretIds.webhookSecretId
+    ) {
+      await this.prisma.bankIntegration.update({
+        where: { id: integration.id },
+        data: resolvedSecretIds,
+      });
+    }
 
     return this.prisma.bankIntegration.findUnique({
       where: { id: integration.id },
@@ -261,7 +385,7 @@ export class BankingService {
 
     await this.assertBankAccount(tenantId, dto.bankAccountId);
 
-    await this.prisma.bankIntegration.update({
+    const updatedIntegration = await this.prisma.bankIntegration.update({
       where: { id },
       data: {
         displayName: dto.displayName ?? integration.displayName,
@@ -297,7 +421,47 @@ export class BankingService {
       },
     });
 
-    await this.storeSecrets(tenantId, id, dto.credentials);
+    const storedSecretIds = await this.storeSecrets(
+      tenantId,
+      updatedIntegration,
+      dto.credentials,
+    );
+    const linkedSecretIds = {
+      credentialSecretId:
+        dto.credentials?.credentialSecretId || updatedIntegration.credentialSecretId,
+      certificateSecretId:
+        dto.credentials?.certificateSecretId ||
+        updatedIntegration.certificateSecretId,
+      webhookSecretId:
+        dto.credentials?.webhookSecretId || updatedIntegration.webhookSecretId,
+    };
+    const resolvedSecretIds = {
+      credentialSecretId:
+        linkedSecretIds.credentialSecretId ||
+        storedSecretIds.credentialSecretId ||
+        null,
+      certificateSecretId:
+        linkedSecretIds.certificateSecretId ||
+        storedSecretIds.certificateSecretId ||
+        null,
+      webhookSecretId:
+        linkedSecretIds.webhookSecretId ||
+        storedSecretIds.webhookSecretId ||
+        null,
+    };
+
+    if (
+      resolvedSecretIds.credentialSecretId !==
+        updatedIntegration.credentialSecretId ||
+      resolvedSecretIds.certificateSecretId !==
+        updatedIntegration.certificateSecretId ||
+      resolvedSecretIds.webhookSecretId !== updatedIntegration.webhookSecretId
+    ) {
+      await this.prisma.bankIntegration.update({
+        where: { id },
+        data: resolvedSecretIds,
+      });
+    }
 
     return this.prisma.bankIntegration.findUnique({
       where: { id },
@@ -326,7 +490,7 @@ export class BankingService {
     }
 
     const provider = this.getProvider(integration.provider);
-    const credentials = await this.loadCredentials(tenantId, integration.id);
+    const credentials = await this.loadCredentials(tenantId, integration);
     const result = await provider.healthcheck({
       integration,
       tenantId,
@@ -359,7 +523,7 @@ export class BankingService {
     }
 
     const provider = this.getProvider(integration.provider);
-    const credentials = await this.loadCredentials(tenantId, integration.id);
+    const credentials = await this.loadCredentials(tenantId, integration);
 
     const syncJob = await this.prisma.bankSyncJob.create({
       data: {
@@ -611,7 +775,7 @@ export class BankingService {
     }
 
     const provider = this.getProvider(integration.provider);
-    const credentials = await this.loadCredentials(tenantId, integration.id);
+    const credentials = await this.loadCredentials(tenantId, integration);
     const result = await provider.createCharge(
       { integration, tenantId, credentials },
       {
@@ -701,7 +865,7 @@ export class BankingService {
     }
 
     const provider = this.getProvider(integration.provider);
-    const credentials = await this.loadCredentials(tenantId, integration.id);
+    const credentials = await this.loadCredentials(tenantId, integration);
     const result = await provider.createPayment(
       { integration, tenantId, credentials },
       {

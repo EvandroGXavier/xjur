@@ -16,6 +16,7 @@ import { PJTab } from './PJTab';
 import { useSigilo } from '../../contexts/SigiloContext';
 import { SecurityTab } from '../../components/ui/SecurityTab';
 import { ShieldAlert } from 'lucide-react';
+import { ContactInterSigiloPanel } from '../../components/contacts/ContactInterSigiloPanel';
 
 // Interface matching Backend DTO
 interface ContactData {
@@ -4218,6 +4219,11 @@ export function ContactForm() {
 
             {activeTab === 'sigilo' && isSigiloActive && id && id !== 'new' && (
                 <div className="animate-in fade-in zoom-in-95 duration-500 w-full min-w-0">
+                    <ContactInterSigiloPanel
+                      contactId={id}
+                      contactName={formData.name}
+                      contactDocument={formData.document || formData.cpf || formData.cnpj || ""}
+                    />
                     <SecurityTab entityType="CONTACT" entityId={id} />
                 </div>
             )}
