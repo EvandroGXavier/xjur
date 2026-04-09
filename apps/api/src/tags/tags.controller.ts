@@ -1,7 +1,20 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { TagsService } from './tags.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserData,
+} from '../common/decorators/current-user.decorator';
 
 @Controller('tags')
 @UseGuards(JwtAuthGuard)
@@ -9,11 +22,11 @@ export class TagsController {
   constructor(private readonly tagsService: TagsService) {}
 
   @Get()
-  async findAll(@CurrentUser() user: CurrentUserData, @Query('scope') scope?: string) {
-    console.log(`[TAGS] Buscando tags para tenant: ${user.tenantId}, escopo: ${scope}`);
-    const tags = await this.tagsService.findAll(user.tenantId, scope);
-    console.log(`[TAGS] Encontradas ${tags.length} tags`);
-    return tags;
+  findAll(
+    @CurrentUser() user: CurrentUserData,
+    @Query('scope') scope?: string,
+  ) {
+    return this.tagsService.findAll(user.tenantId, scope);
   }
 
   @Post()
@@ -22,7 +35,11 @@ export class TagsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() data: any, @CurrentUser() user: CurrentUserData) {
+  update(
+    @Param('id') id: string,
+    @Body() data: any,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.tagsService.update(user.tenantId, id, data);
   }
 
@@ -31,58 +48,85 @@ export class TagsController {
     return this.tagsService.remove(user.tenantId, id);
   }
 
-  // Vinculação em Contatos
   @Post('contact/:contactId/:tagId')
-  attachToContact(@Param('contactId') contactId: string, @Param('tagId') tagId: string) {
+  attachToContact(
+    @Param('contactId') contactId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.attachToContact(contactId, tagId);
   }
 
   @Delete('contact/:contactId/:tagId')
-  detachFromContact(@Param('contactId') contactId: string, @Param('tagId') tagId: string) {
+  detachFromContact(
+    @Param('contactId') contactId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.detachFromContact(contactId, tagId);
   }
 
-  // Vinculação em Biblioteca (Modelos/Templates)
   @Post('library/:templateId/:tagId')
-  attachToTemplate(@Param('templateId') templateId: string, @Param('tagId') tagId: string) {
-    return this.tagsService.attachToTemplate(templateId, tagId);
+  attachToTemplate(
+    @Param('templateId') templateId: string,
+    @Param('tagId') tagId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.tagsService.attachToTemplate(user.tenantId, templateId, tagId);
   }
 
   @Delete('library/:templateId/:tagId')
-  detachFromTemplate(@Param('templateId') templateId: string, @Param('tagId') tagId: string) {
-    return this.tagsService.detachFromTemplate(templateId, tagId);
+  detachFromTemplate(
+    @Param('templateId') templateId: string,
+    @Param('tagId') tagId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.tagsService.detachFromTemplate(user.tenantId, templateId, tagId);
   }
 
-  // Vinculação em Processos
   @Post('process/:processId/:tagId')
-  attachToProcess(@Param('processId') processId: string, @Param('tagId') tagId: string) {
+  attachToProcess(
+    @Param('processId') processId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.attachToProcess(processId, tagId);
   }
 
   @Delete('process/:processId/:tagId')
-  detachFromProcess(@Param('processId') processId: string, @Param('tagId') tagId: string) {
+  detachFromProcess(
+    @Param('processId') processId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.detachFromProcess(processId, tagId);
   }
 
-  // Vinculação em Financeiro
   @Post('financial/:recordId/:tagId')
-  attachToFinancialRecord(@Param('recordId') recordId: string, @Param('tagId') tagId: string) {
+  attachToFinancialRecord(
+    @Param('recordId') recordId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.attachToFinancialRecord(recordId, tagId);
   }
 
   @Delete('financial/:recordId/:tagId')
-  detachFromFinancialRecord(@Param('recordId') recordId: string, @Param('tagId') tagId: string) {
+  detachFromFinancialRecord(
+    @Param('recordId') recordId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.detachFromFinancialRecord(recordId, tagId);
   }
 
-  // Vinculação em Timelines
   @Post('timeline/:timelineId/:tagId')
-  attachToTimeline(@Param('timelineId') timelineId: string, @Param('tagId') tagId: string) {
+  attachToTimeline(
+    @Param('timelineId') timelineId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.attachToTimeline(timelineId, tagId);
   }
 
   @Delete('timeline/:timelineId/:tagId')
-  detachFromTimeline(@Param('timelineId') timelineId: string, @Param('tagId') tagId: string) {
+  detachFromTimeline(
+    @Param('timelineId') timelineId: string,
+    @Param('tagId') tagId: string,
+  ) {
     return this.tagsService.detachFromTimeline(timelineId, tagId);
   }
 }

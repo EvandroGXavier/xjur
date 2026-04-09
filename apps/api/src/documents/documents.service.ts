@@ -269,6 +269,9 @@ export class DocumentsService {
   // =========================
 
   private readonly libraryScope: TagScope = "LIBRARY";
+  private readonly internalLibraryTagName = "SISTEMA";
+  private readonly internalLibraryTagColor = "#f59e0b";
+  private readonly internalLibraryTagTextColor = "#ffffff";
 
   private normalizeScopeList(input: any): string[] {
     const list = Array.isArray(input) ? input : input ? [input] : [];
@@ -282,17 +285,44 @@ export class DocumentsService {
     return Array.from(new Set(normalized)).slice(0, 20);
   }
 
+  private normalizeTagName(input: any): string {
+    return String(input || "")
+      .trim()
+      .replace(/^#+/, "")
+      .replace(/\s+/g, " ")
+      .slice(0, 80);
+  }
+
+  private normalizeTagKey(input: any): string {
+    return this.normalizeTagName(input).toUpperCase();
+  }
+
   private normalizeTagNames(input: any): string[] {
     const list = Array.isArray(input) ? input : input ? [input] : [];
     const normalized = list
-      .map((t) =>
-        String(t || "")
-          .trim()
-          .replace(/^#/, ""),
-      )
-      .map((t) => t.replace(/\s+/g, " ").trim())
+      .map((t) => this.normalizeTagName(t))
       .filter(Boolean);
     return Array.from(new Set(normalized)).slice(0, 30);
+  }
+
+  private isInternalLibraryTagName(input: any): boolean {
+    return this.normalizeTagKey(input) === this.internalLibraryTagName;
+  }
+
+  private isInternalLibraryTag(tag: any): boolean {
+    if (!tag) return false;
+    return (
+      this.isInternalLibraryTagName(tag.name) &&
+      this.normalizeScopeList(tag.scope).includes(this.libraryScope)
+    );
+  }
+
+  private serializeLibraryTag(tag: any) {
+    return {
+      ...tag,
+      scope: this.normalizeScopeList(tag?.scope),
+      isInternal: this.isInternalLibraryTag(tag),
+    };
   }
 
   private hashToColor(name: string) {
@@ -319,57 +349,134 @@ export class DocumentsService {
     return palette[hash % palette.length];
   }
 
-  private async ensureLibraryTagsByNames(
+  private async ensureLibraryTagRecordsByNames(
     tenantId: string,
     rawNames: any,
-  ): Promise<string[]> {
+    options?: {
+      includeInternalSystemTag?: boolean;
+      allowInternalSystemTag?: boolean;
+    },
+  ): Promise<any[]> {
     const names = this.normalizeTagNames(rawNames);
+    if (options?.includeInternalSystemTag) {
+      names.unshift(this.internalLibraryTagName);
+    }
     if (names.length === 0) return [];
 
-    const ids: string[] = [];
+    const dedupedNames = Array.from(
+      new Map(names.map((name) => [this.normalizeTagKey(name), name])).values(),
+    );
+    const tags: any[] = [];
 
-    for (const name of names) {
+    for (const name of dedupedNames) {
+      const isInternal = this.isInternalLibraryTagName(name);
+      if (isInternal && options?.allowInternalSystemTag === false) {
+        throw new BadRequestException(
+          "A tag SISTEMA é reservada ao uso interno da Biblioteca.",
+        );
+      }
+
       const existing = await this.prisma.tag.findFirst({
         where: {
           tenantId,
-          active: true,
           name: { equals: name, mode: "insensitive" },
         },
       });
 
       if (!existing) {
-        const color = this.hashToColor(name);
         const created = await this.prisma.tag.create({
           data: {
             tenantId,
             name,
-            color,
-            textColor: "#ffffff",
+            color: isInternal
+              ? this.internalLibraryTagColor
+              : this.hashToColor(name),
+            textColor: isInternal
+              ? this.internalLibraryTagTextColor
+              : "#ffffff",
             scope: [this.libraryScope],
+            active: true,
           },
         });
-        ids.push(created.id);
+        tags.push(created);
         continue;
       }
 
       const scopes = this.normalizeScopeList((existing as any).scope);
-      if (!scopes.includes(this.libraryScope)) {
-        const nextScopes = Array.from(new Set([...scopes, this.libraryScope]));
-        await this.prisma.tag.update({
+      const nextScopes = isInternal
+        ? [this.libraryScope]
+        : Array.from(new Set([...scopes, this.libraryScope]));
+      const needsUpdate =
+        !existing.active ||
+        !scopes.includes(this.libraryScope) ||
+        (isInternal &&
+          (scopes.length !== 1 || scopes[0] !== this.libraryScope)) ||
+        (isInternal &&
+          (existing.color !== this.internalLibraryTagColor ||
+            existing.textColor !== this.internalLibraryTagTextColor));
+
+      if (needsUpdate) {
+        const updated = await this.prisma.tag.update({
           where: { id: existing.id },
-          data: { scope: nextScopes },
+          data: {
+            active: true,
+            scope: nextScopes,
+            ...(isInternal
+              ? {
+                  color: this.internalLibraryTagColor,
+                  textColor: this.internalLibraryTagTextColor,
+                }
+              : {}),
+          },
         });
+        tags.push(updated);
+        continue;
       }
 
-      ids.push(existing.id);
+      tags.push(existing);
     }
 
-    return ids;
+    return tags.map((tag) => this.serializeLibraryTag(tag));
+  }
+
+  private async ensureLibraryTagsByNames(
+    tenantId: string,
+    rawNames: any,
+    options?: {
+      includeInternalSystemTag?: boolean;
+      allowInternalSystemTag?: boolean;
+    },
+  ): Promise<string[]> {
+    const tags = await this.ensureLibraryTagRecordsByNames(
+      tenantId,
+      rawNames,
+      options,
+    );
+    return tags.map((tag) => tag.id);
+  }
+
+  private async ensureSystemLibraryTag(tenantId: string) {
+    const [tag] = await this.ensureLibraryTagRecordsByNames(
+      tenantId,
+      [this.internalLibraryTagName],
+      { allowInternalSystemTag: true },
+    );
+    return tag;
+  }
+
+  private buildSystemTemplateTagNames(rawTags: any): string[] {
+    return this.normalizeTagNames([
+      this.internalLibraryTagName,
+      ...this.normalizeLegacyTagNames(rawTags),
+    ]);
   }
 
   private async resolveLibraryTagIds(
     tenantId: string,
     input?: { tagIds?: any; tags?: any },
+    options?: {
+      allowInternalSystemTag?: boolean;
+    },
   ): Promise<string[]> {
     const rawIds = Array.isArray(input?.tagIds) ? input?.tagIds : [];
     const tagIds = rawIds
@@ -384,6 +491,10 @@ export class DocumentsService {
         .filter((t) =>
           this.normalizeScopeList((t as any).scope).includes(this.libraryScope),
         )
+        .filter(
+          (t) =>
+            options?.allowInternalSystemTag || !this.isInternalLibraryTag(t),
+        )
         .map((t) => t.id);
 
       const missing = tagIds.filter((id) => !allowed.includes(id));
@@ -396,15 +507,26 @@ export class DocumentsService {
     }
 
     if (input?.tags) {
-      return this.ensureLibraryTagsByNames(tenantId, input.tags);
+      return this.ensureLibraryTagsByNames(tenantId, input.tags, {
+        allowInternalSystemTag: options?.allowInternalSystemTag,
+      });
     }
 
     return [];
   }
 
-  private serializeTemplate(tpl: any) {
+  private serializeTemplate(
+    tpl: any,
+    options?: {
+      globalTags?: any[];
+    },
+  ) {
     const tagLinks = Array.isArray(tpl?.tagLinks) ? tpl.tagLinks : [];
-    const globalTags = tagLinks.map((x: any) => x?.tag).filter(Boolean);
+    const globalTags = (
+      Array.isArray(options?.globalTags)
+        ? options?.globalTags
+        : tagLinks.map((x: any) => x?.tag).filter(Boolean)
+    ).map((tag: any) => this.serializeLibraryTag(tag));
     const tagIds = globalTags.map((t: any) => t.id);
     const tagNames = globalTags.map((t: any) => t.name);
     const legacyTags = Array.isArray(tpl?.tags) ? tpl.tags : [];
@@ -414,12 +536,7 @@ export class DocumentsService {
 
     result.globalTags = globalTags;
     result.tagIds = tagIds;
-    // MantÃ©m `tags` como lista de nomes para compatibilidade visual/legacy.
-    result.tags = tpl?.tenantId
-      ? tagNames.length
-        ? tagNames
-        : legacyTags
-      : legacyTags;
+    result.tags = tagNames.length ? tagNames : legacyTags;
     return result;
   }
 
@@ -434,10 +551,14 @@ export class DocumentsService {
       Array.isArray(template?.tagLinks) && template.tagLinks.length > 0;
     if (hasLinks) return template;
 
-    const legacyTags = Array.isArray(template?.tags) ? template.tags : [];
+    const legacyTags = this.normalizeLegacyTagNames(template?.tags).filter(
+      (name) => !this.isInternalLibraryTagName(name),
+    );
     if (!legacyTags.length) return template;
 
-    const tagIds = await this.ensureLibraryTagsByNames(tenantId, legacyTags);
+    const tagIds = await this.ensureLibraryTagsByNames(tenantId, legacyTags, {
+      allowInternalSystemTag: false,
+    });
     if (!tagIds.length) return template;
 
     await this.prisma.$transaction(async (tx) => {
@@ -455,6 +576,76 @@ export class DocumentsService {
     const updated = await this.prisma.documentTemplate.findFirst({
       where: { id: template.id },
       include: { tagLinks: { include: { tag: true } } },
+    });
+
+    return updated || template;
+  }
+
+  private async migrateCategoryToTags(template: any, tenantId: string) {
+    const isTenantTemplate =
+      !!template?.tenantId &&
+      template.tenantId === tenantId &&
+      !template?.isSystemTemplate;
+    const categoryName = String(template?.category?.name || "").trim();
+    if (!isTenantTemplate || !template?.categoryId || !categoryName) {
+      return template;
+    }
+
+    const tagIds = await this.ensureLibraryTagsByNames(tenantId, [categoryName], {
+      allowInternalSystemTag: false,
+    });
+    if (!tagIds.length) return template;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentTemplate.update({
+        where: { id: template.id },
+        data: { categoryId: null },
+      });
+
+      await (tx as any).documentTemplateTag?.createMany?.({
+        data: tagIds.map((tagId) => ({ templateId: template.id, tagId })),
+        skipDuplicates: true,
+      });
+    });
+
+    const updated = await this.prisma.documentTemplate.findFirst({
+      where: { id: template.id },
+      include: {
+        category: { select: { id: true, name: true } },
+        tagLinks: { include: { tag: true } },
+      },
+    });
+
+    return updated || template;
+  }
+
+  private async removeInternalTagsFromTenantTemplate(template: any, tenantId: string) {
+    const isTenantTemplate =
+      !!template?.tenantId &&
+      template.tenantId === tenantId &&
+      !template?.isSystemTemplate;
+    if (!isTenantTemplate) return template;
+
+    const internalTagIds = (Array.isArray(template?.tagLinks) ? template.tagLinks : [])
+      .map((link: any) => link?.tag)
+      .filter((tag: any) => this.isInternalLibraryTag(tag))
+      .map((tag: any) => tag.id);
+
+    if (!internalTagIds.length) return template;
+
+    await (this.prisma as any).documentTemplateTag?.deleteMany?.({
+      where: {
+        templateId: template.id,
+        tagId: { in: internalTagIds },
+      },
+    });
+
+    const updated = await this.prisma.documentTemplate.findFirst({
+      where: { id: template.id },
+      include: {
+        category: { select: { id: true, name: true } },
+        tagLinks: { include: { tag: true } },
+      },
     });
 
     return updated || template;
@@ -511,15 +702,7 @@ export class DocumentsService {
   }
 
   private normalizeLegacyTagNames(tags: any): string[] {
-    const list = Array.isArray(tags) ? tags : [];
-    return list
-      .map((t) =>
-        String(t || "")
-          .trim()
-          .replace(/^#/, ""),
-      )
-      .filter(Boolean)
-      .slice(0, 30);
+    return this.normalizeTagNames(tags);
   }
 
   async syncSystemLibrary(_tenantId?: string, options?: { force?: boolean }) {
@@ -555,7 +738,7 @@ export class DocumentsService {
             title: seed.title,
             content: seed.content,
             description: seed.description || null,
-            tags: seed.tags || null,
+            tags: this.buildSystemTemplateTagNames(seed.tags),
             preferredStorage: seed.preferredStorage || null,
             metadata: seed.metadata || null,
             categoryId: null,
@@ -576,7 +759,7 @@ export class DocumentsService {
           title: seed.title,
           content: seed.content,
           description: seed.description || null,
-          tags: seed.tags || null,
+          tags: this.buildSystemTemplateTagNames(seed.tags),
           preferredStorage: seed.preferredStorage || null,
           metadata: seed.metadata || null,
           categoryId: null,
@@ -589,7 +772,7 @@ export class DocumentsService {
           title: seed.title,
           content: seed.content,
           description: seed.description || null,
-          tags: seed.tags || null,
+          tags: this.buildSystemTemplateTagNames(seed.tags),
           preferredStorage: seed.preferredStorage || null,
           metadata: seed.metadata || null,
           categoryId: null,
@@ -658,7 +841,7 @@ export class DocumentsService {
         title: String(dto.title || "").trim(),
         content: String(dto.content || ""),
         description: dto.description ? String(dto.description) : null,
-        tags: this.normalizeLegacyTagNames(dto.tags),
+        tags: this.buildSystemTemplateTagNames(dto.tags),
         preferredStorage: dto.preferredStorage
           ? String(dto.preferredStorage)
           : null,
@@ -701,7 +884,7 @@ export class DocumentsService {
           ? { description: dto.description ? String(dto.description) : null }
           : {}),
         ...(dto.tags !== undefined
-          ? { tags: this.normalizeLegacyTagNames(dto.tags) }
+          ? { tags: this.buildSystemTemplateTagNames(dto.tags) }
           : {}),
         ...(dto.preferredStorage !== undefined
           ? {
@@ -756,7 +939,12 @@ export class DocumentsService {
 
     const tagIds = await this.ensureLibraryTagsByNames(
       tenantId,
-      systemTemplate.tags,
+      this.buildSystemTemplateTagNames(systemTemplate.tags).filter(
+        (name) => !this.isInternalLibraryTagName(name),
+      ),
+      {
+        allowInternalSystemTag: false,
+      },
     );
 
     const created = await this.prisma.documentTemplate.create({
@@ -787,14 +975,16 @@ export class DocumentsService {
   }
 
   async createTemplate(dto: CreateTemplateDto, tenantId: string) {
-    const tagIds = await this.resolveLibraryTagIds(tenantId, dto);
+    const tagIds = await this.resolveLibraryTagIds(tenantId, dto, {
+      allowInternalSystemTag: false,
+    });
 
     const created = await this.prisma.documentTemplate.create({
       data: {
         tenantId,
         title: dto.title,
         content: dto.content,
-        categoryId: dto.categoryId,
+        categoryId: null,
         isSystemTemplate: false,
         description: dto.description || null,
         tags: null,
@@ -830,7 +1020,6 @@ export class DocumentsService {
     const scope = this.normalizeScope(options?.scope);
     const q = (options?.q || "").trim();
     const tag = (options?.tag || "").trim();
-    const categoryId = String(options?.categoryId || "").trim();
     const sortField = this.normalizeTemplateSortField(options?.sortBy);
     const sortDirection = this.normalizeSortDirection(options?.sortDirection);
 
@@ -863,17 +1052,55 @@ export class DocumentsService {
         : this.prisma.documentTemplate.findMany({
             where: buildWhere({ tenantId }),
             orderBy: { title: "asc" },
-            include: { tagLinks: { include: { tag: true } } },
+            include: {
+              category: { select: { id: true, name: true } },
+              tagLinks: { include: { tag: true } },
+            },
           }),
     ]);
 
     const migratedTenantTemplates = await Promise.all(
-      tenantTemplates.map((t) => this.migrateLegacyTagsToGlobal(t, tenantId)),
+      tenantTemplates.map(async (template) => {
+        const withLegacyTags = await this.migrateLegacyTagsToGlobal(
+          template,
+          tenantId,
+        );
+        const withCategoryTags = await this.migrateCategoryToTags(
+          withLegacyTags,
+          tenantId,
+        );
+        return this.removeInternalTagsFromTenantTemplate(
+          withCategoryTags,
+          tenantId,
+        );
+      }),
+    );
+    const systemTagNames = Array.from(
+      new Set(
+        systemTemplates.flatMap((template) =>
+          this.buildSystemTemplateTagNames(template.tags),
+        ),
+      ),
+    );
+    const systemTagRecords = systemTagNames.length
+      ? await this.ensureLibraryTagRecordsByNames(tenantId, systemTagNames, {
+          allowInternalSystemTag: true,
+        })
+      : [await this.ensureSystemLibraryTag(tenantId)];
+    const systemTagMap = new Map(
+      systemTagRecords.map((tag) => [this.normalizeTagKey(tag.name), tag]),
     );
 
-    let merged = [...systemTemplates, ...migratedTenantTemplates].map((t) =>
-      this.serializeTemplate(t),
-    );
+    let merged = [
+      ...systemTemplates.map((template) =>
+        this.serializeTemplate(template, {
+          globalTags: this.buildSystemTemplateTagNames(template.tags)
+            .map((name) => systemTagMap.get(this.normalizeTagKey(name)))
+            .filter(Boolean),
+        }),
+      ),
+      ...migratedTenantTemplates.map((template) => this.serializeTemplate(template)),
+    ];
 
     const includedTags = (options?.includedTags || "")
       .split(",")
@@ -881,12 +1108,6 @@ export class DocumentsService {
     const excludedTags = (options?.excludedTags || "")
       .split(",")
       .filter(Boolean);
-
-    if (categoryId) {
-      merged = merged.filter(
-        (template: any) => String(template.categoryId || "") === categoryId,
-      );
-    }
 
     if (tag || includedTags.length > 0 || excludedTags.length > 0) {
       merged = merged.filter((t: any) => {
@@ -972,11 +1193,30 @@ export class DocumentsService {
         id,
         OR: [{ tenantId }, { isSystemTemplate: true, tenantId: null }],
       },
-      include: { tagLinks: { include: { tag: true } } },
+      include: {
+        category: { select: { id: true, name: true } },
+        tagLinks: { include: { tag: true } },
+      },
     });
     if (!template) throw new NotFoundException("Template not found");
 
+    if (template.isSystemTemplate) {
+      const globalTags = await this.ensureLibraryTagRecordsByNames(
+        tenantId,
+        this.buildSystemTemplateTagNames(template.tags),
+        {
+          allowInternalSystemTag: true,
+        },
+      );
+      return this.serializeTemplate(template, { globalTags });
+    }
+
     template = await this.migrateLegacyTagsToGlobal(template, tenantId);
+    template = await this.migrateCategoryToTags(template, tenantId);
+    template = await this.removeInternalTagsFromTenantTemplate(
+      template,
+      tenantId,
+    );
     return this.serializeTemplate(template);
   }
 
@@ -990,14 +1230,16 @@ export class DocumentsService {
         "Template do sistema não pode ser alterado.",
       );
 
-    const tagIds = await this.resolveLibraryTagIds(tenantId, dto);
+    const tagIds = await this.resolveLibraryTagIds(tenantId, dto, {
+      allowInternalSystemTag: false,
+    });
 
     const updated = await this.prisma.documentTemplate.update({
       where: { id },
       data: {
         title: dto.title,
         content: dto.content,
-        categoryId: dto.categoryId,
+        categoryId: null,
         description: dto.description || null,
         tags: null,
         preferredStorage: dto.preferredStorage || null,

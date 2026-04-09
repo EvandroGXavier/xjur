@@ -37,12 +37,6 @@ import { InlineTags } from "../components/ui/InlineTags";
 import { DataGrid } from "../components/ui/DataGrid";
 import { TenantDocumentLayoutSettings } from "../components/documents/TenantDocumentLayoutSettings";
 
-interface Category {
-  id: string;
-  name: string;
-  parentId?: string | null;
-}
-
 interface Template {
   id: string;
   title: string;
@@ -65,6 +59,7 @@ interface GlobalTag {
   name: string;
   color: string;
   textColor?: string;
+  isInternal?: boolean;
 }
 
 interface DocumentHistory {
@@ -77,15 +72,12 @@ interface DocumentHistory {
 
 type LibraryTab = "TEMPLATES" | "HISTORY" | "SETTINGS";
 type TemplateViewMode = "CARDS" | "LIST";
-type TemplateScope = "all" | "system" | "tenant";
 type TemplateSortField = "updatedAt" | "title" | "createdAt";
 type HistorySortField = "createdAt" | "updatedAt" | "title" | "status";
 
 interface PersistedLibraryState {
   activeTab?: LibraryTab;
   searchTerm?: string;
-  templateScope?: TemplateScope;
-  categoryId?: string;
   templateViewMode?: TemplateViewMode;
   templateSortField?: TemplateSortField;
   templateSortDirection?: "asc" | "desc";
@@ -95,7 +87,10 @@ interface PersistedLibraryState {
   excludedTags?: string[];
 }
 
-const LIBRARY_STATE_KEY = "drx:library:state:v2";
+const LIBRARY_STATE_KEY = "drx:library:state:v3";
+const INTERNAL_SYSTEM_TAG_NAME = "SISTEMA";
+const INTERNAL_SYSTEM_TAG_COLOR = "#f59e0b";
+const INTERNAL_SYSTEM_TAG_TEXT = "#ffffff";
 
 const readLibraryState = (): PersistedLibraryState => {
   if (typeof window === "undefined") return {};
@@ -127,6 +122,17 @@ const getLibraryAccentStyles = (
     ...options,
   });
 
+const normalizeSystemTag = (tag?: Partial<GlobalTag> | null): GlobalTag => ({
+  id: String(tag?.id || "__library_system_tag__"),
+  name: INTERNAL_SYSTEM_TAG_NAME,
+  color: String(tag?.color || INTERNAL_SYSTEM_TAG_COLOR),
+  textColor: String(tag?.textColor || INTERNAL_SYSTEM_TAG_TEXT),
+  isInternal: true,
+});
+
+const isInternalSystemTag = (tag?: Partial<GlobalTag> | null) =>
+  String(tag?.name || "").trim().toUpperCase() === INTERNAL_SYSTEM_TAG_NAME;
+
 export function Library() {
   const isSuperAdmin = (() => {
     const baseEmails = ["evandro@conectionmg.com.br"];
@@ -153,7 +159,6 @@ export function Library() {
   );
   const [templates, setTemplates] = useState<Template[]>([]);
   const [history, setHistory] = useState<DocumentHistory[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(
     persistedState.searchTerm || "",
@@ -166,12 +171,10 @@ export function Library() {
   const [editorContent, setEditorContent] = useState("");
   const [editorTitle, setEditorTitle] = useState("");
   const [editorDescription, setEditorDescription] = useState("");
-  const [editorCategoryId, setEditorCategoryId] = useState("");
   const [editorPreferredStorage, setEditorPreferredStorage] = useState<
     "WORD_ONLINE" | "GOOGLE_DOCS" | ""
   >("WORD_ONLINE");
   const [editorTags, setEditorTags] = useState<GlobalTag[]>([]);
-  const [editorLegacyTags, setEditorLegacyTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [editorMode, setEditorMode] = useState<"TENANT" | "SYSTEM">("TENANT");
   const [editorSystemKey, setEditorSystemKey] = useState("");
@@ -192,12 +195,6 @@ export function Library() {
     persistedState.excludedTags || [],
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [templateScope, setTemplateScope] = useState<TemplateScope>(
-    persistedState.templateScope || "all",
-  );
-  const [selectedCategoryId, setSelectedCategoryId] = useState(
-    persistedState.categoryId || "",
-  );
   const [templateViewMode, setTemplateViewMode] = useState<TemplateViewMode>(
     persistedState.templateViewMode || "LIST",
   );
@@ -214,8 +211,6 @@ export function Library() {
     "asc" | "desc"
   >(persistedState.historySortDirection || "desc");
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [creatingCategory, setCreatingCategory] = useState(false);
 
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   const systemAccentStyle = getLibraryAccentStyles(themeColor.amber500, {
@@ -277,8 +272,6 @@ export function Library() {
     const payload: PersistedLibraryState = {
       activeTab,
       searchTerm: searchInput,
-      templateScope,
-      categoryId: selectedCategoryId,
       templateViewMode,
       templateSortField,
       templateSortDirection,
@@ -292,8 +285,6 @@ export function Library() {
   }, [
     activeTab,
     searchInput,
-    templateScope,
-    selectedCategoryId,
     templateViewMode,
     templateSortField,
     templateSortDirection,
@@ -310,9 +301,7 @@ export function Library() {
       void fetchData(controller.signal);
     }
 
-    if (activeTab !== "HISTORY") {
-      void fetchCategories(controller.signal);
-    }
+    void fetchLibraryTags(controller.signal);
 
     return () => controller.abort();
   }, [
@@ -320,8 +309,6 @@ export function Library() {
     searchTerm,
     includedTags,
     excludedTags,
-    templateScope,
-    selectedCategoryId,
     templateSortField,
     templateSortDirection,
     historySortField,
@@ -334,12 +321,10 @@ export function Library() {
       if (activeTab === "TEMPLATES") {
         const params: any = {};
         if (searchTerm) params.q = searchTerm;
-        if (templateScope !== "all") params.scope = templateScope;
         if (includedTags.length > 0)
           params.includedTags = includedTags.join(",");
         if (excludedTags.length > 0)
           params.excludedTags = excludedTags.join(",");
-        if (selectedCategoryId) params.categoryId = selectedCategoryId;
         params.sortBy = templateSortField;
         params.sortDirection = templateSortDirection;
 
@@ -376,30 +361,10 @@ export function Library() {
     setIsRefreshing(true);
     try {
       await fetchData();
-      if (activeTab !== "HISTORY") {
-        await fetchCategories();
-      }
+      await fetchLibraryTags();
     } finally {
       setIsRefreshing(false);
     }
-  };
-
-  const fetchCategories = async (signal?: AbortSignal) => {
-    try {
-      const res = await api.get("/documents/categories", { signal });
-      setCategories(res.data || []);
-    } catch (err: any) {
-      if (axios.isCancel(err)) return;
-      console.error(err);
-    }
-  };
-
-  const normalizeTags = (tags: any): string[] => {
-    const list = Array.isArray(tags) ? tags : [];
-    return list
-      .map((t) => String(t || "").trim())
-      .filter(Boolean)
-      .slice(0, 30);
   };
 
   const normalizeGlobalTags = (tags: any): GlobalTag[] => {
@@ -410,16 +375,28 @@ export function Library() {
         name: String(t?.name || "").trim(),
         color: String(t?.color || defaultTagColor).trim(),
         textColor: t?.textColor ? String(t.textColor) : undefined,
+        isInternal: Boolean(t?.isInternal) || isInternalSystemTag(t),
       }))
       .filter((t) => t.id && t.name)
       .slice(0, 30);
+  };
+
+  const ensureSystemTagSelected = (tags: GlobalTag[]) => {
+    if (tags.some((tag) => isInternalSystemTag(tag))) return tags;
+    const availableSystemTag = availableLibraryTags.find((tag) =>
+      isInternalSystemTag(tag),
+    );
+    return [
+      normalizeSystemTag(availableSystemTag),
+      ...tags.filter((tag) => !isInternalSystemTag(tag)),
+    ].slice(0, 30);
   };
 
   const fetchLibraryTags = async (signal?: AbortSignal) => {
     try {
       setLoadingLibraryTags(true);
       const res = await api.get("/tags?scope=LIBRARY", { signal });
-      setAvailableLibraryTags(Array.isArray(res.data) ? res.data : []);
+      setAvailableLibraryTags(normalizeGlobalTags(res.data));
     } catch (err) {
       console.error(err);
     } finally {
@@ -430,9 +407,14 @@ export function Library() {
   useEffect(() => {
     if (!isEditorOpen) return;
     const controller = new AbortController();
-    fetchLibraryTags(controller.signal);
+    void fetchLibraryTags(controller.signal);
     return () => controller.abort();
   }, [isEditorOpen]);
+
+  useEffect(() => {
+    if (!isEditorOpen || editorMode !== "SYSTEM") return;
+    setEditorTags((prev) => ensureSystemTagSelected(prev));
+  }, [availableLibraryTags, editorMode, isEditorOpen]);
 
   const setEditorFromTemplate = (tpl: Template | null) => {
     setEditingTemplate(tpl);
@@ -443,10 +425,9 @@ export function Library() {
     setEditorTitle(tpl?.title || "");
     setEditorContent(tpl?.content || "");
     setEditorDescription(tpl?.description || "");
-    setEditorCategoryId(tpl?.categoryId || "");
     setEditorPreferredStorage((tpl?.preferredStorage as any) || "WORD_ONLINE");
-    setEditorLegacyTags(normalizeTags(tpl?.tags));
-    setEditorTags(normalizeGlobalTags((tpl as any)?.globalTags));
+    const nextTags = normalizeGlobalTags((tpl as any)?.globalTags);
+    setEditorTags(isSystemTpl ? ensureSystemTagSelected(nextTags) : nextTags);
     setTagInput("");
     setShowAdvanced(false);
     setEditorMetadataText(
@@ -467,8 +448,7 @@ export function Library() {
     setEditorMode("SYSTEM");
     setEditorSystemKey("");
     setEditorPreferredStorage("WORD_ONLINE");
-    setEditorLegacyTags([]);
-    setEditorTags([]);
+    setEditorTags(ensureSystemTagSelected([]));
     setEditorReadOnly(!isSuperAdmin);
     setIsEditorOpen(true);
   };
@@ -479,6 +459,7 @@ export function Library() {
     if (action === "COPY") {
       setEditorMode("TENANT"); // Force to tenant mode to allow editing before saving copy
       setEditorReadOnly(false);
+      setEditorTags((prev) => prev.filter((tag) => !tag.isInternal));
       if (!tpl.title.endsWith("(Cópia)")) {
         setEditorTitle(tpl.title + " (Cópia)");
       }
@@ -490,15 +471,27 @@ export function Library() {
 
   const handleToggleTag = (tag: GlobalTag) => {
     setEditorTags((prev) => {
+      if (editorMode !== "SYSTEM" && tag.isInternal) {
+        toast.error("A tag SISTEMA é interna e não pode ser usada manualmente.");
+        return prev;
+      }
+
       if (prev.some((t) => t.id === tag.id)) {
+        if (tag.isInternal) return prev;
         return prev.filter((t) => t.id !== tag.id);
       }
-      return [...prev, tag].slice(0, 30);
+      const next = [...prev, tag].slice(0, 30);
+      return editorMode === "SYSTEM" ? ensureSystemTagSelected(next) : next;
     });
   };
 
   const handleRemoveTag = (tagId: string) => {
-    setEditorTags((prev) => prev.filter((t) => t.id !== tagId));
+    setEditorTags((prev) => {
+      const current = prev.find((tag) => tag.id === tagId);
+      if (current?.isInternal) return prev;
+      const next = prev.filter((tag) => tag.id !== tagId);
+      return editorMode === "SYSTEM" ? ensureSystemTagSelected(next) : next;
+    });
   };
 
   const handleAddOrCreateTag = async (raw: string) => {
@@ -509,6 +502,10 @@ export function Library() {
       (t) => t.name.toLowerCase() === cleaned.toLowerCase(),
     );
     if (existing) {
+      if (editorMode !== "SYSTEM" && existing.isInternal) {
+        toast.error("A tag SISTEMA é interna e não pode ser usada manualmente.");
+        return;
+      }
       handleToggleTag(existing);
       return;
     }
@@ -520,30 +517,14 @@ export function Library() {
       });
       const created: GlobalTag = res.data;
       setAvailableLibraryTags((prev) => [created, ...prev]);
+      if (editorMode !== "SYSTEM" && created.isInternal) {
+        toast.error("A tag SISTEMA é interna e não pode ser usada manualmente.");
+        return;
+      }
       handleToggleTag(created);
     } catch (err) {
       console.error(err);
       toast.error("Erro ao criar tag global");
-    }
-  };
-
-  const handleCreateCategory = async (rawName?: string) => {
-    const name = String(rawName ?? prompt("Nome da categoria") ?? "").trim();
-    if (!name) return false;
-
-    try {
-      setCreatingCategory(true);
-      await api.post("/documents/categories", { name });
-      toast.success("Categoria criada");
-      await fetchCategories();
-      setNewCategoryName("");
-      return true;
-    } catch (err) {
-      console.error(err);
-      toast.error("Erro ao criar categoria");
-      return false;
-    } finally {
-      setCreatingCategory(false);
     }
   };
 
@@ -552,7 +533,6 @@ export function Library() {
       const payload: any = {
         title: editorTitle,
         content: editorContent,
-        categoryId: editorCategoryId || undefined,
         description: editorDescription,
         preferredStorage: editorPreferredStorage || undefined,
         tagIds: editorTags.map((tag) => tag.id).filter(Boolean),
@@ -610,7 +590,7 @@ export function Library() {
           title: editorTitle,
           content: editorContent,
           description: editorDescription || undefined,
-          tags: normalizeTags(editorLegacyTags),
+          tags: editorTags.map((tag) => tag.name),
           preferredStorage: editorPreferredStorage || undefined,
           metadata: parsedMetadata,
         };
@@ -637,7 +617,6 @@ export function Library() {
       const payload: any = {
         title: editorTitle,
         content: editorContent,
-        categoryId: editorCategoryId || undefined,
         description: editorDescription || undefined,
         tagIds: editorTags.length ? editorTags.map((t) => t.id) : undefined,
         preferredStorage: editorPreferredStorage || undefined,
@@ -706,12 +685,6 @@ export function Library() {
     }
   };
 
-  const categoryNameById = (id?: string | null) => {
-    if (!id) return "";
-    const c = categories.find((x) => x.id === id);
-    return c?.name || "";
-  };
-
   const formatDate = (value?: string | null) => {
     if (!value) return "-";
     return new Date(value).toLocaleDateString("pt-BR");
@@ -723,17 +696,11 @@ export function Library() {
   };
 
   const hasTemplateFilters = Boolean(
-    searchTerm ||
-    selectedCategoryId ||
-    templateScope !== "all" ||
-    includedTags.length > 0 ||
-    excludedTags.length > 0,
+    searchTerm || includedTags.length > 0 || excludedTags.length > 0,
   );
 
   const handleClearTemplateFilters = () => {
     setSearchInput("");
-    setSelectedCategoryId("");
-    setTemplateScope("all");
     setIncludedTags([]);
     setExcludedTags([]);
   };
@@ -761,10 +728,6 @@ export function Library() {
     setHistorySortDirection(direction);
   };
 
-  const handleConfigCategorySubmit = async () => {
-    await handleCreateCategory(newCategoryName);
-  };
-
   const templateColumns = [
     {
       key: "title",
@@ -785,57 +748,19 @@ export function Library() {
       ),
     },
     {
-      key: "categoryId",
-      label: "Categoria",
-      render: (tpl: Template) => (
-        <span className="text-xs text-slate-300">
-          {categoryNameById(tpl.categoryId) || "Sem categoria"}
-        </span>
-      ),
-    },
-    {
-      key: "scope",
-      label: "Origem",
-      render: (tpl: Template) => (
-        <span
-          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border"
-          style={tpl.isSystemTemplate ? systemAccentStyle : officeAccentStyle}
-        >
-          {tpl.isSystemTemplate ? <Sparkles size={12} /> : null}
-          {tpl.isSystemTemplate ? "Sistema" : "Escritorio"}
-        </span>
-      ),
-    },
-    {
       key: "tags",
       label: "Tags",
-      render: (tpl: Template) =>
-        tpl.isSystemTemplate ? (
-          <div className="flex flex-wrap gap-1">
-            {Array.isArray(tpl.tags) && tpl.tags.length > 0 ? (
-              tpl.tags.slice(0, 3).map((tag) => (
-                <span
-                  key={String(tag)}
-                  className="text-[11px] px-2 py-0.5 rounded-full border"
-                  style={copyAccentStyle}
-                >
-                  #{String(tag)}
-                </span>
-              ))
-            ) : (
-              <span className="text-xs text-slate-500">Sem tags</span>
-            )}
-          </div>
-        ) : (
-          <div onClick={(event) => event.stopPropagation()}>
-            <InlineTags
-              entityId={tpl.id}
-              entityType="library"
-              tags={tpl.globalTags || []}
-              onRefresh={() => void refreshCurrentTab()}
-            />
-          </div>
-        ),
+      render: (tpl: Template) => (
+        <div onClick={(event) => event.stopPropagation()}>
+          <InlineTags
+            entityId={tpl.id}
+            entityType="library"
+            tags={tpl.globalTags || []}
+            readOnly={Boolean(tpl.isSystemTemplate)}
+            onRefresh={() => void refreshCurrentTab()}
+          />
+        </div>
+      ),
     },
     {
       key: "updatedAt",
@@ -1101,38 +1026,6 @@ export function Library() {
                     </div>
                   )}
                   <div>
-                    <label className="text-xs text-slate-400">Categoria</label>
-                    <div className="flex gap-2 mt-1">
-                      <select
-                        value={editorCategoryId}
-                        onChange={(e) => setEditorCategoryId(e.target.value)}
-                        disabled={editorReadOnly}
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Sem categoria</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.parentId ? `- ${c.name}` : c.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => void handleCreateCategory()}
-                        disabled={editorReadOnly}
-                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 text-sm"
-                        title="Criar categoria"
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                    {!!editorCategoryId && (
-                      <div className="text-xs text-slate-500 mt-1">
-                        Selecionada: {categoryNameById(editorCategoryId)}
-                      </div>
-                    )}
-                  </div>
-                  <div>
                     <label className="text-xs text-slate-400">
                       Armazenamento
                     </label>
@@ -1221,7 +1114,7 @@ export function Library() {
               </div>
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-3 lg:col-span-2">
                 <div className="text-xs font-bold text-slate-300 flex items-center gap-2">
-                  <TagIcon size={16} /> Tags / Categoria rápida
+                  <TagIcon size={16} /> Tags da Biblioteca
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -1238,14 +1131,6 @@ export function Library() {
                       setTagInput("");
                       if (!parts.length) return;
 
-                      if (isSystem) {
-                        if (!canEditSystem) return;
-                        setEditorLegacyTags((prev) =>
-                          normalizeTags([...prev, ...parts]),
-                        );
-                        return;
-                      }
-
                       for (const part of parts) {
                         void handleAddOrCreateTag(part);
                       }
@@ -1253,7 +1138,7 @@ export function Library() {
                     disabled={isSystem ? !canEditSystem : false}
                     placeholder={
                       isSystem
-                        ? "Digite e pressione Enter (ex: Cível, CPC, Sistema)"
+                        ? "Digite e pressione Enter (ex: Cível, CPC, Contrato)"
                         : "Digite e pressione Enter (ex: Cível, CPC, Contrato)"
                     }
                     className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500"
@@ -1268,14 +1153,6 @@ export function Library() {
                       setTagInput("");
                       if (!parts.length) return;
 
-                      if (isSystem) {
-                        if (!canEditSystem) return;
-                        setEditorLegacyTags((prev) =>
-                          normalizeTags([...prev, ...parts]),
-                        );
-                        return;
-                      }
-
                       for (const part of parts) void handleAddOrCreateTag(part);
                     }}
                     disabled={isSystem ? !canEditSystem : false}
@@ -1284,101 +1161,75 @@ export function Library() {
                     Adicionar
                   </button>
                 </div>
-                {!isSystem && (
-                  <div className="flex flex-wrap gap-2">
-                    {(availableLibraryTags || [])
-                      .filter((t) => {
-                        const q = tagInput.trim().toLowerCase();
-                        if (!q) return true;
-                        return (t.name || "").toLowerCase().includes(q);
-                      })
-                      .slice(0, 14)
-                      .map((tag) => (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          onClick={() => handleToggleTag(tag)}
-                          className={clsx(
-                            "px-2 py-1 rounded-full text-xs font-bold border transition",
-                            isTagSelected(tag.id)
-                              ? "bg-slate-800 border-slate-600"
-                              : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700",
-                          )}
-                          style={{
-                            borderColor: `${tag.color}80`,
-                            color: isTagSelected(tag.id)
-                              ? tag.color
-                              : undefined,
-                          }}
-                          title={
-                            isTagSelected(tag.id)
-                              ? "Remover tag"
-                              : "Adicionar tag"
-                          }
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <span
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: tag.color }}
-                            />
-                            {tag.name}
-                          </span>
-                        </button>
-                      ))}
-                    {loadingLibraryTags && (
-                      <span className="text-xs text-slate-500">
-                        Carregando tags...
-                      </span>
-                    )}
-                  </div>
-                )}
                 <div className="flex flex-wrap gap-2">
-                  {isSystem &&
-                    editorLegacyTags.map((t) => (
-                      <span
-                        key={t}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-950 text-slate-300 border border-slate-700 text-xs"
-                      >
-                        #{t}
-                        {canEditSystem && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditorLegacyTags((prev) =>
-                                prev.filter((x) => x !== t),
-                              )
-                            }
-                            className="ml-1 p-0.5 rounded hover:bg-white/10"
-                            title="Remover"
-                          >
-                            <X size={12} />
-                          </button>
+                  {(availableLibraryTags || [])
+                    .filter((tag) => {
+                      if (!isSystem && tag.isInternal) return false;
+                      const q = tagInput.trim().toLowerCase();
+                      if (!q) return true;
+                      return (tag.name || "").toLowerCase().includes(q);
+                    })
+                    .slice(0, 14)
+                    .map((tag) => (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => handleToggleTag(tag)}
+                        disabled={isSystem ? !canEditSystem : false}
+                        className={clsx(
+                          "px-2 py-1 rounded-full text-xs font-bold border transition",
+                          isTagSelected(tag.id)
+                            ? "bg-slate-800 border-slate-600"
+                            : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700",
                         )}
-                      </span>
-                    ))}
-                  {!isSystem &&
-                    editorTags.map((t) => (
-                      <span
-                        key={t.id}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-xs"
                         style={{
-                          backgroundColor: `${t.color}20`,
-                          borderColor: `${t.color}55`,
-                          color: t.color,
+                          borderColor: `${tag.color}80`,
+                          color: isTagSelected(tag.id) ? tag.color : undefined,
                         }}
+                        title={
+                          isTagSelected(tag.id) ? "Remover tag" : "Adicionar tag"
+                        }
                       >
-                        {t.name}
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          {tag.name}
+                        </span>
+                      </button>
+                    ))}
+                  {loadingLibraryTags && (
+                    <span className="text-xs text-slate-500">
+                      Carregando tags...
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {editorTags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-xs"
+                      style={{
+                        backgroundColor: `${tag.color}20`,
+                        borderColor: `${tag.color}55`,
+                        color: tag.color,
+                      }}
+                    >
+                      {tag.name}
+                      {(!tag.isInternal && (!isSystem || canEditSystem)) && (
                         <button
                           type="button"
-                          onClick={() => handleRemoveTag(t.id)}
+                          onClick={() => handleRemoveTag(tag.id)}
                           className="ml-1 p-0.5 rounded hover:bg-white/10"
                           title="Remover"
                         >
                           <X size={12} />
                         </button>
-                      </span>
-                    ))}
-                  {!isSystem && editorTags.length === 0 && (
+                      )}
+                    </span>
+                  ))}
+                  {editorTags.length === 0 && (
                     <span className="text-xs text-slate-500">Sem tags.</span>
                   )}
                 </div>
@@ -1456,10 +1307,10 @@ export function Library() {
               </div>
               <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 min-w-[140px]">
                 <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Categorias
+                  Tags
                 </div>
                 <div className="text-xl font-semibold text-white mt-1">
-                  {categories.length}
+                  {availableLibraryTags.length}
                 </div>
               </div>
               <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 min-w-[140px]">
@@ -1553,33 +1404,6 @@ export function Library() {
 
                 {activeTab === "TEMPLATES" && (
                   <>
-                    <select
-                      value={templateScope}
-                      onChange={(event) =>
-                        setTemplateScope(event.target.value as TemplateScope)
-                      }
-                      className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="all">Todas as origens</option>
-                      <option value="tenant">Somente escritorio</option>
-                      <option value="system">Somente sistema</option>
-                    </select>
-                    <select
-                      value={selectedCategoryId}
-                      onChange={(event) =>
-                        setSelectedCategoryId(event.target.value)
-                      }
-                      className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="">Todas as categorias</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.parentId
-                            ? `- ${category.name}`
-                            : category.name}
-                        </option>
-                      ))}
-                    </select>
                     <AdvancedTagFilter
                       entityType="library"
                       includedIds={includedTags}
@@ -1731,100 +1555,20 @@ export function Library() {
                     <h3 className="font-bold text-white text-lg mb-1 truncate">
                       {tpl.title}
                     </h3>
-                    {tpl.isSystemTemplate && (
-                      <div className="mb-2">
-                        <span
-                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
-                          style={systemAccentStyle}
-                        >
-                          <Sparkles size={14} /> Sistema
-                        </span>
-                      </div>
-                    )}
-                    {!tpl.isSystemTemplate && (
-                      <div className="mb-2">
-                        <span
-                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
-                          style={officeAccentStyle}
-                        >
-                          Escritório
-                        </span>
-                      </div>
-                    )}
                     {!!tpl.description && (
                       <p className="text-slate-400 text-sm line-clamp-2 mb-2">
                         {tpl.description}
                       </p>
                     )}
-                    {Array.isArray((tpl as any).globalTags) &&
-                    ((tpl as any).globalTags as any[]).length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {((tpl as any).globalTags as any[])
-                          .slice(0, 3)
-                          .map((t) => (
-                            <span
-                              key={String(t?.id || t?.name)}
-                              className="text-[11px] px-2 py-0.5 rounded-full border"
-                              style={getLibraryAccentStyles(
-                                String(t?.color || defaultTagColor),
-                                {
-                                  backgroundAlpha: 0.13,
-                                  borderAlpha: 0.4,
-                                  minContrast: 5,
-                                  surfaceColor: themeColor.slate900,
-                                },
-                              )}
-                            >
-                              {String(t?.name || "")}
-                            </span>
-                          ))}
-                        {((tpl as any).globalTags as any[]).length > 3 && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                            +{((tpl as any).globalTags as any[]).length - 3}
-                          </span>
-                        )}
-                      </div>
-                    ) : Array.isArray(tpl.tags) &&
-                      (tpl.tags as any[]).length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {(tpl.tags as any[]).slice(0, 3).map((t) => (
-                          <span
-                            key={String(t)}
-                            className="text-[11px] px-2 py-0.5 rounded-full border"
-                            style={copyAccentStyle}
-                          >
-                            #{String(t)}
-                          </span>
-                        ))}
-                        {(tpl.tags as any[]).length > 3 && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                            +{(tpl.tags as any[]).length - 3}
-                          </span>
-                        )}
-                      </div>
-                    ) : null}
-                    {!!tpl.categoryId && (
-                      <div className="mt-auto pt-2">
-                        <span className="text-xs text-slate-500 flex items-center gap-1">
-                          <TagIcon size={12} />{" "}
-                          {categoryNameById(tpl.categoryId)}
-                        </span>
-                      </div>
-                    )}
-
-                    {!tpl.isSystemTemplate && (
-                      <div
-                        className="my-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <InlineTags
-                          entityId={tpl.id}
-                          entityType="library"
-                          tags={tpl.globalTags || []}
-                          onRefresh={() => void refreshCurrentTab()}
-                        />
-                      </div>
-                    )}
+                    <div className="my-2" onClick={(e) => e.stopPropagation()}>
+                      <InlineTags
+                        entityId={tpl.id}
+                        entityType="library"
+                        tags={tpl.globalTags || []}
+                        readOnly={Boolean(tpl.isSystemTemplate)}
+                        onRefresh={() => void refreshCurrentTab()}
+                      />
+                    </div>
 
                     <div className="mt-4 pt-4 border-t border-slate-800 flex flex-col sm:flex-row gap-2">
                       <button
@@ -1895,55 +1639,28 @@ export function Library() {
                     Configuracao da Biblioteca
                   </h3>
                   <p className="text-sm text-slate-400 mt-1">
-                    Centralize categorias, templates de sistema e padroes de
-                    cabecalho e rodape do escritorio.
+                    Centralize tags, modelos do sistema e padroes de cabecalho e
+                    rodape do escritorio.
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Categorias
+                    Tags
                   </div>
-                  <div className="flex gap-2">
-                    <input
-                      value={newCategoryName}
-                      onChange={(event) =>
-                        setNewCategoryName(event.target.value)
-                      }
-                      placeholder="Nova categoria"
-                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void handleConfigCategorySubmit()}
-                      disabled={creatingCategory || !newCategoryName.trim()}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium transition"
-                    >
-                      {creatingCategory ? "Salvando..." : "Adicionar"}
-                    </button>
-                  </div>
-                  <div className="max-h-[320px] overflow-y-auto space-y-2 pr-1">
-                    {categories.length > 0 ? (
-                      categories.map((category) => (
-                        <div
-                          key={category.id}
-                          className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-200"
-                        >
-                          <div className="font-medium text-white">
-                            {category.name}
-                          </div>
-                          <div className="text-xs text-slate-500 mt-1">
-                            {category.parentId
-                              ? "Subcategoria"
-                              : "Categoria principal"}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-slate-800 px-4 py-6 text-center text-sm text-slate-500">
-                        Nenhuma categoria cadastrada ainda.
-                      </div>
-                    )}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-4 text-sm text-slate-300 space-y-3">
+                    <p>
+                      A Biblioteca agora usa somente tags para classificar,
+                      filtrar e identificar os modelos.
+                    </p>
+                    <p>
+                      A tag <span className="font-semibold text-amber-300">SISTEMA</span>{" "}
+                      e interna, aplicada automaticamente aos modelos do sistema e
+                      protegida contra edicao e exclusao.
+                    </p>
+                    <div className="text-xs text-slate-500">
+                      Tags disponiveis no tenant: {availableLibraryTags.length}
+                    </div>
                   </div>
                 </div>
 
