@@ -66,6 +66,7 @@ import { PaymentConditions } from "./PaymentConditions";
 import { InlineTags } from "../components/ui/InlineTags";
 import { AdvancedTagFilter } from "../components/ui/AdvancedTagFilter";
 import { BankAccountDetails } from "../components/financial/BankAccountDetails";
+import { BoletoSlipModal } from "../components/financial/BoletoSlipModal";
 import { FinancialParties } from "../components/financial/FinancialParties";
 import { AttachmentPreview } from "../components/ui/AttachmentPreview";
 import { DateRangePicker } from "../components/ui/DateRangePicker";
@@ -654,6 +655,7 @@ export function Financial(props: FinancialProps = {}) {
   const [selectedChargeRecord, setSelectedChargeRecord] =
     useState<FinancialRecord | null>(null);
   const [createdCharge, setCreatedCharge] = useState<BankCharge | null>(null);
+  const [boletoSlipCharge, setBoletoSlipCharge] = useState<BankCharge | null>(null);
   const [lastHealthcheck, setLastHealthcheck] =
     useState<BankingHealthcheckResult | null>(null);
   const [settlingRecord, setSettlingRecord] = useState<FinancialRecord | null>(
@@ -4543,6 +4545,15 @@ export function Financial(props: FinancialProps = {}) {
                           PIX
                         </button>
                       )}
+                      {charge.chargeType === "BOLETO" && (
+                        <button
+                          onClick={() => setBoletoSlipCharge(charge)}
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold inline-flex items-center gap-1"
+                        >
+                          <Download size={12} />
+                          Imprimir
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -5690,6 +5701,17 @@ export function Financial(props: FinancialProps = {}) {
                           {createdCharge.barcode}
                         </p>
                       </div>
+                    )}
+
+                    {createdCharge.chargeType === "BOLETO" && (
+                      <button
+                        type="button"
+                        onClick={() => setBoletoSlipCharge(createdCharge)}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-3 text-sm font-bold text-white transition"
+                      >
+                        <Download size={16} />
+                        Imprimir Boleto / Salvar PDF
+                      </button>
                     )}
                   </div>
                 )}
@@ -6986,6 +7008,13 @@ export function Financial(props: FinancialProps = {}) {
         title="Financeiro"
         sections={helpFinancialBankingHubDetailed}
       />
+
+      {boletoSlipCharge && (
+        <BoletoSlipModal
+          charge={boletoSlipCharge}
+          onClose={() => setBoletoSlipCharge(null)}
+        />
+      )}
     </div>
   );
 }
