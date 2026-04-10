@@ -307,7 +307,7 @@ export function ContactList() {
   ];
 
   return (
-    <div className="space-y-4 h-full flex flex-col animate-in fade-in duration-700 p-4 md:p-6">
+    <div className="space-y-4 h-full flex flex-col overflow-hidden animate-in fade-in duration-700 p-4 md:p-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
@@ -666,7 +666,7 @@ export function ContactList() {
                 />
             </div>
         </div>
-      <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm min-h-[400px]">
+      <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0">
           <DataGrid<Contact>
             data={sortedContacts}
             onSort={(key, direction) => setSortConfig({ key: key as keyof Contact, direction })}

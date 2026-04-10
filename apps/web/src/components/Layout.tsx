@@ -256,7 +256,7 @@ export function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-[Inter] overflow-x-hidden transition-colors duration-300">
+    <div className="h-screen overflow-hidden bg-slate-950 text-slate-100 font-[Inter] transition-colors duration-300">
       <Sidebar
         isOpen={isSidebarOpen}
         closeSidebar={() => setIsSidebarOpen(false)}
@@ -273,7 +273,7 @@ export function Layout() {
 
       <main
         className={clsx(
-          'min-h-screen transition-all duration-300 pt-10 lg:pt-8 w-full flex flex-col',
+          'h-full overflow-hidden transition-all duration-300 pt-10 lg:pt-8 w-full flex flex-col',
           isSidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64',
         )}
       >
@@ -282,7 +282,7 @@ export function Layout() {
           isSidebarCollapsed={isSidebarCollapsed}
           toggleSidebarCollapsed={toggleSidebarCollapsed}
         />
-        <div className="w-full flex-1 p-0">
+        <div className="w-full flex-1 min-h-0 overflow-y-auto">
           <Outlet />
         </div>
       </main>
