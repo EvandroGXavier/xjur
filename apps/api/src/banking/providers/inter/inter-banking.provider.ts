@@ -757,7 +757,7 @@ export class InterBankingProvider implements BankingProvider {
         chargeType: params.chargeType,
         status: 'CREATED_MOCK',
         externalChargeId: reference,
-        txid: params.chargeType === 'PIX' ? `TXID-${Date.now()}` : null,
+        txid: `TXID-${Date.now()}`,
         barcode:
           params.chargeType === 'BOLETO'
             ? '34191790010104351004791020150008291070026000'
@@ -766,8 +766,9 @@ export class InterBankingProvider implements BankingProvider {
           params.chargeType === 'BOLETO'
             ? '34191.79001 01043.510047 91020.150008 2 91070026000'
             : null,
-        pixQrCode: params.chargeType === 'PIX' ? pixPayload : null,
-        pixCopyPaste: params.chargeType === 'PIX' ? pixPayload : null,
+        // Boleto híbrido Inter: todo boleto também carrega QR Code PIX
+        pixQrCode: pixPayload,
+        pixCopyPaste: pixPayload,
         rawRequest: { provider: 'INTER', ...params },
         rawResponse: { mock: true, reference },
         message: 'Cobranca mock criada no Banco Inter.',
