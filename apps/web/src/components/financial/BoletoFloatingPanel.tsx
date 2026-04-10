@@ -202,19 +202,36 @@ export function BoletoFloatingPanel({
   const hasPixQr      = Boolean(charge.pixQrCode);
   const isMock        = charge.status?.includes('MOCK');
 
-  // Extrai data URL do canvas QR code após renderização
+  // Extrai data URL do canvas QR code com tentativas (retries) ao abrir
   useEffect(() => {
-    if (!hasPixQr) return;
+    if (!isOpen || !hasPixQr || qrDataUrl) return;
+    
+    let timer: NodeJS.Timeout;
+    let retries = 0;
+    
     const attempt = () => {
       const canvas = qrCanvasRef.current;
       if (canvas) {
-        try { setQrDataUrl(canvas.toDataURL('image/png')); }
-        catch { /* canvas pode estar vazio ainda */ }
+        try { 
+          const url = canvas.toDataURL('image/png');
+          if (url && url.length > 50) {
+            setQrDataUrl(url); 
+            return;
+          }
+        } catch (e) { console.error('Erro canvas:', e); }
+      }
+      
+      if (retries < 15) {
+        retries++;
+        timer = setTimeout(attempt, 150);
+      } else {
+        setQrDataUrl('fallback'); // força liberar o iframe para não travar num loading infinito
       }
     };
-    const t = setTimeout(attempt, 120);
-    return () => clearTimeout(t);
-  }, [hasPixQr, charge.pixQrCode]);
+    
+    attempt();
+    return () => clearTimeout(timer);
+  }, [isOpen, hasPixQr, qrDataUrl]);
 
   // Cria o blob URL do iframe quando o painel abre (ou quando qrDataUrl muda)
   useEffect(() => {
