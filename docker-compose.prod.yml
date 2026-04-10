@@ -59,6 +59,7 @@ services:
       REDIS_PORT: 6379
       NODE_ENV: production
       PORT: 3000
+      BANKING_INTER_MODE: LIVE
       JWT_SECRET: "${JWT_SECRET:-drx-default-secret-change-me-in-production}"
       APP_URL: "${APP_URL:-https://drx.evandroadvogado.com}"
       # Evolution API (comunicação interna via Docker Network)

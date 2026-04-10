@@ -44,12 +44,20 @@ export class InterBankingProvider implements BankingProvider {
     }
   >();
 
-  private resolveMode(forceMockData?: boolean): InterMode {
+  private resolveMode(
+    environment: 'SANDBOX' | 'PRODUCTION',
+    forceMockData?: boolean,
+  ): InterMode {
     if (forceMockData) return 'MOCK';
-    return String(process.env.BANKING_INTER_MODE || 'MOCK').toUpperCase() ===
-      'LIVE'
-      ? 'LIVE'
-      : 'MOCK';
+    const explicitMode = String(process.env.BANKING_INTER_MODE || '')
+      .trim()
+      .toUpperCase();
+
+    if (explicitMode === 'LIVE' || explicitMode === 'MOCK') {
+      return explicitMode;
+    }
+
+    return environment === 'PRODUCTION' ? 'LIVE' : 'MOCK';
   }
 
   private getMetadata(ctx: BankingProviderContext): InterMetadataConfig {
@@ -110,7 +118,7 @@ export class InterBankingProvider implements BankingProvider {
       : String(rawScope || '').trim() || undefined;
 
     return {
-      mode: this.resolveMode(forceMockData),
+      mode: this.resolveMode(environment, forceMockData),
       environment,
       apiBaseUrl,
       tokenUrl,
