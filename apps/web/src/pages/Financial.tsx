@@ -56,6 +56,7 @@ import {
   Globe,
   Bookmark,
   RefreshCw,
+  Receipt,
 } from "lucide-react";
 import { api } from "../services/api";
 import { toast } from "sonner";
@@ -67,6 +68,7 @@ import { InlineTags } from "../components/ui/InlineTags";
 import { AdvancedTagFilter } from "../components/ui/AdvancedTagFilter";
 import { BankAccountDetails } from "../components/financial/BankAccountDetails";
 import { BoletoSlipModal } from "../components/financial/BoletoSlipModal";
+import { BoletoFloatingPanel } from "../components/financial/BoletoFloatingPanel";
 import { FinancialParties } from "../components/financial/FinancialParties";
 import { AttachmentPreview } from "../components/ui/AttachmentPreview";
 import { DateRangePicker } from "../components/ui/DateRangePicker";
@@ -1405,12 +1407,13 @@ export function Financial(props: FinancialProps = {}) {
       const processId = lockedProcessId;
 
       if (view === "dashboard" || view === "records") {
-        const [dashboardRes, recordsRes, accountsRes, integrationsRes] =
+        const [dashboardRes, recordsRes, accountsRes, integrationsRes, chargesRes] =
           await Promise.all([
           api.get(`/financial/dashboard?tenantId=${tenantId}${processId ? `&processId=${processId}` : ""}`),
           api.get(`/financial/records?tenantId=${tenantId}${processId ? `&processId=${processId}` : ""}`),
           api.get(`/financial/bank-accounts?tenantId=${tenantId}`),
           api.get("/banking/integrations"),
+          api.get("/banking/charges"),
         ]);
         setDashboard(dashboardRes.data);
         setRecords(recordsRes.data);
@@ -1418,6 +1421,7 @@ export function Financial(props: FinancialProps = {}) {
         setBankIntegrations(
           Array.isArray(integrationsRes.data) ? integrationsRes.data : [],
         );
+        setBankCharges(Array.isArray(chargesRes.data) ? chargesRes.data : []);
       } else if (view === "accounts") {
         const accountsRes = await api.get(
           `/financial/bank-accounts?tenantId=${tenantId}`,
@@ -3884,6 +3888,27 @@ export function Financial(props: FinancialProps = {}) {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="flex gap-1.5 justify-end">
+                            {/* Boleto existente — abre painel flutuante */}
+                            {(() => {
+                              const existingBoleto = bankCharges.find(
+                                (c) =>
+                                  c.financialRecord?.id === record.id &&
+                                  c.chargeType === "BOLETO",
+                              );
+                              if (!existingBoleto) return null;
+                              return (
+                                <BoletoFloatingPanel
+                                  charge={existingBoleto}
+                                >
+                                  <button
+                                    className="p-2.5 rounded-xl border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500 hover:text-white transition-all active:scale-90 shadow-sm"
+                                    title="Visualizar / Imprimir Boleto"
+                                  >
+                                    <Receipt size={14} />
+                                  </button>
+                                </BoletoFloatingPanel>
+                              );
+                            })()}
                             {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
                               <button
                                 onClick={() => handleOpenChargeModal(record)}
