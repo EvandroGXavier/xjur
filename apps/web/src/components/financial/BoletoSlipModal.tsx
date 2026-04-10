@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react';
 import { X, Printer, Copy, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
@@ -12,6 +13,8 @@ interface BoletoSlipCharge {
   dueDate?: string | null;
   digitableLine?: string | null;
   barcode?: string | null;
+  pixQrCode?: string | null;
+  pixCopyPaste?: string | null;
   bankIntegration?: { displayName: string; provider: string } | null;
   financialRecord?: {
     description: string;
@@ -71,6 +74,8 @@ function BarcodeDisplay({ barcode }: { barcode: string }) {
 
 export function BoletoSlipModal({ charge, tenantName, onClose }: BoletoSlipModalProps) {
   const slipRef = useRef<HTMLDivElement>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const amount = charge.financialRecord?.amount ?? charge.amount;
   const description = charge.financialRecord?.description || 'Cobrança';
@@ -78,7 +83,23 @@ export function BoletoSlipModal({ charge, tenantName, onClose }: BoletoSlipModal
   const bankName = charge.bankIntegration?.displayName || 'Banco Inter';
   const digitableLine = charge.digitableLine || '';
   const barcode = (charge.barcode || '').replace(/\D/g, '');
+  const pixCopyPaste = charge.pixCopyPaste || '';
   const isMock = charge.status?.includes('MOCK');
+  const hasPixQr = Boolean(charge.pixQrCode);
+
+  // Extract data URL from canvas for print mode
+  useEffect(() => {
+    if (!hasPixQr) return;
+    const attempt = () => {
+      const canvas = qrCanvasRef.current;
+      if (canvas) {
+        try { setQrDataUrl(canvas.toDataURL('image/png')); }
+        catch { /* canvas not ready */ }
+      }
+    };
+    const t = setTimeout(attempt, 120);
+    return () => clearTimeout(t);
+  }, [hasPixQr, charge.pixQrCode]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -220,6 +241,20 @@ export function BoletoSlipModal({ charge, tenantName, onClose }: BoletoSlipModal
             color: #888;
             text-align: right;
           }
+          .pix-print {
+            border-top: 1px dashed #ccc;
+            margin-top: 10px;
+            padding: 10px;
+            display: flex;
+            gap: 15px;
+          }
+          .pix-print-text {
+            flex: 1;
+          }
+          .pix-print-qr {
+            flex: 0 0 100px;
+            text-align: center;
+          }
           @media print {
             body { padding: 0; }
             .slip { border: none; }
@@ -294,6 +329,26 @@ export function BoletoSlipModal({ charge, tenantName, onClose }: BoletoSlipModal
             </div>
             <div class="barcode-number">${barcode || '00000000000000000000000000000000000000000000'}</div>
           </div>
+
+          ${hasPixQr && qrDataUrl ? `
+          <div class="pix-print">
+            <div class="pix-print-text">
+              <div style="font-size:11px;font-weight:bold;color:#111;margin-bottom:4px;text-transform:uppercase;">
+                Pague também via Pix
+              </div>
+              <div style="font-size:9px;color:#555;margin-bottom:8px">
+                Aponte a câmera para o QR Code ao lado ou copie e cole o código Pix abaixo.
+              </div>
+              <div style="font-size:9px;color:#111;font-weight:bold;margin-bottom:4px">Pix Copia e Cola:</div>
+              <div style="font-family:monospace;font-size:8px;word-break:break-all;background:#f5f5f5;padding:6px;border:1px solid #ddd;">
+                ${pixCopyPaste || '—'}
+              </div>
+            </div>
+            <div class="pix-print-qr">
+              <img src="${qrDataUrl}" width="100" height="100" alt="QR Code Pix" style="border:1px solid #ccc;padding:2px;"/>
+            </div>
+          </div>
+          ` : ''}
 
           <div class="instructions">
             <strong>Instruções:</strong> Este boleto é válido até a data de vencimento indicada.
@@ -439,6 +494,37 @@ export function BoletoSlipModal({ charge, tenantName, onClose }: BoletoSlipModal
             </p>
           </div>
 
+          {/* Seção PIX UI (visualização no modal) */}
+          {hasPixQr && charge.pixQrCode && (
+            <div className="border-b border-slate-300 p-4 bg-emerald-50">
+              <div className="flex items-start gap-4">
+                <div className="flex-1">
+                  <div className="text-xs font-bold uppercase text-emerald-700 tracking-wider mb-1">
+                    Pague também via Pix
+                  </div>
+                  <div className="text-[10px] text-slate-600 mb-3">
+                    Aponte a câmera do seu celular para o QR Code ao lado ou copie e cole o código abaixo.
+                  </div>
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">Pix Copia e Cola</div>
+                  <div className="font-mono text-[9px] bg-white border border-slate-300 rounded p-2 text-slate-800 break-all select-all">
+                    {pixCopyPaste}
+                  </div>
+                </div>
+                <div className="shrink-0 flex flex-col items-center">
+                  <div className="bg-white p-1 border border-slate-300 rounded-lg shadow-sm">
+                    <QRCodeSVG
+                      value={charge.pixQrCode}
+                      size={100}
+                      level="M"
+                      marginSize={1}
+                    />
+                  </div>
+                  <div className="text-[9px] text-emerald-700 font-semibold mt-1">QR Code Pix</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="bg-slate-50 px-3 py-2 text-[9px] text-slate-400 text-right">
             Gerado em {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} — Dr.X / Xjur
@@ -459,6 +545,36 @@ export function BoletoSlipModal({ charge, tenantName, onClose }: BoletoSlipModal
                 Copiar
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Action bar Pix */}
+        {hasPixQr && pixCopyPaste && (
+          <div className="mx-5 mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">Pix Copia e Cola</p>
+            <div className="flex items-center gap-2">
+              <p className="flex-1 font-mono text-xs text-emerald-800 truncate">{pixCopyPaste}</p>
+              <button
+                onClick={() => handleCopy(pixCopyPaste, 'Pix copia e cola')}
+                className="shrink-0 flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+              >
+                <Copy size={13} />
+                Copiar Pix
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Hidden Canvas for QR Code Data URL extraction */}
+        {hasPixQr && charge.pixQrCode && (
+          <div style={{ position: 'absolute', left: -9999, top: -9999, pointerEvents: 'none' }}>
+            <QRCodeCanvas
+              ref={qrCanvasRef}
+              value={charge.pixQrCode}
+              size={160}
+              level="M"
+              marginSize={2}
+            />
           </div>
         )}
       </div>
