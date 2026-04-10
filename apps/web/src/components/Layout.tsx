@@ -101,6 +101,20 @@ const StatusBar = ({
       ? `${displayedVersion} #${displayedReleaseCounter}`
       : displayedVersion;
 
+  const displayedUpdatedAt = (() => {
+    const raw = runtimeVersion?.displayUpdatedAt;
+    if (!raw) return null;
+    try {
+      const d = new Date(raw);
+      return d.toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return null;
+    }
+  })();
+
   if (!user) return null;
 
   return (
@@ -133,9 +147,18 @@ const StatusBar = ({
         </div>
       )}
 
-      <div className="hidden md:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium tracking-wide text-emerald-200">
+      <div
+        className="hidden md:flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium tracking-wide text-emerald-200"
+        title={displayedUpdatedAt ? `Lançado em ${displayedUpdatedAt}` : undefined}
+      >
         <span className="text-emerald-400/80">Versao</span>
         <span className="text-white">{displayedVersionText}</span>
+        {displayedUpdatedAt && (
+          <>
+            <span className="text-emerald-700">·</span>
+            <span className="text-emerald-300/70">{displayedUpdatedAt}</span>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-2 lg:gap-6 ml-auto">

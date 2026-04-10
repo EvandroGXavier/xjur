@@ -65,6 +65,12 @@ export function readRuntimeVersionInfo() {
         ? releaseManifest.releaseCounter
         : fallbackReleaseCounter(sourceVersion);
 
+  const displayUpdatedAt =
+    deployState.deployedAt ||
+    deployState.sourceUpdatedAt ||
+    releaseManifest.updatedAt ||
+    null;
+
   return {
     sourceVersion,
     sourceReleaseCounter,
@@ -77,6 +83,7 @@ export function readRuntimeVersionInfo() {
     displayVersion: deployedVersion || sourceVersion,
     displayReleaseCounter:
       deployedCounter ?? sourceCounter ?? fallbackReleaseCounter(sourceVersion),
+    displayUpdatedAt,
     isLatestDeployed:
       Boolean(deployedVersion) &&
       deployedVersion === sourceVersion &&
