@@ -39,16 +39,58 @@ describe('BankingService', () => {
     ],
   };
 
+  const expenseRecord = {
+    id: 'record-expense-1',
+    tenantId: 'tenant-1',
+    description: 'Fornecedor abril',
+    type: 'EXPENSE',
+    status: 'PENDING',
+    amount: 150,
+    amountFinal: 150,
+    amountPaid: 0,
+    bankAccountId: 'bank-account-1',
+    dueDate: new Date('2026-04-30T00:00:00.000Z'),
+    parties: [
+      {
+        role: 'CREDITOR',
+        contact: {
+          id: 'contact-2',
+          name: 'Fornecedor XPTO',
+          personType: 'PJ',
+          document: '12345678000199',
+          email: 'financeiro@fornecedor.com',
+          phone: '31999999999',
+          whatsapp: null,
+          metadata: {
+            financial: {
+              pix: {
+                keyType: 'EMAIL',
+                key: 'pix@fornecedor.com',
+                holderName: 'Fornecedor XPTO',
+                holderDocument: '12345678000199',
+              },
+            },
+          },
+          pfDetails: null,
+          pjDetails: { cnpj: '12345678000199' },
+          addresses: [],
+        },
+      },
+    ],
+  };
+
   const createService = () => {
     const prisma = {
       bankAccount: {
         findFirst: jest.fn(),
+        update: jest.fn(),
       },
       bankIntegration: {
         findFirst: jest.fn(),
       },
       financialRecord: {
         findFirst: jest.fn(),
+        update: jest.fn(),
       },
       bankCharge: {
         findFirst: jest.fn(),
@@ -57,7 +99,17 @@ describe('BankingService', () => {
       },
       bankPaymentRequest: {
         findMany: jest.fn(),
+        create: jest.fn(),
       },
+      user: {
+        findFirst: jest.fn(),
+      },
+      $transaction: jest.fn(async (callbackOrOperations: any) => {
+        if (typeof callbackOrOperations === 'function') {
+          return callbackOrOperations(prisma);
+        }
+        return Promise.all(callbackOrOperations);
+      }),
     };
 
     const securityService = {
@@ -220,6 +272,99 @@ describe('BankingService', () => {
       expect.objectContaining({
         id: 'charge-new',
         reusedExisting: false,
+      }),
+    );
+  });
+
+  it('cria pagamento pix e liquida a despesa quando o banco confirma', async () => {
+    const { prisma, interProvider, service } = createService();
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      email: 'financeiro@example.com',
+      role: 'MEMBER',
+      permissions: {
+        financial_pix_payment: {
+          access: true,
+          update: true,
+        },
+      },
+    });
+    prisma.bankIntegration.findFirst.mockResolvedValue(integration);
+    prisma.bankAccount.findFirst.mockResolvedValue({ id: 'bank-account-1' });
+    prisma.financialRecord.findFirst.mockResolvedValue(expenseRecord);
+    interProvider.createPayment.mockResolvedValue({
+      success: true,
+      mode: 'LIVE',
+      paymentType: 'PIX',
+      status: 'EXECUTADO',
+      externalPaymentId: 'pix-1',
+      endToEndId: 'e2e-1',
+      confirmed: true,
+      executedAt: '2026-04-10T12:00:00.000Z',
+      beneficiaryName: 'Fornecedor XPTO',
+      beneficiaryDocument: '12345678000199',
+      beneficiaryKey: 'pix@fornecedor.com',
+      beneficiaryKeyType: 'EMAIL',
+      rawRequest: { chave: 'pix@fornecedor.com' },
+      rawResponse: { status: 'EXECUTADO' },
+      message: 'ok',
+    });
+    prisma.bankPaymentRequest.create.mockResolvedValue({
+      id: 'payment-request-1',
+      status: 'EXECUTADO',
+      amount: 150,
+      executedAt: new Date('2026-04-10T12:00:00.000Z'),
+      beneficiaryName: 'Fornecedor XPTO',
+      bankIntegration: {
+        id: integration.id,
+        displayName: 'Banco Inter',
+        provider: 'INTER',
+      },
+      financialRecord: {
+        id: expenseRecord.id,
+        description: expenseRecord.description,
+        amount: expenseRecord.amount,
+        dueDate: expenseRecord.dueDate,
+      },
+    });
+
+    const result = await service.createPaymentRequest(
+      'tenant-1',
+      {
+        bankIntegrationId: integration.id,
+        financialRecordId: expenseRecord.id,
+        paymentType: 'PIX',
+      },
+      {
+        userId: 'user-1',
+        email: 'financeiro@example.com',
+        tenantId: 'tenant-1',
+        role: 'MEMBER',
+      },
+    );
+
+    expect(interProvider.createPayment).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        paymentType: 'PIX',
+        beneficiaryKey: 'pix@fornecedor.com',
+        beneficiaryKeyType: 'EMAIL',
+      }),
+    );
+    expect(prisma.financialRecord.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: expenseRecord.id },
+        data: expect.objectContaining({
+          status: 'PAID',
+          paymentMethod: 'PIX',
+        }),
+      }),
+    );
+    expect(prisma.bankAccount.update).toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'payment-request-1',
+        status: 'EXECUTADO',
       }),
     );
   });

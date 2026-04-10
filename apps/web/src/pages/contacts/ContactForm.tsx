@@ -403,6 +403,65 @@ export function ContactForm() {
     const isAdmin = user && ['ADMIN', 'OWNER'].includes(user.role);
     return isAdmin ? [...helpContacts, helpSigilo] : helpContacts;
   }, []);
+  const currentUser = getUser();
+  const canEditContactPix =
+    Boolean(currentUser && ['ADMIN', 'OWNER'].includes(currentUser.role)) ||
+    currentUser?.permissions?.financial_pix_payment?.update === true;
+
+  const contactPixData = useMemo(() => {
+    const source =
+      formData.metadata && typeof formData.metadata === 'object'
+        ? formData.metadata
+        : {};
+    const financial =
+      source.financial && typeof source.financial === 'object'
+        ? source.financial
+        : {};
+    const pix =
+      source.pix && typeof source.pix === 'object'
+        ? source.pix
+        : financial.pix && typeof financial.pix === 'object'
+          ? financial.pix
+          : {};
+
+    return {
+      keyType: String(
+        pix.keyType || pix.pixKeyType || pix.tipo || pix.tipoChave || 'EVP',
+      ).toUpperCase(),
+      key: String(pix.key || pix.pixKey || pix.chave || '').trim(),
+      holderName: String(
+        pix.holderName || pix.nomeTitular || pix.nome || formData.name || '',
+      ).trim(),
+      holderDocument: String(
+        pix.holderDocument ||
+          pix.documentoTitular ||
+          pix.documento ||
+          formData.document ||
+          formData.cpf ||
+          formData.cnpj ||
+          '',
+      ).trim(),
+    };
+  }, [formData.metadata, formData.name, formData.document, formData.cpf, formData.cnpj]);
+
+  const setContactPixField = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      metadata: {
+        ...(prev.metadata || {}),
+        financial: {
+          ...((prev.metadata as any)?.financial || {}),
+          pix: {
+            ...(((prev.metadata as any)?.financial?.pix) || {}),
+            keyType: field === 'keyType' ? value : contactPixData.keyType,
+            key: field === 'key' ? value : contactPixData.key,
+            holderName: field === 'holderName' ? value : contactPixData.holderName,
+            holderDocument: field === 'holderDocument' ? value : contactPixData.holderDocument,
+          },
+        },
+      },
+    }));
+  };
   
   // Address form states
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -4060,6 +4119,71 @@ export function ContactForm() {
                         </div>
                     ) : (
                         <>
+                            <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-5 space-y-4">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-slate-400">PIX do Contato</p>
+                                        <p className="text-sm text-slate-300 mt-1">
+                                            Esta chave será sugerida no pagamento PIX direto das despesas vinculadas ao contato.
+                                        </p>
+                                    </div>
+                                    {!canEditContactPix && (
+                                        <span className="inline-flex rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs text-sky-200">
+                                            Somente leitura
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-400">Tipo da chave</label>
+                                        <select
+                                            value={contactPixData.keyType}
+                                            onChange={e => setContactPixField('keyType', e.target.value)}
+                                            disabled={!canEditContactPix}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                                        >
+                                            <option value="CPF">CPF</option>
+                                            <option value="CNPJ">CNPJ</option>
+                                            <option value="EMAIL">E-mail</option>
+                                            <option value="PHONE">Telefone</option>
+                                            <option value="EVP">Aleatória (EVP)</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className="text-sm font-medium text-slate-400">Chave PIX</label>
+                                        <input
+                                            value={contactPixData.key}
+                                            onChange={e => setContactPixField('key', e.target.value)}
+                                            disabled={!canEditContactPix}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                                            placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-slate-400">Documento do titular</label>
+                                        <input
+                                            value={contactPixData.holderDocument}
+                                            onChange={e => setContactPixField('holderDocument', e.target.value)}
+                                            disabled={!canEditContactPix}
+                                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                                            placeholder="CPF/CNPJ"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-slate-400">Nome do titular</label>
+                                    <input
+                                        value={contactPixData.holderName}
+                                        onChange={e => setContactPixField('holderName', e.target.value)}
+                                        disabled={!canEditContactPix}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                                        placeholder="Nome que receberá o PIX"
+                                    />
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                 <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-4">
                                     <p className="text-xs uppercase tracking-wide text-slate-400">Receitas</p>

@@ -128,7 +128,7 @@ export class BankingController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: CreateBankPaymentRequestDto,
   ) {
-    return this.bankingService.createPaymentRequest(user.tenantId, dto);
+    return this.bankingService.createPaymentRequest(user.tenantId, dto, user);
   }
 
   @Post('integrations/:id/webhook-events')

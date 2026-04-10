@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { CreateBankPaymentRequestDto } from './dto/create-bank-payment-request.d
 import { ReceiveBankWebhookDto } from './dto/receive-bank-webhook.dto';
 import { InterBankingProvider } from './providers/inter/inter-banking.provider';
 import { BankingProvider } from './providers/banking-provider.interface';
+import { CurrentUserData } from '../common/decorators/current-user.decorator';
 
 @Injectable()
 export class BankingService {
@@ -231,6 +233,59 @@ export class BankingService {
     return normalized.length > 0 ? normalized : null;
   }
 
+  private getUserPermissions(user: any) {
+    return user?.permissions && typeof user.permissions === 'object'
+      ? user.permissions
+      : {};
+  }
+
+  private isSuperAdminEmail(email?: string | null) {
+    const allowed = (process.env.SUPERADMIN_EMAILS || '')
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+
+    return allowed.includes(String(email || '').trim().toLowerCase());
+  }
+
+  private canAccessPixPayment(user: any) {
+    if (!user) return false;
+    if (user.role === 'OWNER' || user.role === 'ADMIN') return true;
+    if (this.isSuperAdminEmail(user.email)) return true;
+
+    const permissions = this.getUserPermissions(user);
+    return permissions.financial_pix_payment?.access === true;
+  }
+
+  private canEditPixPayment(user: any) {
+    if (!user) return false;
+    if (user.role === 'OWNER' || user.role === 'ADMIN') return true;
+    if (this.isSuperAdminEmail(user.email)) return true;
+
+    const permissions = this.getUserPermissions(user);
+    return permissions.financial_pix_payment?.update === true;
+  }
+
+  private async assertPixPaymentAccess(currentUser: CurrentUserData) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: currentUser.userId, tenantId: currentUser.tenantId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        permissions: true,
+      },
+    });
+
+    if (!user || !this.canAccessPixPayment(user)) {
+      throw new ForbiddenException(
+        'Acesso negado ao pagamento PIX direto pelo banco.',
+      );
+    }
+
+    return user;
+  }
+
   private calculateOutstandingAmount(record: {
     amount?: number | string | { toString(): string } | null;
     amountFinal?: number | string | { toString(): string } | null;
@@ -293,6 +348,151 @@ export class BankingService {
           }
         : null,
     };
+  }
+
+  private parsePixData(metadata: any) {
+    const source =
+      metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+        ? metadata
+        : {};
+    const financial = source.financial && typeof source.financial === 'object'
+      ? source.financial
+      : {};
+    const pix = source.pix && typeof source.pix === 'object' ? source.pix : {};
+    const paymentPix =
+      financial.pix && typeof financial.pix === 'object' ? financial.pix : {};
+
+    const merged = {
+      ...pix,
+      ...paymentPix,
+    } as Record<string, any>;
+
+    return {
+      key: this.normalizeText(
+        merged.key ||
+          merged.pixKey ||
+          merged.chave ||
+          merged.valor ||
+          null,
+      ),
+      keyType: this.normalizeText(
+        merged.keyType ||
+          merged.pixKeyType ||
+          merged.tipo ||
+          merged.tipoChave ||
+          null,
+      )?.toUpperCase(),
+      holderName: this.normalizeText(
+        merged.holderName || merged.nomeTitular || merged.nome || null,
+      ),
+      holderDocument: this.normalizeDocument(
+        merged.holderDocument || merged.documentoTitular || merged.documento || null,
+      ),
+    };
+  }
+
+  private resolvePaymentBeneficiary(financialRecord: any) {
+    const beneficiaryParty =
+      financialRecord.parties?.find((party: any) =>
+        ['BENEFICIARY', 'CREDITOR'].includes(String(party.role || '').toUpperCase()),
+      ) || null;
+
+    if (!beneficiaryParty?.contact) {
+      throw new BadRequestException(
+        'O pagamento PIX exige um contato credor/beneficiario vinculado a despesa.',
+      );
+    }
+
+    const contact = beneficiaryParty.contact;
+    const pixData = this.parsePixData(contact.metadata);
+    const beneficiaryDocument = this.normalizeDocument(
+      contact.document ||
+        contact.pfDetails?.cpf ||
+        contact.pjDetails?.cnpj ||
+        pixData.holderDocument ||
+        null,
+    );
+
+    return {
+      contact,
+      beneficiaryName: this.normalizeText(
+        pixData.holderName || contact.name || null,
+      ),
+      beneficiaryDocument,
+      beneficiaryKey: this.normalizeText(pixData.key),
+      beneficiaryKeyType: this.normalizeText(pixData.keyType)?.toUpperCase() || null,
+    };
+  }
+
+  private buildAutoSettlementNotes(result: any, extraNotes?: string | null) {
+    const parts = [
+      'Liquidado automaticamente apos confirmacao do pagamento PIX bancario.',
+    ];
+
+    if (result?.externalPaymentId) {
+      parts.push(`Solicitacao: ${result.externalPaymentId}`);
+    }
+
+    if (result?.endToEndId) {
+      parts.push(`EndToEnd: ${result.endToEndId}`);
+    }
+
+    if (extraNotes) {
+      parts.push(extraNotes);
+    }
+
+    return parts.join(' ');
+  }
+
+  private async settleFinancialRecordAfterBankConfirmation(params: {
+    tenantId: string;
+    financialRecord: any;
+    bankAccountId?: string | null;
+    amount: number;
+    paymentDate?: string | null;
+    paymentMethod: string;
+    notes?: string | null;
+  }) {
+    const record = params.financialRecord;
+    if (record.status === 'PAID') {
+      return;
+    }
+
+    const bankAccountId = params.bankAccountId || record.bankAccountId || null;
+    const paymentDate = params.paymentDate
+      ? new Date(params.paymentDate)
+      : new Date();
+    const amountFinal = Number(
+      Number(record.amountFinal ?? record.amount ?? params.amount).toFixed(2),
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.financialRecord.update({
+        where: { id: record.id },
+        data: {
+          status: 'PAID',
+          paymentDate,
+          amountFinal,
+          amountPaid: amountFinal,
+          paymentMethod: params.paymentMethod,
+          bankAccountId,
+          notes: record.notes
+            ? `${record.notes} | ${params.notes || 'Liquidado automaticamente'}`
+            : params.notes || 'Liquidado automaticamente',
+        },
+      });
+
+      if (bankAccountId) {
+        await tx.bankAccount.update({
+          where: { id: bankAccountId },
+          data: {
+            balance: {
+              [record.type === 'INCOME' ? 'increment' : 'decrement']: amountFinal,
+            },
+          },
+        });
+      }
+    });
   }
 
   async listIntegrations(tenantId: string) {
@@ -917,7 +1117,9 @@ export class BankingService {
   async createPaymentRequest(
     tenantId: string,
     dto: CreateBankPaymentRequestDto,
+    currentUser: CurrentUserData,
   ) {
+    const authorizedUser = await this.assertPixPaymentAccess(currentUser);
     const integration = await this.prisma.bankIntegration.findFirst({
       where: { id: dto.bankIntegrationId, tenantId },
     });
@@ -927,9 +1129,80 @@ export class BankingService {
 
     const financialRecord = await this.prisma.financialRecord.findFirst({
       where: { id: dto.financialRecordId, tenantId },
+      include: {
+        parties: {
+          include: {
+            contact: {
+              include: {
+                pfDetails: true,
+                pjDetails: true,
+              },
+            },
+          },
+        },
+        bankAccount: true,
+      },
     });
     if (!financialRecord) {
       throw new BadRequestException('Lançamento financeiro não encontrado.');
+    }
+
+    if (financialRecord.type !== 'EXPENSE') {
+      throw new BadRequestException(
+        'Pagamento PIX direto so pode ser usado em despesas.',
+      );
+    }
+
+    if (['PAID', 'CANCELLED'].includes(String(financialRecord.status || '').toUpperCase())) {
+      throw new BadRequestException(
+        'Esta despesa ja esta liquidada ou cancelada.',
+      );
+    }
+
+    const selectedBankAccountId =
+      dto.bankAccountId || integration.bankAccountId || financialRecord.bankAccountId;
+    await this.assertBankAccount(tenantId, selectedBankAccountId);
+
+    const outstandingAmount = this.calculateOutstandingAmount(financialRecord);
+    if (outstandingAmount <= 0) {
+      throw new BadRequestException(
+        'Nao existe saldo em aberto para enviar via PIX.',
+      );
+    }
+
+    const beneficiary = this.resolvePaymentBeneficiary(financialRecord);
+    const canEditPixKey = this.canEditPixPayment(authorizedUser);
+    const requestedPixKey = this.normalizeText(dto.pixKey);
+    const requestedPixKeyType = this.normalizeText(dto.pixKeyType)?.toUpperCase() || null;
+
+    if ((requestedPixKey || requestedPixKeyType) && !canEditPixKey) {
+      const sameKey = requestedPixKey === beneficiary.beneficiaryKey;
+      const sameType = requestedPixKeyType === beneficiary.beneficiaryKeyType;
+      if (!sameKey || !sameType) {
+        throw new ForbiddenException(
+          'Somente perfis autorizados podem alterar a chave PIX do favorecido.',
+        );
+      }
+    }
+
+    const paymentKey = requestedPixKey || beneficiary.beneficiaryKey;
+    const paymentKeyType = requestedPixKeyType || beneficiary.beneficiaryKeyType;
+    const beneficiaryName =
+      this.normalizeText(dto.beneficiaryName) || beneficiary.beneficiaryName;
+    const beneficiaryDocument =
+      this.normalizeDocument(dto.beneficiaryDocument) ||
+      beneficiary.beneficiaryDocument;
+
+    if (!paymentKey || !paymentKeyType) {
+      throw new BadRequestException(
+        'O contato credor/beneficiario precisa ter chave PIX cadastrada ou informada.',
+      );
+    }
+
+    if (!beneficiaryName) {
+      throw new BadRequestException(
+        'O contato credor/beneficiario precisa ter nome para receber o PIX.',
+      );
     }
 
     const provider = this.getProvider(integration.provider);
@@ -938,28 +1211,44 @@ export class BankingService {
       { integration, tenantId, credentials },
       {
         paymentType: dto.paymentType || 'PIX',
-        amount: Number(financialRecord.amount),
-        beneficiaryName: null,
-        beneficiaryDocument: null,
+        amount: outstandingAmount,
+        beneficiaryName,
+        beneficiaryDocument,
+        beneficiaryKey: paymentKey,
+        beneficiaryKeyType: paymentKeyType,
         description: financialRecord.description,
       },
     );
 
-    return this.prisma.bankPaymentRequest.create({
+    const createdRequest = await this.prisma.bankPaymentRequest.create({
       data: {
         tenantId,
         bankIntegrationId: integration.id,
-        bankAccountId: dto.bankAccountId || integration.bankAccountId || null,
+        bankAccountId: selectedBankAccountId || null,
         financialRecordId: financialRecord.id,
         provider: integration.provider,
         paymentType: dto.paymentType || 'PIX',
         status: result.status,
         externalPaymentId: result.externalPaymentId || null,
+        approvedByUserId: currentUser.userId,
         beneficiaryName: result.beneficiaryName || null,
         beneficiaryDocument: result.beneficiaryDocument || null,
-        amount: Number(financialRecord.amount),
-        rawRequest: this.toJson(result.rawRequest),
-        rawResponse: this.toJson(result.rawResponse),
+        amount: outstandingAmount,
+        executedAt: result.confirmed
+          ? new Date(result.executedAt || new Date().toISOString())
+          : null,
+        approvedAt: new Date(),
+        rawRequest: this.toJson({
+          ...result.rawRequest,
+          beneficiaryKey: result.beneficiaryKey || paymentKey,
+          beneficiaryKeyType: result.beneficiaryKeyType || paymentKeyType,
+          notes: dto.notes || null,
+        }),
+        rawResponse: this.toJson({
+          ...result.rawResponse,
+          endToEndId: result.endToEndId || null,
+          confirmed: result.confirmed === true,
+        }),
       },
       include: {
         bankIntegration: {
@@ -970,6 +1259,20 @@ export class BankingService {
         },
       },
     });
+
+    if (result.success && result.confirmed) {
+      await this.settleFinancialRecordAfterBankConfirmation({
+        tenantId,
+        financialRecord,
+        bankAccountId: selectedBankAccountId || null,
+        amount: outstandingAmount,
+        paymentDate: result.executedAt || new Date().toISOString(),
+        paymentMethod: 'PIX',
+        notes: this.buildAutoSettlementNotes(result, dto.notes),
+      });
+    }
+
+    return createdRequest;
   }
 
   async receiveWebhookEvent(

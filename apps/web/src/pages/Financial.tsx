@@ -75,6 +75,7 @@ import { DateRangePicker } from "../components/ui/DateRangePicker";
 import { useNavigate } from "react-router-dom";
 import { useHotkeys } from "../hooks/useHotkeys";
 import { clsx } from "clsx";
+import { getUser } from "../auth/authStorage";
 
 interface FinancialRecord {
   id: string;
@@ -277,6 +278,11 @@ interface BankPaymentRequest {
   status: string;
   amount: number | string;
   createdAt?: string;
+  executedAt?: string | null;
+  beneficiaryName?: string | null;
+  beneficiaryDocument?: string | null;
+  rawRequest?: Record<string, any> | null;
+  rawResponse?: Record<string, any> | null;
   bankIntegration?: {
     id: string;
     displayName: string;
@@ -314,6 +320,13 @@ interface Contact {
   phone?: string;
   whatsapp?: string;
   category?: string;
+  metadata?: Record<string, any> | null;
+  pfDetails?: {
+    cpf?: string | null;
+  } | null;
+  pjDetails?: {
+    cnpj?: string | null;
+  } | null;
 }
 
 interface Dashboard {
@@ -608,6 +621,7 @@ type FinancialProps = {
 
 export function Financial(props: FinancialProps = {}) {
   const navigate = useNavigate();
+  const currentUser = getUser() || {};
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   const containerRef = useRef<HTMLDivElement>(null);
   const lockedProcessId = props.processContext?.id;
@@ -636,6 +650,7 @@ export function Financial(props: FinancialProps = {}) {
       if (showIntegrationModal) setShowIntegrationModal(false);
       if (showReconcileModal) setShowReconcileModal(false);
       if (showChargeModal) setShowChargeModal(false);
+      if (showPixPaymentModal) setShowPixPaymentModal(false);
       if (showSettleModal) setShowSettleModal(false);
       if (showConditionSubModal) setShowConditionSubModal(false);
     },
@@ -647,6 +662,7 @@ export function Financial(props: FinancialProps = {}) {
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
   const [showReconcileModal, setShowReconcileModal] = useState(false);
   const [showChargeModal, setShowChargeModal] = useState(false);
+  const [showPixPaymentModal, setShowPixPaymentModal] = useState(false);
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [selectedBankAccount, setSelectedBankAccount] =
     useState<BankAccount | null>(null);
@@ -656,7 +672,11 @@ export function Financial(props: FinancialProps = {}) {
     useState<BankTransaction | null>(null);
   const [selectedChargeRecord, setSelectedChargeRecord] =
     useState<FinancialRecord | null>(null);
+  const [selectedPixPaymentRecord, setSelectedPixPaymentRecord] =
+    useState<FinancialRecord | null>(null);
   const [createdCharge, setCreatedCharge] = useState<BankCharge | null>(null);
+  const [createdPaymentRequest, setCreatedPaymentRequest] =
+    useState<BankPaymentRequest | null>(null);
   const [boletoSlipCharge, setBoletoSlipCharge] = useState<BankCharge | null>(null);
   const [lastHealthcheck, setLastHealthcheck] =
     useState<BankingHealthcheckResult | null>(null);
@@ -669,6 +689,7 @@ export function Financial(props: FinancialProps = {}) {
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [chargeSubmitting, setChargeSubmitting] = useState(false);
+  const [pixPaymentSubmitting, setPixPaymentSubmitting] = useState(false);
   const [chargeFormData, setChargeFormData] = useState<{
     bankIntegrationId: string;
     chargeType: "PIX" | "BOLETO";
@@ -677,6 +698,23 @@ export function Financial(props: FinancialProps = {}) {
     bankIntegrationId: "",
     chargeType: "BOLETO",
     dueDate: "",
+  });
+  const [pixPaymentFormData, setPixPaymentFormData] = useState<{
+    bankIntegrationId: string;
+    bankAccountId: string;
+    pixKeyType: "CPF" | "CNPJ" | "EMAIL" | "PHONE" | "EVP";
+    pixKey: string;
+    beneficiaryName: string;
+    beneficiaryDocument: string;
+    notes: string;
+  }>({
+    bankIntegrationId: "",
+    bankAccountId: "",
+    pixKeyType: "EVP",
+    pixKey: "",
+    beneficiaryName: "",
+    beneficiaryDocument: "",
+    notes: "",
   });
 
   const parseAmountPtBr = (raw: string) => {
@@ -694,6 +732,86 @@ export function Financial(props: FinancialProps = {}) {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value);
+  };
+
+  const userPermissions =
+    currentUser.permissions && typeof currentUser.permissions === "object"
+      ? currentUser.permissions
+      : {};
+  const canAccessPixPayment =
+    currentUser.role === "OWNER" ||
+    currentUser.role === "ADMIN" ||
+    userPermissions.financial_pix_payment?.access === true;
+  const canEditPixPaymentKey =
+    currentUser.role === "OWNER" ||
+    currentUser.role === "ADMIN" ||
+    userPermissions.financial_pix_payment?.update === true;
+
+  const normalizeDigits = (value?: string | null) =>
+    String(value || "").replace(/\D/g, "");
+
+  const parsePixData = (metadata?: Record<string, any> | null) => {
+    const source =
+      metadata && typeof metadata === "object" && !Array.isArray(metadata)
+        ? metadata
+        : {};
+    const financial =
+      source.financial && typeof source.financial === "object"
+        ? source.financial
+        : {};
+    const pix = source.pix && typeof source.pix === "object" ? source.pix : {};
+    const paymentPix =
+      financial.pix && typeof financial.pix === "object" ? financial.pix : {};
+    const merged = { ...pix, ...paymentPix } as Record<string, any>;
+
+    const keyType = String(
+      merged.keyType ||
+        merged.pixKeyType ||
+        merged.tipo ||
+        merged.tipoChave ||
+        "EVP",
+    )
+      .trim()
+      .toUpperCase();
+
+    return {
+      key: String(
+        merged.key || merged.pixKey || merged.chave || merged.valor || "",
+      ).trim(),
+      keyType:
+        keyType === "CPF" ||
+        keyType === "CNPJ" ||
+        keyType === "EMAIL" ||
+        keyType === "PHONE" ||
+        keyType === "EVP"
+          ? (keyType as "CPF" | "CNPJ" | "EMAIL" | "PHONE" | "EVP")
+          : ("EVP" as const),
+      holderName: String(
+        merged.holderName || merged.nomeTitular || merged.nome || "",
+      ).trim(),
+      holderDocument: normalizeDigits(
+        merged.holderDocument || merged.documentoTitular || merged.documento || "",
+      ),
+    };
+  };
+
+  const getPixPaymentDisabledReason = (
+    record: FinancialRecord,
+    hasActiveIntegration: boolean,
+  ) => {
+    if (!canAccessPixPayment) {
+      return "Seu usuário não possui acesso ao PIX bancário direto.";
+    }
+    if (String(record.type || "").toUpperCase() !== "EXPENSE") {
+      return "O pagamento PIX direto está disponível apenas para despesas.";
+    }
+    if (!["PENDING", "PARTIAL", "OVERDUE"].includes(String(record.status || "").toUpperCase())) {
+      return "Apenas despesas em aberto podem ser pagas via PIX.";
+    }
+    if (!hasActiveIntegration) {
+      return "Nenhuma integração bancária ativa foi encontrada.";
+    }
+    return null;
   };
 
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -1779,6 +1897,162 @@ export function Financial(props: FinancialProps = {}) {
       );
     } finally {
       setChargeSubmitting(false);
+    }
+  };
+
+  const resolvePixBeneficiary = (record: FinancialRecord) => {
+    const beneficiaryParty =
+      record.parties?.find((party) =>
+        ["BENEFICIARY", "CREDITOR"].includes(String(party.role || "").toUpperCase()),
+      ) || null;
+
+    if (!beneficiaryParty?.contact) {
+      return null;
+    }
+
+    const contact = beneficiaryParty.contact;
+    const pixData = parsePixData(contact.metadata || null);
+    const beneficiaryDocument = normalizeDigits(
+      contact.document ||
+        contact.cpf ||
+        contact.cnpj ||
+        contact.pfDetails?.cpf ||
+        contact.pjDetails?.cnpj ||
+        pixData.holderDocument ||
+        "",
+    );
+
+    return {
+      contact,
+      beneficiaryName: pixData.holderName || contact.name || "",
+      beneficiaryDocument,
+      pixKey: pixData.key || "",
+      pixKeyType: pixData.keyType,
+    };
+  };
+
+  const handleOpenPixPaymentModal = async (record: FinancialRecord) => {
+    const availableReason = getPixPaymentDisabledReason(
+      record,
+      bankIntegrations.some(
+        (integration) => integration.provider === "INTER" && integration.isActive,
+      ),
+    );
+
+    if (availableReason && bankIntegrations.length > 0) {
+      toast.error(availableReason);
+      return;
+    }
+
+    try {
+      const [fullRecordRes, integrations] = await Promise.all([
+        api.get(`/financial/records/${record.id}`),
+        bankIntegrations.length > 0 ? Promise.resolve(bankIntegrations) : loadBankingOperations(),
+      ]);
+
+      const fullRecord = fullRecordRes.data as FinancialRecord;
+      const activeIntegrations = integrations.filter(
+        (integration) => integration.provider === "INTER" && integration.isActive,
+      );
+      const reason = getPixPaymentDisabledReason(fullRecord, activeIntegrations.length > 0);
+      if (reason) {
+        toast.error(reason);
+        return;
+      }
+
+      const preferredIntegration = getPreferredBankIntegration(activeIntegrations);
+      if (!preferredIntegration) {
+        toast.error("Nenhuma integração bancária ativa foi encontrada.");
+        return;
+      }
+
+      const beneficiary = resolvePixBeneficiary(fullRecord);
+      if (!beneficiary) {
+        toast.error("Vincule um credor ou beneficiário com chave PIX antes de pagar.");
+        return;
+      }
+
+      setSelectedPixPaymentRecord(fullRecord);
+      setCreatedPaymentRequest(null);
+      setPixPaymentFormData({
+        bankIntegrationId: preferredIntegration.id,
+        bankAccountId:
+          preferredIntegration.bankAccountId ||
+          fullRecord.bankAccount?.id ||
+          "",
+        pixKeyType: beneficiary.pixKeyType,
+        pixKey: beneficiary.pixKey,
+        beneficiaryName: beneficiary.beneficiaryName,
+        beneficiaryDocument: beneficiary.beneficiaryDocument,
+        notes: "",
+      });
+      setShowPixPaymentModal(true);
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message ||
+          "Erro ao preparar o pagamento PIX bancário.",
+      );
+    }
+  };
+
+  const handleSubmitPixPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedPixPaymentRecord) {
+      toast.error("Selecione uma despesa para pagar.");
+      return;
+    }
+
+    if (!pixPaymentFormData.bankIntegrationId) {
+      toast.error("Selecione uma integração bancária.");
+      return;
+    }
+
+    if (!pixPaymentFormData.bankAccountId) {
+      toast.error("Selecione a conta pagadora.");
+      return;
+    }
+
+    if (!pixPaymentFormData.pixKey.trim()) {
+      toast.error("Informe a chave PIX do favorecido.");
+      return;
+    }
+
+    if (!pixPaymentFormData.beneficiaryName.trim()) {
+      toast.error("Informe o nome do favorecido.");
+      return;
+    }
+
+    setPixPaymentSubmitting(true);
+    try {
+      const response = await api.post("/banking/payment-requests", {
+        bankIntegrationId: pixPaymentFormData.bankIntegrationId,
+        bankAccountId: pixPaymentFormData.bankAccountId,
+        financialRecordId: selectedPixPaymentRecord.id,
+        paymentType: "PIX",
+        pixKeyType: pixPaymentFormData.pixKeyType,
+        pixKey: pixPaymentFormData.pixKey,
+        beneficiaryName: pixPaymentFormData.beneficiaryName,
+        beneficiaryDocument: pixPaymentFormData.beneficiaryDocument,
+        notes: pixPaymentFormData.notes,
+      });
+
+      setCreatedPaymentRequest(response.data);
+      const executed = Boolean(response.data?.executedAt);
+      toast.success(
+        executed
+          ? "Pagamento PIX confirmado e despesa liquidada automaticamente."
+          : "Pagamento PIX enviado. O sistema aguarda a confirmação final do banco.",
+      );
+      await fetchData();
+      await loadBankingOperations();
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message ||
+          "Erro ao enviar o pagamento PIX bancário.",
+      );
+    } finally {
+      setPixPaymentSubmitting(false);
     }
   };
 
@@ -3948,6 +4222,43 @@ export function Financial(props: FinancialProps = {}) {
                             )}
                             {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
                               <button
+                                onClick={() => handleOpenPixPaymentModal(record)}
+                                disabled={!!getPixPaymentDisabledReason(
+                                  record,
+                                  bankIntegrations.some(
+                                    (integration) =>
+                                      integration.provider === "INTER" &&
+                                      integration.isActive,
+                                  ),
+                                )}
+                                className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
+                                  !getPixPaymentDisabledReason(
+                                    record,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  )
+                                    ? "bg-sky-500/10 border-sky-500/20 text-sky-300 hover:bg-sky-500 hover:text-white"
+                                    : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
+                                }`}
+                                title={
+                                  getPixPaymentDisabledReason(
+                                    record,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  ) || "Pagar via PIX direto"
+                                }
+                              >
+                                <ArrowUp size={14} />
+                              </button>
+                            )}
+                            {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
+                              <button
                                 onClick={() => handleOpenSettleModal(record)}
                                 disabled={!hasPartiesToSettle(record)}
                                 className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
@@ -4087,6 +4398,47 @@ export function Financial(props: FinancialProps = {}) {
                                 }
                               >
                                 <FileText size={14} />
+                              </button>
+                            )}
+                            {isOpenRecord(child as FinancialRecord) && (
+                              <button
+                                onClick={() =>
+                                  handleOpenPixPaymentModal(
+                                    child as FinancialRecord,
+                                  )
+                                }
+                                disabled={!!getPixPaymentDisabledReason(
+                                  child as FinancialRecord,
+                                  bankIntegrations.some(
+                                    (integration) =>
+                                      integration.provider === "INTER" &&
+                                      integration.isActive,
+                                  ),
+                                )}
+                                className={`p-1.5 rounded transition-colors ${
+                                  !getPixPaymentDisabledReason(
+                                    child as FinancialRecord,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  )
+                                    ? "text-sky-300 hover:bg-sky-500/10"
+                                    : "text-slate-600 cursor-not-allowed opacity-50"
+                                }`}
+                                title={
+                                  getPixPaymentDisabledReason(
+                                    child as FinancialRecord,
+                                    bankIntegrations.some(
+                                      (integration) =>
+                                        integration.provider === "INTER" &&
+                                        integration.isActive,
+                                    ),
+                                  ) || "Pagar via PIX direto"
+                                }
+                              >
+                                <ArrowUp size={14} />
                               </button>
                             )}
                             {isOpenRecord(child as FinancialRecord) && (
@@ -5764,6 +6116,258 @@ export function Financial(props: FinancialProps = {}) {
       )}
 
       {/* Modal de Conta Bancária */}
+      {showPixPaymentModal && selectedPixPaymentRecord && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <form onSubmit={handleSubmitPixPayment}>
+              <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    Pagar Despesa via PIX Direto
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {selectedPixPaymentRecord.description} •{" "}
+                    {formatCurrency(getOutstandingAmount(selectedPixPaymentRecord))}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPixPaymentModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                  <p className="text-xs uppercase tracking-wider text-slate-500 font-bold">
+                    Favorecido vinculado
+                  </p>
+                  <p className="text-white font-semibold mt-2">
+                    {resolvePixBeneficiary(selectedPixPaymentRecord)?.beneficiaryName ||
+                      "Não informado"}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Documento:{" "}
+                    {resolvePixBeneficiary(selectedPixPaymentRecord)?.beneficiaryDocument ||
+                      "Não informado"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Integração bancária
+                    </span>
+                    <select
+                      value={pixPaymentFormData.bankIntegrationId}
+                      onChange={(e) =>
+                        setPixPaymentFormData((prev) => ({
+                          ...prev,
+                          bankIntegrationId: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    >
+                      <option value="">Selecione</option>
+                      {bankIntegrations
+                        .filter(
+                          (integration) =>
+                            integration.provider === "INTER" && integration.isActive,
+                        )
+                        .map((integration) => (
+                          <option key={integration.id} value={integration.id}>
+                            {integration.displayName} • {integration.environment}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Conta pagadora
+                    </span>
+                    <select
+                      value={pixPaymentFormData.bankAccountId}
+                      onChange={(e) =>
+                        setPixPaymentFormData((prev) => ({
+                          ...prev,
+                          bankAccountId: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    >
+                      <option value="">Selecione</option>
+                      {bankAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.title} • {account.bankName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Tipo da chave PIX
+                    </span>
+                    <select
+                      value={pixPaymentFormData.pixKeyType}
+                      onChange={(e) =>
+                        setPixPaymentFormData((prev) => ({
+                          ...prev,
+                          pixKeyType: e.target.value as
+                            | "CPF"
+                            | "CNPJ"
+                            | "EMAIL"
+                            | "PHONE"
+                            | "EVP",
+                        }))
+                      }
+                      disabled={!canEditPixPaymentKey}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white disabled:opacity-60"
+                    >
+                      <option value="CPF">CPF</option>
+                      <option value="CNPJ">CNPJ</option>
+                      <option value="EMAIL">E-mail</option>
+                      <option value="PHONE">Telefone</option>
+                      <option value="EVP">Aleatória (EVP)</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-2 md:col-span-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Chave PIX do favorecido
+                    </span>
+                    <input
+                      value={pixPaymentFormData.pixKey}
+                      onChange={(e) =>
+                        setPixPaymentFormData((prev) => ({
+                          ...prev,
+                          pixKey: e.target.value,
+                        }))
+                      }
+                      disabled={!canEditPixPaymentKey}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white disabled:opacity-60"
+                      placeholder="Informe ou confirme a chave PIX"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Nome do favorecido
+                    </span>
+                    <input
+                      value={pixPaymentFormData.beneficiaryName}
+                      onChange={(e) =>
+                        setPixPaymentFormData((prev) => ({
+                          ...prev,
+                          beneficiaryName: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      Documento do favorecido
+                    </span>
+                    <input
+                      value={pixPaymentFormData.beneficiaryDocument}
+                      onChange={(e) =>
+                        setPixPaymentFormData((prev) => ({
+                          ...prev,
+                          beneficiaryDocument: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    />
+                  </label>
+                </div>
+
+                {!canEditPixPaymentKey && (
+                  <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+                    <p className="text-sm text-sky-100">
+                      A chave PIX foi carregada do cadastro do contato. Apenas
+                      perfis administrativos ou com permissão especial podem alterá-la.
+                    </p>
+                  </div>
+                )}
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-semibold text-slate-300">
+                    Observações do operador
+                  </span>
+                  <textarea
+                    value={pixPaymentFormData.notes}
+                    onChange={(e) =>
+                      setPixPaymentFormData((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    className="w-full min-h-[96px] rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
+                    placeholder="Motivo, instruções ou observações internas"
+                  />
+                </label>
+
+                {createdPaymentRequest && (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-white">
+                          Pedido de Pagamento Registrado
+                        </h3>
+                        <p className="text-sm text-slate-300 mt-1">
+                          Status: {createdPaymentRequest.status}
+                        </p>
+                      </div>
+                      <span className="text-lg font-bold text-emerald-300">
+                        {formatCurrency(Number(createdPaymentRequest.amount))}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-300">
+                      Favorecido: {createdPaymentRequest.beneficiaryName || "-"}
+                    </p>
+                    {createdPaymentRequest.executedAt ? (
+                      <p className="text-sm text-emerald-200">
+                        O banco confirmou o PIX e a despesa foi liquidada automaticamente.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-amber-100">
+                        O pedido foi enviado e permanece aguardando a confirmação final do banco.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-4 border-t border-slate-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPixPaymentModal(false)}
+                  className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="submit"
+                  disabled={pixPaymentSubmitting}
+                  className="px-4 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-60 text-white font-semibold"
+                >
+                  {pixPaymentSubmitting ? "Enviando..." : "Pagar via PIX"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showIntegrationModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">

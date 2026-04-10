@@ -77,8 +77,13 @@ export interface BankingPaymentResult {
   paymentType: string;
   status: string;
   externalPaymentId?: string | null;
+  endToEndId?: string | null;
+  confirmed?: boolean;
+  executedAt?: string | null;
   beneficiaryName?: string | null;
   beneficiaryDocument?: string | null;
+  beneficiaryKey?: string | null;
+  beneficiaryKeyType?: string | null;
   rawRequest?: Record<string, any>;
   rawResponse?: Record<string, any>;
   message: string;
@@ -120,6 +125,8 @@ export interface BankingProvider {
       amount: number;
       beneficiaryName?: string | null;
       beneficiaryDocument?: string | null;
+      beneficiaryKey?: string | null;
+      beneficiaryKeyType?: string | null;
       description: string;
     },
   ): Promise<BankingPaymentResult>;

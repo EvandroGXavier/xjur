@@ -19,6 +19,7 @@ interface InterRuntimeConfig {
   apiBaseUrl: string;
   tokenUrl: string;
   chargePath: string;
+  paymentPath: string;
   timeoutMs: number;
   tokenScope?: string;
   numDaysAgenda: number;
@@ -28,8 +29,10 @@ interface InterMetadataConfig {
   apiBaseUrl?: string;
   tokenUrl?: string;
   chargePath?: string;
+  paymentPath?: string;
   timeoutMs?: number;
   scope?: string | string[];
+  paymentScope?: string | string[];
   numDaysAgenda?: number;
 }
 
@@ -111,8 +114,11 @@ export class InterBankingProvider implements BankingProvider {
     const chargePath = this.ensureLeadingSlash(
       String(metadata.chargePath || '/cobranca/v3/cobrancas').trim(),
     );
+    const paymentPath = this.ensureLeadingSlash(
+      String(metadata.paymentPath || '/pix/v2/pix').trim(),
+    );
     const timeoutMs = Math.max(5000, Number(metadata.timeoutMs || 30000));
-    const rawScope = metadata.scope;
+    const rawScope = metadata.paymentScope || metadata.scope;
     const tokenScope = Array.isArray(rawScope)
       ? rawScope.filter(Boolean).join(' ').trim()
       : String(rawScope || '').trim() || undefined;
@@ -123,6 +129,7 @@ export class InterBankingProvider implements BankingProvider {
       apiBaseUrl,
       tokenUrl,
       chargePath,
+      paymentPath,
       timeoutMs,
       tokenScope,
       numDaysAgenda: Math.max(0, Number(metadata.numDaysAgenda || 60)),
@@ -831,20 +838,47 @@ export class InterBankingProvider implements BankingProvider {
       amount: number;
       beneficiaryName?: string | null;
       beneficiaryDocument?: string | null;
+      beneficiaryKey?: string | null;
+      beneficiaryKeyType?: string | null;
       description: string;
     },
   ): Promise<BankingPaymentResult> {
     const config = this.resolveRuntimeConfig(ctx);
 
     if (config.mode === 'LIVE') {
-      return {
-        success: false,
-        mode: config.mode,
-        paymentType: params.paymentType,
-        status: 'PENDING_CONFIGURATION',
-        message:
-          'Pagamento LIVE do Banco Inter ainda depende da homologacao final do fluxo oficial.',
-      };
+      try {
+        const payload = this.buildPixPaymentPayload(params);
+        const responseData = await this.requestInter<any>(ctx, config, {
+          method: 'POST',
+          url: config.paymentPath,
+          data: payload,
+        });
+
+        return this.extractPaymentResult(params.paymentType, payload, responseData);
+      } catch (error) {
+        return {
+          success: false,
+          mode: config.mode,
+          paymentType: params.paymentType,
+          status: 'ERROR',
+          beneficiaryName: params.beneficiaryName || null,
+          beneficiaryDocument: params.beneficiaryDocument || null,
+          beneficiaryKey: params.beneficiaryKey || null,
+          beneficiaryKeyType: params.beneficiaryKeyType || null,
+          rawRequest: {
+            paymentType: params.paymentType,
+            amount: params.amount,
+            beneficiaryName: params.beneficiaryName,
+            beneficiaryDocument: params.beneficiaryDocument,
+            beneficiaryKey: params.beneficiaryKey,
+            beneficiaryKeyType: params.beneficiaryKeyType,
+          },
+          message: this.buildRequestErrorMessage(
+            error,
+            'Nao foi possivel enviar o pagamento PIX LIVE no Banco Inter',
+          ),
+        };
+      }
     }
 
     const reference = `inter-payment-${ctx.integration.id}-${Date.now()}`;
@@ -852,13 +886,168 @@ export class InterBankingProvider implements BankingProvider {
       success: true,
       mode: config.mode,
       paymentType: params.paymentType,
-      status: 'REQUESTED_MOCK',
+      status: 'EXECUTED_MOCK',
       externalPaymentId: reference,
+      endToEndId: `E2E-${Date.now()}`,
+      confirmed: true,
+      executedAt: new Date().toISOString(),
       beneficiaryName: params.beneficiaryName || null,
       beneficiaryDocument: params.beneficiaryDocument || null,
+      beneficiaryKey: params.beneficiaryKey || null,
+      beneficiaryKeyType: params.beneficiaryKeyType || null,
       rawRequest: { provider: 'INTER', ...params },
       rawResponse: { mock: true, reference },
-      message: 'Pagamento mock solicitado ao Banco Inter.',
+      message: 'Pagamento mock confirmado no Banco Inter.',
+    };
+  }
+
+  private normalizePixKeyType(value?: string | null) {
+    const normalized = String(value || '')
+      .trim()
+      .toUpperCase();
+
+    if (['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'EVP'].includes(normalized)) {
+      return normalized as 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'EVP';
+    }
+
+    throw new Error('Tipo de chave PIX invalido para o Banco Inter.');
+  }
+
+  private normalizePixKey(
+    keyType: 'CPF' | 'CNPJ' | 'EMAIL' | 'PHONE' | 'EVP',
+    value?: string | null,
+  ) {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) {
+      throw new Error('Informe uma chave PIX valida para o favorecido.');
+    }
+
+    if (keyType === 'CPF' || keyType === 'CNPJ') {
+      const digits = rawValue.replace(/\D/g, '');
+      if (!digits) {
+        throw new Error('A chave PIX informada nao possui numeros validos.');
+      }
+      return digits;
+    }
+
+    if (keyType === 'PHONE') {
+      const digits = rawValue.replace(/\D/g, '');
+      if (!digits) {
+        throw new Error('Telefone PIX invalido.');
+      }
+      return digits.startsWith('55') ? `+${digits}` : `+55${digits}`;
+    }
+
+    return rawValue;
+  }
+
+  private buildPixPaymentPayload(params: {
+    amount: number;
+    beneficiaryName?: string | null;
+    beneficiaryDocument?: string | null;
+    beneficiaryKey?: string | null;
+    beneficiaryKeyType?: string | null;
+    description: string;
+  }) {
+    const keyType = this.normalizePixKeyType(params.beneficiaryKeyType);
+    const key = this.normalizePixKey(keyType, params.beneficiaryKey);
+    const document = String(params.beneficiaryDocument || '').replace(/\D/g, '');
+    const beneficiaryName = this.truncate(String(params.beneficiaryName || ''), 140);
+
+    if (!beneficiaryName) {
+      throw new Error('O favorecido do pagamento PIX precisa ter nome.');
+    }
+
+    return {
+      valor: Number(Number(params.amount || 0).toFixed(2)),
+      descricao: this.truncate(params.description || 'Pagamento via Xjur', 140),
+      destinatario: {
+        tipoChave: keyType,
+        chave: key,
+        nome: beneficiaryName,
+        cpfCnpj: document || undefined,
+      },
+    };
+  }
+
+  private isConfirmedPaymentStatus(status?: string | null) {
+    const normalized = String(status || '')
+      .trim()
+      .toUpperCase();
+
+    return [
+      'PAGO',
+      'PAGAMENTO_EFETIVADO',
+      'EFETIVADO',
+      'EXECUTADO',
+      'EXECUTADA',
+      'CONCLUIDO',
+      'CONCLUIDA',
+      'SUCESSO',
+      'SUCCESS',
+      'REALIZADO',
+      'REALIZADA',
+      'PROCESSADO',
+      'PROCESSADA',
+    ].includes(normalized);
+  }
+
+  private extractPaymentResult(
+    paymentType: string,
+    payload: Record<string, any>,
+    responseData: any,
+  ): BankingPaymentResult {
+    const status =
+      this.pickString(
+        responseData?.status,
+        responseData?.situacao,
+        responseData?.estado,
+        responseData?.resultado,
+        'REQUESTED',
+      ) || 'REQUESTED';
+
+    return {
+      success: true,
+      mode: 'LIVE',
+      paymentType,
+      status,
+      externalPaymentId: this.pickString(
+        responseData?.codigoSolicitacao,
+        responseData?.id,
+        responseData?.codigoTransacao,
+      ),
+      endToEndId: this.pickString(
+        responseData?.endToEndId,
+        responseData?.e2eId,
+        responseData?.codigoEndToEnd,
+      ),
+      confirmed: this.isConfirmedPaymentStatus(status),
+      executedAt: this.pickString(
+        responseData?.dataHoraPagamento,
+        responseData?.executadoEm,
+        responseData?.createdAt,
+      ),
+      beneficiaryName: this.pickString(
+        responseData?.destinatario?.nome,
+        payload?.destinatario?.nome,
+      ),
+      beneficiaryDocument: this.pickString(
+        responseData?.destinatario?.cpfCnpj,
+        payload?.destinatario?.cpfCnpj,
+      ),
+      beneficiaryKey: this.pickString(
+        responseData?.destinatario?.chave,
+        payload?.destinatario?.chave,
+      ),
+      beneficiaryKeyType: this.pickString(
+        responseData?.destinatario?.tipoChave,
+        payload?.destinatario?.tipoChave,
+      ),
+      rawRequest: payload,
+      rawResponse: responseData,
+      message: this.isConfirmedPaymentStatus(status)
+        ? 'Pagamento PIX LIVE confirmado pelo Banco Inter.'
+        : 'Pagamento PIX LIVE enviado ao Banco Inter e aguardando confirmacao final.',
     };
   }
 }

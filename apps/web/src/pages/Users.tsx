@@ -118,13 +118,21 @@ export function UsersPage() {
 
   const handleTogglePermission = (moduleId: string, action: string) => {
     setFormData((prev: any) => {
-        const currentMod = prev.permissions?.[moduleId] || { access: true, create: true, read: true, update: true, delete: true };
+        const currentMod =
+          prev.permissions?.[moduleId] ||
+          (moduleId === 'financial_pix_payment'
+            ? { access: false, update: false }
+            : { access: true, create: true, read: true, update: true, delete: true });
         const newVal = !currentMod[action];
         
         const nextMod = { ...currentMod, [action]: newVal };
         
-        if (action === 'access' && !newVal) {
+        if (action === 'access' && !newVal && moduleId !== 'financial_pix_payment') {
             nextMod.create = false; nextMod.read = false; nextMod.update = false; nextMod.delete = false;
+        }
+
+        if (moduleId === 'financial_pix_payment' && action === 'access' && !newVal) {
+          nextMod.update = false;
         }
 
         return { ...prev, permissions: { ...prev.permissions, [moduleId]: nextMod } };
@@ -519,6 +527,40 @@ export function UsersPage() {
                                   })}
                               </tbody>
                           </table>
+                      </div>
+
+                      <div className="mt-5 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+                          <div className="flex items-start justify-between gap-4">
+                              <div>
+                                  <h5 className="text-sm font-bold text-white">Permissão Especial: PIX Bancário Direto</h5>
+                                  <p className="text-[11px] text-slate-400 mt-1">
+                                      Libera o pagamento PIX direto no Financeiro. A edição manual da chave exige a permissão de editar.
+                                  </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                  {(['access', 'update'] as const).map(action => {
+                                      const key = 'financial_pix_payment';
+                                      const permission = formData.permissions?.[key] || { access: false, update: false };
+                                      const label = action === 'access' ? 'Usar' : 'Editar chave';
+                                      return (
+                                          <button
+                                            key={action}
+                                            type="button"
+                                            onClick={() => handleTogglePermission(key, action)}
+                                            className={clsx(
+                                              "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                                              permission[action]
+                                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                                                : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-500"
+                                            )}
+                                          >
+                                              <Check size={12} className={clsx(!permission[action] && 'opacity-0')} />
+                                              {label}
+                                          </button>
+                                      );
+                                  })}
+                              </div>
+                          </div>
                       </div>
                   </div>
               )}
