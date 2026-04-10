@@ -61,7 +61,7 @@ export function Dashboard() {
           {/* Ações Rápidas */}
           <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 mr-2">
             <button 
-              onClick={() => navigate('/chat')}
+              onClick={() => navigate('/atendimento')}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-teal-400 hover:bg-slate-700 hover:text-teal-300 rounded-lg transition-all"
               title="Novo Atendimento"
             >

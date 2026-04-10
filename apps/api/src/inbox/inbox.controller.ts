@@ -36,17 +36,35 @@ export class InboxController {
     private readonly trustedDeviceService: TrustedDeviceService,
   ) {}
 
+  private parseBooleanQuery(value?: string) {
+    if (value === undefined) return undefined;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') return true;
+    if (normalized === 'false' || normalized === '0') return false;
+    return undefined;
+  }
+
   @Get('conversations')
   findAll(
     @CurrentUser() user: CurrentUserData,
     @Query('status') status?: string,
     @Query('channel') channel?: string,
     @Query('search') search?: string,
+    @Query('queue') queue?: string,
+    @Query('assignedUserId') assignedUserId?: string,
+    @Query('waitingReply') waitingReply?: string,
+    @Query('processId') processId?: string,
+    @Query('includeArchived') includeArchived?: string,
   ) {
     return this.inboxService.findAllConversations(user.tenantId, {
       status,
       channel,
       search,
+      queue,
+      assignedUserId,
+      processId,
+      waitingReply: this.parseBooleanQuery(waitingReply),
+      includeArchived: this.parseBooleanQuery(includeArchived),
     });
   }
 

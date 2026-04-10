@@ -222,6 +222,11 @@ export class ProcessPdfService {
         };
     }
 
+    async quickExtractCnj(fileBuffer: Buffer): Promise<string | undefined> {
+        const coverParsed = await this.extractPdfText(fileBuffer, { first: 1 });
+        return this.extractCnj(this.normalizeExtractedText(coverParsed.text));
+    }
+
     async analyzeFullProcessPdf(fileBuffer: Buffer): Promise<FullProcessPdfAnalysis> {
         const parsed = await this.extractPdfText(fileBuffer);
         const normalizedText = this.normalizeExtractedText(parsed.text);

@@ -1368,7 +1368,7 @@ export class ContactsService {
   async getContactInsights(contactId: string, tenantId: string) {
     const contact = await this.getContactOrThrow(contactId, tenantId);
 
-    const [processParties, ownedProcesses, appointments, whatsappConversations, tickets] = await Promise.all([
+    const [processParties, ownedProcesses, appointments, whatsappConversations] = await Promise.all([
       this.prisma.processParty.findMany({
         where: {
           tenantId,
@@ -1457,9 +1457,6 @@ export class ContactsService {
           connection: {
             select: { id: true, name: true, status: true },
           },
-          ticket: {
-            select: { id: true, code: true, status: true, priority: true, queue: true },
-          },
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 6,
@@ -1474,26 +1471,6 @@ export class ContactsService {
               createdAt: true,
             },
           },
-        },
-        orderBy: { lastMessageAt: 'desc' },
-        take: 8,
-      }),
-      this.prisma.ticket.findMany({
-        where: {
-          tenantId,
-          contactId,
-          channel: 'WHATSAPP',
-        },
-        select: {
-          id: true,
-          code: true,
-          title: true,
-          status: true,
-          priority: true,
-          queue: true,
-          waitingReply: true,
-          lastMessageAt: true,
-          updatedAt: true,
         },
         orderBy: { lastMessageAt: 'desc' },
         take: 8,
@@ -1562,10 +1539,8 @@ export class ContactsService {
           lastMessagePreview: conversation.lastMessagePreview,
           lastMessageAt: conversation.lastMessageAt,
           connection: conversation.connection,
-          ticket: conversation.ticket,
           messages: [...conversation.messages].reverse(),
         })),
-        tickets,
       },
     };
   }

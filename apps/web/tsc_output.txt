@@ -1,0 +1,147 @@
+﻿src/components/agenda/CalendarMonthView.tsx(3,1): error TS6133: 'ptBR' is declared but its value is never read.
+src/components/agenda/CalendarMonthView.tsx(4,1): error TS6133: 'Badge' is declared but its value is never read.
+src/components/agenda/CalendarMonthView.tsx(41,41): error TS6133: 'idx' is declared but its value is never read.
+src/components/dashboard/Widgets.tsx(53,37): error TS6133: 'id' is declared but its value is never read.
+src/components/dashboard/Widgets.tsx(76,45): error TS6133: 'entry' is declared but its value is never read.
+src/components/dashboard/Widgets.tsx(90,42): error TS6133: 'id' is declared but its value is never read.
+src/components/processos/DocumentGeneratorModal.tsx(150,61): error TS2345: Argument of type '{ margin: number; filename: string; image: { type: string; quality: number; }; html2canvas: { scale: number; useCORS: boolean; logging: boolean; }; jsPDF: { unit: string; format: string; orientation: string; }; }' is not assignable to parameter of type 'Html2PdfOptions'.
+  The types of 'image.type' are incompatible between these types.
+    Type 'string' is not assignable to type '"jpeg" | "png" | "webp" | undefined'.
+src/components/settings/BackupTab.tsx(117,13): error TS6133: 'response' is declared but its value is never read.
+src/components/settings/BackupTab.tsx(197,13): error TS6133: 'response' is declared but its value is never read.
+src/components/settings/DrxClawTab.tsx(251,7): error TS6133: 'getProviderLabel' is declared but its value is never read.
+src/components/settings/TagsTab.tsx(98,13): error TS2322: Type 'string' is not assignable to type '"rgb(var(--color-indigo-500))"'.
+src/components/settings/TagsTab.tsx(99,13): error TS2322: Type 'string' is not assignable to type '"rgb(255, 255, 255)"'.
+src/components/settings/TagsTab.tsx(201,87): error TS2322: Type '"rgb(var(--color-indigo-500))" | "rgb(var(--color-amber-500))" | "rgb(var(--color-red-500))" | "rgb(var(--color-violet-500))" | "rgb(var(--color-cyan-500))" | "rgb(var(--color-orange-500))" | ... 7 more ... | "rgb(var(--color-rose-500))"' is not assignable to type '"rgb(var(--color-indigo-500))"'.
+  Type '"rgb(var(--color-amber-500))"' is not assignable to type '"rgb(var(--color-indigo-500))"'.
+src/components/settings/TagsTab.tsx(201,94): error TS2322: Type '"rgb(255, 255, 255)" | "rgb(2, 6, 23)"' is not assignable to type '"rgb(255, 255, 255)"'.
+  Type '"rgb(2, 6, 23)"' is not assignable to type '"rgb(255, 255, 255)"'.
+src/components/settings/WorkflowsTab.tsx(3,16): error TS6133: 'Edit2' is declared but its value is never read.
+src/components/settings/WorkflowsTab.tsx(3,31): error TS6133: 'Check' is declared but its value is never read.
+src/components/Sidebar.tsx(85,38): error TS2339: Property 'subItems' does not exist on type '{ id: string; label: string; icon: LucideIcon; to: string; }'.
+src/components/Sidebar.tsx(85,55): error TS2339: Property 'subItems' does not exist on type '{ id: string; label: string; icon: LucideIcon; to: string; }'.
+src/components/Sidebar.tsx(135,25): error TS2339: Property 'subItems' does not exist on type '{ id: string; label: string; icon: LucideIcon; to: string; }'.
+src/components/Sidebar.tsx(135,39): error TS7006: Parameter 'sub' implicitly has an 'any' type.
+src/components/Sidebar.tsx(160,29): error TS2339: Property 'subItems' does not exist on type '{ id: string; label: string; icon: LucideIcon; to: string; }'.
+src/components/Sidebar.tsx(160,43): error TS7006: Parameter 'sub' implicitly has an 'any' type.
+src/components/ui/DateRangePicker.tsx(251,38): error TS2556: A spread argument must either have a tuple type or be passed to a rest parameter.
+src/components/ui/RichTextEditor.tsx(2,46): error TS6133: 'Bold' is declared but its value is never read.
+src/components/ui/RichTextEditor.tsx(2,58): error TS6133: 'Italic' is declared but its value is never read.
+src/components/ui/RichTextEditor.tsx(2,91): error TS6133: 'Quote' is declared but its value is never read.
+src/components/ui/RichTextEditor.tsx(59,45): error TS2345: Argument of type 'string' is not assignable to parameter of type '"rgb(var(--color-indigo-500))"'.
+src/components/ui/RichTextEditor.tsx(237,75): error TS2322: Type '(block: BlockStyle) => void' is not assignable to type '(value: string) => void'.
+  Types of parameters 'block' and 'value' are incompatible.
+    Type 'string' is not assignable to type 'BlockStyle'.
+src/components/ui/select.tsx(2,20): error TS2307: Cannot find module '@/lib/utils' or its corresponding type declarations.
+src/config/modules.ts(13,3): error TS6133: 'Columns' is declared but its value is never read.
+src/config/modules.ts(14,3): error TS6133: 'Lock' is declared but its value is never read.
+src/pages/atendimento/atendimento-v2.tsx(14,3): error TS6133: 'PenSquare' is declared but its value is never read.
+src/pages/atendimento/atendimento-v2.tsx(874,16): error TS2304: Cannot find name 'SquarePen'.
+src/pages/atendimento/components/AudioRecorder.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/pages/atendimento/components/AudioRecorder.tsx(2,10): error TS6133: 'Mic' is declared but its value is never read.
+src/pages/atendimento/components/Connections.tsx(75,7): error TS6133: 'maskToken' is declared but its value is never read.
+src/pages/atendimento/components/Connections.tsx(221,11): error TS6133: 'handleCreateLegacy' is declared but its value is never read.
+src/pages/atendimento/components/Connections.tsx(253,11): error TS6133: 'handleUpdateLegacy' is declared but its value is never read.
+src/pages/atendimento/components/Connections.tsx(839,27): error TS6133: 'botUsername' is declared but its value is never read.
+src/pages/atendimento/components/Connections.tsx(840,27): error TS6133: 'webhookUrl' is declared but its value is never read.
+src/pages/atendimento/components/Connections.tsx(841,27): error TS6133: 'lastTelegramError' is declared but its value is never read.
+src/pages/atendimento/components/InfoPanel.tsx(4,3): error TS6133: 'User' is declared but its value is never read.
+src/pages/atendimento/components/InfoPanel.tsx(5,3): error TS6133: 'MessageSquare' is declared but its value is never read.
+src/pages/atendimento/components/InfoPanel.tsx(9,11): error TS6133: 'LinkIcon' is declared but its value is never read.
+src/pages/atendimento/components/InfoPanel.tsx(13,1): error TS6133: 'clsx' is declared but its value is never read.
+src/pages/atendimento/components/InfoPanel.tsx(28,3): error TS6133: 'onLinkProcess' is declared but its value is never read.
+src/pages/atendimento/components/MessageBubble.tsx(44,3): error TS6133: 'getMediaUrl' is declared but its value is never read.
+src/pages/contacts/ContactConfig.tsx(4,38): error TS6133: 'Columns' is declared but its value is never read.
+src/pages/contacts/ContactConfig.tsx(4,57): error TS6133: 'FileSpreadsheet' is declared but its value is never read.
+src/pages/contacts/ContactConfig.tsx(5,17): error TS6133: 'Users' is declared but its value is never read.
+src/pages/contacts/ContactForm.tsx(2,229): error TS6133: 'XCircle' is declared but its value is never read.
+src/pages/contacts/ContactForm.tsx(7,1): error TS6133: 'openProtectedMedia' is declared but its value is never read.
+src/pages/contacts/ContactForm.tsx(279,7): error TS6133: 'CATEGORIES' is declared but its value is never read.
+src/pages/contacts/ContactForm.tsx(336,5): error TS2353: Object literal may only specify known properties, and 'whatsapp' does not exist in type 'ContactData | (() => ContactData)'.
+src/pages/contacts/ContactForm.tsx(1017,53): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1027,38): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1160,38): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1231,37): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/pages/contacts/ContactForm.tsx(1232,36): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/pages/contacts/ContactForm.tsx(1233,43): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/pages/contacts/ContactForm.tsx(1236,35): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/pages/contacts/ContactForm.tsx(1237,37): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/pages/contacts/ContactForm.tsx(1238,38): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/pages/contacts/ContactForm.tsx(1239,43): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/pages/contacts/ContactForm.tsx(1247,25): error TS2352: Conversion of type '{ [k: string]: string | boolean | any[] | { code: string; text: string; } | { [key: string]: any; attachments?: ContactAttachment[] | undefined; } | null; }' to type 'ContactData' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ [k: string]: string | boolean | any[] | { code: string; text: string; } | { [key: string]: any; attachments?: ContactAttachment[] | undefined; } | null; }' is missing the following properties from type 'ContactData': name, personType, phone
+src/pages/contacts/ContactForm.tsx(1422,12): error TS2367: This comparison appears to be unintentional because the types 'keyof ContactData' and '"whatsapp"' have no overlap.
+src/pages/contacts/ContactForm.tsx(1946,57): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1947,82): error TS2353: Object literal may only specify known properties, and 'whatsapp' does not exist in type 'SetStateAction<ContactData>'.
+src/pages/contacts/ContactForm.tsx(1948,71): error TS2345: Argument of type '"whatsapp"' is not assignable to parameter of type 'keyof ContactData'.
+src/pages/contacts/ContactForm.tsx(1954,52): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1955,93): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1960,79): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1971,129): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(1971,194): error TS2322: Type '{ size: number; className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & LucideProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & LucideProps'.
+src/pages/contacts/ContactForm.tsx(1971,248): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ContactForm.tsx(2009,191): error TS2322: Type '{ size: number; className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & LucideProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & LucideProps'.
+src/pages/contacts/ContactForm.tsx(2021,87): error TS2322: Type '{ size: number; className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & LucideProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & LucideProps'.
+src/pages/contacts/ContactForm.tsx(3021,49): error TS2322: Type '(filesOverride?: File[]) => Promise<void>' is not assignable to type 'MouseEventHandler<HTMLButtonElement>'.
+  Types of parameters 'filesOverride' and 'event' are incompatible.
+    Type 'MouseEvent<HTMLButtonElement, MouseEvent>' is missing the following properties from type 'File[]': length, pop, push, concat, and 29 more.
+src/pages/contacts/ContactForm.tsx(3204,100): error TS2339: Property 'whatsapp' does not exist on type 'ContactData'.
+src/pages/contacts/ImportContacts.tsx(4,37): error TS6133: 'X' is declared but its value is never read.
+src/pages/contacts/ImportContacts.tsx(4,81): error TS6133: 'Save' is declared but its value is never read.
+src/pages/contacts/ImportContacts.tsx(47,10): error TS6133: 'file' is declared but its value is never read.
+src/pages/contacts/ImportContacts.tsx(75,13): error TS6133: 'headers' is declared but its value is never read.
+src/pages/contacts/PJTab.tsx(2,75): error TS6133: 'Edit2' is declared but its value is never read.
+src/pages/contacts/PJTab.tsx(4,1): error TS6133: 'masks' is declared but its value is never read.
+src/pages/Documents.tsx(2,48): error TS6133: 'Eye' is declared but its value is never read.
+src/pages/Financial.tsx(33,3): error TS6133: 'Download' is declared but its value is never read.
+src/pages/Financial.tsx(42,3): error TS6133: 'Tag' is declared but its value is never read.
+src/pages/Financial.tsx(43,3): error TS6133: 'Split' is declared but its value is never read.
+src/pages/Financial.tsx(51,3): error TS6133: 'ArrowUp' is declared but its value is never read.
+src/pages/Financial.tsx(52,3): error TS6133: 'ArrowDown' is declared but its value is never read.
+src/pages/Financial.tsx(383,7): error TS6133: 'formatCurrency' is declared but its value is never read.
+src/pages/Financial.tsx(609,9): error TS6133: 'containerRef' is declared but its value is never read.
+src/pages/Financial.tsx(852,10): error TS6133: 'showCategoryInput' is declared but its value is never read.
+src/pages/Financial.tsx(899,9): error TS6133: 'handleAddSplit' is declared but its value is never read.
+src/pages/Financial.tsx(932,9): error TS6133: 'handleRemoveSplit' is declared but its value is never read.
+src/pages/Financial.tsx(938,9): error TS6133: 'splitsTotal' is declared but its value is never read.
+src/pages/Financial.tsx(940,9): error TS6133: 'calculatePreviewFinal' is declared but its value is never read.
+src/pages/Financial.tsx(954,9): error TS6133: 'handleCreateCategory' is declared but its value is never read.
+src/pages/inventory/ProposalsPage.tsx(53,10): error TS6133: 'defaultConfigs' is declared but its value is never read.
+src/pages/inventory/ProposalsPage.tsx(53,26): error TS6133: 'setDefaultConfigs' is declared but its value is never read.
+src/pages/inventory/ProposalsPage.tsx(629,19): error TS2322: Type '{ onAdd: () => Promise<void>; hideRole: true; hideQualification: true; showAction: false; hideContactLabel: true; onSelectContact: (id: string) => void; defaultContact: any; className: string; placeholder: string; }' is not assignable to type 'IntrinsicAttributes & ContactPickerGlobalProps'.
+  Property 'placeholder' does not exist on type 'IntrinsicAttributes & ContactPickerGlobalProps'.
+src/pages/inventory/ProposalsPage.tsx(662,19): error TS2322: Type '{ onAdd: () => Promise<void>; hideRole: true; hideQualification: true; showAction: false; hideContactLabel: true; onSelectContact: (id: string) => void; defaultContact: { id: any; name: any; document: any; } | null; className: string; placeholder: string; }' is not assignable to type 'IntrinsicAttributes & ContactPickerGlobalProps'.
+  Property 'placeholder' does not exist on type 'IntrinsicAttributes & ContactPickerGlobalProps'.
+src/pages/processes/ProcessConfig.tsx(12,3): error TS6133: 'Layout' is declared but its value is never read.
+src/pages/processes/ProcessForm.tsx(15,5): error TS6133: 'ExternalLink' is declared but its value is never read.
+src/pages/processes/ProcessForm.tsx(20,5): error TS6133: 'User' is declared but its value is never read.
+src/pages/processes/ProcessForm.tsx(406,19): error TS6133: 'lawyerCount' is declared but its value is never read.
+src/pages/processes/ProcessForm.tsx(406,48): error TS7006: Parameter 'party' implicitly has an 'any' type.
+src/pages/processes/ProcessForm.tsx(979,59): error TS6133: 'cid' is declared but its value is never read.
+src/pages/processes/ProcessForm.tsx(981,49): error TS2322: Type 'string | ContactOption' is not assignable to type 'string'.
+  Type 'ContactOption' is not assignable to type 'string'.
+src/pages/processes/ProcessList.tsx(18,14): error TS6133: 'PhoneIcon' is declared but its value is never read.
+src/pages/processes/ProcessList.tsx(19,5): error TS6133: 'Mail' is declared but its value is never read.
+src/pages/processes/ProcessList.tsx(20,5): error TS6133: 'ChevronDown' is declared but its value is never read.
+src/pages/processes/ProcessList.tsx(21,5): error TS6133: 'ChevronRight' is declared but its value is never read.
+src/pages/processes/ProcessList.tsx(22,5): error TS6133: 'Activity' is declared but its value is never read.
+src/pages/processes/ProcessList.tsx(23,5): error TS6133: 'Calendar' is declared but its value is never read.
+src/pages/processes/ProcessList.tsx(24,5): error TS6133: 'Users' is declared but its value is never read.
+src/pages/processes/ProcessList.tsx(50,1): error TS6133: 'ptBR' is declared but its value is never read.
+src/pages/Settings.tsx(167,7): error TS6133: 'BulkActionsTab' is declared but its value is never read.
+src/utils/themeColors.ts(160,43): error TS2345: Argument of type 'string' is not assignable to parameter of type '"rgb(var(--color-indigo-500))"'.
+src/utils/themeColors.ts(164,61): error TS2345: Argument of type '"rgb(255, 255, 255)"' is not assignable to parameter of type '"rgb(var(--color-indigo-500))"'.
+src/utils/themeColors.ts(173,44): error TS2345: Argument of type '"rgb(2, 6, 23)"' is not assignable to parameter of type '"rgb(var(--color-indigo-500))"'.
+src/utils/themeColors.ts(174,41): error TS2345: Argument of type '"rgb(255, 255, 255)"' is not assignable to parameter of type '"rgb(var(--color-indigo-500))"'.
+src/utils/themeColors.ts(205,79): error TS2345: Argument of type 'string' is not assignable to parameter of type '"rgb(var(--color-indigo-500))"'.
+src/utils/themeColors.ts(206,71): error TS2345: Argument of type 'string' is not assignable to parameter of type '"rgb(var(--color-indigo-500))"'.

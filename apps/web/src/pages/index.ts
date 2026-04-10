@@ -1,5 +1,4 @@
 export { Dashboard } from './Dashboard';
-export { ChatPage } from './ChatPage';
 export * from './Placeholders';
 export { Login } from './Login';
 export * from './contacts';

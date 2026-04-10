@@ -416,6 +416,67 @@ export const helpOmnichannelConnections: HelpSection[] = [
   },
 ];
 
+export const helpAtendimentoV2: HelpSection[] = [
+  {
+    title: 'Visao Geral (Console de Atendimento)',
+    content:
+      'O novo <b>Atendimento</b> usa uma unica base canônica de conversas. Lista, painel lateral e Kanban enxergam o mesmo <b>Inbox</b>, então mudar etapa, fila, responsavel ou processo altera sempre o mesmo registro operacional.',
+  },
+  {
+    title: 'Passo a Passo Pratico',
+    content:
+      '1. Use a busca e os filtros para encontrar a conversa.<br/>2. Clique no atendimento para abrir o historico no centro.<br/>3. Revise no painel lateral a <b>etapa</b>, <b>fila</b>, <b>responsavel</b> e o <b>processo principal</b>.<br/>4. Digite a resposta e pressione <b>Enter</b> para enviar. Use <b>Shift + Enter</b> para quebrar linha.<br/>5. Se houver anexo, clique no <b>clipe</b> antes do envio.<br/>6. Se a conversa deixar de ser apenas triagem, vincule ou pesquise o processo pela lateral.',
+  },
+  {
+    title: 'Etapas do Funil',
+    content:
+      '<ul><li><b>Triagem:</b> entradas novas e primeira leitura.</li><li><b>Em atendimento:</b> conversa ativa da equipe.</li><li><b>Convertidos:</b> assuntos resolvidos ou encaminhados.</li><li><b>Encerrados:</b> fora da fila operacional.</li></ul><br/><b>Dica:</b> o selo <b>Aguardando cliente</b> funciona como destaque auxiliar e nao substitui a etapa principal.',
+  },
+  {
+    title: 'Kanban e Operacao',
+    content:
+      'A aba <b>Kanban</b> mostra a mesma fila do console em formato de quadro. Arrastar um card muda a etapa real da conversa. Ao clicar em um card, o sistema abre diretamente o atendimento correspondente no console principal.',
+  },
+  {
+    title: 'Checklist de Uso Diario',
+    content:
+      '<ul><li><b>Filtrar</b> por canal, responsavel, fila, nao lidos ou sem processo.</li><li><b>Atribuir</b> o responsavel correto antes de iniciar tratativas mais longas.</li><li><b>Vincular processo</b> sempre que a conversa virar atendimento juridico real.</li><li><b>Atualizar etapa</b> para manter o quadro confiavel.</li><li><b>Encerrar</b> somente quando o assunto sair da fila operacional.</li></ul>',
+  },
+  {
+    title: 'Atalhos e Acoes Rapidas',
+    content:
+      '<ul><li><b>F1</b>: abre este manual.</li><li><b>Botao +</b>: cria um novo atendimento manual.</li><li><b>Enter</b>: envia a mensagem atual.</li><li><b>Shift + Enter</b>: quebra linha.</li><li><b>Atualizar fila</b>: recarrega a listagem do Inbox.</li></ul>',
+  },
+];
+
+export const helpOmnichannelConnectionsV2: HelpSection[] = [
+  {
+    title: 'Visao Geral (Central de Canais)',
+    content:
+      'A aba <b>Canais</b> concentra somente a parte tecnica do omnichannel: conexoes, autenticação e preparo dos provedores. O objetivo é manter a tela principal de Atendimento limpa e focada em triagem, conversa, fila e processo.',
+  },
+  {
+    title: 'Quando usar esta aba',
+    content:
+      '<ul><li><b>Antes da operacao:</b> cadastrar ou editar uma conexao de WhatsApp, Telegram ou outro canal.</li><li><b>Na manutencao:</b> verificar status, credenciais, QR Code, webhooks ou instancias.</li><li><b>Na implantacao:</b> preparar novos canais sem misturar setup tecnico com a fila diaria da equipe.</li></ul>',
+  },
+  {
+    title: 'Fluxo Recomendado',
+    content:
+      '1. Crie a conexao com um nome operacional claro, como <i>WA Atendimento Principal</i>.<br/>2. Conecte ou autentique o canal.<br/>3. Teste o recebimento com uma mensagem real ou webhook controlado.<br/>4. Abra o modulo <b>Atendimento</b> e confirme se a conversa apareceu no Inbox.<br/>5. So depois disso libere o canal para uso da equipe.',
+  },
+  {
+    title: 'Boas Praticas',
+    content:
+      '<ul><li>Use nomes de conexao por finalidade, nao por pessoa.</li><li>Documente qual instancia atende qual fila.</li><li>Depois de trocar credencial ou QR Code, valide o recebimento no Inbox.</li><li>Se um canal estiver instavel, resolva aqui antes de culpar a fila do atendimento.</li></ul>',
+  },
+  {
+    title: 'Checklist de Validacao',
+    content:
+      '<ul><li><b>Conectou?</b> O canal mostra status saudavel nesta central.</li><li><b>Entrou no Inbox?</b> A mensagem aparece no modulo Atendimento.</li><li><b>Contato identificado?</b> A conversa mostra nome, canal e contexto corretos.</li><li><b>Fluxo continuo?</b> A equipe consegue responder sem sair do console principal.</li></ul><br/><b>Se algo falhar:</b> revise credenciais, webhook, tenant, canal e instancia antes de mexer no funil operacional.',
+  },
+];
+
 export const helpTelegram: HelpSection[] = [
   {
     title: 'Visão Geral (Chatbot Telegram)',

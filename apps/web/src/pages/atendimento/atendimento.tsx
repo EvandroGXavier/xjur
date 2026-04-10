@@ -1,49 +1,120 @@
-import { useState, useMemo } from "react";
-import { 
-  MessageSquare, 
-  Columns,
-  MessageCircle
-} from "lucide-react";
-import { AtendimentoPage } from "./atendimento-v2";
-import { Kanban } from "../Kanban";
-import { ModuleHeader } from "../../components/ui/ModuleHeader";
+import { clsx } from 'clsx';
+import { BookOpen, Columns, MessageCircle, RadioTower } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { getUser } from '../../auth/authStorage';
+import { HelpModal, useHelpModal } from '../../components/HelpModal';
+import { helpAtendimentoV2, helpOmnichannelConnectionsV2 } from '../../data/helpManuals';
+import { AtendimentoConnectionsPage } from './AtendimentoConnectionsPage';
+import { AtendimentoPage } from './atendimento-v2';
+import { Kanban } from '../Kanban';
 
-type ViewType = "chat" | "kanban";
+type ViewType = 'console' | 'kanban' | 'connections';
+
+const normalizeView = (value: string | null): ViewType => {
+  if (value === 'kanban' || value === 'connections') return value;
+  return 'console';
+};
+
+const NAV_ITEMS = [
+  { id: 'console' as ViewType, label: 'Console', icon: MessageCircle },
+  { id: 'kanban' as ViewType, label: 'Kanban', icon: Columns },
+  { id: 'connections' as ViewType, label: 'Canais', icon: RadioTower },
+] as const;
+
+const getUserInitials = () => {
+  const user = getUser();
+  if (!user?.name) return 'DX';
+  return (
+    user.name
+      .split(' ')
+      .slice(0, 2)
+      .map((w: string) => w[0] || '')
+      .join('')
+      .toUpperCase() || 'DX'
+  );
+};
 
 export function Atendimento() {
-  const [view, setView] = useState<ViewType>("chat");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isHelpOpen, setIsHelpOpen } = useHelpModal();
+  const view = normalizeView(searchParams.get('view'));
+  const selectedConversationId = searchParams.get('conversationId');
 
-  const tabs = useMemo(() => [
-    { id: "chat", label: "Chat Atendimento", icon: MessageSquare },
-    { id: "kanban", label: "Quadro Kanban", icon: Columns },
-  ], []);
+  const updateParams = (nextView: ViewType, conversationId?: string | null) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('view', nextView);
+    if (conversationId) {
+      nextParams.set('conversationId', conversationId);
+    } else {
+      nextParams.delete('conversationId');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const helpSections = view === 'connections' ? helpOmnichannelConnectionsV2 : helpAtendimentoV2;
+  const helpTitle =
+    view === 'connections' ? 'Atendimento > Central de Canais' : 'Atendimento > Console e Kanban';
+  const userInitials = getUserInitials();
 
   return (
-    <div className="flex flex-col h-full space-y-4">
-      <ModuleHeader
-        title="Atendimento"
-        subtitle="Gestão Omnichannel & Triagem"
-        icon={MessageCircle}
-        tabs={tabs}
-        activeTab={view}
-        onTabChange={(id) => setView(id as ViewType)}
-        statusText="Online"
-        versionText="DRX-CLAW v3.0"
-      />
+    <div className="flex h-full overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 text-white">
+      {/* Vertical nav rail */}
+      <nav className="flex w-14 shrink-0 flex-col items-center border-r border-white/10 bg-slate-900/80 py-3">
+        {/* User avatar */}
+        <div className="mb-5 flex h-9 w-9 select-none items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+          {userInitials}
+        </div>
 
-      {/* Conteúdo Dinâmico */}
-      <div className="flex-1 overflow-hidden">
-        {view === "chat" && (
-            <div className="h-full animate-in fade-in duration-500">
-                <AtendimentoPage />
-            </div>
+        {/* Nav items */}
+        <div className="flex flex-1 flex-col items-center gap-1">
+          {NAV_ITEMS.map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => updateParams(id)}
+              title={label}
+              className={clsx(
+                'flex h-10 w-10 items-center justify-center rounded-xl transition',
+                view === id
+                  ? 'bg-emerald-400/20 text-emerald-400'
+                  : 'text-slate-400 hover:bg-white/10 hover:text-white',
+              )}
+            >
+              <Icon size={20} />
+            </button>
+          ))}
+        </div>
+
+        {/* Help at bottom */}
+        <button
+          onClick={() => setIsHelpOpen(true)}
+          title="Ajuda (F1)"
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-white/10 hover:text-white"
+        >
+          <BookOpen size={20} />
+        </button>
+      </nav>
+
+      {/* Content area */}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {view === 'console' && (
+          <AtendimentoPage
+            selectedConversationId={selectedConversationId}
+            onSelectConversation={(conversationId) => updateParams('console', conversationId)}
+            onOpenConnections={() => updateParams('connections')}
+          />
         )}
-        {view === "kanban" && (
-            <div className="h-full animate-in fade-in slide-in-from-bottom-3 duration-500">
-                <Kanban />
-            </div>
+        {view === 'kanban' && (
+          <Kanban onOpenConversation={(conversationId) => updateParams('console', conversationId)} />
         )}
+        {view === 'connections' && <AtendimentoConnectionsPage />}
       </div>
+
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title={helpTitle}
+        sections={helpSections}
+      />
     </div>
   );
 }

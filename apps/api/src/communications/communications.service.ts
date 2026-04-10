@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { TicketsService } from '../tickets/tickets.service';
 import { IncomingCommunicationDto } from './dto/incoming-communication.dto';
-import { CreateTicketDto } from '../tickets/dto/create-ticket.dto';
 import { InboxService } from '../inbox/inbox.service';
 
 @Injectable()
@@ -11,7 +9,6 @@ export class CommunicationsService {
 
   constructor(
     private prisma: PrismaService,
-    private ticketsService: TicketsService,
     private inboxService: InboxService,
   ) {}
 
@@ -124,6 +121,7 @@ export class CommunicationsService {
       conversationId: capture.conversation.id,
       messageId: capture.message.id,
       ticketId: capture.conversation.ticketId || capture.ticket?.id,
+      legacyTicketId: capture.conversation.ticketId || capture.ticket?.id,
     };
   }
 }

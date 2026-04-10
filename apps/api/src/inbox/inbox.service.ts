@@ -37,6 +37,17 @@ type CaptureExternalMessageInput = {
   createdAt?: Date;
 };
 
+type ConversationFilters = {
+  status?: string;
+  channel?: string;
+  search?: string;
+  queue?: string;
+  assignedUserId?: string;
+  waitingReply?: boolean;
+  processId?: string;
+  includeArchived?: boolean;
+};
+
 @Injectable()
 export class InboxService {
   private readonly logger = new Logger(InboxService.name);
@@ -733,17 +744,14 @@ export class InboxService {
     });
   }
 
-  async findAllConversations(
-    tenantId: string,
-    filters?: { status?: string; channel?: string; search?: string },
-  ) {
+  async findAllConversations(tenantId: string, filters?: ConversationFilters) {
     const where: any = {
       tenantId,
     };
 
     if (filters?.status) {
       where.status = filters.status;
-    } else {
+    } else if (!filters?.includeArchived) {
       where.status = {
         not: 'ARCHIVED',
       };
@@ -753,15 +761,37 @@ export class InboxService {
       where.channel = this.normalizeChannel(filters.channel);
     }
 
+    if (filters?.queue?.trim()) {
+      where.queue = {
+        contains: filters.queue.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    if (filters?.assignedUserId?.trim()) {
+      where.assignedUserId = filters.assignedUserId.trim();
+    }
+
+    if (filters?.processId?.trim()) {
+      where.processId = filters.processId.trim();
+    }
+
+    if (typeof filters?.waitingReply === 'boolean') {
+      where.waitingReply = filters.waitingReply;
+    }
+
     if (filters?.search?.trim()) {
       const search = filters.search.trim();
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
+        { queue: { contains: search, mode: 'insensitive' } },
         { externalParticipantId: { contains: search, mode: 'insensitive' } },
         { contact: { is: { name: { contains: search, mode: 'insensitive' } } } },
         { contact: { is: { whatsapp: { contains: search } } } },
         { contact: { is: { phone: { contains: search } } } },
+        { assignee: { is: { name: { contains: search, mode: 'insensitive' } } } },
         { process: { is: { cnj: { contains: search } } } },
+        { process: { is: { title: { contains: search, mode: 'insensitive' } } } },
         { messages: { some: { content: { contains: search, mode: 'insensitive' } } } },
       ];
     }

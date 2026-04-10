@@ -535,6 +535,18 @@ export function ProcessForm() {
         }
 
         try {
+            // Validar se um PDF já foi importado previamente
+            const jaImportado = !isEditing ? (lastPdfImportSummary !== '') : !!form.metadata?.pdfDossierImport;
+            if (jaImportado) {
+                toast.error('Atenção: Um PDF já foi importado neste processo.', {
+                    description: !isEditing 
+                        ? 'Não é possível importar múltiplos PDFs no pré-cadastro. Feche ou recarregue a página para iniciar um novo.'
+                        : 'Já existe uma importação de PDF associada. Para reimportar, é recomendável excluir o processo e criar outro, a fim de evitar duplicidade de andamentos e desorganização.',
+                    duration: 8000
+                });
+                return;
+            }
+
             const previewMode = !isEditing;
             setImportingPdfDossier(true);
             setPdfImportMode(previewMode ? 'PREVIEW' : 'DOSSIER');
@@ -816,6 +828,26 @@ export function ProcessForm() {
 
     return (
         <div className="w-full min-h-full p-4 md:p-6 xl:p-8 animate-in fade-in">
+            {importingPdfDossier && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="w-[90%] max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl text-center space-y-6">
+                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-500">
+                            <Loader2 size={32} className="animate-spin" />
+                        </div>
+                        <h2 className="text-xl font-bold text-white">Analisando Documento</h2>
+                        <div className="text-sm text-slate-400 min-h-[40px] flex items-center justify-center">
+                            {currentPdfImportPhase}
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800 relative">
+                            <div 
+                                className="absolute top-0 left-0 h-full bg-indigo-500 transition-all duration-300 ease-out" 
+                                style={{ width: `${Math.max(15, (pdfImportPhaseIndex / Math.max(1, currentPdfImportPhases.length - 1)) * 100)}%` }}
+                            />
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium">Por favor, aguarde. Isso pode levar alguns segundos dependendo do tamanho do PDF.</p>
+                    </div>
+                </div>
+            )}
             <input
                 id={pdfDossierInputControlId}
                 type="file"

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Param, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Res, Req, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Param, Patch, Delete, UseInterceptors, UploadedFile, UploadedFiles, BadRequestException, Res, Req, UseGuards, ForbiddenException, ConflictException } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { ProcessCrawlerService } from './process-crawler.service';
@@ -29,15 +29,33 @@ export class ProcessesController {
 
     @Post('import-pdf')
     @UseInterceptors(FileInterceptor('file'))
-    async importPdf(@UploadedFile() file: any) {
+    async importPdf(@UploadedFile() file: any, @CurrentUser() user: CurrentUserData) {
         if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
+
+        const cnjQuick = await this.pdfService.quickExtractCnj(file.buffer);
+        if (cnjQuick) {
+            const exists = await this.processesService.checkCnjExists(cnjQuick, user.tenantId);
+            if (exists) {
+                throw new ConflictException(`Atencao: Ja existe um processo cadastrado com este CNJ: ${cnjQuick}. Acesse o processo existente para anexar o PDF ou atualizar os andamentos.`);
+            }
+        }
+
         return this.pdfService.extractDataFromPdf(file.buffer);
     }
 
     @Post('import-pdf/full-analysis')
     @UseInterceptors(FileInterceptor('file'))
-    async analyzeFullProcessPdf(@UploadedFile() file: any) {
+    async analyzeFullProcessPdf(@UploadedFile() file: any, @CurrentUser() user: CurrentUserData) {
         if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
+
+        const cnjQuick = await this.pdfService.quickExtractCnj(file.buffer);
+        if (cnjQuick) {
+            const exists = await this.processesService.checkCnjExists(cnjQuick, user.tenantId);
+            if (exists) {
+                throw new ConflictException(`Atencao: Ja existe um processo cadastrado com este CNJ: ${cnjQuick}. Acesse o processo existente para anexar o PDF ou atualizar os andamentos.`);
+            }
+        }
+
         return this.pdfService.analyzeFullProcessPdf(file.buffer);
     }
 

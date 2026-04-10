@@ -264,26 +264,7 @@ interface ContactInsightConversation {
     channel: string;
     status: string;
   } | null;
-  ticket?: {
-    id: string;
-    code: number;
-    status: string;
-    priority: string;
-    queue?: string | null;
-  } | null;
   messages: ContactInsightMessage[];
-}
-
-interface ContactInsightTicket {
-  id: string;
-  code: number;
-  title: string;
-  status: string;
-  priority: string;
-  queue?: string | null;
-  waitingReply: boolean;
-  lastMessageAt?: string | null;
-  updatedAt: string;
 }
 
 interface ContactInsights {
@@ -291,7 +272,7 @@ interface ContactInsights {
   appointments: ContactInsightAppointment[];
   whatsapp: {
     conversations: ContactInsightConversation[];
-    tickets: ContactInsightTicket[];
+    tickets: any[];
   };
 }
 
@@ -578,7 +559,9 @@ export function ContactForm() {
               conversations: Array.isArray(response.data?.whatsapp?.conversations)
                 ? response.data.whatsapp.conversations
                 : [],
-              tickets: Array.isArray(response.data?.whatsapp?.tickets) ? response.data.whatsapp.tickets : [],
+              tickets: Array.isArray(response.data?.whatsapp?.tickets)
+                ? response.data.whatsapp.tickets
+                : [],
             },
           });
       } catch (err) {
@@ -3190,7 +3173,13 @@ export function ContactForm() {
                                 Abrir no WhatsApp
                             </button>
                             <button
-                                onClick={() => navigate('/chat')}
+                                onClick={() =>
+                                    navigate(
+                                        contactInsights.whatsapp.conversations[0]
+                                            ? `/atendimento?view=console&conversationId=${contactInsights.whatsapp.conversations[0].id}`
+                                            : '/atendimento',
+                                    )
+                                }
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 text-slate-200 hover:border-indigo-400 hover:text-white transition"
                             >
                                 <ExternalLink size={16} />

@@ -192,6 +192,18 @@ export class ProcessesService {
         return tenant.id;
     }
 
+    async checkCnjExists(cnj: string, tenantId: string): Promise<boolean> {
+        const normalized = this.normalizeCnj(cnj);
+        if (!normalized) return false;
+        
+        const exists = await this.prisma.process.findFirst({
+            where: { tenantId, cnj: { contains: normalized } },
+            select: { id: true }
+        });
+        
+        return !!exists;
+    }
+
     private normalizeText(value?: string | null) {
         return String(value || '')
             .normalize('NFD')
