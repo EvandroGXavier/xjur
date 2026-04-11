@@ -51,14 +51,20 @@ export class EvolutionService {
   private formatNumber(number: string): string {
     if (!number) return '';
 
-    // Se já é um JID completo ou LID, não mexer
-    if (number.includes('@g.us') || number.includes('@lid') || number.includes('@s.whatsapp.net')) {
-        // Remover apenas sufixos de devices se existirem (:1, :2 etc)
-        return number.replace(/:[0-9]+(?=@)/, '');
+    const normalized = number.replace(/:[0-9]+(?=@)/, '').trim();
+
+    // Grupos e LIDs precisam permanecer como identificadores técnicos.
+    if (normalized.includes('@g.us') || normalized.includes('@lid')) {
+      return normalized;
+    }
+
+    // Para envio via Evolution, JID de contato individual deve virar telefone puro.
+    if (normalized.includes('@s.whatsapp.net')) {
+      return normalized.split('@')[0].replace(/\D/g, '');
     }
 
     // Remove non-digit characters
-    let cleaned = number.replace(/\D/g, '');
+    let cleaned = normalized.replace(/\D/g, '');
     
     // Se for um número brasileiro sem DDI (10 ou 11 dígitos), adiciona 55
     if (cleaned.length >= 10 && cleaned.length <= 11 && !cleaned.startsWith('55')) {
@@ -66,6 +72,13 @@ export class EvolutionService {
     }
     
     return cleaned;
+  }
+
+  private formatMissingWhatsappTarget(number: string): string {
+    const trimmed = String(number || '').trim();
+    if (!trimmed) return 'destino desconhecido';
+    if (trimmed.startsWith('+') || trimmed.includes('@')) return trimmed;
+    return `+${trimmed}`;
   }
 
   private getClient(config?: EvolutionConfig): AxiosInstance {
@@ -296,7 +309,7 @@ export class EvolutionService {
       const errResp = error.response?.data?.response?.message;
       const firstErr = Array.isArray(errResp) ? errResp[0] : errResp;
       if (firstErr && firstErr.exists === false) {
-        throw new Error(`O número não possui WhatsApp (+${number}).`);
+        throw new Error(`O destino nao possui WhatsApp (${this.formatMissingWhatsappTarget(number)}).`);
       }
       this.logger.error(`Error sending text to ${number} via "${instanceName}": ${error.message}`);
       throw error;
@@ -396,7 +409,7 @@ export class EvolutionService {
       const errResp = error.response?.data?.response?.message;
       const firstErr = Array.isArray(errResp) ? errResp[0] : errResp;
       if (firstErr && firstErr.exists === false) {
-        throw new Error(`O número não possui WhatsApp (+${number}).`);
+        throw new Error(`O destino nao possui WhatsApp (${this.formatMissingWhatsappTarget(number)}).`);
       }
       this.logger.error(`Error sending ${type} to ${number} via "${instanceName}": ${error.message}`);
       throw error;
