@@ -306,9 +306,9 @@ export class InboxService {
     );
 
     const numberCandidates = [
+      contact?.whatsapp,
       contact?.whatsappE164,
       this.extractResolvedWhatsappPhone(conversation),
-      contact?.whatsapp,
       contact?.phone,
       conversation?.externalParticipantId,
       conversation?.externalThreadId,
@@ -494,9 +494,18 @@ export class InboxService {
         conversation,
       );
 
-      if (explicitPhoneJids.length > 0) return explicitPhoneJids[0];
+      const preferredNumber = numbers[0];
+      if (preferredNumber) {
+        const matchingPhoneJid = explicitPhoneJids.find(
+          (candidate) => this.extractWhatsappDigits(candidate) === preferredNumber,
+        );
+
+        if (matchingPhoneJid) return matchingPhoneJid;
+        return `${preferredNumber}@s.whatsapp.net`;
+      }
+
       if (explicitLids.length > 0) return explicitLids[0];
-      if (numbers.length > 0) return `${numbers[0]}@s.whatsapp.net`;
+      if (explicitPhoneJids.length > 0) return explicitPhoneJids[0];
       return null;
     }
 
