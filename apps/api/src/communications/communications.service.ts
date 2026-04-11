@@ -12,6 +12,39 @@ export class CommunicationsService {
     private inboxService: InboxService,
   ) {}
 
+  private normalizeWhatsappIdentity(value?: string | null) {
+    if (typeof value !== 'string') return null;
+
+    const normalized = value.trim().replace(/:[0-9]+(?=@)/, '');
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private extractWhatsappDigits(value?: string | null) {
+    const normalized = this.normalizeWhatsappIdentity(value);
+    if (!normalized) return '';
+    if (normalized.includes('@lid') || normalized.includes('@g.us')) return '';
+
+    if (normalized.includes('@s.whatsapp.net')) {
+      return normalized.split('@')[0].replace(/\D/g, '');
+    }
+
+    return normalized.replace(/\D/g, '');
+  }
+
+  private buildWhatsappLookupCandidates(value?: string | null) {
+    const normalized = this.normalizeWhatsappIdentity(value);
+    const candidates = new Set<string>();
+    const digits = this.extractWhatsappDigits(value);
+
+    if (normalized) candidates.add(normalized);
+    if (digits) {
+      candidates.add(digits);
+      candidates.add(`${digits}@s.whatsapp.net`);
+    }
+
+    return Array.from(candidates);
+  }
+
   async processIncoming(dto: IncomingCommunicationDto) {
     this.logger.log(`Inbound channel=${dto.channel} from=${dto.from}`);
 
@@ -27,20 +60,71 @@ export class CommunicationsService {
       }
     });
 
-    // 1. Find or Create Contact
-    let contact = await this.prisma.contact.findFirst({
-      where: {
-        tenantId: dto.tenantId,
-        OR: [
-          { phone: { contains: dto.from } },
-          { whatsapp: { contains: dto.from } },
-          { email: dto.from },
-          ...(dto.channel === 'TELEGRAM'
-            ? [{ metadata: { path: ['telegramUserId'], equals: dto.from } } as any]
-            : []),
-        ]
+    const normalizedChannel = (dto.channel || '').trim().toUpperCase();
+    const whatsappLookupCandidates =
+      normalizedChannel === 'WHATSAPP'
+        ? this.buildWhatsappLookupCandidates(dto.externalThreadId || dto.from)
+        : [];
+    const whatsappDigits = normalizedChannel === 'WHATSAPP' ? this.extractWhatsappDigits(dto.from) : '';
+    const whatsappThreadId =
+      normalizedChannel === 'WHATSAPP'
+        ? whatsappLookupCandidates.find((candidate) => candidate.includes('@')) ||
+          (whatsappDigits ? `${whatsappDigits}@s.whatsapp.net` : null)
+        : null;
+    const whatsappParticipantId =
+      normalizedChannel === 'WHATSAPP' ? whatsappDigits || this.normalizeWhatsappIdentity(dto.from) : null;
+
+    let contact = null as any;
+
+    if (normalizedChannel === 'WHATSAPP' && whatsappLookupCandidates.length > 0) {
+      const identity = await this.prisma.contactChannelIdentity.findFirst({
+        where: {
+          tenantId: dto.tenantId,
+          channel: 'WHATSAPP',
+          externalId: {
+            in: whatsappLookupCandidates,
+          },
+        },
+        orderBy: {
+          updatedAt: 'desc',
+        },
+      });
+
+      if (identity?.contactId) {
+        contact = await this.prisma.contact.findFirst({
+          where: {
+            id: identity.contactId,
+            tenantId: dto.tenantId,
+          },
+        });
       }
-    });
+    }
+
+    if (!contact) {
+      contact = await this.prisma.contact.findFirst({
+        where: {
+          tenantId: dto.tenantId,
+          OR: [
+            ...(normalizedChannel === 'WHATSAPP'
+              ? [
+                  { whatsappFullId: { in: whatsappLookupCandidates } },
+                  { whatsapp: { in: whatsappLookupCandidates } },
+                  ...(whatsappDigits
+                    ? [
+                        { whatsappE164: whatsappDigits },
+                        { phone: whatsappDigits },
+                      ]
+                    : []),
+                ]
+              : []),
+            { email: dto.from },
+            ...(normalizedChannel === 'TELEGRAM'
+              ? [{ metadata: { path: ['telegramUserId'], equals: dto.from } } as any]
+              : []),
+          ],
+        },
+      });
+    }
 
     if (!contact) {
       this.logger.log(`Creating inbound lead for ${dto.channel}:${dto.from}`);
@@ -49,7 +133,24 @@ export class CommunicationsService {
           tenantId: dto.tenantId,
           name: dto.name || `Lead ${dto.from}`,
           personType: 'LEAD',
-          phone: (dto.channel === 'WHATSAPP' || dto.channel === 'PHONE') ? dto.from : undefined,
+          phone:
+            normalizedChannel === 'PHONE'
+              ? dto.from
+              : normalizedChannel === 'WHATSAPP'
+                ? whatsappDigits || undefined
+                : undefined,
+          whatsapp:
+            normalizedChannel === 'WHATSAPP'
+              ? whatsappParticipantId || undefined
+              : undefined,
+          whatsappE164:
+            normalizedChannel === 'WHATSAPP' && whatsappDigits
+              ? whatsappDigits
+              : undefined,
+          whatsappFullId:
+            normalizedChannel === 'WHATSAPP'
+              ? whatsappThreadId || undefined
+              : undefined,
           email: dto.channel === 'EMAIL' ? dto.from : undefined,
           category: 'LEAD',
           metadata: dto.channel === 'TELEGRAM'
@@ -59,8 +160,33 @@ export class CommunicationsService {
                 telegramUsername: dto.metadata?.telegramUsername || null,
               }
             : undefined,
-        }
+        },
       });
+
+      if (normalizedChannel === 'WHATSAPP') {
+        for (const externalId of whatsappLookupCandidates) {
+          await this.prisma.contactChannelIdentity.upsert({
+            where: {
+              tenantId_channel_externalId: {
+                tenantId: dto.tenantId,
+                channel: 'WHATSAPP',
+                externalId,
+              },
+            },
+            create: {
+              tenantId: dto.tenantId,
+              contactId: contact.id,
+              channel: 'WHATSAPP',
+              provider: 'GENERIC',
+              externalId,
+            },
+            update: {
+              contactId: contact.id,
+              provider: 'GENERIC',
+            },
+          });
+        }
+      }
     } else if (dto.channel === 'TELEGRAM') {
       const currentMetadata =
         contact.metadata && typeof contact.metadata === 'object' && !Array.isArray(contact.metadata)
@@ -94,9 +220,15 @@ export class CommunicationsService {
       channel: dto.channel,
       contactId: contact.id,
       connectionId: dto.connectionId || null,
-      externalThreadId: dto.externalThreadId || dto.from,
+      externalThreadId:
+        normalizedChannel === 'WHATSAPP'
+          ? whatsappThreadId || dto.externalThreadId || dto.from
+          : dto.externalThreadId || dto.from,
       externalMessageId: dto.externalMessageId || null,
-      externalParticipantId: dto.from,
+      externalParticipantId:
+        normalizedChannel === 'WHATSAPP'
+          ? whatsappParticipantId || dto.from
+          : dto.from,
       direction: 'INBOUND',
       role: 'contact',
       content: dto.content,
@@ -108,7 +240,10 @@ export class CommunicationsService {
       metadata: {
         ...(dto.metadata || {}),
         connectionId: dto.connectionId,
-        externalThreadId: dto.externalThreadId || dto.from,
+        externalThreadId:
+          normalizedChannel === 'WHATSAPP'
+            ? whatsappThreadId || dto.externalThreadId || dto.from
+            : dto.externalThreadId || dto.from,
         senderAddress: dto.from,
         subject: dto.subject,
         channel: dto.channel,

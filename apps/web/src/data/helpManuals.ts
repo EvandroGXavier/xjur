@@ -509,8 +509,9 @@ export const helpSigilo: HelpSection = {
   content: 'Recurso exclusivo para <b>Administradores</b> para armazenamento de informações sensíveis com criptografia.<br/><br/>' +
     '<b>Como acessar:</b> Pressione <b>CTRL + F8</b> em qualquer tela para abrir a autenticação. Após confirmar sua senha, a aba <b>SIGILO</b> ficará visível por 5 minutos nos formulários.<br/><br/>' +
     '<b>O que você pode fazer:</b><ul>' +
-    '<li><b>Senhas e PINs:</b> Guarde senhas de bancos, certificados e sistemas externos.</li>' +
+    '<li><b>Senhas e PINs:</b> Guarde credenciais gerais, certificados e acessos a sistemas externos.</li>' +
     '<li><b>Certificados Digitais (A1):</b> Faça o upload do arquivo .pfx/.p12 e controle a data de validade.</li>' +
     '<li><b>Upload de Arquivos:</b> Anexe instaladores ou chaves sensíveis diretamente no registro.</li>' +
-    '</ul>',
+    '</ul><br/>' +
+    '<b>Importante:</b> a configuração de integração bancária não é mais feita no sigilo do contato. Agora ela fica em <b>Financeiro &gt; Contas Bancárias &gt; Sigilo</b>.',
 };

@@ -16,133 +16,127 @@ jobs:
           port: 22
           command_timeout: 40m
           script: |
-            # 1. Configuração do Ambiente Shell
             export PATH=$PATH:/usr/local/bin
             source /etc/profile
             [ -f ~/.bashrc ] && source ~/.bashrc
-            
+
             cd /www/wwwroot/DrX
-            # set -e garante que o script pare se algo crítico falhar, mas permitimos certas falhas (como pm2 que não existe)
-            set -e 
+            set -e
 
             echo "========================================="
-            echo "🔥 DR.X SUPREMO DEPLOY (V3.1 RESILIENTE) - $(date)"
+            echo "DR.X deploy resiliente - $(date)"
             echo "========================================="
 
-            echo "1️⃣ Sincronizando código via Git..."
+            echo "1. Sincronizando codigo via Git..."
             git fetch --all --prune
             git reset --hard origin/main
             git clean -fd
             DEPLOY_COMMIT=$(git rev-parse --short HEAD)
-            echo "📌 Commit para implantação: ${DEPLOY_COMMIT}"
+            echo "Commit para implantacao: ${DEPLOY_COMMIT}"
 
-            echo "2️⃣ Garantindo Banco de Dados para Migração..."
-            # Paramos o banco brevemente se houver conflito de nome, depois subimos
+            echo "2. Garantindo banco de dados para migracao..."
             docker compose -f docker-compose.prod.yml up -d db
-            
-            echo "⏳ Aguardando Banco (Porta 5434) ficar pronto..."
+
+            echo "Aguardando banco (porta 5434) ficar pronto..."
             for i in {1..12}; do
               if nc -z localhost 5434; then
-                echo "✅ Banco de dados pronto!"
+                echo "Banco de dados pronto."
                 break
               fi
-              echo "⌛ Tentativa $i: Aguardando porta 5434..."
+              echo "Tentativa $i: aguardando porta 5434..."
               sleep 5
             done
 
-            echo "3️⃣ Sincronizando Schema (Prisma DB Push)..."
+            echo "3. Sincronizando schema (Prisma DB Push)..."
             export DATABASE_URL="postgresql://drx:drx_secure_pass_123@localhost:5434/drx_db?schema=public"
-            echo "3.2️⃣ Limpeza de pastas de build..."
-            # Deletar apenas as pastas dist para forçar o Docker a recompilar
+
+            echo "3.2. Limpando pastas de build..."
             rm -rf apps/web/dist apps/api/dist
-            
+
             npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss || {
-              echo "⚠️ npx falhou ou versão incompatível. Tentando instalar versão do projeto..."
+              echo "npx falhou ou versao incompativel. Instalando prisma do projeto..."
               npm install prisma@5.20.0 --no-save
               npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
             }
 
-            echo "3.5️⃣ Limpando Espaço em Disco (SISTEMA CHEIO?)..."
-            # Limpar imagens órfãs ANTES do build para garantir espaço na VPS
+            echo "3.3. Saneando identidades WhatsApp na base da VPS..."
+            node scripts/sanitize-whatsapp-identities.js --apply || {
+              echo "Sanitizador sem dependencias suficientes no host. Instalando Prisma Client temporario..."
+              npm install @prisma/client@5.20.0 --no-save
+              node scripts/sanitize-whatsapp-identities.js --apply
+            }
+
+            echo "3.5. Limpando espaco em disco..."
             docker image prune -af --filter "until=24h"
             df -h
 
-            echo "4️⃣ Construindo Imagens (FORÇANDO REFRESH TOTAL)..."
-            # Remover imagens antigas explicitamente antes de construir
+            echo "4. Construindo imagens..."
             docker image prune -af --filter "until=2h"
-            
-            # Passando o timestamp atual como ARG para quebrar o cache de build do Docker
             docker compose -f docker-compose.prod.yml build --pull --build-arg CACHE_BUST=$(date +%s) api web
 
-            echo "5️⃣ Subindo Aplicação (APENAS APPS)..."
-            # --force-recreate apenas para API e WEB, evitando conflito no Banco de Dados
+            echo "5. Subindo aplicacao..."
             docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate api web
-            # Garante que todo o resto esteja up (sem forçar recriação do DB)
             docker compose -f docker-compose.prod.yml up -d
 
-            echo "6️⃣ Limpeza de Disco..."
+            echo "6. Limpeza final de disco..."
             docker image prune -f
 
             echo "========================================="
-            echo "📊 STATUS FINAL DOS SERVIÇOS:"
+            echo "Status final dos servicos:"
             echo "========================================="
             docker compose -f docker-compose.prod.yml ps
 
-            echo "7️⃣ Sincronizando Telegram (Botando bots online)..."
-            # Aguarda a API carregar os arquivos dist antes de tentar sincronizar via Node
-            echo "⏳ Aguardando API estabilizar (20s)..."
+            echo "7. Sincronizando Telegram..."
             sleep 20
-            
-            # Script node robusto com tratamento de promessa e escapamento de caracteres bash (\$)
+
             docker compose -f docker-compose.prod.yml exec -T api node -e "
               const { NestFactory } = require('@nestjs/core');
-              
+
               async function sync() {
                 try {
-                  console.log('--- Iniciando Sincronismo de Bots ---');
+                  console.log('--- Iniciando sincronismo de bots ---');
                   const { AppModule } = require('./apps/api/dist/app.module');
                   const { TelegramService } = require('./apps/api/dist/telegram/telegram.service');
                   const { PrismaClient } = require('@prisma/client');
 
-                  // Inicia o contexto Nest de forma leve
                   const app = await NestFactory.createApplicationContext(AppModule);
                   const telegramService = app.get(TelegramService);
                   const prisma = new PrismaClient();
 
-                  const conns = await prisma.connection.findMany({ 
-                    where: { type: 'TELEGRAM', status: 'CONNECTED' } 
+                  const conns = await prisma.connection.findMany({
+                    where: { type: 'TELEGRAM', status: 'CONNECTED' }
                   });
 
-                  console.log('🤖 Bots ativos para reconexão:', conns.length);
+                  console.log('Bots ativos para reconexao:', conns.length);
 
                   for (const conn of conns) {
                     try {
                       await telegramService.connect(conn.id);
-                      console.log('✅ Bot [' + conn.name + '] sincronizado.');
+                      console.log('Bot [' + conn.name + '] sincronizado.');
                     } catch (e) {
-                      console.error('❌ Erro no bot [' + conn.name + ']:', e.message);
+                      console.error('Erro no bot [' + conn.name + ']:', e.message);
                     }
                   }
 
-                  await prisma.\$disconnect();
+                  await prisma.$disconnect();
                   await app.close();
-                  console.log('--- Sincronismo Finalizado ---');
+                  console.log('--- Sincronismo finalizado ---');
                   process.exit(0);
                 } catch (err) {
-                  console.error('🔴 ERRO FATAL NO SYNC:', err.message);
+                  console.error('ERRO FATAL NO SYNC:', err.message);
                   process.exit(1);
                 }
               }
               sync().catch(e => { console.error(e); process.exit(1); });
-            " || echo "⚠️ Aviso: O Sync do Telegram falhou, mas o deploy foi bem sucedido."
+            " || echo "Aviso: o sync do Telegram falhou, mas o deploy foi concluido."
 
             echo ""
-            echo "🩺 VERIFICAÇÃO DE SAÚDE (HEALTH CHECK):"
+            echo "Verificacao de saude:"
             sleep 5
             echo "${DEPLOY_COMMIT}" > .deploy-version
-            curl -s -o /dev/null -w "Web status: %{http_code}\n" https://dr-x.xtd.com.br || echo "Web: ❌ Offline"
-            curl -s -o /dev/null -w "API status: %{http_code}\n" https://api.dr-x.xtd.com.br/app || echo "API: ❌ Offline"
-            
+            curl -s -o /dev/null -w "Web status: %{http_code}\n" https://dr-x.xtd.com.br || echo "Web offline"
+            curl -s -o /dev/null -w "API status: %{http_code}\n" https://api.dr-x.xtd.com.br/app || echo "API offline"
+
             echo "========================================="
-            echo "🚀 DEPLOY V3 CONCLUÍDO COM SUCESSO!"
+            echo "Deploy concluido com sucesso."
             echo "========================================="

@@ -31,6 +31,7 @@ import { BackupTab } from "../components/settings/BackupTab";
 import { SkillsTab } from "../components/settings/SkillsTab";
 import { WorkflowsTab } from "../components/settings/WorkflowsTab";
 import { TagsTab } from "../components/settings/TagsTab";
+import { BankIntegrationsTab } from "../components/settings/BankIntegrationsTab";
 import { TabButton } from "../components/ui/TabButton";
 import { getAuthPersistence, getUser, setUser } from "../auth/authStorage";
 import { applyThemePreference, setStoredThemePreference, type ThemePreference } from "../utils/theme";
@@ -66,10 +67,10 @@ const Microsoft365Diagnostics = ({ result }: any) => {
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h5 className="text-sm font-semibold text-white">
-            DiagnÃ³stico da IntegraÃ§Ã£o
+            Diagnóstico da Integração
           </h5>
           <p className="text-xs text-slate-400">
-            Resultado do Ãºltimo teste executado com as credenciais atuais.
+            Resultado do último teste executado com as credenciais atuais.
           </p>
         </div>
         <span
@@ -81,7 +82,7 @@ const Microsoft365Diagnostics = ({ result }: any) => {
           )}
         >
           <Check size={14} />
-          {result.success ? "IntegraÃ§Ã£o validada" : "RevisÃ£o necessÃ¡ria"}
+          {result.success ? "Integração validada" : "Revisão necessária"}
         </span>
       </div>
 
@@ -108,7 +109,7 @@ const Microsoft365Diagnostics = ({ result }: any) => {
               {check.status === "success"
                 ? "OK"
                 : check.status === "warning"
-                  ? "AtenÃ§Ã£o"
+                  ? "Atenção"
                   : "Erro"}
             </span>
           </div>
@@ -135,7 +136,7 @@ const Microsoft365Diagnostics = ({ result }: any) => {
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
             <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-              Origem da ResoluÃ§Ã£o
+              Origem da Resolução
             </p>
             <p className="mt-1 text-xs text-slate-200">
               {result.resolved.ownerLabel || result.resolved.source || "-"}
@@ -147,7 +148,7 @@ const Microsoft365Diagnostics = ({ result }: any) => {
       {!!result.recommendations?.length && (
         <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">
-            RecomendaÃ§Ãµes
+            Recomendações
           </p>
           <div className="mt-2 space-y-1">
             {result.recommendations.map((item: string, index: number) => (
@@ -188,7 +189,7 @@ const BulkActionsTab = () => {
       const tagsRes = await api.get(`/tags?scope=${scope}`);
       setTags(Array.isArray(tagsRes.data) ? tagsRes.data : []);
     } catch (err) {
-      console.error("Erro ao carregar tags para aÃ§Ãµes em massa", err);
+      console.error("Erro ao carregar tags para ações em massa", err);
       setTags([]);
     }
   };
@@ -673,7 +674,7 @@ export function Settings() {
 
   const handleTestMicrosoft365 = async (tenantId?: string) => {
     if (!tenantId) {
-      alert("Salve a empresa primeiro para habilitar o teste da integraÃ§Ã£o.");
+      alert("Salve a empresa primeiro para habilitar o teste da integração.");
       return;
     }
 
@@ -702,19 +703,19 @@ export function Settings() {
         checks: [
           {
             key: "request",
-            label: "Teste de integraÃ§Ã£o",
+            label: "Teste de integração",
             status: "error",
             details:
               error.response?.data?.message ||
               error.message ||
-              "Falha ao testar a integraÃ§Ã£o com o Microsoft 365.",
+              "Falha ao testar a integração com o Microsoft 365.",
           },
         ],
         recommendations: [],
       };
       setMicrosoft365TestResult(fallback);
       alert(
-        "Erro ao testar integraÃ§Ã£o: " +
+        "Erro ao testar integração: " +
           (error.response?.data?.message || error.message),
       );
     } finally {
@@ -948,6 +949,12 @@ export function Settings() {
            onClick={() => setActiveTab("tags")}
            icon={Tags}
            label="Etiquetas"
+         />
+        <TabButton
+           active={activeTab === "banking"}
+           onClick={() => setActiveTab("banking")}
+           icon={Building2}
+           label="Integrações Bancárias"
          />
 
         {/* SAAS TABS - SUPER ADMIN ONLY */}
@@ -1253,7 +1260,7 @@ export function Settings() {
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Save size={18} />
-                    {loading ? "Salvando..." : "Salvar Configuracoes"}
+                    {loading ? "Salvando..." : "Salvar Configurações"}
                   </button>
                 </div>
               </form>
@@ -1264,6 +1271,8 @@ export function Settings() {
         {activeTab === "skills" && <SkillsTab />}
 
         {activeTab === "workflows" && <WorkflowsTab />}
+
+        {activeTab === "banking" && <BankIntegrationsTab />}
 
         {activeTab === "drx-claw" && <DrxClawTab />}
 
@@ -1827,7 +1836,7 @@ export function Settings() {
                                 msFolderId: e.target.value,
                               })
                             }
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 outline-none"
                             placeholder="Ex: 01XTLPBK3F..."
                           />
                           <p className="text-[10px] text-slate-500 mt-1">
@@ -1968,8 +1977,7 @@ export function Settings() {
               Salvar
             </button>
             <button
-              type="button"
-              onClick={(e) => handleSave(e, true)}
+              type="submit"
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
             >
               <Save size={18} />

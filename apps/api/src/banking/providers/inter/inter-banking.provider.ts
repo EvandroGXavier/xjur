@@ -1043,6 +1043,29 @@ export class InterBankingProvider implements BankingProvider {
         responseData?.destinatario?.tipoChave,
         payload?.destinatario?.tipoChave,
       ),
+      receiptPayload: this.isConfirmedPaymentStatus(status) ? {
+        amount: payload?.valor || responseData?.valor,
+        paymentDate: this.pickString(
+          responseData?.dataHoraPagamento,
+          responseData?.executadoEm,
+          responseData?.createdAt,
+        ),
+        endToEndId: this.pickString(
+          responseData?.endToEndId,
+          responseData?.e2eId,
+          responseData?.codigoEndToEnd,
+        ),
+        beneficiaryName: this.pickString(
+          responseData?.destinatario?.nome,
+          payload?.destinatario?.nome,
+        ),
+        beneficiaryDocument: this.pickString(
+          responseData?.destinatario?.cpfCnpj,
+          payload?.destinatario?.cpfCnpj,
+        ),
+        beneficiaryBank: responseData?.destinatario?.banco || payload?.destinatario?.instituicao,
+        payerBank: 'Banco Inter S.A.',
+      } : undefined,
       rawRequest: payload,
       rawResponse: responseData,
       message: this.isConfirmedPaymentStatus(status)

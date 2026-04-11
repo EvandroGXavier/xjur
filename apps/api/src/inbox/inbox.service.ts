@@ -255,6 +255,74 @@ export class InboxService {
     return /^\d{10,15}$/.test(resolvedPhone) ? resolvedPhone : null;
   }
 
+  private normalizeWhatsappIdentity(value: unknown) {
+    if (typeof value !== 'string') return null;
+
+    const normalized = value.trim().replace(/:[0-9]+(?=@)/, '');
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private extractWhatsappDigits(value: unknown) {
+    const normalized = this.normalizeWhatsappIdentity(value);
+    if (!normalized) return '';
+    if (normalized.includes('@lid') || normalized.includes('@g.us')) return '';
+
+    if (normalized.includes('@s.whatsapp.net')) {
+      return normalized.split('@')[0].replace(/\D/g, '');
+    }
+
+    return normalized.replace(/\D/g, '');
+  }
+
+  private isPlausibleWhatsappDigits(value: unknown): value is string {
+    return typeof value === 'string' && /^\d{10,15}$/.test(value);
+  }
+
+  private getWhatsappAddressCandidates(contact?: any, conversation?: any) {
+    const metadata = this.asObject(conversation?.metadata as Record<string, any>);
+
+    const explicitIdentities = [
+      contact?.whatsappFullId,
+      typeof metadata.remoteJid === 'string' ? metadata.remoteJid : null,
+      typeof metadata.lidJid === 'string' ? metadata.lidJid : null,
+      conversation?.externalThreadId,
+      conversation?.externalParticipantId,
+      contact?.whatsapp,
+    ]
+      .map((candidate) => this.normalizeWhatsappIdentity(candidate))
+      .filter((candidate): candidate is string => Boolean(candidate));
+
+    const explicitPhoneJids = Array.from(
+      new Set(
+        explicitIdentities.filter(
+          (candidate) =>
+            candidate.endsWith('@s.whatsapp.net') || candidate.endsWith('@g.us'),
+        ),
+      ),
+    );
+
+    const explicitLids = Array.from(
+      new Set(explicitIdentities.filter((candidate) => candidate.endsWith('@lid'))),
+    );
+
+    const numberCandidates = [
+      contact?.whatsappE164,
+      this.extractResolvedWhatsappPhone(conversation),
+      contact?.whatsapp,
+      contact?.phone,
+      conversation?.externalParticipantId,
+      conversation?.externalThreadId,
+    ]
+      .map((candidate) => this.extractWhatsappDigits(candidate))
+      .filter((candidate): candidate is string => this.isPlausibleWhatsappDigits(candidate));
+
+    return {
+      explicitPhoneJids,
+      explicitLids,
+      numbers: Array.from(new Set(numberCandidates)),
+    };
+  }
+
   private async loadConversationSummary(id: string) {
     return this.prisma.agentConversation.findUnique({
       where: { id },
@@ -421,40 +489,15 @@ export class InboxService {
     const normalizedChannel = this.normalizeChannel(channel);
 
     if (normalizedChannel === 'WHATSAPP') {
-      const resolvedPhone = this.extractResolvedWhatsappPhone(conversation);
-      const candidates = [
-        resolvedPhone,
-        contact?.whatsappFullId,
-        contact?.whatsappE164,
-        contact?.whatsapp,
-        contact?.phone,
-        conversation?.externalParticipantId,
-        conversation?.externalThreadId,
-      ].filter(Boolean);
+      const { explicitPhoneJids, explicitLids, numbers } = this.getWhatsappAddressCandidates(
+        contact,
+        conversation,
+      );
 
-      const normalizeWhatsappThreadId = (value: unknown) => {
-        if (typeof value !== 'string') return null;
-        const trimmed = value.trim();
-        if (!trimmed) return null;
-
-        // Keep groups and explicit JIDs intact (important for Evolution webhooks).
-        if (trimmed.includes('@g.us') || trimmed.includes('@lid') || trimmed.includes('@s.whatsapp.net')) {
-          return trimmed.replace(/:[0-9]+(?=@)/, '');
-        }
-
-        // Otherwise treat as phone-ish and canonicalize to the same shape used by inbound webhooks.
-        const digits = trimmed.replace(/\D/g, '');
-        if (!digits) return null;
-        return `${digits}@s.whatsapp.net`;
-      };
-
-      // Prefer a canonical non-LID thread id when available, but always normalize.
-      const normalizedCandidates = candidates
-        .map(normalizeWhatsappThreadId)
-        .filter((candidate): candidate is string => Boolean(candidate));
-
-      const preferred = normalizedCandidates.find((candidate) => !candidate.includes('@lid'));
-      return preferred || normalizedCandidates[0] || null;
+      if (explicitPhoneJids.length > 0) return explicitPhoneJids[0];
+      if (explicitLids.length > 0) return explicitLids[0];
+      if (numbers.length > 0) return `${numbers[0]}@s.whatsapp.net`;
+      return null;
     }
 
     if (conversation?.externalThreadId) return conversation.externalThreadId;
@@ -650,6 +693,9 @@ export class InboxService {
         where: {
           tenantId: input.tenantId,
           channel,
+          status: {
+            notIn: ['CLOSED', 'ARCHIVED'],
+          },
           ...(isWhatsapp
             ? {
                 OR: [
@@ -701,10 +747,7 @@ export class InboxService {
           processId: input.processId ?? existing.processId,
           externalThreadId: input.externalThreadId ?? existing.externalThreadId,
           externalParticipantId: input.externalParticipantId ?? existing.externalParticipantId,
-          status:
-            this.normalizeDirection(input.direction) === 'INBOUND' && existing.status === 'CLOSED'
-              ? 'OPEN'
-              : existing.status,
+          status: existing.status,
           waitingReply: this.normalizeDirection(input.direction) === 'INBOUND',
           unreadCount:
             this.normalizeDirection(input.direction) === 'INBOUND'
@@ -829,6 +872,71 @@ export class InboxService {
         externalThreadId: dto.externalThreadId,
         externalParticipantId: dto.externalParticipantId,
       });
+
+    const existing = await this.findExistingConversation({
+      tenantId,
+      channel,
+      contactId: dto.contactId || null,
+      connectionId: dto.connectionId || null,
+      processId: dto.processId || null,
+      externalThreadId: externalThreadId || null,
+      externalParticipantId: dto.externalParticipantId || externalThreadId || null,
+      direction: 'OUTBOUND',
+      title: dto.title || contact?.name || `Atendimento ${channel}`,
+    });
+
+    if (existing) {
+      await this.prisma.agentConversation.update({
+        where: { id: existing.id },
+        data: {
+          assignedUserId: dto.assignedUserId !== undefined ? dto.assignedUserId : existing.assignedUserId || userId,
+          connectionId: dto.connectionId || existing.connectionId,
+          processId: dto.processId !== undefined ? dto.processId : existing.processId,
+          queue: dto.queue !== undefined ? dto.queue : existing.queue,
+          priority: dto.priority?.trim().toUpperCase() || existing.priority,
+          title: dto.title || existing.title,
+          externalThreadId: existing.externalThreadId || externalThreadId || null,
+          externalParticipantId:
+            existing.externalParticipantId || dto.externalParticipantId || externalThreadId || null,
+        },
+      });
+
+      if (contact) {
+        await this.ensureConversationParticipant({
+          tenantId,
+          conversationId: existing.id,
+          contactId: contact.id,
+          role: 'CONTACT',
+          label: contact.name,
+          externalAddress: existing.externalThreadId || externalThreadId || null,
+          isPrimary: true,
+        });
+      }
+
+      await this.ensureConversationParticipant({
+        tenantId,
+        conversationId: existing.id,
+        userId: dto.assignedUserId || existing.assignedUserId || userId,
+        role: existing.isInternal ? 'MEMBER' : 'OPERATOR',
+        isPrimary: !contact,
+      });
+
+      if (dto.initialMessage?.trim()) {
+        await this.sendMessage(
+          existing.id,
+          tenantId,
+          userId,
+          {
+            content: dto.initialMessage.trim(),
+            connectionId: dto.connectionId || existing.connectionId || undefined,
+          },
+        );
+      }
+
+      const reusedPayload = await this.loadConversationDetails(existing.id);
+      this.inboxGateway.emitConversationUpdated(tenantId, reusedPayload);
+      return reusedPayload;
+    }
 
     const conversation = await this.prisma.agentConversation.create({
       data: {
@@ -1071,7 +1179,7 @@ export class InboxService {
       );
 
       const destination = this.resolveExternalAddress(conversation.channel, conversation.contact, conversation);
-      if (!destination || String(destination).includes('@lid')) {
+      if (!destination) {
         throw new BadRequestException('O contato nao possui endereco valido para envio no WhatsApp.');
       }
 

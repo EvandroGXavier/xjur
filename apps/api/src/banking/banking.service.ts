@@ -452,6 +452,7 @@ export class BankingService {
     paymentDate?: string | null;
     paymentMethod: string;
     notes?: string | null;
+    receiptPayload?: any;
   }) {
     const record = params.financialRecord;
     if (record.status === 'PAID') {
@@ -467,6 +468,12 @@ export class BankingService {
     );
 
     await this.prisma.$transaction(async (tx) => {
+      const existingMetadata = record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata) ? record.metadata : {};
+      const newMetadata = { ...existingMetadata };
+      if (params.receiptPayload) {
+        newMetadata.pixReceipt = params.receiptPayload;
+      }
+
       await tx.financialRecord.update({
         where: { id: record.id },
         data: {
@@ -476,6 +483,7 @@ export class BankingService {
           amountPaid: amountFinal,
           paymentMethod: params.paymentMethod,
           bankAccountId,
+          metadata: newMetadata,
           notes: record.notes
             ? `${record.notes} | ${params.notes || 'Liquidado automaticamente'}`
             : params.notes || 'Liquidado automaticamente',
@@ -1269,6 +1277,7 @@ export class BankingService {
         paymentDate: result.executedAt || new Date().toISOString(),
         paymentMethod: 'PIX',
         notes: this.buildAutoSettlementNotes(result, dto.notes),
+        receiptPayload: result.receiptPayload,
       });
     }
 

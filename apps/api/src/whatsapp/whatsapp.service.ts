@@ -208,10 +208,12 @@ export class WhatsappService implements OnModuleInit {
     const normalized = this.normalizeWhatsappJid(value);
     if (!normalized) return '';
 
+    if (normalized.includes('@lid') || normalized.includes('@g.us')) {
+      return '';
+    }
+
     return normalized
       .replace('@s.whatsapp.net', '')
-      .replace('@g.us', '')
-      .replace('@lid', '')
       .replace(/\D/g, '');
   }
 

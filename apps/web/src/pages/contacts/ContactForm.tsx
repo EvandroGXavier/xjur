@@ -16,7 +16,6 @@ import { PJTab } from './PJTab';
 import { useSigilo } from '../../contexts/SigiloContext';
 import { SecurityTab } from '../../components/ui/SecurityTab';
 import { ShieldAlert } from 'lucide-react';
-import { ContactInterSigiloPanel } from '../../components/contacts/ContactInterSigiloPanel';
 
 // Interface matching Backend DTO
 interface ContactData {
@@ -4332,11 +4331,13 @@ export function ContactForm() {
 
             {activeTab === 'sigilo' && isSigiloActive && id && id !== 'new' && (
                 <div className="animate-in fade-in zoom-in-95 duration-500 w-full min-w-0">
-                    <ContactInterSigiloPanel
-                      contactId={id}
-                      contactName={formData.name}
-                      contactDocument={formData.document || formData.cpf || formData.cnpj || ""}
-                    />
+                    <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-slate-300">
+                      <div className="font-semibold text-white">Integrações bancárias migradas para a conta bancária</div>
+                      <p className="mt-2 text-slate-400">
+                        O sigilo do contato continua disponível para guardar credenciais e observações gerais,
+                        mas a conexão com banco agora deve ser configurada em <span className="text-amber-200">Financeiro &gt; Contas Bancárias &gt; Sigilo</span>.
+                      </p>
+                    </div>
                     <SecurityTab entityType="CONTACT" entityId={id} />
                 </div>
             )}

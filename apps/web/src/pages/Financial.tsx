@@ -5740,6 +5740,35 @@ export function Financial(props: FinancialProps = {}) {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Comprovante PIX Digital */}
+                    {editingRecord?.metadata?.pixReceipt && (
+                      <div className="group/saved flex items-center gap-3 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl p-3 hover:border-emerald-400 transition-all">
+                        <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 shrink-0">
+                          <CheckCircle2 size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="block text-xs font-black text-emerald-300 truncate">
+                            Comprovante PIX
+                          </p>
+                          <p className="text-[9px] text-emerald-600/80 font-bold uppercase tracking-widest mt-0.5">
+                            E2E: {editingRecord.metadata.pixReceipt.endToEndId || "Validado via Banco"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toast.info(
+                              `Comprovante PIX:\nFavorecido: ${editingRecord.metadata.pixReceipt.beneficiaryName || "-"}\nDoc: ${editingRecord.metadata.pixReceipt.beneficiaryDocument || "-"}`
+                            );
+                          }}
+                          className="p-2 text-emerald-500 hover:text-emerald-300 transition-colors"
+                          title="Ver Detalhes do Comprovante"
+                        >
+                          <FileText size={16} />
+                        </button>
+                      </div>
+                    )}
+
                     {/* Anexos já salvos */}
                     {editingRecord?.metadata?.attachments?.map((att: any, attIdx: number) => {
                       const docUrl = savedAttachmentUrls[att.fileName];
@@ -5794,7 +5823,7 @@ export function Financial(props: FinancialProps = {}) {
                     ))}
                   </div>
 
-                  {attachments.length === 0 && (!editingRecord?.metadata?.attachments || editingRecord.metadata.attachments.length === 0) && (
+                  {attachments.length === 0 && (!editingRecord?.metadata?.pixReceipt) && (!editingRecord?.metadata?.attachments || editingRecord.metadata.attachments.length === 0) && (
                     <div className="py-8 text-center bg-slate-950/20 rounded-3xl border border-slate-800/50 border-dashed">
                       <Paperclip size={24} className="mx-auto text-slate-700 mb-2 opacity-30" />
                       <p className="text-[10px] text-slate-600 font-black uppercase tracking-[0.2em]">Nenhum documento vinculado</p>

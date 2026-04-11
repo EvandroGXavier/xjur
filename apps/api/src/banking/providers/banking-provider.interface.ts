@@ -84,6 +84,7 @@ export interface BankingPaymentResult {
   beneficiaryDocument?: string | null;
   beneficiaryKey?: string | null;
   beneficiaryKeyType?: string | null;
+  receiptPayload?: Record<string, any>;
   rawRequest?: Record<string, any>;
   rawResponse?: Record<string, any>;
   message: string;
