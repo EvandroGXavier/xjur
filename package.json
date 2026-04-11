@@ -2,7 +2,7 @@
   "//": "Última atualização em 02/04/2026 | Versão do sistema: 1.0.001",
   "name": "dr-x-monorepo",
   "private": true,
-  "version": "1.0.001",
+  "version": "1.0.2",
   "description": "DR.X - Ecossistema Jurídico Comercial",
   "workspaces": [
     "apps/*",
