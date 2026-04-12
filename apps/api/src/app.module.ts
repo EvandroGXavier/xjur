@@ -28,12 +28,9 @@ import { SecurityModule } from "./security/security.module";
 import { AgentModule } from "./agent/agent.module";
 import { DrxClawModule } from "./drx-claw/drx-claw.module";
 import { BackupModule } from "./backup/backup.module";
-import { TelegramModule } from "./telegram/telegram.module";
-import { InboxModule } from "./inbox/inbox.module";
-import { DashboardModule } from "./dashboard/dashboard.module";
-import { WorkflowsModule } from "./workflows/workflows.module";
 import { BankingModule } from "./banking/banking.module";
 import { EventProcessorModule } from "./event-processor/event-processor.module";
+import { EmailModule } from "./email/email.module";
 
 @Module({
   imports: [
@@ -69,6 +66,7 @@ import { EventProcessorModule } from "./event-processor/event-processor.module";
     WorkflowsModule,
     BankingModule,
     EventProcessorModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [

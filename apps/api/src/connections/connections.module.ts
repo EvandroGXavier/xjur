@@ -5,9 +5,10 @@ import { ConnectionsController } from './connections.controller';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { PrismaService } from '../prisma.service';
 import { TelegramModule } from '../telegram/telegram.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [WhatsappModule, TelegramModule],
+  imports: [WhatsappModule, TelegramModule, EmailModule],
   controllers: [ConnectionsController],
   providers: [ConnectionsService, PrismaService],
   exports: [ConnectionsService],

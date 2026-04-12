@@ -30,8 +30,26 @@ export class CommunicationsService {
     this.logger.log(`Capturando Inbound bruto channel=${dto.channel} from=${dto.from}`);
 
     const normalizedChannel = (dto.channel || '').trim().toUpperCase();
+    const externalMessageId = dto.externalMessageId || null;
 
-    // 1. Persist Raw Incoming Event - UNIFED BRUTE CAPTURE
+    // 1. DEDUPLICATION (IDEMPOTENCY)
+    // Se temos um ID de mensagem externa, verificamos se já foi capturado para esta conexão
+    if (externalMessageId && dto.connectionId) {
+      const existing = await this.prisma.incomingEvent.findFirst({
+        where: {
+          connectionId: dto.connectionId,
+          externalMessageId: externalMessageId,
+        },
+        select: { id: true }
+      });
+
+      if (existing) {
+        this.logger.debug(`Mensagem externa ${externalMessageId} já capturada. Pulando.`);
+        return { status: 'ALREADY_CAPTURED', id: existing.id };
+      }
+    }
+
+    // 2. Persist Raw Incoming Event - UNIFED BRUTE CAPTURE
     await this.prisma.incomingEvent.create({
       data: {
         tenantId: dto.tenantId,

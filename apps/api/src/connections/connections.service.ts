@@ -5,6 +5,7 @@ import { CreateConnectionDto, ConnectionType } from './dto/create-connection.dto
 import { UpdateConnectionDto } from './dto/update-connection.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class ConnectionsService implements OnModuleInit {
@@ -12,6 +13,7 @@ export class ConnectionsService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly whatsappService: WhatsappService,
     private readonly telegramService: TelegramService,
+    private readonly emailService: EmailService,
   ) {}
 
   async onModuleInit() {
@@ -116,13 +118,24 @@ export class ConnectionsService implements OnModuleInit {
         return { status: 'CONNECTED', message: 'Instagram Connected (Simulated)' };
     }
 
-    // EMAIL LOGIC (Simulated)
+    // EMAIL LOGIC (Real Implementation)
     if (connection.type === ConnectionType.EMAIL) {
+        const validation = await this.emailService.validateConnection(connection.config);
+        
+        if (!validation.success) {
+            await this.prisma.connection.update({
+                where: { id },
+                data: { status: 'ERROR' }
+            });
+            throw new BadRequestException(`Falha na conexao IMAP: ${validation.message}`);
+        }
+
         await this.prisma.connection.update({
             where: { id },
             data: { status: 'CONNECTED' }
         });
-        return { status: 'CONNECTED', message: 'Email Connected via IMAP/SMTP' };
+        
+        return { status: 'CONNECTED', message: 'E-mail conectado e polling ativado.' };
     }
 
     if (connection.type === ConnectionType.TELEGRAM) {
