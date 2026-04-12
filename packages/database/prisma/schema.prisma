@@ -69,8 +69,10 @@ model Tenant {
   suppliers                   Supplier[]
   inventoryMovements          InventoryMovement[]
   tickets                     Ticket[]
+  ticketMessages              TicketMessage[]
   waInstances                 WaInstance[]
   connections                 Connection[]
+  incomingEvents              IncomingEvent[]
   inventoryConfig             InventoryConfig?
   partyRoles                  PartyRole[]
   partyQualifications         PartyQualification[]
@@ -211,6 +213,8 @@ model Contact {
   agentConversations        AgentConversation[]
   agentParticipants         AgentParticipant[]       @relation("AgentParticipantContact")
   channelIdentities         ContactChannelIdentity[]
+  ticketMessages            TicketMessage[]
+  incomingEvents            IncomingEvent[]
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -452,6 +456,7 @@ model Process {
   agentConversations          AgentConversation[]
   agentMessageLinks           AgentMessageLink[]
   documents                   DocumentHistory[]
+  ticketMessages              TicketMessage[]
 
   workflowId String?
   workflow   Workflow? @relation(fields: [workflowId], references: [id])
@@ -652,6 +657,7 @@ model FinancialRecord {
 
   // Tags
   tags FinancialRecordTag[]
+  ticketMessages TicketMessage[]
 
   @@index([parentId])
   @@index([tenantId, status])
@@ -1327,27 +1333,90 @@ model Ticket {
   @@map("tickets")
 }
 
+model IncomingEvent {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  connectionId          String?
+  contactId             String?
+  channel               String
+  provider              String?
+  eventType             String
+  direction             String?
+  sourceAddress         String?
+  externalThreadId      String?
+  externalParticipantId String?
+  externalMessageId     String?
+  payload               Json
+  normalizedPayload     Json?
+  status                String    @default("PENDING") // PENDING, PROCESSING, PROCESSED, FAILED, DEAD_LETTER
+  retryCount            Int       @default(0)
+  nextAttemptAt         DateTime?
+  processingStartedAt   DateTime?
+  processedAt           DateTime?
+  processingError       String?   @db.Text
+  receivedAt            DateTime  @default(now())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  connection    Connection?    @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  contact       Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  ticketMessage TicketMessage?
+
+  @@index([tenantId, status, nextAttemptAt])
+  @@index([tenantId, channel, receivedAt])
+  @@index([connectionId, receivedAt])
+  @@index([tenantId, externalMessageId])
+  @@map("incoming_events")
+}
+
 model TicketMessage {
-  id          String    @id @default(uuid())
-  ticketId    String
-  externalId  String?   @unique
-  status      String    @default("SENT") // PENDING, SENT, DELIVERED, READ, PLAYED, FAILED, SCHEDULED
-  senderType  String // USER (Agente), CONTACT (Cliente), SYSTEM (Bot)
-  senderId    String? // ID do User ou Contact
-  content     String    @db.Text
-  contentType String // TEXT, IMAGE, AUDIO, FILE
-  mediaUrl    String?
-  quotedId    String?
-  scheduledAt DateTime? // Time when the message should be sent
+  id                    String    @id @default(uuid())
+  tenantId              String?
+  ticketId              String?
+  contactId             String?
+  processId             String?
+  connectionId          String?
+  financialRecordId     String?
+  incomingEventId       String?   @unique
+  externalId            String?   @unique
+  externalThreadId      String?
+  externalParticipantId String?
+  channel               String    @default("WHATSAPP")
+  direction             String    @default("OUTBOUND") // INBOUND, OUTBOUND, INTERNAL
+  status                String    @default("PENDING") // PENDING, SENT, DELIVERED, READ, PLAYED, FAILED, SCHEDULED, RECEIVED
+  senderType            String // USER (Agente), CONTACT (Cliente), SYSTEM (Bot)
+  senderId              String? // ID do User ou Contact
+  content               String    @db.Text
+  textContent           String?   @db.Text
+  contentType           String // TEXT, IMAGE, AUDIO, FILE
+  mediaUrl              String?
+  quotedId              String?
+  scheduledAt           DateTime? // Time when the message should be sent
+  sentAt                DateTime?
+  deliveredAt           DateTime?
+  readAt                DateTime?
+  aiAnalysis            Json?
+  transcriptionStatus   String?   @default("NOT_REQUIRED") // NOT_REQUIRED, PENDING, PROCESSING, COMPLETED, FAILED
 
   reactions Json? // [{ emoji: "👍", userId: "..." }]
   metadata  Json? // Waveforms, thumbnails, etc.
 
-  readAt DateTime?
+  tenant          Tenant?          @relation(fields: [tenantId], references: [id])
+  ticket          Ticket?          @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  contact         Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  process         Process?         @relation(fields: [processId], references: [id], onDelete: SetNull)
+  connection      Connection?      @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  financialRecord FinancialRecord? @relation(fields: [financialRecordId], references: [id], onDelete: SetNull)
+  incomingEvent   IncomingEvent?   @relation(fields: [incomingEventId], references: [id], onDelete: SetNull)
+  createdAt       DateTime         @default(now())
 
-  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
+  @@index([tenantId, contactId, createdAt])
+  @@index([tenantId, ticketId, createdAt])
+  @@index([tenantId, processId, createdAt])
+  @@index([tenantId, financialRecordId, createdAt])
+  @@index([tenantId, status, scheduledAt])
+  @@index([tenantId, channel, externalThreadId])
   @@map("ticket_messages")
 }
 
@@ -1542,6 +1611,8 @@ model Connection {
 
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
   agentConversations AgentConversation[]
+  ticketMessages     TicketMessage[]
+  incomingEvents     IncomingEvent[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 

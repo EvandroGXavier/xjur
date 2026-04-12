@@ -33,6 +33,7 @@ import { InboxModule } from "./inbox/inbox.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { WorkflowsModule } from "./workflows/workflows.module";
 import { BankingModule } from "./banking/banking.module";
+import { EventProcessorModule } from "./event-processor/event-processor.module";
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { BankingModule } from "./banking/banking.module";
     DashboardModule,
     WorkflowsModule,
     BankingModule,
+    EventProcessorModule,
   ],
   controllers: [AppController],
   providers: [

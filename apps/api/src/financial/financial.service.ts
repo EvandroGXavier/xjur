@@ -3,7 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  Logger,
 } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import { randomUUID } from "crypto";
 import { PrismaService } from "@drx/database";
 import { Decimal } from "@prisma/client/runtime/library";
@@ -19,6 +21,8 @@ import { UpdateBankAccountDto } from "./dto/update-bank-account.dto";
 
 @Injectable()
 export class FinancialService {
+  private readonly logger = new Logger(FinancialService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private allocateAmountsToTarget(amounts: number[], target: number) {
@@ -1901,5 +1905,186 @@ export class FinancialService {
       pending,
       records,
     };
+  }
+
+  async sugerirBaixaPorComprovante(tenantId: string, contactId: string) {
+    const hoje = new Date();
+    const limite = new Date(hoje);
+    limite.setDate(limite.getDate() + 15);
+
+    const candidates = await this.prisma.financialRecord.findMany({
+      where: {
+        tenantId,
+        type: "INCOME",
+        status: { in: ["PENDING", "OVERDUE", "PARTIAL"] },
+        dueDate: { lte: limite },
+        parties: {
+          some: {
+            contactId,
+            role: "DEBTOR",
+          },
+        },
+      },
+      select: {
+        id: true,
+        description: true,
+        dueDate: true,
+        amount: true,
+        amountFinal: true,
+        amountPaid: true,
+        status: true,
+      },
+      orderBy: [{ dueDate: "asc" }],
+      take: 5,
+    });
+
+    return candidates.map((record) => ({
+      id: record.id,
+      descricao: record.description,
+      vencimento: record.dueDate,
+      valor: Number(record.amountFinal || record.amount || 0),
+      valorPago: Number(record.amountPaid || 0),
+      status: record.status,
+    }));
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_8AM)
+  async gerarMensagensAgendadasDeCobranca() {
+    const agora = new Date();
+    const inicio = new Date(agora);
+    inicio.setHours(0, 0, 0, 0);
+
+    const fim = new Date(agora);
+    fim.setDate(fim.getDate() + 14);
+    fim.setHours(23, 59, 59, 999);
+
+    const registros = await this.prisma.financialRecord.findMany({
+      where: {
+        tenantId: { not: null } as any,
+        type: "INCOME",
+        status: { in: ["PENDING", "OVERDUE", "PARTIAL"] },
+        dueDate: {
+          gte: inicio,
+          lte: fim,
+        },
+        parties: {
+          some: {
+            role: "DEBTOR",
+            contact: {
+              OR: [
+                { whatsapp: { not: null } },
+                { whatsappFullId: { not: null } },
+                { phone: { not: null } },
+              ],
+            },
+          },
+        },
+      },
+      include: {
+        parties: {
+          include: {
+            contact: true,
+          },
+        },
+      },
+    });
+
+    for (const registro of registros) {
+      const contato = registro.parties.find(
+        (party) =>
+          party.role === "DEBTOR" &&
+          (party.contact?.whatsappFullId || party.contact?.whatsapp || party.contact?.phone),
+      )?.contact;
+
+      if (!contato) continue;
+
+      const lembreteEm = new Date(registro.dueDate);
+      lembreteEm.setDate(lembreteEm.getDate() - 2);
+      lembreteEm.setHours(9, 0, 0, 0);
+
+      if (lembreteEm <= agora) continue;
+
+      const existente = await this.prisma.ticketMessage.findFirst({
+        where: {
+          financialRecordId: registro.id,
+          status: "SCHEDULED",
+          metadata: {
+            path: ["automationKind"],
+            equals: "FINANCIAL_REMINDER",
+          } as any,
+        },
+        select: { id: true },
+      });
+
+      if (existente) continue;
+
+      let ticket = await this.prisma.ticket.findFirst({
+        where: {
+          tenantId: registro.tenantId,
+          contactId: contato.id,
+          channel: "WHATSAPP",
+          status: { notIn: ["CLOSED", "RESOLVED"] },
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+
+      if (!ticket) {
+        ticket = await this.prisma.ticket.create({
+          data: {
+            tenantId: registro.tenantId,
+            title: `Cobranca - ${contato.name}`,
+            status: "OPEN",
+            priority: "MEDIUM",
+            channel: "WHATSAPP",
+            contactId: contato.id,
+            queue: "FINANCEIRO",
+            waitingReply: false,
+            lastMessageAt: agora,
+          },
+        });
+      }
+
+      const enderecoWhatsapp =
+        contato.whatsappFullId ||
+        contato.whatsapp ||
+        contato.phone ||
+        null;
+
+      if (!enderecoWhatsapp) continue;
+
+      const dataFormatada = new Intl.DateTimeFormat("pt-BR").format(
+        new Date(registro.dueDate),
+      );
+      const valor = Number(registro.amountFinal || registro.amount || 0).toFixed(2);
+      const mensagem = `Olá, ${contato.name}. Este é um lembrete automático de cobrança referente a "${registro.description}", com vencimento em ${dataFormatada}, no valor de R$ ${valor}.`;
+
+      await this.prisma.ticketMessage.create({
+        data: {
+          tenantId: registro.tenantId,
+          ticketId: ticket.id,
+          contactId: contato.id,
+          financialRecordId: registro.id,
+          channel: "WHATSAPP",
+          direction: "OUTBOUND",
+          status: "SCHEDULED",
+          senderType: "SYSTEM",
+          senderId: null,
+          content: mensagem,
+          textContent: mensagem,
+          contentType: "TEXT",
+          scheduledAt: lembreteEm,
+          externalThreadId: enderecoWhatsapp,
+          externalParticipantId: enderecoWhatsapp,
+          metadata: {
+            automationKind: "FINANCIAL_REMINDER",
+            daysBeforeDue: 2,
+          },
+        },
+      });
+    }
+
+    if (registros.length > 0) {
+      this.logger.log(`Regua de cobranca verificada para ${registros.length} registros financeiros.`);
+    }
   }
 }

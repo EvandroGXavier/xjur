@@ -263,6 +263,162 @@ export class TicketsService {
     private agentService: AgentService,
   ) {}
 
+  async listMessagesAudit(
+    tenantId: string,
+    filters?: {
+      search?: string;
+      channel?: string;
+      direction?: string;
+      status?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: string;
+      pageSize?: string;
+    },
+  ) {
+    const page = Math.max(Number(filters?.page) || 1, 1);
+    const pageSize = Math.min(Math.max(Number(filters?.pageSize) || 50, 1), 200);
+    const skip = (page - 1) * pageSize;
+    const tenantScope = {
+      OR: [{ tenantId }, { ticket: { is: { tenantId } } }, { contact: { is: { tenantId } } }],
+    };
+    const where: any = { AND: [tenantScope] };
+
+    const normalizedChannel = filters?.channel?.trim().toUpperCase();
+    if (normalizedChannel && normalizedChannel !== 'ALL') {
+      where.AND.push({ channel: normalizedChannel });
+    }
+
+    const normalizedDirection = filters?.direction?.trim().toUpperCase();
+    if (normalizedDirection && normalizedDirection !== 'ALL') {
+      where.AND.push({ direction: normalizedDirection });
+    }
+
+    const normalizedStatus = filters?.status?.trim().toUpperCase();
+    if (normalizedStatus && normalizedStatus !== 'ALL') {
+      where.AND.push({ status: normalizedStatus });
+    }
+
+    const createdAt: Record<string, Date> = {};
+    if (filters?.dateFrom) {
+      const parsedFrom = new Date(filters.dateFrom);
+      if (!Number.isNaN(parsedFrom.getTime())) {
+        createdAt.gte = parsedFrom;
+      }
+    }
+    if (filters?.dateTo) {
+      const parsedTo = new Date(filters.dateTo);
+      if (!Number.isNaN(parsedTo.getTime())) {
+        parsedTo.setHours(23, 59, 59, 999);
+        createdAt.lte = parsedTo;
+      }
+    }
+    if (Object.keys(createdAt).length > 0) {
+      where.AND.push({ createdAt });
+    }
+
+    const search = filters?.search?.trim();
+    if (search) {
+      where.AND.push({
+        OR: [
+          { content: { contains: search, mode: 'insensitive' } },
+          { textContent: { contains: search, mode: 'insensitive' } },
+          { externalId: { contains: search, mode: 'insensitive' } },
+          { externalThreadId: { contains: search, mode: 'insensitive' } },
+          { externalParticipantId: { contains: search, mode: 'insensitive' } },
+          { contact: { is: { name: { contains: search, mode: 'insensitive' } } } },
+          { contact: { is: { phone: { contains: search } } } },
+          { contact: { is: { whatsapp: { contains: search } } } },
+          { ticket: { is: { title: { contains: search, mode: 'insensitive' } } } },
+          { process: { is: { cnj: { contains: search } } } },
+          { process: { is: { title: { contains: search, mode: 'insensitive' } } } },
+          { connection: { is: { name: { contains: search, mode: 'insensitive' } } } },
+        ],
+      });
+    }
+
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.ticketMessage.count({ where }),
+      this.prisma.ticketMessage.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+        include: {
+          contact: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              whatsapp: true,
+            },
+          },
+          ticket: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              queue: true,
+            },
+          },
+          process: {
+            select: {
+              id: true,
+              cnj: true,
+              code: true,
+              title: true,
+            },
+          },
+          connection: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              status: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items: items.map((message) => ({
+        id: message.id,
+        tenantId: message.tenantId,
+        ticketId: message.ticketId,
+        contactId: message.contactId,
+        processId: message.processId,
+        connectionId: message.connectionId,
+        financialRecordId: message.financialRecordId,
+        incomingEventId: message.incomingEventId,
+        channel: message.channel,
+        direction: message.direction,
+        status: message.status,
+        senderType: message.senderType,
+        contentType: message.contentType,
+        content: message.content,
+        textContent: message.textContent,
+        mediaUrl: message.mediaUrl,
+        createdAt: message.createdAt,
+        scheduledAt: message.scheduledAt,
+        sentAt: message.sentAt,
+        deliveredAt: message.deliveredAt,
+        readAt: message.readAt,
+        externalId: message.externalId,
+        externalThreadId: message.externalThreadId,
+        externalParticipantId: message.externalParticipantId,
+        contact: message.contact,
+        ticket: message.ticket,
+        process: message.process,
+        connection: message.connection,
+      })),
+      total,
+      page,
+      pageSize,
+      hasMore: skip + items.length < total,
+    };
+  }
+
   async create(createTicketDto: CreateTicketDto, tenantId: string, userId: string) {
     let contactId = createTicketDto.contactId;
 
@@ -304,11 +460,17 @@ export class TicketsService {
     if (createTicketDto.description) {
       await this.prisma.ticketMessage.create({
         data: {
+          tenantId,
           ticketId: ticket.id,
+          contactId: contactId || null,
+          channel: createTicketDto.channel || 'WHATSAPP',
+          direction: 'OUTBOUND',
           senderType: 'USER',
           senderId: userId,
           content: createTicketDto.description,
+          textContent: createTicketDto.description,
           contentType: 'TEXT',
+          sentAt: new Date(),
         },
       });
     }
@@ -381,10 +543,16 @@ export class TicketsService {
 
     const message = await this.prisma.ticketMessage.create({
       data: {
+        tenantId,
         ticketId: ticket.id,
+        contactId: ticket.contactId,
+        connectionId: createMessageDto.connectionId || null,
+        channel: ticket.channel,
+        direction: 'OUTBOUND',
         senderType: 'USER',
         senderId: userId,
         content: createMessageDto.content || '',
+        textContent: createMessageDto.content || '',
         contentType: contentType as any,
         mediaUrl,
         scheduledAt: isScheduled ? scheduledAt : null,
@@ -471,14 +639,23 @@ export class TicketsService {
 
     const message = await this.prisma.ticketMessage.create({
       data: {
+        tenantId,
         ticketId: ticket.id,
+        contactId: ticket.contactId,
+        channel: ticket.channel,
+        direction: 'INBOUND',
         senderType: 'CONTACT',
         senderId: ticket.contactId,
         content,
+        textContent: content,
         contentType: options?.contentType || 'TEXT',
         mediaUrl: options?.mediaUrl || null,
         externalId: options?.externalId || null,
+        externalThreadId: options?.metadata?.externalThreadId || null,
+        externalParticipantId: options?.metadata?.senderAddress || null,
         metadata: options?.metadata,
+        deliveredAt: new Date(),
+        status: 'DELIVERED',
       },
     });
 
@@ -522,15 +699,21 @@ export class TicketsService {
     const ticket = await this.findOne(ticketId, tenantId);
     const message = await this.prisma.ticketMessage.create({
       data: {
+        tenantId,
         ticketId: ticket.id,
+        contactId: ticket.contactId,
+        channel: ticket.channel,
+        direction: 'OUTBOUND',
         senderType: 'SYSTEM',
         senderId: null,
         content: payload.content || '',
+        textContent: payload.content || '',
         contentType: payload.contentType || 'TEXT',
         mediaUrl: payload.mediaUrl || null,
         externalId: payload.externalId || null,
         metadata: payload.metadata,
         status: payload.status || 'SENT',
+        sentAt: (payload.status || 'SENT') === 'SENT' ? new Date() : null,
       },
     });
 
@@ -670,7 +853,11 @@ export class TicketsService {
       this.logger.log(`Attempting to send to WhatsApp via connection ${connection.id} to phone ${formattedPhone}`);
 
       if (message.contentType === 'TEXT') {
-        externalId = await this.whatsappService.sendText(connection.id, formattedPhone, message.content);
+        externalId = await this.whatsappService.sendText(
+          connection.id,
+          formattedPhone,
+          message.textContent || message.content,
+        );
       } else {
         let mediaType: 'image' | 'video' | 'audio' | 'document' = 'document';
         if (message.contentType === 'IMAGE') mediaType = 'image';
@@ -681,7 +868,7 @@ export class TicketsService {
           formattedPhone,
           mediaType,
           message.mediaUrl,
-          message.content || '',
+          message.textContent || message.content || '',
           mimeType,
           fileName,
         );
@@ -692,14 +879,31 @@ export class TicketsService {
       if (externalId && typeof externalId === 'string') {
         await this.prisma.ticketMessage.update({
           where: { id: message.id },
-          data: { externalId, status: 'SENT', metadata: nextMetadata },
+          data: {
+            externalId,
+            status: 'SENT',
+            metadata: nextMetadata,
+            connectionId: connection.id,
+            channel: 'WHATSAPP',
+            externalThreadId: formattedPhone,
+            externalParticipantId: formattedPhone,
+            sentAt: new Date(),
+          },
         });
         this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
       } else {
         this.logger.warn('Message sent but no valid externalId returned. Setting status to SENT anyway.');
         await this.prisma.ticketMessage.update({
           where: { id: message.id },
-          data: { status: 'SENT', metadata: nextMetadata },
+          data: {
+            status: 'SENT',
+            metadata: nextMetadata,
+            connectionId: connection.id,
+            channel: 'WHATSAPP',
+            externalThreadId: formattedPhone,
+            externalParticipantId: formattedPhone,
+            sentAt: new Date(),
+          },
         });
         this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');
       }
@@ -764,7 +968,7 @@ export class TicketsService {
       const sent = await this.telegramService.sendOutboundMessage({
         connectionId: connection.id,
         chatId: String(chatId),
-        text: message.content || '',
+        text: message.textContent || message.content || '',
         contentType: message.contentType || 'TEXT',
         mediaPath: message.mediaUrl || undefined,
         mimeType: file?.mimetype || currentMetadata.mimeType || undefined,
@@ -785,6 +989,11 @@ export class TicketsService {
           externalId: sent.externalMessageId || null,
           status: 'SENT',
           metadata: nextMetadata,
+          connectionId: connection.id,
+          channel: 'TELEGRAM',
+          externalThreadId: String(chatId),
+          externalParticipantId: String(chatId),
+          sentAt: new Date(),
         },
       });
       this.ticketsGateway.emitMessageStatus(tenantId, ticket.id, message.id, 'SENT');

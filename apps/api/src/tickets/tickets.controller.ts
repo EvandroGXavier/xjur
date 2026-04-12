@@ -31,6 +31,31 @@ export class TicketsController {
     return this.ticketsService.findAll(user.tenantId, { status, queue });
   }
 
+  @Get('messages/audit')
+  listMessagesAudit(
+    @CurrentUser() user: CurrentUserData,
+    @Query('search') search?: string,
+    @Query('channel') channel?: string,
+    @Query('direction') direction?: string,
+    @Query('status') status?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    if (!user || !user.tenantId) throw new Error('User context invalid');
+    return this.ticketsService.listMessagesAudit(user.tenantId, {
+      search,
+      channel,
+      direction,
+      status,
+      dateFrom,
+      dateTo,
+      page,
+      pageSize,
+    });
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     if (!user || !user.tenantId) throw new Error('User context invalid');

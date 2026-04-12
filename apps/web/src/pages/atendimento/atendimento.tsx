@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { BookOpen, Columns, MessageCircle, RadioTower } from 'lucide-react';
+import { BookOpen, Columns, List, MessageCircle, RadioTower } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { getUser } from '../../auth/authStorage';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
@@ -7,16 +7,18 @@ import { helpAtendimentoV2, helpOmnichannelConnectionsV2 } from '../../data/help
 import { AtendimentoConnectionsPage } from './AtendimentoConnectionsPage';
 import { AtendimentoPage } from './atendimento-v2';
 import { Kanban } from '../Kanban';
+import { AtendimentoMessagesAuditPage } from './components/AtendimentoMessagesAuditPage';
 
-type ViewType = 'console' | 'kanban' | 'connections';
+type ViewType = 'console' | 'kanban' | 'connections' | 'messages';
 
 const normalizeView = (value: string | null): ViewType => {
-  if (value === 'kanban' || value === 'connections') return value;
+  if (value === 'kanban' || value === 'connections' || value === 'messages') return value;
   return 'console';
 };
 
 const NAV_ITEMS = [
   { id: 'console' as ViewType, label: 'Console', icon: MessageCircle },
+  { id: 'messages' as ViewType, label: 'Mensagens', icon: List },
   { id: 'kanban' as ViewType, label: 'Kanban', icon: Columns },
   { id: 'connections' as ViewType, label: 'Canais', icon: RadioTower },
 ] as const;
@@ -106,6 +108,7 @@ export function Atendimento() {
         {view === 'kanban' && (
           <Kanban onOpenConversation={(conversationId) => updateParams('console', conversationId)} />
         )}
+        {view === 'messages' && <AtendimentoMessagesAuditPage />}
         {view === 'connections' && <AtendimentoConnectionsPage />}
       </div>
 
