@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   forwardRef,
@@ -11,6 +12,7 @@ import { InboxGateway } from './inbox.gateway';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { CreateInboxMessageDto } from './dto/create-inbox-message.dto';
+import { MergeContactDto } from './dto/merge-contact.dto';
 import { LinkMessageProcessDto } from './dto/link-message-process.dto';
 import { TelegramService } from '../telegram/telegram.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
@@ -872,12 +874,12 @@ export class InboxService {
         eventType: 'manual.creation',
         direction: 'OUTBOUND',
         sourceAddress: `USER:${userId}`,
-        payload: {
+        payload: JSON.parse(JSON.stringify({
           dto,
           userId,
           action: 'createConversation',
           system: 'Dr.X Agent System'
-        },
+        })),
         status: 'PROCESSED', // Manual UI actions are already "Treated" by the user's intent
         receivedAt: new Date(),
       }
@@ -1646,6 +1648,97 @@ export class InboxService {
       metadata: {
         simulated: true,
       },
+    });
+  }
+
+  async mergeContacts(tenantId: string, userId: string, dto: MergeContactDto) {
+    const target = await this.prisma.contact.findUnique({ where: { id: dto.targetContactId } });
+    const source = await this.prisma.contact.findUnique({ where: { id: dto.sourceContactId } });
+
+    if (!target || !source) {
+      throw new NotFoundException('Um ou ambos os contatos nao foram encontrados.');
+    }
+
+    if (target.id === source.id) {
+      throw new BadRequestException('Nao e possivel mesclar um contato com ele mesmo.');
+    }
+
+    // 1. Transferir Identidades (ContactChannelIdentity)
+    // Usamos transaction para garantir consistência
+    await this.prisma.$transaction(async (tx) => {
+      // Mover as identidades
+      await tx.contactChannelIdentity.updateMany({
+        where: { tenantId, contactId: source.id },
+        data: { contactId: target.id },
+      });
+
+      // Mover Conversas
+      await tx.agentConversation.updateMany({
+        where: { tenantId, contactId: source.id },
+        data: { contactId: target.id },
+      });
+
+      // Mover Mensagens legadas (se houver)
+      await tx.ticketMessage.updateMany({
+        where: { tenantId, contactId: source.id },
+        data: { contactId: target.id },
+      });
+
+      // 2. Criar Mensagem de Auditoria (Ghost Message) na timeline do destino
+      // Localizar a conversa ativa ou criar um log de sistema
+      const activeConversation = await tx.agentConversation.findFirst({
+        where: { tenantId, contactId: target.id },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      if (activeConversation) {
+        await this.createInternalLogMessage(tx, {
+          tenantId,
+          conversationId: activeConversation.id,
+          content: `🔄 CONTATO MESCLADO: Identidades e historico do contato "${source.name}" foram unificados a este perfil por um operador.`,
+          metadata: {
+            action: 'MERGE_CONTACTS',
+            sourceContactId: source.id,
+            sourceContactName: source.name,
+            mergedByUserId: userId,
+          }
+        });
+      }
+
+      // 3. Desativar Contato de Origem (Lead temporario)
+      await tx.contact.update({
+        where: { id: source.id },
+        data: { active: false, notes: `[MESCLADO EM ${new Date().toISOString()}] Mesclado ao contato ID ${target.id}` }
+      });
+    });
+
+    return {
+      status: 'MERGED',
+      targetContactId: target.id,
+      sourceContactId: source.id,
+      message: 'Contatos mesclados com sucesso.'
+    };
+  }
+
+  async createInternalLogMessage(prismaTx: any, data: {
+    tenantId: string;
+    conversationId: string;
+    content: string;
+    metadata?: any;
+  }) {
+    // Busca um participante de sistema ou cria um fake
+    return prismaTx.agentMessage.create({
+      data: {
+        tenantId: data.tenantId,
+        conversationId: data.conversationId,
+        direction: 'INTERNAL',
+        role: 'member',
+        senderType: 'SYSTEM',
+        content: data.content,
+        contentType: 'TEXT',
+        status: 'SENT',
+        metadata: data.metadata || {},
+      }
     });
   }
 

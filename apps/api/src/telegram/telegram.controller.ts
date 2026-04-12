@@ -1,6 +1,6 @@
 import { Body, Controller, Headers, Logger, Param, Post } from '@nestjs/common';
-import { DrxClawService } from '../drx-claw/drx-claw.service';
 import { TelegramService } from './telegram.service';
+import { CommunicationsService } from '../communications/communications.service';
 
 @Controller('communications/channels/telegram')
 export class TelegramController {
@@ -8,7 +8,7 @@ export class TelegramController {
 
   constructor(
     private readonly telegramService: TelegramService,
-    private readonly drxClawService: DrxClawService,
+    private readonly communicationsService: CommunicationsService,
   ) {}
 
   @Post(':connectionId/webhook')
@@ -17,45 +17,38 @@ export class TelegramController {
     @Headers('x-telegram-bot-api-secret-token') secretToken: string,
     @Body() update: any,
   ) {
-    await this.telegramService.assertWebhookRequest(connectionId, secretToken);
+    // 1. Validar Origem
+    const connection = await this.telegramService.assertWebhookRequest(connectionId, secretToken);
 
-    const result = await this.drxClawService.handleTelegramInbound(connectionId, update);
-
-    if (result?.ignored) {
-      this.logger.debug(
-        `Telegram inbound ignored connection=${connectionId} reason=${result?.reason || 'n/a'} update=${update?.update_id ?? 'unknown'}`,
-      );
-      return { ok: true, ignored: true, reason: result?.reason || null };
+    // 2. Extrair dados básicos da mensagem/update
+    const message = update.message || update.edited_message;
+    if (!message) {
+      this.logger.debug(`Telegram update sem mensagem (update_id: ${update.update_id}) para conexao ${connectionId}`);
+      return { ok: true };
     }
 
-    if (result.reply && result.chatId) {
-      try {
-        const sent = await this.telegramService.sendMessageByConnection(
-          connectionId,
-          result.chatId,
-          result.reply,
-          result.replyToMessageId
-            ? { replyToMessageId: result.replyToMessageId }
-            : undefined,
-        );
+    const chatId = String(message.chat.id);
+    const content = message.text || message.caption || '';
+    const externalMessageId = `${chatId}:${message.message_id}`;
 
-        if (result.ticketId && result.tenantId) {
-          await this.drxClawService.registerTelegramOutbound({
-            tenantId: result.tenantId,
-            ticketId: result.ticketId,
-            connectionId,
-            chatId: result.chatId,
-            content: result.reply,
-            externalMessageId: sent?.externalMessageId || `${result.chatId}:${sent?.message_id}`,
-            replyToMessageId: sent?.message_id,
-          });
-        }
-      } catch (error: any) {
-        this.logger.error(
-          `Telegram auto-reply failed connection=${connectionId} chat=${result.chatId}: ${error?.message || error}`,
-        );
+    // 3. CAPTURA BRUTA (No-Treatment)
+    // Encaminhar para o banco de eventos brutos sem nenhuma lógica de negócio.
+    await this.communicationsService.processIncoming({
+      tenantId: connection.tenantId,
+      connectionId: connection.id,
+      channel: 'TELEGRAM',
+      from: chatId,
+      name: message.from?.first_name || message.from?.username || `User ${chatId}`,
+      content: content,
+      contentType: message.photo ? 'IMAGE' : message.voice || message.audio ? 'AUDIO' : message.document ? 'FILE' : 'TEXT',
+      externalThreadId: chatId,
+      externalMessageId: externalMessageId,
+      metadata: {
+        provider: 'TELEGRAM',
+        update, // Grava o JSON bruto original do Telegram para auditoria completa
+        chatType: message.chat.type,
       }
-    }
+    });
 
     return { ok: true };
   }

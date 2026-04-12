@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
-import { Loader2, RefreshCcw, Search } from 'lucide-react';
+import { Copy, Loader2, RefreshCcw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../../services/api';
 import { getChannelLabel } from '../atendimento.shared';
@@ -413,7 +413,19 @@ export function AtendimentoMessagesAuditPage() {
                   </div>
 
                   <div className="space-y-3 text-sm text-slate-200">
-                    <p className="line-clamp-3 leading-6 text-white">{getPreview(message)}</p>
+                    <div className="flex items-start justify-between gap-2">
+                       <p className="line-clamp-3 leading-6 text-white">{getPreview(message)}</p>
+                       <button 
+                         onClick={() => {
+                           navigator.clipboard.writeText(getPreview(message));
+                           toast.success('Conteudo copiado');
+                         }}
+                         className="p-1.5 rounded-lg hover:bg-white/10 text-slate-500 hover:text-white transition-colors flex-shrink-0"
+                         title="Copiar conteudo"
+                       >
+                         <Copy size={14} />
+                       </button>
+                    </div>
                     <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                       <span>ID: {message.id.slice(0, 8)}</span>
                       {message.externalId && <span>Externo: {message.externalId}</span>}
@@ -433,6 +445,24 @@ export function AtendimentoMessagesAuditPage() {
                       {renderTraceValue('Evento', message.incomingEventId)}
                       {renderTraceValue('Financeiro', message.financialRecordId)}
                     </div>
+                    
+                    <button 
+                       onClick={() => {
+                         const trace = JSON.stringify({
+                           id: message.id,
+                           tenantId: message.tenantId,
+                           contactId: message.contactId,
+                           ticketId: message.ticketId,
+                           incomingEventId: message.incomingEventId
+                         }, null, 2);
+                         navigator.clipboard.writeText(trace);
+                         toast.success('Trace JSON copiado');
+                       }}
+                       className="inline-flex items-center gap-2 rounded-lg border border-white/5 bg-slate-950/50 px-3 py-1.5 text-[10px] text-slate-500 transition hover:border-emerald-500/30 hover:text-emerald-400"
+                    >
+                       <Copy size={12} />
+                       Copiar Trace Completo
+                    </button>
 
                     <div className="space-y-2 text-xs text-slate-500">
                       <div>

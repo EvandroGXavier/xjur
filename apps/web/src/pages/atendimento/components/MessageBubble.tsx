@@ -42,18 +42,32 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   profilePicUrl,
   formatTime,
   getMediaUrl,
+  msg,
+  isMe,
+  isSystem,
+  profilePicUrl,
+  formatTime,
+  getMediaUrl,
   onDelete,
   onLinkToProcess,
   quotedMsg
 }) => {
   const protectedMediaUrl = useProtectedMediaUrl(msg?.mediaUrl);
 
-  if (isSystem) {
+  if (isSystem || msg.direction === 'INTERNAL') {
     return (
-      <div className="flex justify-center my-2">
-        <span className="text-[10px] text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50">
-          {msg.content}
-        </span>
+      <div className="flex justify-center my-4 px-4">
+        <div className="max-w-[85%] text-center space-y-1 animate-in fade-in zoom-in-95 duration-500">
+           <span className="inline-flex items-center gap-2 text-[11px] font-medium text-slate-400 bg-slate-900/60 border border-white/5 backdrop-blur-sm px-4 py-1.5 rounded-full shadow-sm">
+             {msg.direction === 'INTERNAL' && <ShieldCheck size={12} className="text-emerald-400/70" />}
+             {msg.content}
+           </span>
+           {msg.metadata?.action === 'MERGE_CONTACTS' && (
+             <p className="text-[10px] text-slate-500 italic">
+               Operação realizada em {formatTime(msg.createdAt)}
+             </p>
+           )}
+        </div>
       </div>
     );
   }

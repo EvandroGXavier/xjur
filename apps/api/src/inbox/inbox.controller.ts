@@ -23,6 +23,7 @@ import { InboxService } from './inbox.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { CreateInboxMessageDto } from './dto/create-inbox-message.dto';
+import { MergeContactDto } from './dto/merge-contact.dto';
 import { LinkMessageProcessDto } from './dto/link-message-process.dto';
 import { TrustedDeviceService } from '../auth/trusted-device.service';
 
@@ -168,5 +169,13 @@ export class InboxController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.inboxService.linkMessageToProcess(id, user.tenantId, user.userId, dto);
+  }
+
+  @Post('contacts/merge')
+  mergeContacts(
+    @Body() dto: MergeContactDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.inboxService.mergeContacts(user.tenantId, user.userId, dto);
   }
 }

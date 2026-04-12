@@ -686,20 +686,39 @@ export class EventProcessorService {
     if (!payload) {
       throw new Error(`Dados normalizados ausentes para o evento ${event.id}`);
     }
+    // 1. Resolver Contato (Lookup Multicanal Robusto)
+    let contact = null;
 
-    // 1. Resolver Contato (Mesma lógica do antigo CommunicationsService, mas agora assíncrona)
-    // Aqui poderíamos ter uma lógica mais refinada de lookup de contatos
-    let contact = await this.prisma.contact.findFirst({
-      where: {
-        tenantId: event.tenantId,
-        OR: [
-          { email: event.sourceAddress },
-          { phone: event.externalPhone || undefined },
-          { whatsapp: event.sourceAddress },
-        ],
-      },
-    });
+    // A. Busca por Identity (O padrão mais forte: IDs específicos de cada canal)
+    if (event.externalMessageId || event.sourceAddress) {
+        const identity = await this.prisma.contactChannelIdentity.findFirst({
+            where: {
+                tenantId: event.tenantId,
+                channel: event.channel,
+                externalId: event.sourceAddress || undefined,
+            },
+            include: { contact: true }
+        });
+        if (identity?.contact) {
+            contact = identity.contact;
+        }
+    }
 
+    // B. Re-lookup por campos diretos (WhatsApp, Email, etc) se não achou identidade
+    if (!contact) {
+        contact = await this.prisma.contact.findFirst({
+            where: {
+                tenantId: event.tenantId,
+                OR: [
+                    { email: event.channel === 'EMAIL' ? event.sourceAddress : undefined },
+                    { whatsappFullId: event.channel === 'WHATSAPP' ? event.sourceAddress : undefined },
+                    { phone: event.externalPhone || undefined },
+                ],
+            },
+        });
+    }
+
+    // C. Criação de LEAD se nada for encontrado
     if (!contact) {
       this.logger.log(`Criando contato para Inbound Bruto: ${event.channel}:${event.sourceAddress}`);
       contact = await this.prisma.contact.create({
@@ -710,9 +729,35 @@ export class EventProcessorService {
           email: event.channel === 'EMAIL' ? event.sourceAddress : undefined,
           phone: event.channel === 'PHONE' ? event.sourceAddress : event.externalPhone || undefined,
           whatsapp: event.channel === 'WHATSAPP' ? event.sourceAddress : undefined,
+          whatsappFullId: event.channel === 'WHATSAPP' ? event.sourceAddress : undefined,
           category: 'LEAD',
         },
       });
+    }
+
+    // D. Registrar/Garantir Identity para futuras mensagens
+    if (event.sourceAddress) {
+        try {
+            await this.prisma.contactChannelIdentity.upsert({
+                where: {
+                    tenantId_channel_externalId: {
+                        tenantId: event.tenantId,
+                        channel: event.channel,
+                        externalId: event.sourceAddress
+                    }
+                },
+                update: {},
+                create: {
+                    tenantId: event.tenantId,
+                    contactId: contact.id,
+                    channel: event.channel,
+                    externalId: event.sourceAddress,
+                    provider: rawPayload.metadata?.provider || 'GENERIC'
+                }
+            });
+        } catch (e) {
+            this.logger.debug(`Falha ao registrar identity (provavel corrida): ${e.message}`);
+        }
     }
 
     // 2. Sincronizar com Novo Inbox (Agent System)

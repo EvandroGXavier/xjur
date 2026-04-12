@@ -1411,18 +1411,17 @@ export class DrxClawService {
 
     // Delegate to channel-specific handling
     if (conversation.channel === 'WHATSAPP') {
-       const result = await this.handleWhatsappInbound(
-         tenantId,
-         message.connectionId || '',
-         conversationId,
+        const result = await this.handleWhatsappInbound(
+          tenantId,
+          conversation.connectionId || '',
+          conversationId,
          message.senderAddress || '',
          message.content || '',
          message.mediaUrl || undefined
        );
 
        if (result && result.reply) {
-         await this.inboxService.sendMessage(tenantId, null, {
-           conversationId,
+         await this.inboxService.sendMessage(conversationId, tenantId, 'SYSTEM', {
            content: result.reply,
            contentType: 'TEXT'
          });
@@ -1598,17 +1597,17 @@ export class DrxClawService {
       },
     } as any);
 
-    if (inbound?.created === false) {
+    const castedInbound = inbound as any;
+    if (castedInbound?.status === 'ALREADY_CAPTURED' || castedInbound?.status === 'DUPLICATE') {
       return {
         ignored: true,
         reason: 'DUPLICATE_UPDATE',
         tenantId: connection.tenantId,
-        ticketId: inbound?.ticketId || null,
         chatId,
       };
     }
 
-    const ticketId = String(inbound?.ticketId || '').trim();
+    const ticketId = String(castedInbound?.ticketId || '').trim();
     if (!ticketId) {
       return { ignored: true };
     }

@@ -31,6 +31,10 @@ import { BackupModule } from "./backup/backup.module";
 import { BankingModule } from "./banking/banking.module";
 import { EventProcessorModule } from "./event-processor/event-processor.module";
 import { EmailModule } from "./email/email.module";
+import { TelegramModule } from "./telegram/telegram.module";
+import { InboxModule } from "./inbox/inbox.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { WorkflowsModule } from "./workflows/workflows.module";
 
 @Module({
   imports: [
@@ -55,7 +59,7 @@ import { EmailModule } from "./email/email.module";
     StockModule,
     ProposalsModule,
     PurchasesModule,
-    PaymentConditionsModule, // Integração Evolution API
+    PaymentConditionsModule,
     SecurityModule,
     AgentModule,
     DrxClawModule,

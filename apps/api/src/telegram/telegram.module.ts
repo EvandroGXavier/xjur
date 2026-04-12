@@ -1,11 +1,11 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { DrxClawModule } from '../drx-claw/drx-claw.module';
+import { CommunicationsModule } from '../communications/communications.module';
 import { PrismaService } from '../prisma.service';
 import { TelegramController } from './telegram.controller';
 import { TelegramService } from './telegram.service';
 
 @Module({
-  imports: [forwardRef(() => DrxClawModule)],
+  imports: [CommunicationsModule],
   controllers: [TelegramController],
   providers: [TelegramService, PrismaService],
   exports: [TelegramService],

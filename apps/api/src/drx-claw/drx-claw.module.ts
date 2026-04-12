@@ -7,6 +7,7 @@ import { CommunicationsModule } from "../communications/communications.module";
 import { TicketsModule } from "../tickets/tickets.module";
 import { TelegramModule } from "../telegram/telegram.module";
 import { WhatsappModule } from "../whatsapp/whatsapp.module";
+import { InboxModule } from "../inbox/inbox.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { WhatsappModule } from "../whatsapp/whatsapp.module";
     forwardRef(() => TicketsModule),
     forwardRef(() => TelegramModule),
     forwardRef(() => WhatsappModule),
+    forwardRef(() => InboxModule),
   ],
   controllers: [DrxClawController],
   providers: [DrxClawService, TriagemService, PrismaService],

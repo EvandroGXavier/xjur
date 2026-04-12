@@ -127,8 +127,8 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
               tenantId: connection.tenantId,
               connectionId: connection.id,
               channel: 'EMAIL',
-              from: parsed.from?.text || parsed.envelopeFrom?.address || message.envelope.from[0]?.address,
-              name: parsed.from?.value[0]?.name || parsed.envelopeFrom?.name || null,
+              from: parsed.from?.text || (parsed as any).envelope?.from?.[0]?.address || message.envelope.from[0]?.address,
+              name: parsed.from?.value[0]?.name || (parsed as any).envelope?.from?.[0]?.name || null,
               content: parsed.text || parsed.html || '',
               contentType: parsed.html ? 'HTML' : 'TEXT',
               externalThreadId: parsed.messageId || null,
@@ -165,11 +165,6 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
             }
           });
           this.logger.log(`Histórico retroativo finalizado para conexão ${connection.id}`);
-        }
-
-          } catch (msgError) {
-            this.logger.error(`Erro ao processar mensagem individual na conexão ${connection.id}: ${msgError.message}`);
-          }
         }
       } finally {
         lock.release();
