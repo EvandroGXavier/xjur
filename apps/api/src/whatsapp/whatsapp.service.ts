@@ -822,7 +822,7 @@ export class WhatsappService implements OnModuleInit {
   async handleEvolutionMessage(connectionId: string, message: any, eventPayload?: any) {
     if (message.key?.remoteJid === 'status@broadcast') return;
 
-    this.fileLogger.log(`Persisting raw Evolution message for ${connectionId}. JID: ${message.key?.remoteJid}`);
+    this.fileLogger.log(`Processing Evolution message for ${connectionId}. JID: ${message.key?.remoteJid}`);
 
     const connection = await this.prisma.connection.findUnique({
       where: { id: connectionId },
@@ -853,6 +853,13 @@ export class WhatsappService implements OnModuleInit {
         remoteJid,
       );
 
+      // Identify explicit ID variants for detailed tracking in the event log
+      const lid = [remoteJid, participantId].find(id => id?.includes('@lid')) || null;
+      const jid = [remoteJid, participantId].find(id => id?.includes('@s.whatsapp.net')) || null;
+      const phoneClean = this.extractWhatsappDigits(participantId || remoteJid) || null;
+
+      // 1. Persist Incoming Event - RAW CAPTURE ONLY
+      // No contact resolution or media processing at this stage.
       await this.prisma.incomingEvent.create({
         data: {
           tenantId: connection.tenantId,
@@ -865,6 +872,9 @@ export class WhatsappService implements OnModuleInit {
           externalThreadId: remoteJid || null,
           externalParticipantId: participantId || remoteJid || null,
           externalMessageId: message?.key?.id || null,
+          externalPhone: phoneClean,
+          externalFullId: jid,
+          externalLid: lid,
           payload: eventPayload || { event: 'messages.upsert', instance: connectionId, data: message },
           normalizedPayload: {
             message,
@@ -873,14 +883,16 @@ export class WhatsappService implements OnModuleInit {
             pushName: message?.pushName || null,
             fromMe: Boolean(message?.key?.fromMe),
           },
-          status: 'PENDING',
+          status: 'PENDING', // Will be picked up by EventProcessorService
           receivedAt: new Date(
             message?.messageTimestamp ? Number(message.messageTimestamp) * 1000 : Date.now(),
           ),
         },
       });
+
+      // Treatment (Contacts, Media, Inbox, AI) is deferred to the asynchronous EventProcessor
     } catch (error: any) {
-      this.logger.error(`Error persisting Evolution incoming event: ${error?.message || error}`);
+      this.logger.error(`Error capturing Evolution message: ${error?.message || error}`);
     }
   }
 

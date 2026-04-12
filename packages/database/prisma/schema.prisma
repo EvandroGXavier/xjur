@@ -1346,7 +1346,10 @@ model IncomingEvent {
   externalThreadId      String?
   externalParticipantId String?
   externalMessageId     String?
-  payload               Json
+  externalPhone         String?
+  externalFullId        String?
+  externalLid           String?
+  payload               Json?
   normalizedPayload     Json?
   status                String    @default("PENDING") // PENDING, PROCESSING, PROCESSED, FAILED, DEAD_LETTER
   retryCount            Int       @default(0)
@@ -1482,6 +1485,9 @@ model AgentMessage {
   externalMessageId String?
   senderName        String?
   senderAddress     String?
+  senderPhone       String?
+  senderFullId      String?
+  senderLid         String?
   mediaUrl          String?
   metadata          Json?
   editedAt          DateTime?

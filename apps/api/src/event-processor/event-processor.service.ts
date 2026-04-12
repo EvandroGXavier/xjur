@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma.service';
 import { FinancialService } from '../financial/financial.service';
+import { InboxService } from '../inbox/inbox.service';
+import { forwardRef, Inject } from '@nestjs/common';
 
 @Injectable()
 export class EventProcessorService {
@@ -12,6 +14,8 @@ export class EventProcessorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly financialService: FinancialService,
+    @Inject(forwardRef(() => InboxService))
+    private readonly inboxService: InboxService,
   ) {}
 
   @Cron('*/15 * * * * *')
@@ -60,23 +64,34 @@ export class EventProcessorService {
           data: {
             status: 'PROCESSED',
             processedAt: new Date(),
-            processingError: null,
-            contactId: result.contactId || event.contactId,
           },
         });
         return result;
       }
 
+      // NOVO: Tratamento universal para outros canais capturados de forma bruta
+      if (event.eventType === 'inbound.message') {
+        const result = await this.processGenericInbound(event);
+        await this.prisma.incomingEvent.update({
+          where: { id: event.id },
+          data: {
+            status: 'PROCESSED',
+            processedAt: new Date(),
+          },
+        });
+        return result;
+      }
+      // Fallback para eventos desconhecidos
       await this.prisma.incomingEvent.update({
         where: { id: event.id },
         data: {
           status: 'PROCESSED',
           processedAt: new Date(),
-          processingError: null,
+          processingError: 'EVENT_TYPE_NOT_HANDLED',
         },
       });
 
-      return { skipped: true, eventType: event.eventType, channel: event.channel };
+      return { skipped: true, eventType: event.eventType };
     } catch (error: any) {
       this.logger.error(`Falha ao processar IncomingEvent ${event.id}: ${error?.message || error}`);
       const nextAttemptAt = new Date(Date.now() + 30_000);
@@ -555,6 +570,38 @@ export class EventProcessorService {
     const textContent = type === 'AUDIO' ? null : text;
     const aiAnalysis = this.buildInitialAiAnalysis(text || '', contentType);
 
+    // 4. SYNC WITH NEW INBOX (AGENT SYSTEM)
+    // We now additionally capture this in the Agent system to support the new UI
+    let agentCaptureResult = null;
+    try {
+      agentCaptureResult = await (this as any).inboxService.captureExternalMessage({
+         tenantId: event.tenantId,
+         channel: 'WHATSAPP',
+         contactId: contact.id,
+         connectionId: event.connectionId || null,
+         direction: isFromMe ? 'OUTBOUND' : 'INBOUND',
+         role: isFromMe ? 'operator' : 'contact',
+         content: text || '',
+         contentType: type as any,
+         externalMessageId: event.externalMessageId,
+         externalThreadId: remoteJid,
+         externalParticipantId: participantId,
+         senderName: message.pushName || contact.name || null,
+         senderAddress: participantId || remoteJid || null,
+         senderPhone: phoneDigits,
+         senderFullId: canonicalJid,
+         senderLid: remoteJid?.includes('@lid') ? remoteJid : null,
+         mediaUrl,
+         metadata: {
+           source: 'event-processor',
+           fromMe: isFromMe,
+         },
+      });
+    } catch (inboxError) {
+      this.logger.error(`Falha ao capturar no Inbox (Novo Projeto): ${inboxError.message}`);
+    }
+
+    // 5. LEGACY TICKET MESSAGE (Old System)
     const createdMessage = await this.prisma.ticketMessage.create({
       data: {
         tenantId: event.tenantId,
@@ -587,6 +634,8 @@ export class EventProcessorService {
           participantId: externalParticipantId,
           mimeType: mimeType || null,
           fileName: fileName || null,
+          agentConversationId: agentCaptureResult?.conversation?.id || null,
+          agentMessageId: agentCaptureResult?.message?.id || null,
         },
         createdAt: occurredAt,
       },
@@ -620,6 +669,78 @@ export class EventProcessorService {
       }
     }
 
-    return { ticketId: ticket.id, ticketMessageId: createdMessage.id, contactId: contact.id };
+    return { 
+      ticketId: ticket.id, 
+      ticketMessageId: createdMessage.id, 
+      contactId: contact.id,
+      agentConversationId: agentCaptureResult?.conversation?.id || null 
+    };
+  }
+
+  private async processGenericInbound(event: any) {
+    this.logger.log(`Processando Generic Inbound Event: ${event.id} (${event.channel})`);
+
+    const payload = event.normalizedPayload as any;
+    const rawPayload = event.payload as any;
+
+    if (!payload) {
+      throw new Error(`Dados normalizados ausentes para o evento ${event.id}`);
+    }
+
+    // 1. Resolver Contato (Mesma lógica do antigo CommunicationsService, mas agora assíncrona)
+    // Aqui poderíamos ter uma lógica mais refinada de lookup de contatos
+    let contact = await this.prisma.contact.findFirst({
+      where: {
+        tenantId: event.tenantId,
+        OR: [
+          { email: event.sourceAddress },
+          { phone: event.externalPhone || undefined },
+          { whatsapp: event.sourceAddress },
+        ],
+      },
+    });
+
+    if (!contact) {
+      this.logger.log(`Criando contato para Inbound Bruto: ${event.channel}:${event.sourceAddress}`);
+      contact = await this.prisma.contact.create({
+        data: {
+          tenantId: event.tenantId,
+          name: payload.senderName || `Lead ${event.sourceAddress}`,
+          personType: 'LEAD',
+          email: event.channel === 'EMAIL' ? event.sourceAddress : undefined,
+          phone: event.channel === 'PHONE' ? event.sourceAddress : event.externalPhone || undefined,
+          whatsapp: event.channel === 'WHATSAPP' ? event.sourceAddress : undefined,
+          category: 'LEAD',
+        },
+      });
+    }
+
+    // 2. Sincronizar com Novo Inbox (Agent System)
+    const agentCapture = await this.inboxService.captureExternalMessage({
+      tenantId: event.tenantId,
+      channel: event.channel,
+      contactId: contact.id,
+      connectionId: event.connectionId,
+      direction: 'INBOUND',
+      role: 'contact',
+      content: payload.content || '',
+      contentType: payload.contentType || 'TEXT',
+      externalThreadId: event.externalThreadId,
+      externalMessageId: event.externalMessageId,
+      externalParticipantId: event.externalParticipantId,
+      senderName: payload.senderName || contact.name,
+      senderAddress: event.sourceAddress,
+      metadata: {
+        ...rawPayload.metadata,
+        capturedBy: 'event-processor',
+        rawEventId: event.id,
+      },
+    });
+
+    return {
+      contactId: contact.id,
+      agentConversationId: agentCapture.conversation.id,
+      agentMessageId: agentCapture.message.id,
+    };
   }
 }

@@ -33,6 +33,9 @@ type CaptureExternalMessageInput = {
   title?: string | null;
   senderName?: string | null;
   senderAddress?: string | null;
+  senderPhone?: string | null;
+  senderFullId?: string | null;
+  senderLid?: string | null;
   metadata?: Record<string, any> | null;
   createdAt?: Date;
 };
@@ -861,6 +864,25 @@ export class InboxService {
   }
 
   async createConversation(tenantId: string, userId: string, dto: CreateConversationDto) {
+    // 0. CAPTURA BRUTA DA INTENÇÃO DE ATENDIMENTO (Brute/No-Treatment)
+    await this.prisma.incomingEvent.create({
+      data: {
+        tenantId,
+        channel: dto.channel?.toUpperCase() || 'CHAT',
+        eventType: 'manual.creation',
+        direction: 'OUTBOUND',
+        sourceAddress: `USER:${userId}`,
+        payload: {
+          dto,
+          userId,
+          action: 'createConversation',
+          system: 'Dr.X Agent System'
+        },
+        status: 'PROCESSED', // Manual UI actions are already "Treated" by the user's intent
+        receivedAt: new Date(),
+      }
+    });
+
     const channel = this.normalizeChannel(dto.channel);
     const contact = dto.contactId
       ? await this.prisma.contact.findFirst({
@@ -1440,6 +1462,9 @@ export class InboxService {
         externalMessageId: input.externalMessageId || null,
         senderName: input.senderName || null,
         senderAddress: input.senderAddress || input.externalParticipantId || null,
+        senderPhone: input.senderPhone || null,
+        senderFullId: input.senderFullId || null,
+        senderLid: input.senderLid || null,
         mediaUrl: input.mediaUrl || null,
         metadata: this.asObject(input.metadata),
         createdAt: input.createdAt || new Date(),

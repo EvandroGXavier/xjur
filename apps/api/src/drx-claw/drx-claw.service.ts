@@ -20,6 +20,7 @@ import { PdfExtractor } from '../telegram/utils/pdf.util';
 import { TelegramService } from '../telegram/telegram.service';
 import { TriagemService } from "./triagem.service";
 import { WhatsappService } from "../whatsapp/whatsapp.service";
+import { InboxService } from "../inbox/inbox.service";
 
 type ProviderCatalogEntry = {
   provider: ProviderId;
@@ -168,6 +169,8 @@ export class DrxClawService {
     private readonly telegramService: TelegramService,
     @Inject(forwardRef(() => WhatsappService))
     private readonly whatsappService: WhatsappService,
+    @Inject(forwardRef(() => InboxService))
+    private readonly inboxService: InboxService,
   ) {}
 
   private normalizeProvider(providerInput?: string): ProviderId {
@@ -1390,6 +1393,44 @@ export class DrxClawService {
     );
 
     return result.answer || input.baseReply;
+  }
+
+  async handleIncomingMessage(tenantId: string, conversationId: string, messageId: string) {
+    this.logger.debug(`Dr.X Claw handling incoming message ${messageId} for conversation ${conversationId}`);
+    
+    const message = await this.prisma.agentMessage.findUnique({
+      where: { id: messageId },
+      include: { conversation: true }
+    });
+
+    if (!message || message.direction !== 'INBOUND') {
+      return { ignored: true, reason: 'NOT_INBOUND_OR_UNDEFINED' };
+    }
+
+    const { conversation } = message;
+
+    // Delegate to channel-specific handling
+    if (conversation.channel === 'WHATSAPP') {
+       const result = await this.handleWhatsappInbound(
+         tenantId,
+         message.connectionId || '',
+         conversationId,
+         message.senderAddress || '',
+         message.content || '',
+         message.mediaUrl || undefined
+       );
+
+       if (result && result.reply) {
+         await this.inboxService.sendMessage(tenantId, null, {
+           conversationId,
+           content: result.reply,
+           contentType: 'TEXT'
+         });
+       }
+       return result;
+    }
+
+    return { ignored: true, reason: 'UNSUPPORTED_CHANNEL' };
   }
 
   async handleWhatsappInbound(tenantId: string, connectionId: string, conversationId: string, phone: string, prompt: string, mediaUrl?: string) {
