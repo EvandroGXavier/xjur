@@ -9,6 +9,10 @@ import { EvolutionService, EvolutionConfig } from '../evolution/evolution.servic
 import { FileLogger } from '../common/file-logger';
 import { InboxService } from '../inbox/inbox.service';
 import { DrxClawService } from '../drx-claw/drx-claw.service';
+import {
+  construirContatosAdicionaisPorCanal,
+  construirValoresBuscaIdentificadores,
+} from '../common/contact-identifiers';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit {
@@ -280,6 +284,30 @@ export class WhatsappService implements OnModuleInit {
       // If there's historic duplication, the unique constraint may already be held by another contact.
       // We'll still rely on whatsappE164/whatsappFullId normalization to reduce future duplicates.
     }
+
+    const additionalContacts = construirContatosAdicionaisPorCanal('WHATSAPP', [externalId]);
+    if (additionalContacts.length === 0) return;
+
+    const existing = await this.prisma.additionalContact.findMany({
+      where: {
+        contactId: params.contactId,
+        value: { in: additionalContacts.map((item) => item.value) },
+      },
+      select: { value: true },
+    });
+
+    const existingValues = new Set(existing.map((item) => item.value));
+    const toCreate = additionalContacts.filter((item) => !existingValues.has(item.value));
+    if (toCreate.length === 0) return;
+
+    await this.prisma.additionalContact.createMany({
+      data: toCreate.map((item) => ({
+        contactId: params.contactId,
+        type: item.type,
+        value: item.value,
+        nomeContatoAdicional: item.nomeContatoAdicional,
+      })),
+    });
   }
 
   private async resolveWhatsappPhoneByLid(connectionId: string, lidJid?: string | null) {
@@ -754,6 +782,11 @@ export class WhatsappService implements OnModuleInit {
         .map(id => this.normalizeWhatsappJid(id))
         .filter(Boolean) as string[]
     ));
+    const lookupValues = construirValoresBuscaIdentificadores('WHATSAPP', [
+      ...normalizedIdentities,
+      phoneClean,
+      phoneFullId,
+    ]);
 
     if (normalizedIdentities.length > 0) {
       const identity = await this.prisma.contactChannelIdentity.findFirst({
@@ -771,6 +804,22 @@ export class WhatsappService implements OnModuleInit {
         });
         if (contact) return contact;
       }
+    }
+
+    if (lookupValues.length > 0) {
+      const contactByAdditional = await this.prisma.contact.findFirst({
+        where: {
+          tenantId,
+          additionalContacts: {
+            some: {
+              value: { in: lookupValues },
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      if (contactByAdditional) return contactByAdditional;
     }
 
     // Fallback to Contact table direct fields

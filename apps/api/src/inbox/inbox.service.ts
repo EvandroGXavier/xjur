@@ -16,6 +16,10 @@ import { MergeContactDto } from './dto/merge-contact.dto';
 import { LinkMessageProcessDto } from './dto/link-message-process.dto';
 import { TelegramService } from '../telegram/telegram.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import {
+  construirContatosAdicionaisPorCanal,
+  construirValoresBuscaIdentificadores,
+} from '../common/contact-identifiers';
 
 type CaptureExternalMessageInput = {
   tenantId: string;
@@ -74,9 +78,19 @@ export class InboxService {
           name: true,
           phone: true,
           whatsapp: true,
+          whatsappFullId: true,
+          whatsappE164: true,
           email: true,
           profilePicUrl: true,
           category: true,
+          additionalContacts: {
+            select: {
+              id: true,
+              type: true,
+              value: true,
+              nomeContatoAdicional: true,
+            },
+          },
         },
       },
       assignee: {
@@ -158,9 +172,19 @@ export class InboxService {
               name: true,
               phone: true,
               whatsapp: true,
+              whatsappFullId: true,
+              whatsappE164: true,
               email: true,
               profilePicUrl: true,
               category: true,
+              additionalContacts: {
+                select: {
+                  id: true,
+                  type: true,
+                  value: true,
+                  nomeContatoAdicional: true,
+                },
+              },
             },
           },
         },
@@ -453,6 +477,42 @@ export class InboxService {
         );
       }
     }
+
+    await this.ensureAdditionalContactIdentifiers({
+      contactId: params.contactId,
+      channel,
+      identifiers: validIdentifiers,
+    });
+  }
+
+  private async ensureAdditionalContactIdentifiers(params: {
+    contactId: string;
+    channel: string;
+    identifiers: (string | null | undefined)[];
+  }) {
+    const items = construirContatosAdicionaisPorCanal(params.channel, params.identifiers);
+    if (items.length === 0) return;
+
+    const existing = await this.prisma.additionalContact.findMany({
+      where: {
+        contactId: params.contactId,
+        value: { in: items.map((item) => item.value) },
+      },
+      select: { value: true },
+    });
+
+    const existingValues = new Set(existing.map((item) => item.value));
+    const toCreate = items.filter((item) => !existingValues.has(item.value));
+    if (toCreate.length === 0) return;
+
+    await this.prisma.additionalContact.createMany({
+      data: toCreate.map((item) => ({
+        contactId: params.contactId,
+        type: item.type,
+        value: item.value,
+        nomeContatoAdicional: item.nomeContatoAdicional,
+      })),
+    });
   }
 
   private async resolveConnectedWhatsappConnection(
@@ -553,14 +613,27 @@ export class InboxService {
     const normalizedChannel = this.normalizeChannel(channel);
 
     if (normalizedChannel === 'WHATSAPP') {
+      const additionalValues = construirValoresBuscaIdentificadores(
+        'WHATSAPP',
+        Array.isArray(contact?.additionalContacts)
+          ? contact.additionalContacts.map((item: any) => item.value)
+          : [],
+      );
+      const additionalPhoneJids = additionalValues.filter((value) => value.endsWith('@s.whatsapp.net'));
+      const additionalLids = additionalValues.filter((value) => value.endsWith('@lid'));
+      const additionalNumbers = additionalValues.filter((value) => /^\d{8,15}$/.test(value));
+
       const { explicitPhoneJids, explicitLids, numbers } = this.getWhatsappAddressCandidates(
         contact,
         conversation,
       );
+      const mergedPhoneJids = Array.from(new Set([...additionalPhoneJids, ...explicitPhoneJids]));
+      const mergedLids = Array.from(new Set([...additionalLids, ...explicitLids]));
+      const mergedNumbers = Array.from(new Set([...additionalNumbers, ...numbers]));
 
-      const preferredNumber = numbers[0];
+      const preferredNumber = mergedNumbers[0];
       if (preferredNumber) {
-        const matchingPhoneJid = explicitPhoneJids.find(
+        const matchingPhoneJid = mergedPhoneJids.find(
           (candidate) => this.extractWhatsappDigits(candidate) === preferredNumber,
         );
 
@@ -568,9 +641,16 @@ export class InboxService {
         return `${preferredNumber}@s.whatsapp.net`;
       }
 
-      if (explicitLids.length > 0) return explicitLids[0];
-      if (explicitPhoneJids.length > 0) return explicitPhoneJids[0];
+      if (mergedLids.length > 0) return mergedLids[0];
+      if (mergedPhoneJids.length > 0) return mergedPhoneJids[0];
       return null;
+    }
+
+    if (normalizedChannel === 'TELEGRAM' && Array.isArray(contact?.additionalContacts)) {
+      const telegramAdditional = contact.additionalContacts.find((item: any) =>
+        ['TELEGRAM_ID', 'TELEGRAM'].includes(String(item.type || '').toUpperCase()),
+      );
+      if (telegramAdditional?.value) return telegramAdditional.value;
     }
 
     if (conversation?.externalThreadId) return conversation.externalThreadId;
@@ -905,6 +985,7 @@ export class InboxService {
         { contact: { is: { name: { contains: search, mode: 'insensitive' } } } },
         { contact: { is: { whatsapp: { contains: search } } } },
         { contact: { is: { phone: { contains: search } } } },
+        { contact: { is: { additionalContacts: { some: { value: { contains: search, mode: 'insensitive' } } } } } },
         { assignee: { is: { name: { contains: search, mode: 'insensitive' } } } },
         { process: { is: { cnj: { contains: search } } } },
         { process: { is: { title: { contains: search, mode: 'insensitive' } } } },
@@ -952,6 +1033,9 @@ export class InboxService {
           where: {
             id: dto.contactId,
             tenantId,
+          },
+          include: {
+            additionalContacts: true,
           },
         })
       : null;
@@ -1309,6 +1393,13 @@ export class InboxService {
             mediaUrl,
           )}`,
         );
+        if (conversation.contactId) {
+          await this.ensureAdditionalContactIdentifiers({
+            contactId: conversation.contactId,
+            channel: 'WHATSAPP',
+            identifiers: [resolvedDestination],
+          });
+        }
         const externalMessageId =
           contentType === 'TEXT'
             ? await this.whatsappService.sendText(connection.id, resolvedDestination, content)
@@ -1399,6 +1490,13 @@ export class InboxService {
             mediaUrl,
           )}`,
         );
+        if (conversation.contactId) {
+          await this.ensureAdditionalContactIdentifiers({
+            contactId: conversation.contactId,
+            channel: 'TELEGRAM',
+            identifiers: [destination],
+          });
+        }
         const sent = await this.telegramService.sendOutboundMessage({
           connectionId: connection.id,
           chatId: String(destination),
@@ -1527,6 +1625,19 @@ export class InboxService {
         contactId: input.contactId,
         channel: input.channel,
         provider: (input.metadata as any)?.provider || null,
+        identifiers: [
+          input.senderAddress,
+          input.externalParticipantId,
+          input.externalThreadId,
+          input.senderFullId,
+          input.senderLid,
+          input.senderPhone,
+        ],
+      });
+    } else if (input.contactId && direction === 'OUTBOUND') {
+      await this.ensureAdditionalContactIdentifiers({
+        contactId: input.contactId,
+        channel: input.channel,
         identifiers: [
           input.senderAddress,
           input.externalParticipantId,
@@ -1791,6 +1902,11 @@ export class InboxService {
       // Mover as identidades
       await tx.contactChannelIdentity.updateMany({
         where: { tenantId, contactId: source.id },
+        data: { contactId: target.id },
+      });
+
+      await tx.additionalContact.updateMany({
+        where: { contactId: source.id },
         data: { contactId: target.id },
       });
 

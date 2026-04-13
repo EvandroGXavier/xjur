@@ -6,6 +6,10 @@ import { PrismaService } from '../prisma.service';
 import { FinancialService } from '../financial/financial.service';
 import { InboxService } from '../inbox/inbox.service';
 import { forwardRef, Inject } from '@nestjs/common';
+import {
+  construirContatosAdicionaisPorCanal,
+  construirValoresBuscaIdentificadores,
+} from '../common/contact-identifiers';
 
 @Injectable()
 export class EventProcessorService {
@@ -135,6 +139,36 @@ export class EventProcessorService {
 
   private isPlausibleWhatsappNumber(value?: string | null) {
     return typeof value === 'string' && /^\d{10,15}$/.test(value);
+  }
+
+  private async ensureAdditionalContactIdentifiers(params: {
+    contactId: string;
+    channel: string;
+    identifiers: (string | null | undefined)[];
+  }) {
+    const items = construirContatosAdicionaisPorCanal(params.channel, params.identifiers);
+    if (items.length === 0) return;
+
+    const existing = await this.prisma.additionalContact.findMany({
+      where: {
+        contactId: params.contactId,
+        value: { in: items.map((item) => item.value) },
+      },
+      select: { value: true },
+    });
+
+    const existingValues = new Set(existing.map((item) => item.value));
+    const toCreate = items.filter((item) => !existingValues.has(item.value));
+    if (toCreate.length === 0) return;
+
+    await this.prisma.additionalContact.createMany({
+      data: toCreate.map((item) => ({
+        contactId: params.contactId,
+        type: item.type,
+        value: item.value,
+        nomeContatoAdicional: item.nomeContatoAdicional,
+      })),
+    });
   }
 
   private getMediaNode(realContent: any): any {
@@ -317,6 +351,11 @@ export class EventProcessorService {
       .map((value) => this.extractWhatsappDigits(value))
       .find((value) => this.isPlausibleWhatsappNumber(value)) || null;
     const canonicalJid = phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null;
+    const lookupValues = construirValoresBuscaIdentificadores('WHATSAPP', [
+      ...identities,
+      canonicalJid,
+      phoneDigits,
+    ]);
 
     let contact = null as any;
 
@@ -334,6 +373,19 @@ export class EventProcessorService {
           where: { id: alias.contactId, tenantId: params.tenantId },
         });
       }
+    }
+
+    if (!contact) {
+      contact = await this.prisma.contact.findFirst({
+        where: {
+          tenantId: params.tenantId,
+          additionalContacts: {
+            some: {
+              value: { in: lookupValues },
+            },
+          },
+        },
+      });
     }
 
     if (!contact) {
@@ -408,6 +460,12 @@ export class EventProcessorService {
         },
       });
     }
+
+    await this.ensureAdditionalContactIdentifiers({
+      contactId: contact.id,
+      channel: 'WHATSAPP',
+      identifiers: [...identities, canonicalJid, phoneDigits],
+    });
 
     return {
       contact,
@@ -688,6 +746,14 @@ export class EventProcessorService {
     }
     // 1. Resolver Contato (Lookup Multicanal Robusto)
     let contact = null;
+    const lookupValues = construirValoresBuscaIdentificadores(event.channel, [
+      event.sourceAddress,
+      event.externalParticipantId,
+      event.externalThreadId,
+      event.externalPhone,
+      event.externalFullId,
+      event.externalLid,
+    ]);
 
     // A. Busca por Identity (O padrão mais forte: IDs específicos de cada canal)
     if (event.externalMessageId || event.sourceAddress) {
@@ -705,6 +771,19 @@ export class EventProcessorService {
     }
 
     // B. Re-lookup por campos diretos (WhatsApp, Email, etc) se não achou identidade
+    if (!contact) {
+        contact = await this.prisma.contact.findFirst({
+            where: {
+                tenantId: event.tenantId,
+                additionalContacts: {
+                    some: {
+                        value: { in: lookupValues },
+                    },
+                },
+            },
+        });
+    }
+
     if (!contact) {
         contact = await this.prisma.contact.findFirst({
             where: {
@@ -728,7 +807,7 @@ export class EventProcessorService {
           personType: 'LEAD',
           email: event.channel === 'EMAIL' ? event.sourceAddress : undefined,
           phone: event.channel === 'PHONE' ? event.sourceAddress : event.externalPhone || undefined,
-          whatsapp: event.channel === 'WHATSAPP' ? event.sourceAddress : undefined,
+          whatsapp: event.channel === 'WHATSAPP' ? event.externalPhone || undefined : undefined,
           whatsappFullId: event.channel === 'WHATSAPP' ? event.sourceAddress : undefined,
           category: 'LEAD',
         },
@@ -759,6 +838,12 @@ export class EventProcessorService {
             this.logger.debug(`Falha ao registrar identity (provavel corrida): ${e.message}`);
         }
     }
+
+    await this.ensureAdditionalContactIdentifiers({
+      contactId: contact.id,
+      channel: event.channel,
+      identifiers: lookupValues,
+    });
 
     // 2. Sincronizar com Novo Inbox (Agent System)
     const agentCapture = await this.inboxService.captureExternalMessage({

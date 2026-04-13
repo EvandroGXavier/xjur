@@ -7,6 +7,7 @@ import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { TicketsGateway } from './tickets.gateway';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AgentService } from '../agent/agent.service';
+import { construirContatosAdicionaisPorCanal, construirValoresBuscaIdentificadores } from '../common/contact-identifiers';
 
 @Injectable()
 export class TicketsService {
@@ -78,6 +79,27 @@ export class TicketsService {
     }
 
     return 'ticket:' + ticket.id;
+  }
+
+  private resolveAdditionalContactValue(contact: any, channel: string) {
+    const additionalContacts = Array.isArray(contact?.additionalContacts) ? contact.additionalContacts : [];
+    const lookupValues = construirValoresBuscaIdentificadores(
+      channel,
+      additionalContacts.map((item: any) => item.value),
+    );
+
+    if ((channel || '').toUpperCase() === 'WHATSAPP') {
+      const number = lookupValues.find((value) => /^\d{8,15}$/.test(value));
+      const jid = lookupValues.find((value) => value.endsWith('@s.whatsapp.net'));
+      const lid = lookupValues.find((value) => value.endsWith('@lid'));
+      return number || jid || lid || null;
+    }
+
+    if ((channel || '').toUpperCase() === 'TELEGRAM') {
+      return lookupValues[0] || null;
+    }
+
+    return lookupValues[0] || null;
   }
 
   private async captureTicketMessageForAgent(
@@ -424,7 +446,24 @@ export class TicketsService {
 
     if (!contactId && createTicketDto.contactPhone) {
       const existingContact = await this.prisma.contact.findFirst({
-        where: { tenantId, phone: createTicketDto.contactPhone },
+        where: {
+          tenantId,
+          OR: [
+            { phone: createTicketDto.contactPhone },
+            { whatsapp: createTicketDto.contactPhone },
+            {
+              additionalContacts: {
+                some: {
+                  value: {
+                    in: construirValoresBuscaIdentificadores(createTicketDto.channel || 'WHATSAPP', [
+                      createTicketDto.contactPhone,
+                    ]),
+                  },
+                },
+              },
+            },
+          ],
+        },
       });
 
       if (existingContact) {
@@ -440,6 +479,22 @@ export class TicketsService {
         const newContact = await this.prisma.contact.create({
           data: contactData,
         });
+        if (createTicketDto.contactPhone) {
+          const additionalContacts = construirContatosAdicionaisPorCanal(
+            createTicketDto.channel || 'WHATSAPP',
+            [createTicketDto.contactPhone],
+          );
+          if (additionalContacts.length > 0) {
+            await this.prisma.additionalContact.createMany({
+              data: additionalContacts.map((item) => ({
+                contactId: newContact.id,
+                type: item.type,
+                value: item.value,
+                nomeContatoAdicional: item.nomeContatoAdicional,
+              })),
+            });
+          }
+        }
         contactId = newContact.id;
       }
     }
@@ -815,7 +870,11 @@ export class TicketsService {
     file?: Express.Multer.File,
     preferredConnectionId?: string | null,
   ) {
-    const rawPhone = ticket.contact?.whatsappFullId || ticket.contact?.whatsapp || ticket.contact?.phone;
+    const rawPhone =
+      this.resolveAdditionalContactValue(ticket.contact, 'WHATSAPP')
+      || ticket.contact?.whatsappFullId
+      || ticket.contact?.whatsapp
+      || ticket.contact?.phone;
     if (!rawPhone) {
       this.ticketsGateway.emitTicketError(tenantId, {
         ticketId: ticket.id,
@@ -851,6 +910,31 @@ export class TicketsService {
       const fileName = file?.originalname || currentMetadata.fileName;
 
       this.logger.log(`Attempting to send to WhatsApp via connection ${connection.id} to phone ${formattedPhone}`);
+
+      if (ticket.contactId) {
+        const additionalContacts = construirContatosAdicionaisPorCanal('WHATSAPP', [formattedPhone]);
+        if (additionalContacts.length > 0) {
+          const existing = await this.prisma.additionalContact.findMany({
+            where: {
+              contactId: ticket.contactId,
+              value: { in: additionalContacts.map((item) => item.value) },
+            },
+            select: { value: true },
+          });
+          const existingValues = new Set(existing.map((item) => item.value));
+          const toCreate = additionalContacts.filter((item) => !existingValues.has(item.value));
+          if (toCreate.length > 0) {
+            await this.prisma.additionalContact.createMany({
+              data: toCreate.map((item) => ({
+                contactId: ticket.contactId,
+                type: item.type,
+                value: item.value,
+                nomeContatoAdicional: item.nomeContatoAdicional,
+              })),
+            });
+          }
+        }
+      }
 
       if (message.contentType === 'TEXT') {
         externalId = await this.whatsappService.sendText(
@@ -937,7 +1021,8 @@ export class TicketsService {
   ) {
     const currentMetadata = this.asMetadataObject(message.metadata);
     const chatId =
-      currentMetadata.externalThreadId
+      this.resolveAdditionalContactValue(ticket.contact, 'TELEGRAM')
+      || currentMetadata.externalThreadId
       || currentMetadata.senderAddress
       || currentMetadata.telegramChatId
       || ticket.contact?.metadata?.telegramChatId

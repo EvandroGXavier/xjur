@@ -11,6 +11,7 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto';
 import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { construirContatosAdicionaisPorCanal, construirValoresBuscaIdentificadores } from '../common/contact-identifiers';
 
 @Injectable()
 export class ContactsService {
@@ -895,6 +896,36 @@ export class ContactsService {
   }
 
   async lookupContactExact(tenantId: string, searchParams: any) {
+      const lookupValues = construirValoresBuscaIdentificadores(
+        searchParams?.channel || 'WHATSAPP',
+        [
+          searchParams?.value,
+          searchParams?.whatsapp,
+          searchParams?.phone,
+          searchParams?.email,
+          searchParams?.fullId,
+          searchParams?.lid,
+          searchParams?.externalId,
+        ],
+      );
+
+      if (lookupValues.length > 0) {
+        const byAdditional = await this.prisma.contact.findFirst({
+          where: {
+            tenantId,
+            additionalContacts: {
+              some: {
+                value: { in: lookupValues },
+              },
+            },
+          },
+        });
+
+        if (byAdditional) {
+          return { id: byAdditional.id, name: byAdditional.name, matchedField: 'contato adicional' };
+        }
+      }
+
       return this.findDuplicateContact(tenantId, searchParams);
   }
 
@@ -1997,6 +2028,17 @@ export class ContactsService {
 
       if (contact.phone && contact.phone.trim() && !currentValues.has(contact.phone.trim().toLowerCase())) {
           toCreate.push({ type: 'TELEFONE', value: contact.phone, nomeContatoAdicional: 'Telefone Principal' });
+      }
+
+      const channelIdentifiers = construirContatosAdicionaisPorCanal('WHATSAPP', [
+        contact.whatsappFullId,
+        contact.whatsappE164,
+      ]);
+
+      for (const identifier of channelIdentifiers) {
+        if (!currentValues.has(identifier.value.trim().toLowerCase())) {
+          toCreate.push(identifier);
+        }
       }
 
       if (toCreate.length > 0) {
