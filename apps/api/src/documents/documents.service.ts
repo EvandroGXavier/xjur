@@ -1355,15 +1355,15 @@ ${footer}
       : null;
 
     let process: any = null;
-    let opposingParty: any = null;
+    let parties: any[] = [];
 
     if (processId) {
       process = await this.prisma.process.findFirst({
         where: { id: processId, tenantId },
         include: {
           processParties: {
-            where: { isOpposing: true },
             include: {
+              role: true,
               contact: {
                 include: {
                   addresses: true,
@@ -1376,8 +1376,8 @@ ${footer}
         },
       });
 
-      if (process?.processParties?.length > 0) {
-        opposingParty = process.processParties[0].contact;
+      if (process?.processParties) {
+        parties = process.processParties;
       }
     }
 
@@ -1396,12 +1396,53 @@ ${footer}
 
     const formatAddress = (addr: any) => {
       if (!addr) return "";
-      return `${addr.street}, ${addr.number}${addr.complement ? ` ${addr.complement}` : ""}, ${addr.district || ""}, ${addr.city}/${addr.state} - CEP: ${addr.zipCode}`;
+      const parts = [
+        addr.street,
+        addr.number ? `, nº ${addr.number}` : "",
+        addr.complement ? ` (${addr.complement})` : "",
+        addr.district ? `, Bairro ${addr.district}` : "",
+        addr.city ? `, ${addr.city}` : "",
+        addr.state ? `/${addr.state}` : "",
+        addr.zipCode ? `, CEP ${addr.zipCode}` : "",
+      ];
+      return parts.join("").replace(/^, /, "");
     };
 
-    const primaryAddress = contact.addresses?.[0];
-    const opposingAddress = opposingParty?.addresses?.[0];
-    const now = new Date();
+    const getQualification = (c: any) => {
+      if (!c) return "";
+      const isPF = c.personType === "PF";
+      const details = isPF ? c.pfDetails : c.pjDetails;
+      const addr = c.addresses?.[0];
+
+      if (isPF) {
+        const parts = [
+          c.name.toUpperCase(),
+          details?.nationality ? `, ${details.nationality}` : "",
+          details?.civilStatus ? `, ${details.civilStatus.toLowerCase()}` : "",
+          details?.profession ? `, ${details.profession.toLowerCase()}` : "",
+          details?.cpf
+            ? `, inscrito no CPF sob o nº ${details.cpf}`
+            : c.document
+              ? `, inscrito no CPF sob o nº ${c.document}`
+              : "",
+          details?.rg ? `, portador do RG nº ${details.rg}` : "",
+          details?.rgIssuer ? ` ${details.rgIssuer}` : "",
+          addr ? `, residente e domiciliado na ${formatAddress(addr)}` : "",
+        ];
+        return parts.join("");
+      } else {
+        const parts = [
+          details?.companyName ? details.companyName.toUpperCase() : c.name.toUpperCase(),
+          details?.cnpj
+            ? `, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${details.cnpj}`
+            : c.document
+              ? `, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${c.document}`
+              : "",
+          addr ? `, com sede na ${formatAddress(addr)}` : "",
+        ];
+        return parts.join("");
+      }
+    };
 
     const replacements: Record<string, string> = {};
     const add = (key: string, value: any) => {
@@ -1412,101 +1453,83 @@ ${footer}
     add("tenant.name", tenant?.name || "");
     add("tenant.document", tenant?.document || "");
 
-    // Dot-keys (compatíveis com editor moderno)
+    // Contact (Primary)
+    const primaryAddress = contact.addresses?.[0];
     add("contact.name", contact.name);
     add("contact.personType", contact.personType);
-    add(
-      "contact.document",
-      contact.document ||
-        contact.pfDetails?.cpf ||
-        contact.pjDetails?.cnpj ||
-        "",
-    );
+    add("contact.document", contact.document || contact.pfDetails?.cpf || contact.pjDetails?.cnpj || "");
+    add("contact.qualification", getQualification(contact));
     add("contact.email", contact.email || "");
-    add("contact.phone", contact.phone || contact.whatsapp || "");
     add("contact.whatsapp", contact.whatsapp || "");
-    add("contact.notes", contact.notes || "");
-    add("contact.category", contact.category || "");
     add("contact.address.full", formatAddress(primaryAddress));
     add("contact.address.street", primaryAddress?.street || "");
     add("contact.address.number", primaryAddress?.number || "");
+    add("contact.address.complement", primaryAddress?.complement || "");
+    add("contact.address.neighborhood", primaryAddress?.district || "");
     add("contact.address.city", primaryAddress?.city || "");
     add("contact.address.state", primaryAddress?.state || "");
     add("contact.address.zipCode", primaryAddress?.zipCode || "");
 
-    add("contact.pf.nationality", contact.pfDetails?.nationality || "");
-    add("contact.pf.civilStatus", contact.pfDetails?.civilStatus || "");
-    add("contact.pf.profession", contact.pfDetails?.profession || "");
-    add("contact.pf.cpf", contact.pfDetails?.cpf || contact.document || "");
-    add("contact.pf.rg", contact.pfDetails?.rg || "");
-    add("contact.pf.rgIssuer", contact.pfDetails?.rgIssuer || "");
-    add("contact.pf.birthDate", formatDate(contact.pfDetails?.birthDate));
-    add("contact.pf.motherName", contact.pfDetails?.motherName || "");
-    add("contact.pf.fatherName", contact.pfDetails?.fatherName || "");
+    // Multi-Party Logic (Buyers and Sellers)
+    const buyers = parties
+      .filter((p) => p.role?.name?.toUpperCase() === "COMPRADOR")
+      .map((p) => p.contact);
+    const sellers = parties
+      .filter((p) => p.role?.name?.toUpperCase() === "VENDEDOR")
+      .map((p) => p.contact);
 
-    add("contact.pj.cnpj", contact.pjDetails?.cnpj || contact.document || "");
-    add("contact.pj.companyName", contact.pjDetails?.companyName || "");
-    add(
-      "contact.pj.stateRegistration",
-      contact.pjDetails?.stateRegistration || "",
-    );
+    const addPartyGroup = (list: any[], prefix: string) => {
+      add(`${prefix}.count`, list.length);
+      add(
+        `${prefix}s.list.names`,
+        list.map((c) => c.name).join(", ").replace(/, ([^,]*)$/, " e $1"),
+      );
+      add(
+        `${prefix}s.list.qualifications`,
+        list.map((c) => getQualification(c)).join("; "),
+      );
 
+      list.forEach((c, i) => {
+        const index = i + 1;
+        add(`${prefix}.${index}.name`, c.name);
+        add(`${prefix}.${index}.document`, c.document || c.pfDetails?.cpf || c.pjDetails?.cnpj || "");
+        add(`${prefix}.${index}.qualification`, getQualification(c));
+      });
+    };
+
+    addPartyGroup(buyers, "buyer");
+    addPartyGroup(sellers, "seller");
+
+    // Process
     add("process.cnj", process?.cnj || process?.number || "");
     add("process.title", process?.title || "");
     add("process.vars", process?.vars || "");
     add("process.district", process?.district || "");
     add("process.court", process?.court || "");
-    add("process.courtSystem", process?.courtSystem || "");
     add("process.status", process?.status || "");
-    add("process.category", process?.category || "");
-    add("process.area", process?.area || "");
-    add("process.subject", process?.subject || "");
-    add("process.class", process?.class || "");
-    add("process.distributionDate", formatDate(process?.distributionDate));
-    add("process.judge", process?.judge || "");
-    add("process.responsibleLawyer", process?.responsibleLawyer || "");
-    add("process.uf", process?.uf || "MG");
     add("process.value", process?.value ? String(process.value) : "");
 
+    // Opposing
+    const opposingParty = parties.find((p) => p.isOpposing)?.contact;
+    const opposingAddress = opposingParty?.addresses?.[0];
     add("opposing.name", opposingParty?.name || "");
-    add(
-      "opposing.document",
-      opposingParty?.document ||
-        opposingParty?.pfDetails?.cpf ||
-        opposingParty?.pjDetails?.cnpj ||
-        "",
-    );
+    add("opposing.document", opposingParty?.document || opposingParty?.pfDetails?.cpf || opposingParty?.pjDetails?.cnpj || "");
+    add("opposing.qualification", getQualification(opposingParty));
     add("opposing.address.full", formatAddress(opposingAddress));
-    add("opposing.email", opposingParty?.email || "");
-    add(
-      "opposing.phone",
-      opposingParty?.phone || opposingParty?.whatsapp || "",
-    );
-    add("opposing.whatsapp", opposingParty?.whatsapp || "");
+    add("opposing.address.neighborhood", opposingAddress?.district || "");
 
+    // System
+    const now = new Date();
     add("today.date", formatDate(now));
     add("today.fullDate", formatFullDate(now));
-    add("current.city", "");
-    add("current.state", "");
     add("user.name", user?.name || "");
-    add("user.email", user?.email || "");
     add("user.oab", "");
 
-    // Legacy keys (compatibilidade com modelos antigos)
+    // Aliases / Legacy
     add("NOME_CLIENTE", contact.name);
     add("CPF_CLIENTE", contact.document || contact.pfDetails?.cpf || "");
-    add("EMAIL_CLIENTE", contact.email || "");
     add("ENDERECO_CLIENTE", formatAddress(primaryAddress));
-    add("NUMERO_PROCESSO", process?.cnj || "");
-    add("COMARCA_PROCESSO", process?.district || "");
-    add("VARA_PROCESSO", process?.vars || "");
-    add("TRIBUNAL_PROCESSO", process?.court || "");
     add("DATA_ATUAL", formatFullDate(now));
-
-    // Aliases usados em alguns modelos manuais
-    add("dados_vara", process?.vars || "");
-    add("numero_processo", process?.cnj || "");
-    add("nome_cliente", contact.name);
 
     return { replacements };
   }
@@ -1803,71 +1826,69 @@ ${footer}
   // =========================
 
   getVariables() {
+    const contactBase = [
+      { key: "contact.name", label: "Nome Completo" },
+      { key: "contact.personType", label: "Tipo (PF/PJ)" },
+      { key: "contact.document", label: "CPF / CNPJ (Genérico)" },
+      { key: "contact.qualification", label: "Qualificação Completa (Texto)" },
+      { key: "contact.whatsapp", label: "WhatsApp" },
+      { key: "contact.email", label: "E-mail" },
+      { key: "contact.phone", label: "Telefone" },
+      { key: "contact.address.full", label: "Endereço Completo" },
+      { key: "contact.address.street", label: "Logradouro" },
+      { key: "contact.address.number", label: "Número" },
+      { key: "contact.address.complement", label: "Complemento" },
+      { key: "contact.address.neighborhood", label: "Bairro" },
+      { key: "contact.address.city", label: "Cidade" },
+      { key: "contact.address.state", label: "Estado" },
+      { key: "contact.address.zipCode", label: "CEP" },
+    ];
+
+    const generateIndexedParty = (prefix: string, label: string, count: number) => {
+      const vars = [];
+      for (let i = 1; i <= count; i++) {
+        vars.push({ key: `${prefix}.${i}.name`, label: `${label} ${i}: Nome` });
+        vars.push({ key: `${prefix}.${i}.document`, label: `${label} ${i}: CPF/CNPJ` });
+        vars.push({ key: `${prefix}.${i}.qualification`, label: `${label} ${i}: Qualificação Completa` });
+      }
+      return vars;
+    };
+
     return {
-      contact: [
-        { key: "contact.name", label: "Nome Completo" },
-        { key: "contact.personType", label: "Tipo (PF/PJ)" },
-        { key: "contact.document", label: "CPF / CNPJ (Genérico)" },
-        { key: "contact.whatsapp", label: "WhatsApp" },
-        { key: "contact.email", label: "E-mail" },
-        { key: "contact.phone", label: "Telefone" },
-        { key: "contact.notes", label: "Observações" },
-        { key: "contact.category", label: "Categoria" },
-
-        { key: "contact.address.full", label: "Endereço Completo" },
-        { key: "contact.address.street", label: "Logradouro" },
-        { key: "contact.address.number", label: "Número" },
-        { key: "contact.address.city", label: "Cidade" },
-        { key: "contact.address.state", label: "Estado" },
-        { key: "contact.address.zipCode", label: "CEP" },
-
-        { key: "contact.pf.cpf", label: "CPF" },
-        { key: "contact.pf.rg", label: "RG" },
-        { key: "contact.pf.rgIssuer", label: "Órgão Emissor RG" },
-        { key: "contact.pf.birthDate", label: "Data Nascimento" },
-        { key: "contact.pf.motherName", label: "Nome da Mãe" },
-        { key: "contact.pf.fatherName", label: "Nome do Pai" },
-        { key: "contact.pf.profession", label: "Profissão" },
-        { key: "contact.pf.nationality", label: "Nacionalidade" },
-        { key: "contact.pf.civilStatus", label: "Estado Civil" },
-
-        { key: "contact.pj.cnpj", label: "CNPJ" },
-        { key: "contact.pj.companyName", label: "Razão Social" },
-        { key: "contact.pj.stateRegistration", label: "Inscrição Estadual" },
+      contact: contactBase,
+      "Compradores (Listas)": [
+        { key: "buyers.list.names", label: "Lista de Nomes (Compradores)" },
+        { key: "buyers.list.qualifications", label: "Lista de Qualificações (Compradores)" },
+        { key: "buyers.count", label: "Total de Compradores" },
+        ...generateIndexedParty("buyer", "Comprador", 5),
+      ],
+      "Vendedores (Listas)": [
+        { key: "sellers.list.names", label: "Lista de Nomes (Vendedores)" },
+        { key: "sellers.list.qualifications", label: "Lista de Qualificações (Vendedores)" },
+        { key: "sellers.count", label: "Total de Vendedores" },
+        ...generateIndexedParty("seller", "Vendedor", 5),
       ],
       process: [
         { key: "process.title", label: "Título do Caso" },
         { key: "process.cnj", label: "Número do Processo (CNJ)" },
         { key: "process.court", label: "Tribunal" },
-        { key: "process.courtSystem", label: "Sistema" },
-        { key: "process.vars", label: "Vara" },
         { key: "process.district", label: "Comarca" },
         { key: "process.status", label: "Status" },
-        { key: "process.category", label: "Categoria" },
-        { key: "process.area", label: "Área" },
-        { key: "process.subject", label: "Assunto" },
-        { key: "process.class", label: "Classe Processual" },
-        { key: "process.distributionDate", label: "Data de Distribuição" },
-        { key: "process.judge", label: "Magistrado" },
-        { key: "process.responsibleLawyer", label: "Responsável (Processo)" },
-        { key: "process.value", label: "Valor da Causa" },
+        { key: "process.value", label: "Valor da Causa / Contrato" },
       ],
       opposing: [
         { key: "opposing.name", label: "Nome (Parte contrária)" },
         { key: "opposing.document", label: "CPF/CNPJ (Parte contrária)" },
-        { key: "opposing.email", label: "E-mail (Parte contrária)" },
-        { key: "opposing.phone", label: "Telefone (Parte contrária)" },
-        { key: "opposing.whatsapp", label: "WhatsApp (Parte contrária)" },
+        { key: "opposing.qualification", label: "Qualificação (Parte contrária)" },
+        { key: "opposing.address.neighborhood", label: "Bairro (Parte contrária)" },
         { key: "opposing.address.full", label: "Endereço (Parte contrária)" },
       ],
       system: [
         { key: "today.date", label: "Data de Hoje" },
         { key: "today.fullDate", label: "Data Extenso" },
         { key: "user.name", label: "Advogado Responsável" },
-        { key: "user.email", label: "E-mail do Advogado" },
         { key: "user.oab", label: "OAB do Advogado" },
         { key: "current.city", label: "Cidade do Escritório" },
-        { key: "current.state", label: "Estado do Escritório" },
       ],
     };
   }

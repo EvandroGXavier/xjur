@@ -232,136 +232,120 @@ export const helpSettingsMyTenant: HelpSection[] = [
 
 export const helpSettingsTags: HelpSection[] = [
   {
-    title: 'Visão Geral (Etiquetas / Tags)',
+    title: "Visão Geral (Etiquetas / Tags)",
     content:
-      'As <b>Tags globais</b> permitem padronizar marcações no sistema inteiro. Você cria a tag uma vez e define em quais módulos ela pode aparecer.<br/><br/>' +
-      '<b>Regra principal:</b> cada módulo só enxerga tags que estiverem marcadas para ele (ex.: tags com escopo <b>Biblioteca</b> só aparecem na Biblioteca).',
+      "As <b>Tags globais</b> permitem padronizar marcações no sistema inteiro. Você cria a tag uma vez e define em quais módulos ela pode aparecer.<br/><br/>" +
+      "<b>Regra principal:</b> cada módulo só enxerga tags que estiverem marcadas para ele (ex.: tags com escopo <b>Biblioteca</b> só aparecem na Biblioteca).",
   },
   {
-    title: 'Como criar/editar uma Tag',
+    title: "Como criar/editar uma Tag",
     content:
-      '<ol>' +
-      '<li>Clique em <b>Nova Tag</b>.</li>' +
-      '<li>Defina <b>Nome</b> (ex.: Cível, CPC, Contrato, Imóvel).</li>' +
-      '<li>Escolha uma <b>cor</b> (identificação visual).</li>' +
-      '<li>Em <b>Permitir uso em</b>, marque os módulos (Contato, Processo, Financeiro, Tarefa, Atendimento, Biblioteca).</li>' +
-      '<li>Salve e teste no módulo escolhido.</li>' +
-      '</ol><br/>' +
-      '<b>Dica de padronização:</b> prefira nomes curtos e consistentes. Na interface, o sistema pode exibir com <code>#</code> automaticamente (ex.: <code>#Cível</code>).',
+      "<ol>" +
+      "<li>Clique em <b>Nova Tag</b>.</li>" +
+      "<li>Defina <b>Nome</b> (ex.: Cível, CPC, Contrato, Imóvel).</li>" +
+      "<li>Escolha uma <b>cor</b> (identificação visual).</li>" +
+      "<li>Em <b>Permitir uso em</b>, marque os módulos (Contato, Processo, Financeiro, Tarefa, Atendimento, Biblioteca).</li>" +
+      "<li>Salve e teste no módulo escolhido.</li>" +
+      "</ol><br/>" +
+      "<b>Dica de padronização:</b> prefira nomes curtos e consistentes. Na interface, o sistema pode exibir com <code>#</code> automaticamente (ex.: <code>#Cível</code>).",
   },
   {
-    title: 'Exemplo prático (Biblioteca)',
+    title: "Exemplo prático (Biblioteca)",
     content:
-      'Para organizar modelos na Biblioteca, crie tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b> e marque o escopo <b>Biblioteca</b>. Assim, ao editar um modelo, você verá apenas as tags permitidas para a Biblioteca.<br/><br/>' +
+      "Para organizar modelos na Biblioteca, crie tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b> e marque o escopo <b>Biblioteca</b>. Assim, ao editar um modelo, você verá apenas as tags permitidas para a Biblioteca.<br/><br/>" +
       '<img src="/help/library/library-tags.svg" alt="Exemplo de tags na Biblioteca" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
-    title: 'Vídeo rápido (tags por módulo)',
-    content: helpVideoEmbed('VITE_HELP_VIDEO_SETTINGS_TAGS', 'Tags globais por módulo'),
+    title: "Vídeo rápido (tags por módulo)",
+    content: helpVideoEmbed(
+      "VITE_HELP_VIDEO_SETTINGS_TAGS",
+      "Tags globais por módulo",
+    ),
   },
 ];
 
 export const helpLibrary: HelpSection[] = [
   {
-    title: 'Visão Geral (Biblioteca de Modelos)',
+    title: "Visão Geral (Biblioteca de Modelos)",
     content:
-      'A <b>Biblioteca</b> centraliza suas <b>minutas</b>, <b>contratos</b> e <b>peças</b> para reutilização. Você pode manter modelos do <b>Escritório</b> (editáveis) e também usar modelos do <b>Sistema</b> (base/Visual Law).<br/><br/><b>Objetivo:</b> reduzir retrabalho e padronizar a redação, mantendo variáveis e estrutura prontas para o Word Online.<br/><br/>' +
+      "A <b>Biblioteca</b> centraliza suas <b>minutas</b>, <b>contratos</b> e <b>peças</b> para reutilização. Você pode manter modelos do <b>Escritório</b> (editáveis) e também usar modelos do <b>Sistema</b> (base/Visual Law).<br/><br/><b>Objetivo:</b> reduzir retrabalho e padronizar a redação, mantendo variáveis e estrutura prontas para o Word Online.<br/><br/>" +
       '<img src="/help/library/library-overview.svg" alt="Visão rápida da Biblioteca" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
-    title: 'Buscar e Abrir Modelos',
+    title: "Editor de Textos Profissional (Justificar e Visual Law)",
     content:
-      'Use a barra <b>"Buscar modelos…"</b> para filtrar por <b>título</b>, <b>descrição</b> e <b>tags</b>. Clique no card do modelo para abrir o editor e visualizar/editar (quando permitido).',
+      "O novo editor de documentos permite formatação jurídica de alta precisão:<ul>" +
+      "<li><b>Alinhamento Justificado:</b> Use o botão <b>Justificar</b> na barra de ferramentas para garantir que o texto ocupe toda a largura da página, padrão em contratos e petições.</li>" +
+      "<li><b>Blocos de Visual Law:</b> No botão de <b>Blocos Rápidos</b> (ícone de brilho ✨), você pode inserir caixas flutuantes e informativas estilizadas para destacar cláusulas críticas ou resumos.</li>" +
+      "<li><b>Listas e Numeração:</b> O sistema agora garante que listas numeradas e com marcadores mantenham o recuo correto ao gerar o documento final.</li>" +
+      "</ul>",
   },
   {
-    title: 'Modelos do Sistema x Modelos do Escritório',
+    title: "Variáveis Inteligentes (Multi-Partes)",
     content:
-      '<b>Modelo do Sistema</b> aparece com selo <b>Sistema</b> e serve como base. Normalmente ele não é editável pelo usuário.<br/><br/>Para adaptar ao seu escritório, clique em <b>"Personalizar"</b>. Isso cria uma <b>cópia editável</b> (selo <b>Escritório</b>) mantendo a estrutura original.<br/><br/>' +
+      "Pela primeira vez, o Xjur resolve o desafio de contratos com múltiplos compradores ou vendedores:<ul>" +
+      "<li><b>Lista Automática:</b> Use <code>{{buyers.list.names}}</code> para gerar o texto \"João, Maria e José\" com gramática correta (vírgulas e conectivo \"e\").</li>" +
+      "<li><b>Qualificação Automática:</b> Use <code>{{buyers.list.qualifications}}</code> para que o sistema gere o parágrafo jurídico completo de <b>todos</b> os compradores cadastrados no processo, incluindo nacionalidade, estado civil, documentos e endereço.</li>" +
+      "<li><b>Variáveis Indexadas:</b> Precisa de um dado específico? Use <code>{{buyer.1.name}}</code> ou <code>{{seller.2.document}}</code> para acessar participantes individualmente.</li>" +
+      "</ul>",
+  },
+  {
+    title: "Dica de Eficácia no Endereço",
+    content:
+      "Para que a qualificação e as caixas de Visual Law funcionem perfeitamente, certifique-se de preencher o <b>Bairro</b> e o <b>Complemento</b> (novas variáveis <code>{{contact.address.neighborhood}}</code> e <code>{{contact.address.complement}}</code>) no cadastro do contato.",
+  },
+  {
+    title: "Modelos do Sistema x Modelos do Escritório",
+    content:
+      "<b>Modelo do Sistema</b> aparece com selo <b>Sistema</b> e serve como base. Normalmente ele não é editável pelo usuário.<br/><br/>Para adaptar ao seu escritório, clique em <b>\"Personalizar\"</b>. Isso cria uma <b>cópia editável</b> (selo <b>Escritório</b>) mantendo a estrutura original.<br/><br/>" +
       '<img src="/help/library/library-personalizar.svg" alt="Como personalizar um modelo do Sistema" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
   },
   {
-    title: 'Criar um Novo Modelo (Escritório)',
+    title: "Criar um Novo Modelo (Escritório)",
     content:
-      'Clique em <b>"Novo Modelo"</b> e preencha:<ul><li><b>Título</b> e <b>Descrição</b> (orientações jurídicas internas)</li><li><b>Tags</b> para facilitar busca e padronização</li><li><b>Conteúdo</b> no editor (Visual Law/Word Online)</li></ul><br/>Ao final, clique em <b>"Salvar Modelo"</b>.',
+      "Clique em <b>\"Novo Modelo\"</b> e preencha:<ul><li><b>Título</b> e <b>Descrição</b> (orientações jurídicas internas)</li><li><b>Tags</b> para facilitar busca e padronização</li><li><b>Conteúdo</b> no editor (Visual Law/Word Online)</li></ul><br/>Ao final, clique em <b>\"Salvar Modelo\"</b>.",
   },
   {
-    title: 'Tags (Pesquisa rápida)',
+    title: "Tags (Pesquisa rápida)",
     content:
-      'As <b>Tags</b> servem para organizar e encontrar modelos rapidamente. Você pode:<ul><li>Digitar a tag e pressionar <b>Enter</b> para adicionar</li><li>Usar tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b>, <b>Execução</b>, <b>Consumidor</b></li></ul><br/><b>Dica:</b> mantenha poucas tags bem consistentes (padronização) em vez de muitas variações.<br/><br/>' +
+      "As <b>Tags</b> servem para organizar e encontrar modelos rapidamente. Você pode:<ul><li>Digitar a tag e pressionar <b>Enter</b> para adicionar</li><li>Usar tags como <b>Cível</b>, <b>CPC</b>, <b>Contrato</b>, <b>Execução</b>, <b>Consumidor</b></li></ul><br/><b>Dica:</b> mantenha poucas tags bem consistentes (padronização) em vez de muitas variações.<br/><br/>" +
       '<img src="/help/library/library-tags.svg" alt="Exemplo de padronização de tags" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />' +
       '<br/><br/><b>Exemplo pronto:</b><br/><code>#Cível #CPC #Contestação</code> (peças)<br/><code>#Contrato #Imóvel #CompraEVenda</code> (contratos)',
   },
   {
-    title: 'Variáveis Dinâmicas (Automação)',
+    title: "Variáveis Dinâmicas (Automação Base)",
     content:
-      'No editor, use as <b>Variáveis Dinâmicas</b> para automatizar preenchimentos (ex.: <code>{{contact.name}}</code>, <code>{{process.cnj}}</code>, <code>{{today.fullDate}}</code>).<br/><br/>Quando o modelo for usado para gerar documento, o sistema substitui automaticamente as variáveis com dados reais.<br/><br/>' +
+      "No editor, use as <b>Variáveis Dinâmicas</b> para automatizar preenchimentos (ex.: <code>{{contact.name}}</code>, <code>{{process.cnj}}</code>, <code>{{today.fullDate}}</code>).<br/><br/>Quando o modelo for usado para gerar documento, o sistema substitui automaticamente as variáveis com dados reais.<br/><br/>" +
       '<img src="/help/library/library-variaveis.svg" alt="Exemplo de variáveis dinâmicas" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />' +
-      '<br/><br/><b>Exemplo pronto (copiar e colar):</b><pre><code>&lt;p&gt;Cliente: {{contact.name}} — CPF/CNPJ {{contact.document}}&lt;/p&gt;\n&lt;p&gt;Processo: {{process.cnj}} — {{process.district}}/{{process.uf}}&lt;/p&gt;\n&lt;p&gt;Data: {{today.fullDate}}&lt;/p&gt;</code></pre>',
+      "<br/><br/><b>Exemplo pronto (copiar e colar):</b><pre><code>&lt;p&gt;Cliente: {{contact.name}} — CPF/CNPJ {{contact.document}}&lt;/p&gt;\n&lt;p&gt;Processo: {{process.cnj}} — {{process.district}}/{{process.uf}}&lt;/p&gt;\n&lt;p&gt;Data: {{today.fullDate}}&lt;/p&gt;</code></pre>",
   },
   {
-    title: 'Vídeos rápidos (práticos)',
+    title: "Avançado (Metadata / Visual Law)",
     content:
-      '<b>Personalizar modelo do Sistema</b>' +
-      helpVideoEmbed('VITE_HELP_VIDEO_LIBRARY_PERSONALIZAR', 'Personalizar modelo do Sistema') +
-      '<br/><br/><b>Criar e salvar modelo (Escritório)</b>' +
-      helpVideoEmbed('VITE_HELP_VIDEO_LIBRARY_CRIAR', 'Criar e salvar modelo (Escritório)') +
-      '<br/><br/><b>Usar variáveis dinâmicas</b>' +
-      helpVideoEmbed('VITE_HELP_VIDEO_LIBRARY_VARIAVEIS', 'Usar variáveis dinâmicas'),
+      "Em <b>\"Mostrar avançado\"</b>, você pode manter uma <b>metadata em JSON</b> com seções, ajudas e comentários internos (não impressos). Isso ajuda o time a preencher corretamente e mantém um padrão de qualidade nas peças.",
   },
   {
-    title: 'Avançado (Metadata / Visual Law)',
+    title: "Atalhos",
     content:
-      'Em <b>"Mostrar avançado"</b>, você pode manter uma <b>metadata em JSON</b> com seções, ajudas e comentários internos (não impressos). Isso ajuda o time a preencher corretamente e mantém um padrão de qualidade nas peças.',
-  },
-  {
-    title: 'Cabeçalho e Rodapé (Padrão do Escritório)',
-    content:
-      'Você pode definir um <b>cabeçalho</b> e um <b>rodapé</b> padrão por empresa (tenant). Esse conteúdo é inserido automaticamente quando você gera um documento usando qualquer modelo (do Sistema ou do Escritório).<br/><br/>' +
-      '<b>Onde configurar:</b> <b>Configurações</b> → <b>Minha Empresa</b> → <b>Cabeçalho e Rodapé das Peças</b>.<br/><br/>' +
-      '<b>Variáveis úteis:</b> <code>{{tenant.name}}</code>, <code>{{tenant.document}}</code>, <code>{{process.cnj}}</code>, <code>{{process.district}}</code>, <code>{{contact.name}}</code>, <code>{{today.fullDate}}</code>.<br/><br/>' +
-      '<b>Dica:</b> mantenha o cabeçalho enxuto (identificação + dados do processo) e o rodapé com contato/data/assinatura.',
-  },
-  {
-    title: 'Histórico Gerado',
-    content:
-      'Na aba <b>"Histórico Gerado"</b> você acompanha documentos já criados a partir dos modelos (rascunho/finalizado), com data de criação e status.<br/><br/>' +
-      '<img src="/help/library/library-historico.svg" alt="Histórico gerado" style="width:100%; border-radius:12px; border:1px solid rgb(51, 65, 85);" />',
-  },
-  {
-    title: 'Atalhos',
-    content:
-      '<ul><li><b>F2</b> (ou <b>+</b> no teclado numérico): Novo Modelo</li><li><b>ESC</b>: Fechar/cancelar editor</li><li><b>F1</b>: Abrir este manual</li></ul>',
-  },
-  {
-    title: 'SuperAdmin (opcional)',
-    content:
-      'Se você for <b>SuperAdmin</b>, a Biblioteca também permite um <b>CRUD completo</b> dos <b>Modelos do Sistema</b> (templates globais). Usuários comuns não veem nem editam esses recursos.<br/><br/>' +
-      '<b>Recursos disponíveis:</b><ul>' +
-      '<li><b>Novo Sistema</b>: cria um modelo global do sistema (exige <b>System Key</b> única e estável).</li>' +
-      '<li><b>Salvar (Sistema)</b>: atualiza o modelo do sistema diretamente.</li>' +
-      '<li><b>Excluir (Sistema)</b>: remove um modelo global do sistema.</li>' +
-      '<li><b>Personalizar</b>: cria uma cópia editável do sistema para o seu escritório (modelo do tenant).</li>' +
-      '<li><b>Sync Sistema</b>: força sincronização a partir do código (atenção: pode sobrescrever alterações manuais no modelo do sistema).</li>' +
-      '</ul><br/>' +
-      '<b>Boas práticas:</b><ul>' +
-      '<li>Defina o <b>System Key</b> com padrão (ex.: <code>CHA_CONTRATO_HONORARIOS</code>) e evite nomes ambíguos.</li>' +
-      '<li>Use <b>Personalizar</b> quando a mudança for específica do escritório; reserve <b>Salvar (Sistema)</b> para ajustes globais.</li>' +
-      '</ul>',
+      "<ul><li><b>F2</b> (ou <b>+</b> no teclado numérico): Novo Modelo</li><li><b>ESC</b>: Fechar/cancelar editor</li><li><b>F1</b>: Abrir este manual</li></ul>",
   },
 ];
 
 export const helpOmnichannelConnections: HelpSection[] = [
   {
-    title: 'Visao Geral (Conexoes & Agente Omnichannel)',
-    content: 'Este modulo centraliza a operacao dos novos recursos de <b>conexao por canal</b> e da nova <b>camada omnichannel do agente</b>. A partir desta implantacao, toda entrada relevante pode ser normalizada para uma conversa canonica interna, vinculada ao <b>Contato</b>, <b>Ticket</b>, <b>Conexao</b> e canal de origem.<br/><br/><b>Canais previstos:</b> WhatsApp, E-mail, Instagram e Telegram.<br/><b>Camadas implantadas:</b> <i>AgentConversation</i>, <i>AgentMessage</i> e <i>AgentRun</i>.<br/><br/>Na pratica, isso permite que o sistema deixe de tratar cada canal como um fluxo isolado e passe a registrar tudo em um padrao unico, pronto para automacao, IA, roteamento e auditoria.',
+    title: "Visao Geral (Conexoes & Agente Omnichannel)",
+    content:
+      "Este modulo centraliza a operacao dos novos recursos de <b>conexao por canal</b> e da nova <b>camada omnichannel do agente</b>. A partir desta implantacao, toda entrada relevante pode ser normalizada para uma conversa canonica interna, vinculada ao <b>Contato</b>, <b>Ticket</b>, <b>Conexao</b> e canal de origem.<br/><br/><b>Canais previstos:</b> WhatsApp, E-mail, Instagram e Telegram.<br/><b>Camadas implantadas:</b> <i>AgentConversation</i>, <i>AgentMessage</i> e <i>AgentRun</i>.<br/><br/>Na pratica, isso permite que o sistema deixe de tratar cada canal como um fluxo isolado e passe a registrar tudo em um padrao unico, pronto para automacao, IA, roteamento e auditoria.",
   },
   {
-    title: 'O que ja esta operacional hoje',
-    content: '<ul><li><b>WhatsApp:</b> conexao real via Evolution + QR Code + tickets + mensagens ja operando na interface.</li><li><b>E-mail e Instagram:</b> a base omnichannel ja esta preparada e o sistema ja aceita entradas pelo webhook generico de comunicacoes.</li><li><b>Ticket novo:</b> a primeira mensagem agora entra corretamente como mensagem do contato, e nao como descricao interna do operador.</li><li><b>Memoria canonica:</b> toda mensagem relevante pode ser espelhada na nova camada do agente para futuras rotinas de IA, automacao e auditoria.</li></ul><br/><b>Importante:</b> para E-mail e Instagram, a conexao visual ja pode ser cadastrada nesta tela, mas o recebimento nativo definitivo dependera do adaptador externo do provedor. Enquanto isso, a operacao pode ser testada de forma real pelo endpoint <code>/api/communications/webhook</code>.',
+    title: "O que ja esta operacional hoje",
+    content:
+      "<ul><li><b>WhatsApp:</b> conexao real via Evolution + QR Code + tickets + mensagens ja operando na interface.</li><li><b>E-mail e Instagram:</b> a base omnichannel ja esta preparada e o sistema ja aceita entradas pelo webhook generico de comunicacoes.</li><li><b>Ticket novo:</b> a primeira mensagem agora entra corretamente como mensagem do contato, e nao como descricao interna do operador.</li><li><b>Memoria canonica:</b> toda mensagem relevante pode ser espelhada na nova camada do agente para futuras rotinas de IA, automacao e auditoria.</li></ul><br/><b>Importante:</b> para E-mail e Instagram, a conexao visual ja pode ser cadastrada nesta tela, mas o recebimento nativo definitivo dependera do adaptador externo do provedor. Enquanto isso, a operacao pode ser testada de forma real pelo endpoint <code>/api/communications/webhook</code>.",
   },
   {
-    title: 'Como operar a tela Conexoes & Canais',
-    content: '1. Clique em <b>Nova Conexao</b>.<br/>2. Escolha o canal: <b>WHATSAPP</b>, <b>EMAIL</b>, <b>INSTAGRAM</b> ou <b>TELEGRAM</b>.<br/>3. Informe um nome operacional claro, como <i>Atendimento Principal</i>, <i>Financeiro Email</i> ou <i>Instagram Comercial</i>.<br/>4. Se o canal for WhatsApp, preencha a URL e a API Key da Evolution quando necessario.<br/>5. Salve a conexao.<br/>6. Use <b>Connect</b> para iniciar a conexao. No WhatsApp, o sistema abrira o processo de pareamento com QR Code. Nos demais canais, a conexao pode ser preparada e usada nos testes de webhook.<br/><br/><b>Dica operacional:</b> use nomes de conexao por finalidade e nao por pessoa. Exemplo: <i>WA Financeiro</i> e melhor que <i>Celular Joao</i>.',
+    title: "Como operar a tela Conexoes & Canais",
+    content:
+      "1. Clique em <b>Nova Conexao</b>.<br/>2. Escolha o canal: <b>WHATSAPP</b>, <b>EMAIL</b>, <b>INSTAGRAM</b> ou <b>TELEGRAM</b>.<br/>3. Informe um nome operacional claro, como <i>Atendimento Principal</i>, <i>Financeiro Email</i> ou <i>Instagram Comercial</i>.<br/>4. Se o canal for WhatsApp, preencha a URL e a API Key da Evolution quando necessario.<br/>5. Salve a conexao.<br/>6. Use <b>Connect</b> para iniciar a conexao. No WhatsApp, o sistema abrira o processo de pareamento com QR Code. Nos demais canais, a conexao pode ser preparada e usada nos testes de webhook.<br/><br/><b>Dica operacional:</b> use nomes de conexao por finalidade e nao por pessoa. Exemplo: <i>WA Financeiro</i> e melhor que <i>Celular Joao</i>.",
   },
   {
     title: 'Fluxo esperado por canal',

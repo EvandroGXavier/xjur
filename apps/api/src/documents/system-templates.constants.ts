@@ -1460,4 +1460,38 @@ export const SYSTEM_TEMPLATE_SEEDS: SystemTemplateSeed[] = [
       blocks: [{ id: 'b_test', type: 'subtitle', title: 'Convocação de Testemunha' }],
     },
   },
+  {
+    systemKey: "CONTRATO_COMPRA_VENDA_MULTI_PARTES",
+    title: "Contrato de Compra e Venda (Multi-Partes & Visual Law)",
+    description:
+      "Modelo avançado para testar múltiplos compradores/vendedores, qualificação automática e caixa Visual Law.",
+    tags: ["Contrato", "Eficácia", "Multi-Partes", "Visual Law"],
+    preferredStorage: "WORD_ONLINE",
+    content: join([
+      `<div class="visual-law-box" style="float: right; width: 35%; background-color: #f0f7ff; border: 2px solid #2563eb; padding: 15px; border-radius: 8px; margin-left: 20px; font-size: 0.9em; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">`,
+      `  <strong><span style="color: #2563eb;">📍 LOCALIZAÇÃO DO IMÓVEL</span></strong><br/>`,
+      `  Situado no <strong>Bairro {{contact.address.neighborhood}}</strong>.<br/><br/>`,
+      `  <strong>Complemento:</strong> {{contact.address.complement}}<br/>`,
+      `  <strong>Comarca:</strong> {{process.district}}`,
+      `</div>`,
+      `<h1 style="text-align: center;">INSTRUMENTO PARTICULAR DE COMPRA E VENDA</h1>`,
+      `<p style="text-align: justify;">Pelo presente instrumento particular de compra e venda, as partes abaixo qualificadas, que somam <strong>{{seller.count}} Vendedor(es)</strong> e <strong>{{buyer.count}} Comprador(es)</strong>, têm entre si justo e contratado o quanto segue:</p>`,
+      `<h2>1. DOS VENDEDORES</h2>`,
+      `<p style="text-align: justify;">{{sellers.list.qualifications}}</p>`,
+      `<h2>2. DOS COMPRADORES</h2>`,
+      `<p style="text-align: justify;">{{buyers.list.qualifications}}</p>`,
+      `<h2>3. DO OBJETO</h2>`,
+      `<p style="text-align: justify;">O objeto deste contrato é a transação comercial do imóvel localizado no bairro {{contact.address.neighborhood}}, com os detalhes descritos na matrícula {{process.vars}}.</p>`,
+      `<p style="text-align: justify;">Este documento foi gerado pelo Dr.X e validado para os compradores: {{buyers.list.names}}.</p>`,
+      `<p style="margin-top: 30px;">{{today.fullDate}}</p>`,
+      `<p>________________________________________</p>`,
+      `<p>{{user.name}} - OAB/{{process.uf}}</p>`,
+    ]),
+    metadata: {
+      sections: [
+        { title: "Objeto", help: "Descreva o imóvel e valor da transação." },
+      ],
+      blocks: [{ id: "b_multi", type: "textBox", title: "Notas de Venda" }],
+    },
+  },
 ];

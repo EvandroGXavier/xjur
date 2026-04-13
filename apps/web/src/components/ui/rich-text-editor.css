@@ -7,6 +7,12 @@
   color: #0f172a;
   outline: none;
   white-space: pre-wrap;
+  text-align: left;
+}
+
+.rich-text-editor .ProseMirror [style*="text-align: justify"] {
+  text-align: justify !important;
+  text-justify: inter-word;
 }
 
 .rich-text-editor .ProseMirror p,
@@ -45,7 +51,20 @@
 
 .rich-text-editor .ProseMirror ul,
 .rich-text-editor .ProseMirror ol {
-  padding-left: 1.5rem;
+  padding-left: 1.8rem;
+  margin-bottom: 1.2rem;
+}
+
+.rich-text-editor .ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.rich-text-editor .ProseMirror ul {
+  list-style-type: disc;
+}
+
+.rich-text-editor .ProseMirror li p {
+  margin-bottom: 0.25rem;
 }
 
 .rich-text-editor .ProseMirror blockquote {
@@ -119,6 +138,21 @@
 .rich-text-editor [data-page-break="true"] {
   page-break-after: always;
   break-after: page;
+}
+
+/* Visual Law - Caixa Flutuante */
+.rich-text-editor .visual-law-box {
+  display: block;
+  position: relative;
+  transition: border-color 0.2s;
+}
+
+.rich-text-editor .visual-law-box:hover {
+  border-color: #6366f1 !important;
+}
+
+.rich-text-editor .visual-law-box p {
+  margin-bottom: 0 !important;
 }
 
 @media (max-width: 768px) {
