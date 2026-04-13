@@ -583,11 +583,7 @@ export class InboxService {
       where: { id: messageId },
       include: {
         participant: true,
-        conversation: {
-          include: {
-            contact: true,
-          },
-        },
+        conversation: true,
       },
     });
 
@@ -622,6 +618,11 @@ export class InboxService {
     const legacyMessage = await this.prisma.ticketMessage.create({
       data: {
         ticketId: ticket.id,
+        tenantId: message.tenantId || (message.conversation as any).tenantId || null,
+        contactId: message.conversation?.contactId || message.participant?.contactId || null,
+        connectionId: (message.metadata as any)?.connectionId || message.conversation?.connectionId || null,
+        channel: message.conversation?.channel || 'WHATSAPP',
+        direction: message.direction || 'OUTBOUND',
         externalId: message.externalMessageId || null,
         status: message.status || this.normalizeStatus(message.status, message.direction),
         senderType: this.mapDirectionToSenderType(message.direction, message.role),
@@ -923,6 +924,7 @@ export class InboxService {
       await this.prisma.agentConversation.update({
         where: { id: existing.id },
         data: {
+          contactId: dto.contactId || existing.contactId,
           assignedUserId: dto.assignedUserId !== undefined ? dto.assignedUserId : existing.assignedUserId || userId,
           connectionId: dto.connectionId || existing.connectionId,
           processId: dto.processId !== undefined ? dto.processId : existing.processId,
