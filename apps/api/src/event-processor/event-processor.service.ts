@@ -775,10 +775,14 @@ export class EventProcessorService {
       externalParticipantId: event.externalParticipantId,
       senderName: payload.senderName || contact.name,
       senderAddress: event.sourceAddress,
+      senderPhone: payload.senderPhone || null,
+      senderFullId: payload.senderFullId || null,
+      senderLid: payload.senderLid || null,
       metadata: {
         ...rawPayload.metadata,
         capturedBy: 'event-processor',
         rawEventId: event.id,
+        provider: rawPayload.metadata?.provider || 'GENERIC',
       },
     });
 

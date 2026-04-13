@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="IA DrX-Claw Skills"><node TEXT="Missao"><node TEXT="Assistencia governada por dominio" /></node><node TEXT="Centro"><node TEXT="Skill" /><node TEXT="Contexto" /><node TEXT="Saida previsivel" /></node><node TEXT="Riscos"><node TEXT="Prompts soltos" /><node TEXT="Falta de governanca" /></node></node></map>

@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="Fiscal"><node TEXT="Missao"><node TEXT="Readiness e emissao fiscal" /></node><node TEXT="Centro"><node TEXT="Invoice" /><node TEXT="FiscalConfig" /></node><node TEXT="Escopo"><node TEXT="NF-e" /><node TEXT="NFS-e" /><node TEXT="Provedores" /></node><node TEXT="Riscos"><node TEXT="Acoplamento ao financeiro" /></node></node></map>

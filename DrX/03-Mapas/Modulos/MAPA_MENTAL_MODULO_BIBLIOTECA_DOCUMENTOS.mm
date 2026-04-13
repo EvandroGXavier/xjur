@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="Biblioteca Documentos"><node TEXT="Missao"><node TEXT="Inteligencia documental" /></node><node TEXT="Centro"><node TEXT="Template" /><node TEXT="Documento" /><node TEXT="Versao" /></node><node TEXT="Escopo"><node TEXT="Geracao" /><node TEXT="Historico" /><node TEXT="Storage" /></node></node></map>

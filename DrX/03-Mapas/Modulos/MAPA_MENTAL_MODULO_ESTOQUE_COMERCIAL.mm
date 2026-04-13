@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="Estoque Comercial"><node TEXT="Missao"><node TEXT="Trilha comercial do sistema" /></node><node TEXT="Centro"><node TEXT="Produto" /><node TEXT="Compra" /><node TEXT="Proposta" /><node TEXT="Movimentacao" /></node><node TEXT="Riscos"><node TEXT="Escopo amplo demais" /></node></node></map>

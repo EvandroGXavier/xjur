@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="Configuracoes"><node TEXT="Missao"><node TEXT="Governanca transversal do tenant" /></node><node TEXT="Centro"><node TEXT="Preferencias globais" /><node TEXT="Segredos transversais" /></node><node TEXT="Riscos"><node TEXT="Deposito de regras soltas" /></node></node></map>

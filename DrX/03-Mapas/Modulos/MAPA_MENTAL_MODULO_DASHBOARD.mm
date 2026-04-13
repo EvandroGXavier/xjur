@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="Dashboard"><node TEXT="Missao"><node TEXT="Visao executiva com acao" /></node><node TEXT="Centro"><node TEXT="Indicadores e alertas" /></node><node TEXT="Riscos"><node TEXT="Painel decorativo" /></node><node TEXT="Direcao"><node TEXT="Menos metricas, mais decisao" /></node></node></map>

@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="Agenda"><node TEXT="Missao"><node TEXT="Tempo responsabilidade follow-up" /></node><node TEXT="Centro"><node TEXT="Compromisso agendado" /></node><node TEXT="Escopo"><node TEXT="Prazos" /><node TEXT="Audiencias" /><node TEXT="Reunioes" /></node><node TEXT="Riscos"><node TEXT="Calendario sem acao" /></node></node></map>

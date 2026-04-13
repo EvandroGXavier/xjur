@@ -396,6 +396,65 @@ export class InboxService {
     });
   }
 
+  /**
+   * Garante que todos os identificadores externos (JIDs, LIDs, endereços de canal)
+   * recebidos em uma mensagem sejam persistidos em `contact_channel_identities`.
+   * Isso é fundamental para que o sistema consiga mapear mensagens futuras
+   * de volta ao mesmo contato, mesmo que venham com variações de JID.
+   */
+  private async ensureContactChannelIdentities(params: {
+    tenantId: string;
+    contactId: string;
+    channel: string;
+    identifiers: (string | null | undefined)[];
+    provider?: string | null;
+  }) {
+    const channel = params.channel.toUpperCase();
+    const provider = params.provider || 'INBOX';
+
+    const validIdentifiers = Array.from(
+      new Set(
+        params.identifiers
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+          .map((id) => id.trim()),
+      ),
+    );
+
+    if (validIdentifiers.length === 0) return;
+
+    for (const externalId of validIdentifiers) {
+      try {
+        await this.prisma.contactChannelIdentity.upsert({
+          where: {
+            tenantId_channel_externalId: {
+              tenantId: params.tenantId,
+              channel,
+              externalId,
+            },
+          },
+          create: {
+            tenantId: params.tenantId,
+            contactId: params.contactId,
+            channel,
+            provider,
+            externalId,
+          },
+          update: {
+            // Se já existe um registro, garante que o contactId seja o correto
+            contactId: params.contactId,
+            provider,
+          },
+        });
+      } catch (error: any) {
+        // Swallow race conditions - a unique constraint violation means another
+        // concurrent request already created the record, which is fine.
+        this.logger.debug(
+          `Falha ao registrar ContactChannelIdentity (possivel corrida): channel=${channel} externalId=${externalId} error=${error?.message}`,
+        );
+      }
+    }
+  }
+
   private async resolveConnectedWhatsappConnection(
     tenantId: string,
     conversation: { connectionId?: string | null },
@@ -1215,22 +1274,47 @@ export class InboxService {
       );
 
       const destination = this.resolveExternalAddress(conversation.channel, conversation.contact, conversation);
-      if (!destination) {
+
+      this.logger.debug(
+        `WhatsApp destination resolution conversation=${conversationId} ` +
+        `contact=${conversation.contact?.id || 'none'} ` +
+        `contactWhatsapp=${conversation.contact?.whatsapp || 'none'} ` +
+        `externalParticipantId=${conversation.externalParticipantId || 'none'} ` +
+        `externalThreadId=${conversation.externalThreadId || 'none'} ` +
+        `resolvedDestination=${destination || 'null'}`,
+      );
+
+      // Fallback: search participant CONTACT for externalAddress (JID received when message came in)
+      const resolvedDestination = destination || (() => {
+        const contactParticipant = (conversation as any).participants?.find(
+          (p: any) => p.role === 'CONTACT' && p.externalAddress,
+        );
+        if (contactParticipant?.externalAddress) {
+          this.logger.log(
+            `WhatsApp destination resolved via participant fallback conversation=${conversationId} ` +
+            `participantId=${contactParticipant.id} address=${contactParticipant.externalAddress}`,
+          );
+          return contactParticipant.externalAddress as string;
+        }
+        return null;
+      })();
+
+      if (!resolvedDestination) {
         throw new BadRequestException('O contato nao possui endereco valido para envio no WhatsApp.');
       }
 
       try {
         this.logger.log(
-          `Sending WhatsApp message conversation=${conversationId} connection=${connection.id} destination=${destination} contentType=${contentType} contentLength=${content.length} hasMedia=${Boolean(
+          `Sending WhatsApp message conversation=${conversationId} connection=${connection.id} destination=${resolvedDestination} contentType=${contentType} contentLength=${content.length} hasMedia=${Boolean(
             mediaUrl,
           )}`,
         );
         const externalMessageId =
           contentType === 'TEXT'
-            ? await this.whatsappService.sendText(connection.id, destination, content)
+            ? await this.whatsappService.sendText(connection.id, resolvedDestination, content)
             : await this.whatsappService.sendMedia(
                 connection.id,
-                destination,
+                resolvedDestination,
                 contentType === 'IMAGE'
                   ? 'image'
                   : contentType === 'AUDIO'
@@ -1248,12 +1332,12 @@ export class InboxService {
           where: { id: message.id },
           data: {
             externalMessageId: externalMessageId || null,
-            senderAddress: destination,
+            senderAddress: resolvedDestination,
             status: 'SENT',
             metadata: {
               ...this.asObject(message.metadata as Record<string, any>),
               connectionId: connection.id,
-              destination,
+              destination: resolvedDestination,
             },
           },
         });
@@ -1263,8 +1347,8 @@ export class InboxService {
           data: {
             connectionId: connection.id,
             // Keep WhatsApp thread id canonical so inbound webhooks and manual sends match the same conversation.
-            externalThreadId: destination,
-            externalParticipantId: conversation.externalParticipantId || destination,
+            externalThreadId: conversation.externalThreadId || resolvedDestination,
+            externalParticipantId: conversation.externalParticipantId || resolvedDestination,
           },
         });
 
@@ -1272,7 +1356,7 @@ export class InboxService {
           channel: 'WHATSAPP',
           connectionId: connection.id,
           externalMessageId,
-          destination,
+          destination: resolvedDestination,
         });
       } catch (error) {
         finalMessage = await this.prisma.agentMessage.update({
@@ -1432,6 +1516,25 @@ export class InboxService {
         label: input.senderName || undefined,
         externalAddress: input.senderAddress || input.externalParticipantId || input.externalThreadId || null,
         isPrimary: direction === 'INBOUND',
+      });
+    }
+
+    // Persiste todos os identificadores externos no contato para garantir rastreabilidade futura.
+    // Isso permite que mensagens futuras (com diferentes JIDs/LIDs) sejam mapeadas ao mesmo contato.
+    if (input.contactId && direction === 'INBOUND') {
+      await this.ensureContactChannelIdentities({
+        tenantId: input.tenantId,
+        contactId: input.contactId,
+        channel: input.channel,
+        provider: (input.metadata as any)?.provider || null,
+        identifiers: [
+          input.senderAddress,
+          input.externalParticipantId,
+          input.externalThreadId,
+          input.senderFullId,
+          input.senderLid,
+          input.senderPhone,
+        ],
       });
     }
 

@@ -1,0 +1,1 @@
+<map version="1.0.1"><node TEXT="SaaS Multi-tenant"><node TEXT="Missao"><node TEXT="Isolamento e governanca da plataforma" /></node><node TEXT="Centro"><node TEXT="Tenant" /><node TEXT="Usuario" /><node TEXT="Plano" /></node><node TEXT="Riscos"><node TEXT="Vazamento entre tenants" /></node></node></map>
