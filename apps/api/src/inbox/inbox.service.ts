@@ -732,7 +732,6 @@ export class InboxService {
           tenantId: input.tenantId,
           channel,
           contactId: input.contactId,
-          ...connectionFilter,
           status: {
             notIn: ['CLOSED', 'ARCHIVED'],
           },
@@ -870,6 +869,8 @@ export class InboxService {
     await this.prisma.incomingEvent.create({
       data: {
         tenantId,
+        contactId: dto.contactId || null,
+        connectionId: dto.connectionId || null,
         channel: dto.channel?.toUpperCase() || 'CHAT',
         eventType: 'manual.creation',
         direction: 'OUTBOUND',
@@ -1399,6 +1400,22 @@ export class InboxService {
   async captureExternalMessage(input: CaptureExternalMessageInput) {
     const direction = this.normalizeDirection(input.direction);
     const status = this.normalizeStatus(input.status, direction);
+    // 0. CAPTURA BRUTA (Brute/No-Treatment)
+    await this.prisma.incomingEvent.create({
+      data: {
+        tenantId: input.tenantId,
+        contactId: input.contactId || null,
+        connectionId: input.connectionId || null,
+        channel: input.channel?.toUpperCase() || 'CHAT',
+        eventType: `external.${direction.toLowerCase()}`,
+        direction,
+        sourceAddress: input.senderAddress || input.externalParticipantId || null,
+        payload: JSON.parse(JSON.stringify(input)),
+        status: 'PROCESSED',
+        receivedAt: new Date(),
+      },
+    });
+
     const conversation = await this.ensureConversationForCapture({
       ...input,
       direction,
