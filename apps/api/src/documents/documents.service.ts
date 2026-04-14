@@ -1276,12 +1276,28 @@ export class DocumentsService {
     return String(value);
   }
 
+  private escapeHtml(value: string) {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  private formatReplacementValueForHtml(value: any) {
+    const normalized = this.toStr(value);
+    if (!normalized) return "";
+    return this.escapeHtml(normalized).replace(/\r?\n/g, "<br/>");
+  }
+
   private applyReplacementsToHtml(
     html: string,
     replacements: Record<string, string>,
   ) {
     let content = html;
-    for (const [key, value] of Object.entries(replacements)) {
+    for (const [key, rawValue] of Object.entries(replacements)) {
+      const value = this.formatReplacementValueForHtml(rawValue);
       const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       content = content.replace(
         new RegExp(`\\{\\{${escapedKey}\\}\\}`, "gi"),

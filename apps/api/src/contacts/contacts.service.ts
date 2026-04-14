@@ -497,6 +497,15 @@ export class ContactsService {
         { email: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search, mode: 'insensitive' } },
         { whatsapp: { contains: search, mode: 'insensitive' } },
+        { whatsappE164: { contains: search, mode: 'insensitive' } },
+        { whatsappFullId: { contains: search, mode: 'insensitive' } },
+        {
+          additionalContacts: {
+            some: {
+              value: { contains: search, mode: 'insensitive' },
+            },
+          },
+        },
         { pfDetails: { cpf: { contains: search, mode: 'insensitive' } } },
         { pjDetails: { cnpj: { contains: search, mode: 'insensitive' } } },
       ];

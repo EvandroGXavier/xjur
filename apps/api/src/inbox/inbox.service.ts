@@ -610,8 +610,9 @@ export class InboxService {
     return connections[0];
   }
 
-  private resolveExternalAddress(channel: string, contact?: any, conversation?: any) {
+  private resolveExternalAddress(channel: string, contact?: any, conversation?: any): { destination: string | null; candidates: string[] } {
     const normalizedChannel = this.normalizeChannel(channel);
+    const candidates = new Set<string>();
 
     if (normalizedChannel === 'WHATSAPP') {
       const additionalValues = construirValoresBuscaIdentificadores(
@@ -620,48 +621,59 @@ export class InboxService {
           ? contact.additionalContacts.map((item: any) => item.value)
           : [],
       );
-      const additionalPhoneJids = additionalValues.filter((value) => value.endsWith('@s.whatsapp.net'));
-      const additionalLids = additionalValues.filter((value) => value.endsWith('@lid'));
-      const additionalNumbers = additionalValues.filter((value) => /^\d{8,15}$/.test(value));
+
+      additionalValues.forEach(v => candidates.add(v));
 
       const { explicitPhoneJids, explicitLids, numbers } = this.getWhatsappAddressCandidates(
         contact,
         conversation,
       );
-      const mergedPhoneJids = Array.from(new Set([...additionalPhoneJids, ...explicitPhoneJids]));
-      const mergedLids = Array.from(new Set([...additionalLids, ...explicitLids]));
-      const mergedNumbers = Array.from(new Set([...additionalNumbers, ...numbers]));
+
+      explicitPhoneJids.forEach(v => candidates.add(v));
+      explicitLids.forEach(v => candidates.add(v));
+      numbers.forEach(v => {
+        candidates.add(v);
+        candidates.add(`${v}@s.whatsapp.net`);
+      });
+
+      const mergedPhoneJids = Array.from(new Set([...additionalValues.filter(v => v.endsWith('@s.whatsapp.net')), ...explicitPhoneJids]));
+      const mergedNumbers = Array.from(new Set([...additionalValues.filter(v => /^\d{8,15}$/.test(v)), ...numbers]));
+      const mergedLids = Array.from(new Set([...additionalValues.filter(v => v.endsWith('@lid')), ...explicitLids]));
 
       const preferredNumber = mergedNumbers[0];
       if (preferredNumber) {
-        const matchingPhoneJid = mergedPhoneJids.find(
-          (candidate) => this.extractWhatsappDigits(candidate) === preferredNumber,
-        );
-
-        if (matchingPhoneJid) return matchingPhoneJid;
-        return `${preferredNumber}@s.whatsapp.net`;
+        return {
+          destination: preferredNumber,
+          candidates: Array.from(candidates)
+        };
       }
 
-      if (mergedLids.length > 0) return mergedLids[0];
-      if (mergedPhoneJids.length > 0) return mergedPhoneJids[0];
-      return null;
+      if (mergedLids.length > 0) return { destination: mergedLids[0], candidates: Array.from(candidates) };
+      if (mergedPhoneJids.length > 0) return { destination: mergedPhoneJids[0], candidates: Array.from(candidates) };
+      
+      return { destination: null, candidates: Array.from(candidates) };
     }
 
     if (normalizedChannel === 'TELEGRAM' && Array.isArray(contact?.additionalContacts)) {
       const telegramAdditional = contact.additionalContacts.find((item: any) =>
         ['TELEGRAM_ID', 'TELEGRAM'].includes(String(item.type || '').toUpperCase()),
       );
-      if (telegramAdditional?.value) return telegramAdditional.value;
+      if (telegramAdditional?.value) {
+        candidates.add(telegramAdditional.value);
+        return { destination: telegramAdditional.value, candidates: Array.from(candidates) };
+      }
     }
 
-    if (conversation?.externalThreadId) return conversation.externalThreadId;
-    if (conversation?.externalParticipantId) return conversation.externalParticipantId;
+    const threadId = conversation?.externalThreadId || conversation?.externalParticipantId;
+    if (threadId) candidates.add(threadId);
 
-    if (normalizedChannel === 'EMAIL') {
-      return contact?.email || null;
-    }
+    const fallback = contact?.phone || contact?.email || null;
+    if (fallback) candidates.add(fallback);
 
-    return contact?.phone || contact?.email || null;
+    return { 
+      destination: (normalizedChannel === 'EMAIL' ? contact?.email : fallback) || threadId || null, 
+      candidates: Array.from(candidates) 
+    };
   }
 
   private mapConversationStatusToTicketStatus(status: string, waitingReply: boolean) {
@@ -843,6 +855,7 @@ export class InboxService {
       };
 
       const whatsappVariants = isWhatsapp ? buildWhatsappThreadIdVariants(rawThreadId) : [rawThreadId];
+      const normalizedWhatsappVariants = isWhatsapp ? whatsappVariants.map(v => v.includes('@') ? v : normalizarDigitosDDI(v)) : whatsappVariants;
 
       const byThread = await this.prisma.agentConversation.findFirst({
         where: {
@@ -854,8 +867,8 @@ export class InboxService {
           ...(isWhatsapp
             ? {
                 OR: [
-                  { externalThreadId: { in: whatsappVariants } },
-                  { externalParticipantId: { in: whatsappVariants } },
+                  { externalThreadId: { in: Array.from(new Set([...whatsappVariants, ...normalizedWhatsappVariants])) } },
+                  { externalParticipantId: { in: Array.from(new Set([...whatsappVariants, ...normalizedWhatsappVariants])) } },
                 ],
               }
             : { externalThreadId: rawThreadId }),
@@ -1029,10 +1042,37 @@ export class InboxService {
     });
 
     const channel = this.normalizeChannel(dto.channel);
-    const contact = dto.contactId
+    let contactId = dto.contactId;
+
+    // Se o contactId não foi informado, tenta localizar por número/identificador
+    if (!contactId && dto.externalThreadId && channel === 'WHATSAPP') {
+      const lookupValues = construirValoresBuscaIdentificadores('WHATSAPP', [dto.externalThreadId]);
+      const foundContact = await this.prisma.contact.findFirst({
+        where: {
+          tenantId,
+          OR: [
+            { whatsapp: { in: lookupValues } },
+            { whatsappE164: { in: lookupValues } },
+            { phone: { in: lookupValues } },
+            { whatsappFullId: { in: lookupValues } },
+            {
+              additionalContacts: {
+                some: { value: { in: lookupValues } }
+              }
+            }
+          ]
+        }
+      });
+      if (foundContact) {
+        contactId = foundContact.id;
+        this.logger.log(`Lookup manual: contato identificado por número ${dto.externalThreadId} -> ${foundContact.name} (${foundContact.id})`);
+      }
+    }
+
+    const contact = contactId
       ? await this.prisma.contact.findFirst({
           where: {
-            id: dto.contactId,
+            id: contactId,
             tenantId,
           },
           include: {
@@ -1045,21 +1085,35 @@ export class InboxService {
       throw new BadRequestException('Contato nao encontrado para iniciar o atendimento.');
     }
 
-    const externalThreadId =
-      dto.externalThreadId ||
-      this.resolveExternalAddress(channel, contact, {
+    const resolution = this.resolveExternalAddress(channel, contact, {
         externalThreadId: dto.externalThreadId,
         externalParticipantId: dto.externalParticipantId,
       });
 
+    const externalThreadId = dto.externalThreadId || resolution.destination;
+    const whatsappDigits =
+      channel === 'WHATSAPP' ? this.extractWhatsappDigits(externalThreadId) : '';
+    const externalParticipantId =
+      dto.externalParticipantId ||
+      (channel === 'WHATSAPP' ? whatsappDigits || externalThreadId : externalThreadId) ||
+      null;
+
+    if (contactId && resolution.candidates.length > 0) {
+      await this.ensureAdditionalContactIdentifiers({
+        contactId,
+        channel,
+        identifiers: resolution.candidates,
+      });
+    }
+
     const existing = await this.findExistingConversation({
       tenantId,
       channel,
-      contactId: dto.contactId || null,
+      contactId: contactId || null,
       connectionId: dto.connectionId || null,
       processId: dto.processId || null,
       externalThreadId: externalThreadId || null,
-      externalParticipantId: dto.externalParticipantId || externalThreadId || null,
+      externalParticipantId: externalParticipantId,
       direction: 'OUTBOUND',
       title: dto.title || contact?.name || `Atendimento ${channel}`,
     });
@@ -1068,7 +1122,7 @@ export class InboxService {
       await this.prisma.agentConversation.update({
         where: { id: existing.id },
         data: {
-          contactId: dto.contactId || existing.contactId,
+          contactId: contactId || existing.contactId,
           assignedUserId: dto.assignedUserId !== undefined ? dto.assignedUserId : existing.assignedUserId || userId,
           connectionId: dto.connectionId || existing.connectionId,
           processId: dto.processId !== undefined ? dto.processId : existing.processId,
@@ -1077,7 +1131,7 @@ export class InboxService {
           title: dto.title || existing.title,
           externalThreadId: existing.externalThreadId || externalThreadId || null,
           externalParticipantId:
-            existing.externalParticipantId || dto.externalParticipantId || externalThreadId || null,
+            existing.externalParticipantId || externalParticipantId,
         },
       });
 
@@ -1122,7 +1176,7 @@ export class InboxService {
       data: {
         tenantId,
         channel,
-        contactId: dto.contactId || null,
+        contactId: contactId || null,
         connectionId: dto.connectionId || null,
         processId: dto.processId || null,
         assignedUserId: dto.assignedUserId || userId,
@@ -1134,7 +1188,7 @@ export class InboxService {
         isInternal: !!dto.isInternal,
         title: dto.title || contact?.name || `Atendimento ${channel}`,
         externalThreadId: externalThreadId || null,
-        externalParticipantId: dto.externalParticipantId || externalThreadId || null,
+        externalParticipantId: externalParticipantId,
         waitingReply: false,
         unreadCount: 0,
         lastMessagePreview: null,
@@ -1358,7 +1412,8 @@ export class InboxService {
         dto.connectionId || null,
       );
 
-      const destination = this.resolveExternalAddress(conversation.channel, conversation.contact, conversation);
+      const resolution = this.resolveExternalAddress(conversation.channel, conversation.contact, conversation);
+      const destination = resolution.destination;
 
       this.logger.debug(
         `WhatsApp destination resolution conversation=${conversationId} ` +
@@ -1389,17 +1444,55 @@ export class InboxService {
       }
 
       try {
+        const resolvedPhone =
+          this.extractWhatsappDigits(resolvedDestination) ||
+          this.extractResolvedWhatsappPhone(conversation);
+        const canonicalThreadId = resolvedPhone
+          ? `${resolvedPhone}@s.whatsapp.net`
+          : conversation.externalThreadId || resolvedDestination;
+
         this.logger.log(
           `Sending WhatsApp message conversation=${conversationId} connection=${connection.id} destination=${resolvedDestination} contentType=${contentType} contentLength=${content.length} hasMedia=${Boolean(
             mediaUrl,
           )}`,
         );
         if (conversation.contactId) {
-          await this.ensureAdditionalContactIdentifiers({
+          const syncIdentifiers = Array.from(new Set([resolvedDestination, ...resolution.candidates]));
+          await this.ensureContactChannelIdentities({
+            tenantId,
             contactId: conversation.contactId,
             channel: 'WHATSAPP',
-            identifiers: [resolvedDestination],
+            provider: 'INBOX',
+            identifiers: [
+              ...syncIdentifiers,
+              resolvedPhone || null,
+              canonicalThreadId,
+            ],
           });
+
+          if (resolvedPhone && conversation.contact?.id) {
+            const contactNeedsUpdate =
+              this.extractWhatsappDigits(conversation.contact.whatsapp) !== resolvedPhone ||
+              this.extractWhatsappDigits(conversation.contact.whatsappE164) !== resolvedPhone ||
+              this.normalizeWhatsappIdentity(conversation.contact.whatsappFullId) !== canonicalThreadId;
+
+            if (contactNeedsUpdate) {
+              const updatedContact = await this.prisma.contact.update({
+                where: { id: conversation.contact.id },
+                data: {
+                  whatsapp: resolvedPhone,
+                  whatsappE164: resolvedPhone,
+                  whatsappFullId: canonicalThreadId,
+                },
+              });
+              conversation.contact = {
+                ...conversation.contact,
+                whatsapp: updatedContact.whatsapp,
+                whatsappE164: updatedContact.whatsappE164,
+                whatsappFullId: updatedContact.whatsappFullId,
+              };
+            }
+          }
         }
         const externalMessageId =
           contentType === 'TEXT'
@@ -1438,9 +1531,14 @@ export class InboxService {
           where: { id: conversationId },
           data: {
             connectionId: connection.id,
-            // Keep WhatsApp thread id canonical so inbound webhooks and manual sends match the same conversation.
-            externalThreadId: conversation.externalThreadId || resolvedDestination,
-            externalParticipantId: conversation.externalParticipantId || resolvedDestination,
+            externalThreadId: canonicalThreadId,
+            externalParticipantId: resolvedPhone || conversation.externalParticipantId || resolvedDestination,
+            metadata: {
+              ...this.asObject(conversation.metadata as Record<string, any>),
+              resolvedPhone: resolvedPhone || null,
+              canonicalThreadId,
+              lastResolvedDestination: resolvedDestination,
+            },
           },
         });
 
@@ -1479,7 +1577,8 @@ export class InboxService {
         conversation,
         dto.connectionId || null,
       );
-      const destination = this.resolveExternalAddress(conversation.channel, conversation.contact, conversation);
+      const resolution = this.resolveExternalAddress(conversation.channel, conversation.contact, conversation);
+      const destination = resolution.destination;
 
       if (!destination) {
         throw new BadRequestException('A conversa Telegram nao possui chat valido para envio.');
@@ -1620,25 +1719,12 @@ export class InboxService {
 
     // Persiste todos os identificadores externos no contato para garantir rastreabilidade futura.
     // Isso permite que mensagens futuras (com diferentes JIDs/LIDs) sejam mapeadas ao mesmo contato.
-    if (input.contactId && direction === 'INBOUND') {
+    if (input.contactId) {
       await this.ensureContactChannelIdentities({
         tenantId: input.tenantId,
         contactId: input.contactId,
         channel: input.channel,
         provider: (input.metadata as any)?.provider || null,
-        identifiers: [
-          input.senderAddress,
-          input.externalParticipantId,
-          input.externalThreadId,
-          input.senderFullId,
-          input.senderLid,
-          input.senderPhone,
-        ],
-      });
-    } else if (input.contactId && direction === 'OUTBOUND') {
-      await this.ensureAdditionalContactIdentifiers({
-        contactId: input.contactId,
-        channel: input.channel,
         identifiers: [
           input.senderAddress,
           input.externalParticipantId,

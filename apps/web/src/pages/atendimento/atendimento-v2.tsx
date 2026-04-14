@@ -155,6 +155,23 @@ const ConversationAvatar = ({ name }: { name: string }) => {
 const formatTime = (value?: string | null) =>
   value ? new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
 
+const normalizeWhatsappDigits = (value?: string | null) => {
+  const digits = (value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length >= 10 && digits.length <= 11 && !digits.startsWith('55')) {
+    return `55${digits}`;
+  }
+  return digits;
+};
+
+const getContactWhatsappTarget = (contact?: ContactSummary | null) => {
+  const canonicalDigits = normalizeWhatsappDigits(contact?.whatsappE164 || contact?.whatsapp || contact?.phone);
+  if (canonicalDigits) return canonicalDigits;
+
+  const fullId = (contact?.whatsappFullId || '').trim();
+  return fullId || '';
+};
+
 const getMessageTimestamp = (message?: Pick<InboxMessage, 'createdAt'> | null) =>
   message?.createdAt ? new Date(message.createdAt).getTime() : 0;
 
@@ -260,6 +277,7 @@ export function AtendimentoPage({
     connectionId: '',
     title: '',
     initialMessage: '',
+    externalThreadId: '',
   });
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const { on } = useInboxSocket();
@@ -645,6 +663,7 @@ export function AtendimentoPage({
         connectionId: '',
         title: '',
         initialMessage: '',
+        externalThreadId: '',
       });
       toast.success('Atendimento criado no Inbox principal.');
     } catch (error: any) {
@@ -1473,11 +1492,15 @@ export function AtendimentoPage({
                       <button
                         key={contact.id}
                         onClick={() =>
-                          setNewConversation((current) => ({
-                            ...current,
-                            contactId: contact.id,
-                            title: current.title || contact.name,
-                          }))
+                            setNewConversation((current) => ({
+                              ...current,
+                              contactId: contact.id,
+                              title: current.title || contact.name,
+                              externalThreadId:
+                                current.channel === 'WHATSAPP'
+                                  ? getContactWhatsappTarget(contact)
+                                  : current.externalThreadId,
+                            }))
                         }
                         className={clsx(
                           'w-full rounded-2xl border px-3 py-2 text-left text-sm',
@@ -1488,7 +1511,7 @@ export function AtendimentoPage({
                       >
                         <p>{contact.name}</p>
                         <p className="text-xs text-slate-400">
-                          {contact.whatsapp || contact.phone || contact.email || '-'}
+                          {contact.whatsappE164 || contact.whatsapp || contact.phone || contact.email || '-'}
                         </p>
                       </button>
                     ))}

@@ -417,13 +417,18 @@ export class EventProcessorService {
       });
     } else {
       const updateData: Record<string, any> = {};
-      if (phoneDigits && (!contact.whatsapp || String(contact.whatsapp).includes('@lid'))) {
+      if (phoneDigits && this.extractWhatsappDigits(contact.whatsapp) !== phoneDigits) {
         updateData.whatsapp = phoneDigits;
       }
-      if (phoneDigits && !contact.whatsappE164) {
+      if (phoneDigits && this.extractWhatsappDigits(contact.whatsappE164) !== phoneDigits) {
         updateData.whatsappE164 = phoneDigits;
       }
-      if (canonicalJid && !contact.whatsappFullId) {
+      if (
+        canonicalJid &&
+        (!contact.whatsappFullId ||
+          this.normalizeWhatsappIdentity(contact.whatsappFullId)?.includes('@lid') ||
+          this.normalizeWhatsappIdentity(contact.whatsappFullId) !== canonicalJid)
+      ) {
         updateData.whatsappFullId = canonicalJid;
       }
       if (displayName && (!contact.name || contact.name === 'WhatsApp Contact')) {
@@ -642,17 +647,21 @@ export class EventProcessorService {
          content: text || '',
          contentType: type as any,
          externalMessageId: event.externalMessageId,
-         externalThreadId: remoteJid,
-         externalParticipantId: participantId,
+         externalThreadId,
+         externalParticipantId,
          senderName: message.pushName || contact.name || null,
-         senderAddress: participantId || remoteJid || null,
+         senderAddress: externalParticipantId || externalThreadId || null,
          senderPhone: phoneDigits,
          senderFullId: canonicalJid,
-         senderLid: remoteJid?.includes('@lid') ? remoteJid : null,
+         senderLid: [remoteJid, participantId].find((value) => value?.includes('@lid')) || null,
          mediaUrl,
          metadata: {
            source: 'event-processor',
            fromMe: isFromMe,
+           remoteJid: remoteJid || null,
+           participantId: participantId || null,
+           resolvedPhone: phoneDigits || null,
+           canonicalThreadId: externalThreadId || null,
          },
       });
     } catch (inboxError) {

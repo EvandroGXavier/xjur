@@ -22,6 +22,30 @@ interface ProcessDocument {
     template?: { id: string; title: string } | null;
 }
 
+const escapeHtml = (value: string) =>
+    value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+const buildRenderableDocumentHtml = (content?: string | null) => {
+    const raw = String(content || '');
+    if (!raw.trim()) {
+        return '<p>&nbsp;</p>';
+    }
+
+    const hasHtml = /<[a-z][\s\S]*>/i.test(raw);
+    if (!hasHtml) {
+        return `<div class="document-print-root" style="white-space: pre-wrap;">${escapeHtml(raw)}</div>`;
+    }
+
+    return raw
+        .replace(/<p>\s*<\/p>/gi, '<p>&nbsp;</p>')
+        .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '<p>&nbsp;</p>');
+};
+
 export function ProcessDocumentsTab({ processId }: { processId: string }) {
     const [loading, setLoading] = useState(true);
     const [documents, setDocuments] = useState<ProcessDocument[]>([]);
@@ -190,16 +214,20 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
             toast.error('Por favor, permita pop-ups para imprimir.');
             return;
         }
+        const printableHtml = buildRenderableDocumentHtml(doc.content);
         printWindow.document.write(`
             <html>
                 <head>
                     <title>${doc.title}</title>
                     <style>
                         body { font-family: Arial, sans-serif; padding: 20mm; margin: 0; color: ${embeddedContentColor.textStrong}; background: ${embeddedContentColor.surface}; }
+                        .document-print-root { white-space: normal; }
+                        .document-print-root p:empty::before { content: "\\00a0"; }
+                        .document-print-root p { min-height: 1em; }
                         @media print { body { padding: 0; margin: 0; } }
                     </style>
                 </head>
-                <body>${doc.content || ''}</body>
+                <body>${printableHtml}</body>
             </html>
         `);
         printWindow.document.close();
@@ -213,10 +241,11 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
 
     const handleSavePdf = async (doc: ProcessDocument) => {
         const element = document.createElement('div');
-        element.innerHTML = doc.content || '';
+        element.innerHTML = buildRenderableDocumentHtml(doc.content);
         element.style.padding = '20mm';
         element.style.color = 'black';
         element.style.backgroundColor = 'white';
+        element.className = 'document-print-root';
 
         const opt = {
             margin: 0,

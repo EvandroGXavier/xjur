@@ -14,6 +14,8 @@ export interface ContactSummary {
   name: string;
   phone?: string;
   whatsapp?: string;
+  whatsappE164?: string;
+  whatsappFullId?: string;
   email?: string;
 }
 
@@ -110,7 +112,7 @@ export const getChannelLabel = (channel?: string | null) =>
   ATENDIMENTO_CHANNEL_LABELS[(channel || '').toUpperCase()] || channel || 'Canal';
 
 export const getContactIdentifier = (contact?: ContactSummary | null) =>
-  contact?.whatsapp || contact?.phone || contact?.email || '';
+  contact?.whatsappE164 || contact?.whatsapp || contact?.phone || contact?.email || '';
 
 export const getConversationDisplayName = (conversation?: AtendimentoConversation | null) =>
   conversation?.contact?.name?.trim() ||
