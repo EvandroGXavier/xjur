@@ -1,10 +1,12 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma.service';
 import { FinancialService } from '../financial/financial.service';
 import { InboxService } from '../inbox/inbox.service';
+import { EvolutionConfig, EvolutionService } from '../evolution/evolution.service';
 import {
   construirContatosAdicionaisPorCanal,
   construirValoresBuscaIdentificadores,
@@ -20,6 +22,8 @@ export class EventProcessorService {
     private readonly financialService: FinancialService,
     @Inject(forwardRef(() => InboxService))
     private readonly inboxService: InboxService,
+    private readonly evolutionService: EvolutionService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Cron('*/15 * * * * *')
@@ -141,6 +145,118 @@ export class EventProcessorService {
     return typeof value === 'string' && /^\d{10,15}$/.test(value);
   }
 
+  private async getEvolutionConfig(connectionId: string): Promise<EvolutionConfig | undefined> {
+    try {
+      const connection = await this.prisma.connection.findUnique({
+        where: { id: connectionId },
+        select: { config: true },
+      });
+
+      const config = connection?.config as any || {};
+      const settings = config.evolutionSettings || {};
+      if (config.evolutionVersion) {
+        settings.whatsappVersion = config.evolutionVersion;
+      }
+
+      return {
+        apiUrl: config.evolutionUrl || this.configService.get<string>('EVOLUTION_API_URL') || 'http://localhost:8080',
+        apiKey: config.evolutionApiKey || this.configService.get<string>('EVOLUTION_API_KEY') || '',
+        settings,
+      };
+    } catch (error: any) {
+      this.logger.debug(`Falha ao carregar config Evolution da conexao ${connectionId}: ${error?.message || error}`);
+      return undefined;
+    }
+  }
+
+  private extractPossibleWhatsappNumbers(candidate: any): string[] {
+    const values = [
+      candidate?.remoteJid,
+      candidate?.jid,
+      candidate?.id,
+      candidate?.remoteJidAlt,
+      candidate?.participant,
+      candidate?.owner,
+      candidate?.user,
+      candidate?.number,
+      candidate?.phone,
+      candidate?.mobile,
+      candidate?.contact?.phone,
+      candidate?.contact?.number,
+      candidate?.contact?.jid,
+      candidate?.contact?.remoteJid,
+      candidate?.participantPn,
+      candidate?.senderPn,
+    ].filter(Boolean);
+
+    return Array.from(
+      new Set(
+        values
+          .map((value) => this.extractWhatsappDigits(String(value)))
+          .filter((value) => this.isPlausibleWhatsappNumber(value)),
+      ),
+    );
+  }
+
+  private async resolveWhatsappPhoneByLid(
+    connectionId?: string | null,
+    identities?: Array<string | null | undefined>,
+  ) {
+    const lidIds = Array.from(
+      new Set(
+        (identities || [])
+          .map((value) => this.normalizeWhatsappIdentity(value))
+          .filter((value): value is string => Boolean(value && value.endsWith('@lid'))),
+      ),
+    );
+
+    if (!connectionId || lidIds.length === 0) {
+      return null;
+    }
+
+    try {
+      const evolutionConfig = await this.getEvolutionConfig(connectionId);
+      const contactsData = await this.evolutionService.findContacts(connectionId, evolutionConfig);
+      const contactsList = Array.isArray(contactsData)
+        ? contactsData
+        : Array.isArray((contactsData as any)?.contacts)
+          ? (contactsData as any).contacts
+          : Array.isArray((contactsData as any)?.data)
+            ? (contactsData as any).data
+            : [];
+
+      for (const candidate of contactsList) {
+        const candidateIds = [
+          candidate?.remoteJid,
+          candidate?.jid,
+          candidate?.id,
+          candidate?.remoteJidAlt,
+          candidate?.participant,
+          candidate?.participantPn,
+          candidate?.senderPn,
+        ]
+          .map((value) => this.normalizeWhatsappIdentity(value))
+          .filter((value): value is string => Boolean(value));
+
+        if (!candidateIds.some((value) => lidIds.includes(value))) {
+          continue;
+        }
+
+        const numbers = this.extractPossibleWhatsappNumbers(candidate);
+        if (numbers.length > 0) {
+          this.logger.log(
+            `WhatsApp LID resolvido via Evolution: ${lidIds.join(', ')} -> ${numbers[0]}`,
+          );
+          return numbers[0];
+        }
+      }
+    } catch (error: any) {
+      this.logger.debug(`Falha ao resolver telefone por LID ${lidIds.join(', ')}: ${error?.message || error}`);
+    }
+
+    return null;
+  }
+
   private async ensureAdditionalContactIdentifiers(params: {
     contactId: string;
     channel: string;
@@ -168,6 +284,92 @@ export class EventProcessorService {
         value: item.value,
         nomeContatoAdicional: item.nomeContatoAdicional,
       })),
+    });
+  }
+
+  private async rebindWhatsappDuplicateContact(params: {
+    tenantId: string;
+    sourceContactId: string;
+    targetContactId: string;
+  }) {
+    if (
+      !params.sourceContactId ||
+      !params.targetContactId ||
+      params.sourceContactId === params.targetContactId
+    ) {
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contactChannelIdentity.updateMany({
+        where: {
+          tenantId: params.tenantId,
+          contactId: params.sourceContactId,
+          channel: 'WHATSAPP',
+        },
+        data: {
+          contactId: params.targetContactId,
+          provider: 'EVOLUTION',
+        },
+      });
+
+      await tx.additionalContact.updateMany({
+        where: { contactId: params.sourceContactId },
+        data: { contactId: params.targetContactId },
+      });
+
+      await tx.agentConversation.updateMany({
+        where: {
+          tenantId: params.tenantId,
+          channel: 'WHATSAPP',
+          contactId: params.sourceContactId,
+        },
+        data: { contactId: params.targetContactId },
+      });
+
+      await tx.ticket.updateMany({
+        where: {
+          tenantId: params.tenantId,
+          channel: 'WHATSAPP',
+          contactId: params.sourceContactId,
+        },
+        data: { contactId: params.targetContactId },
+      });
+
+      await tx.ticketMessage.updateMany({
+        where: {
+          tenantId: params.tenantId,
+          channel: 'WHATSAPP',
+          contactId: params.sourceContactId,
+        },
+        data: { contactId: params.targetContactId },
+      });
+
+      await tx.incomingEvent.updateMany({
+        where: {
+          tenantId: params.tenantId,
+          channel: 'WHATSAPP',
+          contactId: params.sourceContactId,
+        },
+        data: { contactId: params.targetContactId },
+      });
+
+      const source = await tx.contact.findUnique({
+        where: { id: params.sourceContactId },
+        select: { notes: true },
+      });
+
+      await tx.contact.update({
+        where: { id: params.sourceContactId },
+        data: {
+          whatsapp: null,
+          whatsappE164: null,
+          whatsappFullId: null,
+          notes: [source?.notes, `Contato WhatsApp consolidado em ${params.targetContactId}.`]
+            .filter(Boolean)
+            .join('\n'),
+        },
+      });
     });
   }
 
@@ -338,19 +540,32 @@ export class EventProcessorService {
     remoteJid?: string | null;
     participantId?: string | null;
     pushName?: string | null;
+    resolvedPhoneDigits?: string | null;
+    canonicalJidHint?: string | null;
+    additionalIdentities?: Array<string | null | undefined>;
   }) {
     const identities = Array.from(
       new Set(
-        [params.remoteJid, params.participantId]
+        [
+          params.remoteJid,
+          params.participantId,
+          params.canonicalJidHint,
+          ...(params.additionalIdentities || []),
+        ]
           .map((value) => this.normalizeWhatsappIdentity(value))
           .filter((value): value is string => Boolean(value)),
       ),
     );
 
-    const phoneDigits = identities
-      .map((value) => this.extractWhatsappDigits(value))
-      .find((value) => this.isPlausibleWhatsappNumber(value)) || null;
-    const canonicalJid = phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null;
+    const phoneDigits =
+      (this.isPlausibleWhatsappNumber(params.resolvedPhoneDigits)
+        ? params.resolvedPhoneDigits
+        : null) ||
+      identities
+        .map((value) => this.extractWhatsappDigits(value))
+        .find((value) => this.isPlausibleWhatsappNumber(value)) ||
+      null;
+    const canonicalJid = params.canonicalJidHint || (phoneDigits ? `${phoneDigits}@s.whatsapp.net` : null);
     const lookupValues = construirValoresBuscaIdentificadores('WHATSAPP', [
       ...identities,
       canonicalJid,
@@ -358,6 +573,29 @@ export class EventProcessorService {
     ]);
 
     let contact = null as any;
+    let aliasContact = null as any;
+
+    if (phoneDigits || canonicalJid) {
+      contact = await this.prisma.contact.findFirst({
+        where: {
+          tenantId: params.tenantId,
+          OR: [
+            ...(phoneDigits ? [{ whatsapp: phoneDigits }, { whatsappE164: phoneDigits }, { phone: phoneDigits }] : []),
+            ...(canonicalJid ? [{ whatsappFullId: canonicalJid }] : []),
+            {
+              additionalContacts: {
+                some: {
+                  value: {
+                    in: lookupValues,
+                  },
+                },
+              },
+            },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
 
     if (identities.length > 0) {
       const alias = await this.prisma.contactChannelIdentity.findFirst({
@@ -369,10 +607,14 @@ export class EventProcessorService {
       });
 
       if (alias?.contactId) {
-        contact = await this.prisma.contact.findFirst({
+        aliasContact = await this.prisma.contact.findFirst({
           where: { id: alias.contactId, tenantId: params.tenantId },
         });
       }
+    }
+
+    if (!contact && aliasContact) {
+      contact = aliasContact;
     }
 
     if (!contact) {
@@ -398,6 +640,18 @@ export class EventProcessorService {
             ...identities.map((identity) => ({ whatsappFullId: identity })),
           ],
         },
+      });
+    }
+
+    if (contact && aliasContact && contact.id !== aliasContact.id) {
+      this.logger.warn(
+        `Contato WhatsApp duplicado detectado para ${phoneDigits || canonicalJid || identities.join(', ')}: ` +
+        `mantendo ${contact.id} e rebinding ${aliasContact.id}.`,
+      );
+      await this.rebindWhatsappDuplicateContact({
+        tenantId: params.tenantId,
+        sourceContactId: aliasContact.id,
+        targetContactId: contact.id,
       });
     }
 
@@ -580,12 +834,28 @@ export class EventProcessorService {
       remoteJid,
     );
 
+    const resolvedPhoneDigits =
+      event.externalPhone ||
+      this.extractWhatsappDigits(participantId) ||
+      this.extractWhatsappDigits(remoteJid) ||
+      await this.resolveWhatsappPhoneByLid(event.connectionId, [
+        participantId,
+        remoteJid,
+        event.externalLid,
+      ]);
+    const canonicalJid = resolvedPhoneDigits ? `${resolvedPhoneDigits}@s.whatsapp.net` : null;
+    const canonicalThreadId = canonicalJid || remoteJid || participantId;
+    const canonicalParticipantId = resolvedPhoneDigits || participantId || canonicalThreadId;
+
     const { type, text, quotedId, contentType } = this.buildWhatsappContent(realContent);
-    const { contact, phoneDigits, canonicalJid } = await this.findOrCreateWhatsappContact({
+    const { contact, phoneDigits } = await this.findOrCreateWhatsappContact({
       tenantId: event.tenantId,
       remoteJid,
       participantId,
       pushName: message.pushName || null,
+      resolvedPhoneDigits,
+      canonicalJidHint: canonicalJid,
+      additionalIdentities: [event.externalFullId, event.externalLid],
     });
 
     const occurredAt = new Date(
@@ -628,8 +898,8 @@ export class EventProcessorService {
     const { mimeType, fileName } = this.extractMediaDetails(realContent);
     const mediaBase64 = type !== 'TEXT' ? this.extractMediaBase64(message, rawPayload, realContent) : null;
     const mediaUrl = mediaBase64 ? this.saveInboundMedia(type, mediaBase64, mimeType, fileName) : null;
-    const externalThreadId = canonicalJid || remoteJid || participantId;
-    const externalParticipantId = phoneDigits || participantId || externalThreadId;
+    const externalThreadId = canonicalJid || canonicalThreadId;
+    const externalParticipantId = phoneDigits || canonicalParticipantId;
     const textContent = type === 'AUDIO' ? null : text;
     const aiAnalysis = this.buildInitialAiAnalysis(text || '', contentType);
 
@@ -658,9 +928,9 @@ export class EventProcessorService {
          metadata: {
            source: 'event-processor',
            fromMe: isFromMe,
-           remoteJid: remoteJid || null,
-           participantId: participantId || null,
-           resolvedPhone: phoneDigits || null,
+            remoteJid: remoteJid || null,
+            participantId: participantId || null,
+           resolvedPhone: phoneDigits || resolvedPhoneDigits || null,
            canonicalThreadId: externalThreadId || null,
          },
       });

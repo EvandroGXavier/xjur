@@ -4,9 +4,10 @@ import { PrismaService } from '../prisma.service';
 import { TicketsModule } from '../tickets/tickets.module';
 import { FinancialModule } from '../financial/financial.module';
 import { InboxModule } from '../inbox/inbox.module';
+import { EvolutionModule } from '../evolution/evolution.module';
 
 @Module({
-  imports: [TicketsModule, FinancialModule, forwardRef(() => InboxModule)],
+  imports: [TicketsModule, FinancialModule, forwardRef(() => InboxModule), EvolutionModule],
   providers: [EventProcessorService, PrismaService],
   exports: [EventProcessorService],
 })
