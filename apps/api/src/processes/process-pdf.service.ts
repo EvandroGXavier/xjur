@@ -247,7 +247,7 @@ export class ProcessPdfService {
             cnjConsulted: false,
             qualificationSourceCount: qualificationSources.length,
         };
-        const deadlineCandidates = this.extractDeadlineCandidates(normalizedText, documents);
+        const deadlineCandidates = this.extractDeadlineCandidatesSafe(normalizedText, documents);
         const proceduralActs = documents.filter((document) => this.isProceduralAct(document));
         const parts = this.enrichPartiesWithQualificationSources(
             this.extractPartiesPreferred(normalizedText, courtSystem),
@@ -329,7 +329,7 @@ export class ProcessPdfService {
         const cnj = this.extractCnj(coverSource) || this.extractCnj(normalizedText);
         const processClass = this.extractProcessClassPreferred(coverSource) || this.extractProcessClassPreferred(normalizedText);
         const title = processClass && cnj ? `${processClass} - ${cnj}` : processClass || cnj || 'Processo importado via PDF';
-        const deadlineCandidates = this.extractDeadlineCandidates(normalizedText, documents);
+        const deadlineCandidates = this.extractDeadlineCandidatesSafe(normalizedText, documents);
         const proceduralActs = documents.filter((document) => this.isProceduralAct(document));
         const metadata = {
             ...this.buildMetadataSummary(normalizedText, parsed.pageCount, normalizedText.length, courtSystem, documents),
@@ -1011,7 +1011,7 @@ export class ProcessPdfService {
             return party;
         }
 
-        const details = this.extractPartyQualificationDetails(snippet);
+        const details = this.extractPartyQualificationDetailsSafe(snippet, party);
         if (!details.document && !details.rg && !details.phone && !details.email && !details.qualificationText && !details.address) {
             return party;
         }
@@ -1093,6 +1093,56 @@ export class ProcessPdfService {
             phone: phone?.trim(),
             email: email?.trim(),
         };
+    }
+
+    private extractPartyQualificationDetailsSafe(snippet: string, party?: LegacyImportedParty) {
+        const isLawyer = this.isLawyerType(party?.type || '');
+        const baseDetails = this.extractPartyQualificationDetails(snippet);
+        const safePhone = this.extractQualifiedPhone(snippet);
+
+        return {
+            ...baseDetails,
+            document: isLawyer ? undefined : baseDetails.document,
+            rg: isLawyer ? undefined : baseDetails.rg,
+            birthDate: isLawyer ? undefined : baseDetails.birthDate,
+            motherName: isLawyer ? undefined : baseDetails.motherName,
+            fatherName: isLawyer ? undefined : baseDetails.fatherName,
+            phone: safePhone?.trim(),
+            qualificationText: [
+                isLawyer ? undefined : baseDetails.document,
+                isLawyer ? undefined : baseDetails.rg,
+                baseDetails.nationality,
+                baseDetails.civilStatus,
+                baseDetails.profession,
+                baseDetails.address,
+                baseDetails.email,
+                safePhone,
+            ].some(Boolean)
+                ? snippet.slice(0, 500)
+                : undefined,
+        };
+    }
+
+    private extractQualifiedPhone(snippet: string) {
+        const labeledMatch = snippet.match(
+            /\b(?:telefone|celular|fone|whatsapp|tel\.?)\s*[:\-]?\s*((?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?(?:9?\d{4})[-.\s]?\d{4})/i,
+        )?.[1];
+        if (labeledMatch) {
+            return labeledMatch;
+        }
+
+        const genericMatch = snippet.match(/\b((?:\(?\d{2}\)?[\s-]+)?(?:9?\d{4})[-.\s]+\d{4})\b/);
+        const candidate = genericMatch?.[1]?.trim();
+        if (!candidate) {
+            return undefined;
+        }
+
+        const digits = candidate.replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 11) {
+            return undefined;
+        }
+
+        return candidate;
     }
 
     private extractPartyProfession(snippet: string, civilStatus?: string) {
@@ -1606,7 +1656,7 @@ export class ProcessPdfService {
             };
 
             const contentText = contentInfo.contentText || null;
-            const deadlineCandidates = this.extractDeadlineCandidates(contentText || '', [
+            const deadlineCandidates = this.extractDeadlineCandidatesSafe(contentText || '', [
                 {
                     ...existing,
                     contentText,
@@ -1697,7 +1747,7 @@ export class ProcessPdfService {
         }
 
         for (const [eventNumber, document] of documents.entries()) {
-            const deadlineCandidates = this.extractDeadlineCandidates(document.contentText || '', [
+            const deadlineCandidates = this.extractDeadlineCandidatesSafe(document.contentText || '', [
                 {
                     ...document,
                     deadlineCandidates: [],
@@ -2033,18 +2083,32 @@ export class ProcessPdfService {
         return null;
     }
 
+    private extractDeadlineCandidatesSafe(text: string, documents: PdfProcessDocument[]) {
+        const proceduralDocuments = (documents || []).filter((document) => this.isProceduralAct(document));
+        const targetDocuments = proceduralDocuments.length > 0 ? proceduralDocuments : documents || [];
+        const baseCandidates = this.extractDeadlineCandidates(text, targetDocuments);
+
+        return baseCandidates.filter((candidate) => {
+            if (proceduralDocuments.length > 0 && !candidate.sourceDocumentId) {
+                return false;
+            }
+
+            return this.isLikelyProceduralDeadlineContext(candidate.excerpt, candidate.documentType || null);
+        });
+    }
+
     private extractDeadlineCandidates(text: string, documents: PdfProcessDocument[]) {
         const candidates: PdfDeadlineCandidate[] = [];
         const normalizedText = String(text || '');
 
         const collectCandidates = (sourceText: string, sourceDocumentId?: string | null, documentType?: string | null) => {
-            const daysRegex = /prazo(?:\s+de)?\s+(\d{1,3})\s*\(([^)]*)\)?\s*dias?/gi;
+            const daysRegex = /prazo(?:\s+de)?\s+(\d{1,3}|um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|quinze|vinte|trinta|quarenta|quarenta e cinco|sessenta)(?:\s*\(([^)]*)\))?\s*dias?/gi;
             for (const match of sourceText.matchAll(daysRegex)) {
                 candidates.push({
                     sourceDocumentId: sourceDocumentId || null,
                     documentType: documentType || null,
                     excerpt: this.safeExcerpt(sourceText, match.index ?? 0),
-                    deadlineDays: Number(match[1]),
+                    deadlineDays: this.parseDeadlineDays(match[1]),
                     fatalDate: this.extractExplicitFatalDateNear(sourceText, match.index ?? 0),
                     confidence: this.extractExplicitFatalDateNear(sourceText, match.index ?? 0) ? 'HIGH' : 'MEDIUM',
                 });
@@ -2077,6 +2141,70 @@ export class ProcessPdfService {
         return candidates.slice(0, 200);
     }
 
+    private parseDeadlineDays(rawValue?: string | null) {
+        const normalized = this.normalizeLooseText(rawValue);
+        const numeric = Number(String(rawValue || '').replace(/\D/g, ''));
+        if (numeric > 0) {
+            return numeric;
+        }
+
+        const mapping: Record<string, number> = {
+            UM: 1,
+            UMA: 1,
+            DOIS: 2,
+            DUAS: 2,
+            TRES: 3,
+            QUATRO: 4,
+            CINCO: 5,
+            SEIS: 6,
+            SETE: 7,
+            OITO: 8,
+            NOVE: 9,
+            DEZ: 10,
+            QUINZE: 15,
+            VINTE: 20,
+            TRINTA: 30,
+            QUARENTA: 40,
+            'QUARENTA E CINCO': 45,
+            SESSENTA: 60,
+        };
+
+        return mapping[normalized] || null;
+    }
+
+    private isLikelyProceduralDeadlineContext(excerpt: string, documentType?: string | null) {
+        const normalizedExcerpt = this.normalizeLooseText(excerpt);
+        const normalizedDocumentType = this.normalizeLooseText(documentType);
+
+        if (
+            [
+                'SALARIO',
+                'CBO',
+                'TIPO DE CONTRATO',
+                'ESTATUTO SOCIAL',
+                'GARANTIA',
+                'FORA DO ESTABELECIMENTO COMERCIAL',
+                'DATAPREV',
+                'HISTORICO LABORAL',
+                'CTPS',
+            ].some((term) => normalizedExcerpt.includes(term))
+        ) {
+            return false;
+        }
+
+        if (
+            ['INTIM', 'DESPACH', 'DECISAO', 'SENTENCA', 'MANDADO', 'CERTIDAO', 'ATO ORDINATORIO', 'CITACAO'].some((term) =>
+                normalizedDocumentType.includes(term),
+            )
+        ) {
+            return true;
+        }
+
+        return ['INTIM', 'MANIFEST', 'CONTEST', 'PRAZO', 'AUDIENC', 'PERIC', 'LAUDO', 'JUNTAR', 'APRESENTAR', 'CITAR'].some((term) =>
+            normalizedExcerpt.includes(term),
+        );
+    }
+
     private extractExplicitFatalDateNear(text: string, startIndex: number) {
         const window = text.slice(startIndex, startIndex + 200);
         const match = window.match(/(\d{2}\/\d{2}\/\d{4})(?:\s*(?:as|às)?\s*(\d{2}:\d{2}))?/i);
@@ -2092,7 +2220,7 @@ export class ProcessPdfService {
 
     private isProceduralAct(document: PdfProcessDocument) {
         const normalized = this.normalizeLooseText(`${document.documentType || ''} ${document.label}`);
-        return ['INTIM', 'DESPACH', 'DECISAO', 'SENTENCA', 'CERTIDAO', 'MANDADO', 'FORMAL DE PARTILHA', 'COMUNICACAO'].some((token) =>
+        return ['INTIM', 'DESPACH', 'DECISAO', 'SENTENCA', 'CERTIDAO', 'MANDADO', 'FORMAL DE PARTILHA', 'COMUNICACAO', 'ATO ORDINATORIO', 'CITACAO'].some((token) =>
             normalized.includes(token),
         );
     }

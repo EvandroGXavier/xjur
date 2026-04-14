@@ -211,8 +211,66 @@ describe('ProcessPdfService', () => {
             type: 'PERITO',
             document: '101.608.786-16',
         });
+        expect(analysis.parts.find((party) => party.name === 'LEONARDO FIALHO PINTO')?.document).toBeUndefined();
+        expect(analysis.parts.find((party) => party.name === 'LEONARDO FIALHO PINTO')?.phone).toBeUndefined();
+        expect(analysis.parts.find((party) => party.name === 'ERICK LEMOS TEIXEIRA')?.phone).toBeUndefined();
         expect(analysis.documents.find((document) => document.documentId === '21')?.documentType).toBe('Peticao');
         expect(analysis.documents.find((document) => document.documentId === '29')?.documentType).toBe('Contrarrazoes');
+    });
+
+    it('filters noisy deadline candidates and keeps procedural eproc deadlines', async () => {
+        mockedExtractTextFromPdfBuffer.mockResolvedValue({
+            pageCount: 6,
+            text: [
+                'CAPA PROCESSO',
+                'N\u00BA do processo 1044734-36.2025.8.13.0024',
+                '-- 1 of 6 --',
+                'PAGINA DE SEPARACAO',
+                'Evento 1',
+                'Evento:',
+                'Data:',
+                'Usuario:',
+                'Processo:',
+                'Sequencia Evento:',
+                'PETICAO INICIAL',
+                '29/08/2025 20:27:12',
+                'MG158592 - EVANDRO GERALDO XAVIER - ADVOGADO',
+                '1044734-36.2025.8.13.0024/MG',
+                '1',
+                '-- 2 of 6 --',
+                'Contrato de adesao. O consumidor podera desistir no prazo de 7 (sete) dias fora do estabelecimento comercial.',
+                'Garantia contratual de 90 (noventa) dias.',
+                'A vistoria possuia validade ate 15/03/2025.',
+                'Processo 1044734-36.2025.8.13.0024/MG, Evento 1, INIC1, Pagina 1',
+                '-- 3 of 6 --',
+                'PAGINA DE SEPARACAO',
+                'Evento 57',
+                'Evento:',
+                'Data:',
+                'Usuario:',
+                'Processo:',
+                'Sequencia Evento:',
+                'ATO ORDINATORIO PRATICADO',
+                '23/03/2026 14:41:19',
+                'F0140939 - VANIA DE OLIVEIRA MATTAR - USUARIO EPROC',
+                '1044734-36.2025.8.13.0024/MG',
+                '57',
+                '-- 4 of 6 --',
+                'ATO ORDINATORIO',
+                'Procedi, de oficio, a intimacao do perito para que junte o laudo pericial aos autos, no prazo de trinta dias, a contar da realizacao da pericia.',
+                'Processo 1044734-36.2025.8.13.0024/MG, Evento 57, ATOORD1, Pagina 1',
+            ].join('\n'),
+        });
+
+        const analysis = await service.analyzeFullProcessPdf(Buffer.from('pdf'));
+
+        expect(analysis.deadlineCandidates).toEqual([
+            expect.objectContaining({
+                sourceDocumentId: '57',
+                deadlineDays: 30,
+                documentType: 'Ato ordinatorio',
+            }),
+        ]);
     });
 
     it('extracts preview data from the first PJe pages without depending on CNJ consultation', async () => {
