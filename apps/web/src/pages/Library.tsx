@@ -1292,8 +1292,8 @@ export function Library() {
                 Biblioteca de Modelos
               </h1>
               <p className="text-slate-400 mt-1">
-                Gerencie minutas, contratos e documentos padrao com busca, grid,
-                tags e configuracoes do escritorio.
+                Gerencie minutas, contratos e documentos padrão com busca, grid,
+                tags e configurações do escritório.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -1382,41 +1382,41 @@ export function Library() {
         </div>
 
         {activeTab !== "SETTINGS" && (
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="flex flex-col gap-4 flex-1">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-                <div className="relative flex-1 max-w-xl">
-                  <Search
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
-                    size={18}
-                  />
-                  <input
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    placeholder={
-                      activeTab === "TEMPLATES"
-                        ? "Buscar modelos, descricoes e tags..."
-                        : "Buscar documentos gerados..."
-                    }
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex flex-col gap-5 flex-1">
+              {/* Barra de Busca - Linha Dedicada */}
+              <div className="relative w-full group">
+                <Search
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-indigo-400"
+                  size={20}
+                />
+                <input
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder={
+                    activeTab === "TEMPLATES"
+                      ? "Buscar por título, descrição ou tags do modelo..."
+                      : "Buscar documentos gerados recentemente..."
+                  }
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-12 pr-4 py-4 text-lg text-white font-medium focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition-all shadow-lg placeholder:text-slate-600 focus:bg-slate-900 focus:border-indigo-500/50"
+                />
+              </div>
+
+              {/* Tags de Filtro - Linha Dedicada abaixo da busca */}
+              {activeTab === "TEMPLATES" && (
+                <div className="bg-slate-950/20 p-2 rounded-xl border border-slate-900/50">
+                  <AdvancedTagFilter
+                    entityType="library"
+                    includedIds={includedTags}
+                    excludedIds={excludedTags}
+                    onChange={(inc, exc) => {
+                      setIncludedTags(inc);
+                      setExcludedTags(exc);
+                    }}
+                    className="min-h-[48px]"
                   />
                 </div>
-
-                {activeTab === "TEMPLATES" && (
-                  <>
-                    <AdvancedTagFilter
-                      entityType="library"
-                      includedIds={includedTags}
-                      excludedIds={excludedTags}
-                      onChange={(inc, exc) => {
-                        setIncludedTags(inc);
-                        setExcludedTags(exc);
-                      }}
-                      className="min-h-[48px]"
-                    />
-                  </>
-                )}
-              </div>
+              )}
 
               {activeTab === "TEMPLATES" && (
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">

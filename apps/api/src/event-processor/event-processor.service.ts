@@ -1,11 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma.service';
 import { FinancialService } from '../financial/financial.service';
 import { InboxService } from '../inbox/inbox.service';
-import { forwardRef, Inject } from '@nestjs/common';
+import {
   construirContatosAdicionaisPorCanal,
   construirValoresBuscaIdentificadores,
   normalizarDigitosDDI,

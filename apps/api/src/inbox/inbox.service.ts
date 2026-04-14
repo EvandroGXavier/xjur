@@ -16,6 +16,7 @@ import { MergeContactDto } from './dto/merge-contact.dto';
 import { LinkMessageProcessDto } from './dto/link-message-process.dto';
 import { TelegramService } from '../telegram/telegram.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import {
   construirContatosAdicionaisPorCanal,
   construirValoresBuscaIdentificadores,
   normalizarDigitosDDI,
