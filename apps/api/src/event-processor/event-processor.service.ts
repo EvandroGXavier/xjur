@@ -6,9 +6,9 @@ import { PrismaService } from '../prisma.service';
 import { FinancialService } from '../financial/financial.service';
 import { InboxService } from '../inbox/inbox.service';
 import { forwardRef, Inject } from '@nestjs/common';
-import {
   construirContatosAdicionaisPorCanal,
   construirValoresBuscaIdentificadores,
+  normalizarDigitosDDI,
 } from '../common/contact-identifiers';
 
 @Injectable()
@@ -132,9 +132,9 @@ export class EventProcessorService {
     if (!normalized) return '';
     if (normalized.includes('@lid') || normalized.includes('@g.us')) return '';
     if (normalized.includes('@s.whatsapp.net')) {
-      return normalized.split('@')[0].replace(/\D/g, '');
+      return normalizarDigitosDDI(normalized.split('@')[0]);
     }
-    return normalized.replace(/\D/g, '');
+    return normalizarDigitosDDI(normalized);
   }
 
   private isPlausibleWhatsappNumber(value?: string | null) {

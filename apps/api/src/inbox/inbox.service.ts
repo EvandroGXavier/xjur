@@ -16,9 +16,9 @@ import { MergeContactDto } from './dto/merge-contact.dto';
 import { LinkMessageProcessDto } from './dto/link-message-process.dto';
 import { TelegramService } from '../telegram/telegram.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
-import {
   construirContatosAdicionaisPorCanal,
   construirValoresBuscaIdentificadores,
+  normalizarDigitosDDI,
 } from '../common/contact-identifiers';
 
 type CaptureExternalMessageInput = {
@@ -297,10 +297,10 @@ export class InboxService {
     if (normalized.includes('@lid') || normalized.includes('@g.us')) return '';
 
     if (normalized.includes('@s.whatsapp.net')) {
-      return normalized.split('@')[0].replace(/\D/g, '');
+      return normalizarDigitosDDI(normalized.split('@')[0]);
     }
 
-    return normalized.replace(/\D/g, '');
+    return normalizarDigitosDDI(normalized);
   }
 
   private isPlausibleWhatsappDigits(value: unknown): value is string {

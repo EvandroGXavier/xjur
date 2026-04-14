@@ -4,6 +4,15 @@ export type ContatoAdicionalIdentificador = {
   nomeContatoAdicional: string;
 };
 
+export function normalizarDigitosDDI(digits: string): string {
+  if (!digits) return '';
+  const clean = digits.replace(/\D/g, '');
+  if (clean.length >= 10 && clean.length <= 11 && !clean.startsWith('55')) {
+    return '55' + clean;
+  }
+  return clean;
+}
+
 export function normalizarIdentificadorCanal(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim().replace(/:[0-9]+(?=@)/, '');
@@ -18,14 +27,14 @@ export function extrairDigitosIdentificador(value: unknown): string {
   if (!normalized) return '';
 
   if (normalized.includes('@s.whatsapp.net')) {
-    return normalized.split('@')[0].replace(/\D/g, '');
+    return normalizarDigitosDDI(normalized.split('@')[0]);
   }
 
   if (normalized.includes('@lid') || normalized.includes('@g.us')) {
     return '';
   }
 
-  return normalized.replace(/\D/g, '');
+  return normalizarDigitosDDI(normalized);
 }
 
 export function ehTelefoneProvavel(value: unknown): value is string {
@@ -91,6 +100,8 @@ export function construirContatosAdicionaisPorCanal(
 
       if (digits) {
         push('WHATSAPP', digits, 'WhatsApp');
+        // Adiciona também a versão JID canônica
+        push('WHATSAPP_JID', `${digits}@s.whatsapp.net`, 'WhatsApp JID');
       }
 
       continue;
