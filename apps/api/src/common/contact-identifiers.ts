@@ -41,6 +41,19 @@ export function ehTelefoneProvavel(value: unknown): value is string {
   return typeof value === 'string' && /^\d{8,15}$/.test(value);
 }
 
+function construirVariantesTelefoneWhatsapp(digits: string): string[] {
+  const variants = new Set<string>();
+  if (!digits) return [];
+
+  variants.add(digits);
+
+  if (digits.startsWith('55') && digits.length >= 12 && digits.length <= 13) {
+    variants.add(digits.slice(2));
+  }
+
+  return Array.from(variants);
+}
+
 export function construirValoresBuscaIdentificadores(
   channel: string,
   identifiers: Array<unknown>,
@@ -56,9 +69,11 @@ export function construirValoresBuscaIdentificadores(
 
     const digits = extrairDigitosIdentificador(identifier);
     if (digits) {
-      values.add(digits);
       if (normalizedChannel === 'WHATSAPP' && ehTelefoneProvavel(digits)) {
+        construirVariantesTelefoneWhatsapp(digits).forEach((variant) => values.add(variant));
         values.add(`${digits}@s.whatsapp.net`);
+      } else {
+        values.add(digits);
       }
     }
   }

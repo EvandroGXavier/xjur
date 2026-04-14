@@ -61,11 +61,11 @@ export class TicketsService {
     }
 
     if (ticket.channel === 'WHATSAPP') {
-      return ticket.contact?.whatsapp || ticket.contact?.phone || 'ticket:' + ticket.id;
+      return this.resolveAdditionalContactValue(ticket.contact, 'WHATSAPP') || 'ticket:' + ticket.id;
     }
 
     if (ticket.channel === 'EMAIL') {
-      return ticket.contact?.email || 'ticket:' + ticket.id;
+      return this.resolveAdditionalContactValue(ticket.contact, 'EMAIL') || 'ticket:' + ticket.id;
     }
 
     if (ticket.channel === 'TELEGRAM') {
@@ -113,9 +113,9 @@ export class TicketsService {
       metadata.remoteJid
       || metadata.senderAddress
       || (ticket.channel === 'TELEGRAM' ? ticket.contact?.metadata?.telegramChatId : null)
-      || (ticket.channel === 'EMAIL' ? ticket.contact?.email : null)
-      || ticket.contact?.whatsapp
-      || ticket.contact?.phone
+      || (ticket.channel === 'EMAIL' ? this.resolveAdditionalContactValue(ticket.contact, 'EMAIL') : null)
+      || (ticket.channel === 'WHATSAPP' ? this.resolveAdditionalContactValue(ticket.contact, 'WHATSAPP') : null)
+      || (ticket.channel === 'PHONE' ? this.resolveAdditionalContactValue(ticket.contact, 'PHONE') : null)
       || null;
 
     await this.agentService.captureMessage({
@@ -448,21 +448,15 @@ export class TicketsService {
       const existingContact = await this.prisma.contact.findFirst({
         where: {
           tenantId,
-          OR: [
-            { phone: createTicketDto.contactPhone },
-            { whatsapp: createTicketDto.contactPhone },
-            {
-              additionalContacts: {
-                some: {
-                  value: {
-                    in: construirValoresBuscaIdentificadores(createTicketDto.channel || 'WHATSAPP', [
-                      createTicketDto.contactPhone,
-                    ]),
-                  },
-                },
+          additionalContacts: {
+            some: {
+              value: {
+                in: construirValoresBuscaIdentificadores(createTicketDto.channel || 'WHATSAPP', [
+                  createTicketDto.contactPhone,
+                ]),
               },
             },
-          ],
+          },
         },
       });
 
@@ -472,8 +466,6 @@ export class TicketsService {
         const contactData: any = {
           tenantId,
           name: createTicketDto.contactName || createTicketDto.contactPhone,
-          phone: createTicketDto.contactPhone,
-          whatsapp: createTicketDto.channel === 'WHATSAPP' ? createTicketDto.contactPhone : undefined,
         };
 
         const newContact = await this.prisma.contact.create({
@@ -533,7 +525,7 @@ export class TicketsService {
     const fullTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
+          contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true, additionalContacts: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -552,9 +544,9 @@ export class TicketsService {
     return this.prisma.ticket.findMany({
       where,
       include: {
-        contact: {
-          select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true },
-        },
+          contact: {
+            select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true, additionalContacts: true },
+          },
         _count: {
           select: { messages: true },
         },
@@ -643,7 +635,7 @@ export class TicketsService {
     const updatedTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
+         contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true, additionalContacts: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -659,7 +651,7 @@ export class TicketsService {
       where: { id },
       data: updateData,
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true, additionalContacts: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -730,7 +722,7 @@ export class TicketsService {
     const updatedTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true, additionalContacts: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -787,7 +779,7 @@ export class TicketsService {
     const updatedTicket = await this.prisma.ticket.findFirst({
       where: { id: ticket.id },
       include: {
-        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true, whatsapp: true, whatsappFullId: true, whatsappE164: true, category: true, additionalContacts: true } },
         _count: { select: { messages: true } },
       },
     });
@@ -810,7 +802,7 @@ export class TicketsService {
         const connection = await this.resolveWhatsappConnection(tenantId, message.ticket, messageMetadata.connectionId);
 
         if (connection && message.externalId) {
-          const phone = message.ticket.contact?.whatsapp || message.ticket.contact?.phone;
+          const phone = this.resolveAdditionalContactValue(message.ticket.contact, 'WHATSAPP');
           await this.whatsappService.deleteMessage(connection.id, phone, message.externalId, true);
           this.logger.log(`Remote delete executed for message ${messageId}`);
         } else if (!message.externalId) {
@@ -851,7 +843,7 @@ export class TicketsService {
       const connection = await this.resolveWhatsappConnection(tenantId, ticket, preferredConnectionId);
 
       if (connection) {
-        const rawJid = ticket.contact?.whatsapp || ticket.contact?.phone;
+        const rawJid = this.resolveAdditionalContactValue(ticket.contact, 'WHATSAPP');
         if (rawJid && this.whatsappService.markRead) {
           await this.whatsappService.markRead(connection.id, rawJid, unreadMessages.map((message) => message.externalId!));
         }
@@ -871,10 +863,7 @@ export class TicketsService {
     preferredConnectionId?: string | null,
   ) {
     const rawPhone =
-      this.resolveAdditionalContactValue(ticket.contact, 'WHATSAPP')
-      || ticket.contact?.whatsappFullId
-      || ticket.contact?.whatsapp
-      || ticket.contact?.phone;
+      this.resolveAdditionalContactValue(ticket.contact, 'WHATSAPP');
     if (!rawPhone) {
       this.ticketsGateway.emitTicketError(tenantId, {
         ticketId: ticket.id,

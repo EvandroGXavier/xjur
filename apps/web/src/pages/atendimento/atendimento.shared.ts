@@ -17,7 +17,38 @@ export interface ContactSummary {
   whatsappE164?: string;
   whatsappFullId?: string;
   email?: string;
+  additionalContacts?: Array<{
+    id?: string;
+    type?: string;
+    value: string;
+    nomeContatoAdicional?: string | null;
+  }>;
 }
+
+export const getAdditionalContactIdentifier = (contact?: ContactSummary | null, channel?: string) => {
+  const values = Array.isArray(contact?.additionalContacts)
+    ? contact.additionalContacts.map((item) => item.value)
+    : [];
+
+  if ((channel || '').toUpperCase() === 'WHATSAPP') {
+    const digits = values
+      .map((value) => (value || '').replace(/\D/g, ''))
+      .find((value) => /^\d{10,15}$/.test(value));
+    if (digits) return digits;
+
+    const jid = values.find((value) => value.includes('@s.whatsapp.net'));
+    if (jid) return jid;
+
+    const lid = values.find((value) => value.includes('@lid'));
+    if (lid) return lid;
+  }
+
+  if ((channel || '').toUpperCase() === 'EMAIL') {
+    return values.find((value) => value.includes('@')) || '';
+  }
+
+  return values[0] || '';
+};
 
 export interface ProcessSummary {
   id: string;
@@ -112,7 +143,9 @@ export const getChannelLabel = (channel?: string | null) =>
   ATENDIMENTO_CHANNEL_LABELS[(channel || '').toUpperCase()] || channel || 'Canal';
 
 export const getContactIdentifier = (contact?: ContactSummary | null) =>
-  contact?.whatsappE164 || contact?.whatsapp || contact?.phone || contact?.email || '';
+  getAdditionalContactIdentifier(contact, 'WHATSAPP')
+  || getAdditionalContactIdentifier(contact, 'EMAIL')
+  || '';
 
 export const getConversationDisplayName = (conversation?: AtendimentoConversation | null) =>
   conversation?.contact?.name?.trim() ||

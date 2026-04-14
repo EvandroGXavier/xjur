@@ -312,12 +312,11 @@ export class InboxService {
     const metadata = this.asObject(conversation?.metadata as Record<string, any>);
 
     const explicitIdentities = [
-      contact?.whatsappFullId,
       typeof metadata.remoteJid === 'string' ? metadata.remoteJid : null,
       typeof metadata.lidJid === 'string' ? metadata.lidJid : null,
       conversation?.externalThreadId,
       conversation?.externalParticipantId,
-      contact?.whatsapp,
+      contact?.whatsappFullId,
     ]
       .map((candidate) => this.normalizeWhatsappIdentity(candidate))
       .filter((candidate): candidate is string => Boolean(candidate));
@@ -336,10 +335,7 @@ export class InboxService {
     );
 
     const numberCandidates = [
-      contact?.whatsapp,
-      contact?.whatsappE164,
       this.extractResolvedWhatsappPhone(conversation),
-      contact?.phone,
       conversation?.externalParticipantId,
       conversation?.externalThreadId,
     ]
@@ -435,8 +431,6 @@ export class InboxService {
     provider?: string | null;
   }) {
     const channel = params.channel.toUpperCase();
-    const provider = params.provider || 'INBOX';
-
     const validIdentifiers = Array.from(
       new Set(
         params.identifiers
@@ -446,38 +440,6 @@ export class InboxService {
     );
 
     if (validIdentifiers.length === 0) return;
-
-    for (const externalId of validIdentifiers) {
-      try {
-        await this.prisma.contactChannelIdentity.upsert({
-          where: {
-            tenantId_channel_externalId: {
-              tenantId: params.tenantId,
-              channel,
-              externalId,
-            },
-          },
-          create: {
-            tenantId: params.tenantId,
-            contactId: params.contactId,
-            channel,
-            provider,
-            externalId,
-          },
-          update: {
-            // Se já existe um registro, garante que o contactId seja o correto
-            contactId: params.contactId,
-            provider,
-          },
-        });
-      } catch (error: any) {
-        // Swallow race conditions - a unique constraint violation means another
-        // concurrent request already created the record, which is fine.
-        this.logger.debug(
-          `Falha ao registrar ContactChannelIdentity (possivel corrida): channel=${channel} externalId=${externalId} error=${error?.message}`,
-        );
-      }
-    }
 
     await this.ensureAdditionalContactIdentifiers({
       contactId: params.contactId,
@@ -513,6 +475,35 @@ export class InboxService {
         value: item.value,
         nomeContatoAdicional: item.nomeContatoAdicional,
       })),
+    });
+  }
+
+  private async findContactByChannelIdentifiers(
+    tenantId: string,
+    channel: string,
+    identifiers: Array<string | null | undefined>,
+  ) {
+    const normalizedChannel = this.normalizeChannel(channel);
+    const lookupValues = construirValoresBuscaIdentificadores(normalizedChannel, identifiers);
+    if (lookupValues.length === 0) {
+      return null;
+    }
+
+    return this.prisma.contact.findFirst({
+      where: {
+        tenantId,
+        additionalContacts: {
+          some: {
+            value: { in: lookupValues },
+          },
+        },
+      },
+      include: {
+        additionalContacts: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
     });
   }
 
@@ -640,7 +631,9 @@ export class InboxService {
       const mergedNumbers = Array.from(new Set([...additionalValues.filter(v => /^\d{8,15}$/.test(v)), ...numbers]));
       const mergedLids = Array.from(new Set([...additionalValues.filter(v => v.endsWith('@lid')), ...explicitLids]));
 
-      const preferredNumber = mergedNumbers[0];
+      const preferredNumber =
+        mergedNumbers.find((value) => value.startsWith('55') && /^\d{12,13}$/.test(value)) ||
+        mergedNumbers[0];
       if (preferredNumber) {
         return {
           destination: preferredNumber,
@@ -664,15 +657,28 @@ export class InboxService {
       }
     }
 
+    if (Array.isArray(contact?.additionalContacts)) {
+      const normalizedAdditionalValues = construirValoresBuscaIdentificadores(
+        normalizedChannel,
+        contact.additionalContacts.map((item: any) => item.value),
+      );
+      const preferredAdditional =
+        normalizedChannel === 'EMAIL'
+          ? normalizedAdditionalValues.find((value) => value.includes('@'))
+          : normalizedAdditionalValues[0];
+
+      if (preferredAdditional) {
+        candidates.add(preferredAdditional);
+        return { destination: preferredAdditional, candidates: Array.from(candidates) };
+      }
+    }
+
     const threadId = conversation?.externalThreadId || conversation?.externalParticipantId;
     if (threadId) candidates.add(threadId);
 
-    const fallback = contact?.phone || contact?.email || null;
-    if (fallback) candidates.add(fallback);
-
-    return { 
-      destination: (normalizedChannel === 'EMAIL' ? contact?.email : fallback) || threadId || null, 
-      candidates: Array.from(candidates) 
+    return {
+      destination: threadId || null,
+      candidates: Array.from(candidates),
     };
   }
 
@@ -1044,28 +1050,16 @@ export class InboxService {
     const channel = this.normalizeChannel(dto.channel);
     let contactId = dto.contactId;
 
-    // Se o contactId não foi informado, tenta localizar por número/identificador
-    if (!contactId && dto.externalThreadId && channel === 'WHATSAPP') {
-      const lookupValues = construirValoresBuscaIdentificadores('WHATSAPP', [dto.externalThreadId]);
-      const foundContact = await this.prisma.contact.findFirst({
-        where: {
-          tenantId,
-          OR: [
-            { whatsapp: { in: lookupValues } },
-            { whatsappE164: { in: lookupValues } },
-            { phone: { in: lookupValues } },
-            { whatsappFullId: { in: lookupValues } },
-            {
-              additionalContacts: {
-                some: { value: { in: lookupValues } }
-              }
-            }
-          ]
-        }
-      });
-      if (foundContact) {
-        contactId = foundContact.id;
-        this.logger.log(`Lookup manual: contato identificado por número ${dto.externalThreadId} -> ${foundContact.name} (${foundContact.id})`);
+    if (!contactId && (dto.externalThreadId || dto.externalParticipantId)) {
+      const foundByIdentifiers = await this.findContactByChannelIdentifiers(tenantId, channel, [
+        dto.externalThreadId,
+        dto.externalParticipantId,
+      ]);
+      if (foundByIdentifiers) {
+        contactId = foundByIdentifiers.id;
+        this.logger.log(
+          `Lookup manual por additionalContacts: ${dto.externalThreadId || dto.externalParticipantId} -> ${foundByIdentifiers.name} (${foundByIdentifiers.id})`,
+        );
       }
     }
 
@@ -1388,24 +1382,6 @@ export class InboxService {
     });
 
     if (!conversation.isInternal && conversation.channel === 'WHATSAPP') {
-      const resolvedPhone = this.extractResolvedWhatsappPhone(conversation);
-      if (
-        resolvedPhone &&
-        conversation.contact?.id &&
-        (!conversation.contact.whatsapp || String(conversation.contact.whatsapp).includes('@lid'))
-      ) {
-        await this.prisma.contact.update({
-          where: { id: conversation.contact.id },
-          data: {
-            whatsapp: resolvedPhone,
-          },
-        });
-        conversation.contact = {
-          ...conversation.contact,
-          whatsapp: resolvedPhone,
-        };
-      }
-
       const connection = await this.resolveConnectedWhatsappConnection(
         tenantId,
         conversation,
@@ -1418,7 +1394,7 @@ export class InboxService {
       this.logger.debug(
         `WhatsApp destination resolution conversation=${conversationId} ` +
         `contact=${conversation.contact?.id || 'none'} ` +
-        `contactWhatsapp=${conversation.contact?.whatsapp || 'none'} ` +
+        `contactAdditional=${Array.isArray(conversation.contact?.additionalContacts) ? conversation.contact.additionalContacts.length : 0} ` +
         `externalParticipantId=${conversation.externalParticipantId || 'none'} ` +
         `externalThreadId=${conversation.externalThreadId || 'none'} ` +
         `resolvedDestination=${destination || 'null'}`,
@@ -1470,29 +1446,6 @@ export class InboxService {
             ],
           });
 
-          if (resolvedPhone && conversation.contact?.id) {
-            const contactNeedsUpdate =
-              this.extractWhatsappDigits(conversation.contact.whatsapp) !== resolvedPhone ||
-              this.extractWhatsappDigits(conversation.contact.whatsappE164) !== resolvedPhone ||
-              this.normalizeWhatsappIdentity(conversation.contact.whatsappFullId) !== canonicalThreadId;
-
-            if (contactNeedsUpdate) {
-              const updatedContact = await this.prisma.contact.update({
-                where: { id: conversation.contact.id },
-                data: {
-                  whatsapp: resolvedPhone,
-                  whatsappE164: resolvedPhone,
-                  whatsappFullId: canonicalThreadId,
-                },
-              });
-              conversation.contact = {
-                ...conversation.contact,
-                whatsapp: updatedContact.whatsapp,
-                whatsappE164: updatedContact.whatsappE164,
-                whatsappFullId: updatedContact.whatsappFullId,
-              };
-            }
-          }
         }
         const externalMessageId =
           contentType === 'TEXT'
@@ -1983,15 +1936,10 @@ export class InboxService {
       throw new BadRequestException('Nao e possivel mesclar um contato com ele mesmo.');
     }
 
-    // 1. Transferir Identidades (ContactChannelIdentity)
+    // 1. Transferir identificadores e relacionamentos operacionais.
     // Usamos transaction para garantir consistência
     await this.prisma.$transaction(async (tx) => {
       // Mover as identidades
-      await tx.contactChannelIdentity.updateMany({
-        where: { tenantId, contactId: source.id },
-        data: { contactId: target.id },
-      });
-
       await tx.additionalContact.updateMany({
         where: { contactId: source.id },
         data: { contactId: target.id },

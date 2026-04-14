@@ -494,11 +494,6 @@ export class ContactsService {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { document: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
-        { whatsapp: { contains: search, mode: 'insensitive' } },
-        { whatsappE164: { contains: search, mode: 'insensitive' } },
-        { whatsappFullId: { contains: search, mode: 'insensitive' } },
         {
           additionalContacts: {
             some: {
@@ -825,19 +820,30 @@ export class ContactsService {
 
     const whatsappMatch = getPhoneMatchKey(whatsapp);
     const phoneMatch = getPhoneMatchKey(phone);
+    const buildAdditionalPhoneCondition = (match: string) => ({
+      additionalContacts: {
+        some: {
+          value: { endsWith: match },
+        },
+      },
+    });
 
     const conditions: any[] = [];
     if (name) conditions.push({ name: { equals: name, mode: 'insensitive' } });
     if (whatsappMatch) {
-      conditions.push({ whatsapp: { endsWith: whatsappMatch } });
-      conditions.push({ phone: { endsWith: whatsappMatch } });
+      conditions.push(buildAdditionalPhoneCondition(whatsappMatch));
     }
     if (phoneMatch) {
-      conditions.push({ phone: { endsWith: phoneMatch } });
-      conditions.push({ whatsapp: { endsWith: phoneMatch } });
+      conditions.push(buildAdditionalPhoneCondition(phoneMatch));
     }
     if (email && !isPlaceholderEmail(email)) {
-      conditions.push({ email: { equals: email, mode: 'insensitive' } });
+      conditions.push({
+        additionalContacts: {
+          some: {
+            value: { equals: email, mode: 'insensitive' },
+          },
+        },
+      });
     }
     if (document) conditions.push({ document: { endsWith: document } });
     if (cpf) conditions.push({ pfDetails: { cpf: { endsWith: cpf } } });
@@ -853,6 +859,7 @@ export class ContactsService {
       include: {
         pfDetails: true,
         pjDetails: true,
+        additionalContacts: true,
       },
     };
 
@@ -864,12 +871,18 @@ export class ContactsService {
     if (!matches || matches.length === 0) return null;
 
     for (const hit of matches as any[]) {
-      const hitWhatsappMatch = getPhoneMatchKey(hit.whatsapp);
-      const hitPhoneMatch = getPhoneMatchKey(hit.phone);
+      const hitAdditionalValues = Array.isArray(hit.additionalContacts)
+        ? hit.additionalContacts.map((item: any) => item.value)
+        : [];
+      const hitPhoneKeys = hitAdditionalValues
+        .map((value: string) => getPhoneMatchKey(value))
+        .filter(Boolean);
       const hitDocument = this.normalizeDigits(hit.document);
       const hitCpf = this.normalizeDigits(hit.pfDetails?.cpf);
       const hitCnpj = this.normalizeDigits(hit.pjDetails?.cnpj);
-      const hitEmail = this.normalizeText(hit.email);
+      const hitEmail = this.normalizeText(
+        hitAdditionalValues.find((value: string) => String(value || '').includes('@')) || '',
+      );
       const hitName = this.normalizeText(hit.name);
 
       if (name && hitName === name) {
@@ -880,13 +893,13 @@ export class ContactsService {
       }
       if (
         whatsappMatch &&
-        (hitWhatsappMatch === whatsappMatch || hitPhoneMatch === whatsappMatch)
+        hitPhoneKeys.includes(whatsappMatch)
       ) {
         return { id: hit.id, name: hit.name, matchedField: 'celular/whatsapp' };
       }
       if (
         phoneMatch &&
-        (hitPhoneMatch === phoneMatch || hitWhatsappMatch === phoneMatch)
+        hitPhoneKeys.includes(phoneMatch)
       ) {
         return { id: hit.id, name: hit.name, matchedField: 'telefone' };
       }
@@ -1858,9 +1871,13 @@ export class ContactsService {
         whereClause.OR = [
           { name: { contains: search, mode: 'insensitive' } },
           { document: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search, mode: 'insensitive' } },
-          { whatsapp: { contains: search, mode: 'insensitive' } },
+          {
+            additionalContacts: {
+              some: {
+                value: { contains: search, mode: 'insensitive' },
+              },
+            },
+          },
           { pfDetails: { cpf: { contains: search, mode: 'insensitive' } } },
           { pjDetails: { cnpj: { contains: search, mode: 'insensitive' } } },
         ];
@@ -2040,6 +2057,7 @@ export class ContactsService {
       }
 
       const channelIdentifiers = construirContatosAdicionaisPorCanal('WHATSAPP', [
+        contact.whatsapp,
         contact.whatsappFullId,
         contact.whatsappE164,
       ]);
@@ -2090,10 +2108,8 @@ export class ContactsService {
     const connectionId = connections[0].id;
 
     const numbersToCheck = new Set<string>();
-    if (contact.whatsapp) numbersToCheck.add(contact.whatsapp);
-    if (contact.phone) numbersToCheck.add(contact.phone);
     contact.additionalContacts.forEach(ac => {
-        if (['WHATSAPP', 'TELEFONE', 'CELULAR'].includes(ac.type.toUpperCase())) {
+        if (['WHATSAPP', 'WHATSAPP_JID', 'TELEFONE', 'CELULAR'].includes(ac.type.toUpperCase())) {
             numbersToCheck.add(ac.value);
         }
     });

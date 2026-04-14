@@ -251,39 +251,11 @@ export class WhatsappService implements OnModuleInit {
   }
 
   private async upsertWhatsappIdentity(params: {
-    tenantId: string;
     contactId: string;
     externalId: string | null;
-    provider?: string;
   }) {
     const externalId = this.normalizeWhatsappJid(params.externalId);
     if (!externalId) return;
-
-    try {
-      await this.prisma.contactChannelIdentity.upsert({
-        where: {
-          tenantId_channel_externalId: {
-            tenantId: params.tenantId,
-            channel: 'WHATSAPP',
-            externalId,
-          },
-        },
-        create: {
-          tenantId: params.tenantId,
-          contactId: params.contactId,
-          channel: 'WHATSAPP',
-          provider: params.provider || 'EVOLUTION',
-          externalId,
-        },
-        update: {
-          contactId: params.contactId,
-          provider: params.provider || 'EVOLUTION',
-        },
-      });
-    } catch {
-      // If there's historic duplication, the unique constraint may already be held by another contact.
-      // We'll still rely on whatsappE164/whatsappFullId normalization to reduce future duplicates.
-    }
 
     const additionalContacts = construirContatosAdicionaisPorCanal('WHATSAPP', [externalId]);
     if (additionalContacts.length === 0) return;
@@ -788,24 +760,6 @@ export class WhatsappService implements OnModuleInit {
       phoneFullId,
     ]);
 
-    if (normalizedIdentities.length > 0) {
-      const identity = await this.prisma.contactChannelIdentity.findFirst({
-        where: {
-          tenantId,
-          channel: 'WHATSAPP',
-          externalId: { in: normalizedIdentities },
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
-
-      if (identity?.contactId) {
-        const contact = await this.prisma.contact.findFirst({
-          where: { id: identity.contactId, tenantId },
-        });
-        if (contact) return contact;
-      }
-    }
-
     if (lookupValues.length > 0) {
       const contactByAdditional = await this.prisma.contact.findFirst({
         where: {
@@ -822,46 +776,7 @@ export class WhatsappService implements OnModuleInit {
       if (contactByAdditional) return contactByAdditional;
     }
 
-    // Fallback to Contact table direct fields
-    const contact = await this.prisma.contact.findFirst({
-      where: {
-        tenantId,
-        OR: [
-          { whatsappFullId: { in: normalizedIdentities } },
-          { whatsapp: { in: normalizedIdentities } },
-          { whatsappE164: phoneClean || undefined },
-          { phone: phoneClean || undefined },
-          phoneFullId ? { whatsappFullId: phoneFullId } : undefined,
-          phoneClean ? { whatsapp: phoneClean } : undefined,
-        ].filter(Boolean) as any,
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-
-    if (contact) return contact;
-
-    // Last resort: Tail matching (only for non-group, non-LID digits)
-    if (phoneTail && phoneClean) {
-      const phoneTail4 = (digits: string) => digits.length >= 4 ? digits.slice(-4) : digits;
-      const tail4 = phoneTail4(phoneClean);
-
-      const candidateContacts = await this.prisma.contact.findMany({
-        where: {
-          tenantId,
-          OR: [
-            { whatsapp: { contains: tail4 } },
-            { phone: { contains: tail4 } }
-          ]
-        }
-      });
-
-      return candidateContacts.find(c => {
-        const wClean = (c.whatsapp || '').replace(/\D/g, '');
-        const pClean = (c.phone || '').replace(/\D/g, '');
-        return (wClean && wClean.endsWith(phoneTail)) || (pClean && pClean.endsWith(phoneTail));
-      }) || null;
-    }
-
+    return null;
     return null;
   }
 
@@ -1032,35 +947,44 @@ export class WhatsappService implements OnModuleInit {
       const conn = await this.prisma.connection.findUnique({ where: { id: connectionId } });
       if (conn) {
         let contact: any = null;
+        const lookupValues = construirValoresBuscaIdentificadores('WHATSAPP', [jid, phone]);
 
-        if (phoneTail4) {
-          const candidateContacts = await this.prisma.contact.findMany({
-            where: {
-              tenantId: conn.tenantId,
-              OR: [
-                { whatsapp: { contains: phoneTail4 } },
-                { phone: { contains: phoneTail4 } }
-              ]
-            }
-          });
-
-          contact = candidateContacts.find((candidate) => {
-            const whatsappDigits = (candidate.whatsapp || '').replace(/\D/g, '');
-            const phoneDigitsCandidate = (candidate.phone || '').replace(/\D/g, '');
-            return (whatsappDigits && whatsappDigits.endsWith(phoneTail)) || (phoneDigitsCandidate && phoneDigitsCandidate.endsWith(phoneTail));
-          });
-        }
-
-        if (!contact) {
+        if (lookupValues.length > 0) {
           contact = await this.prisma.contact.findFirst({
             where: {
               tenantId: conn.tenantId,
-              OR: [
-                { whatsapp: jid },
-                { whatsapp: phone },
-                { phone }
-              ]
-            }
+              additionalContacts: {
+                some: {
+                  value: { in: lookupValues },
+                },
+              },
+            },
+          });
+        }
+
+        if (!contact && phoneTail4) {
+          const candidateContacts = await this.prisma.contact.findMany({
+            where: {
+              tenantId: conn.tenantId,
+              additionalContacts: {
+                some: {
+                  value: { contains: phoneTail4 },
+                },
+              },
+            },
+            include: {
+              additionalContacts: true,
+            },
+          });
+
+          contact = candidateContacts.find((candidate) => {
+            const additionalValues = Array.isArray(candidate.additionalContacts)
+              ? candidate.additionalContacts.map((item: any) => item.value)
+              : [];
+            return additionalValues.some((value: string) => {
+              const digits = this.extractWhatsappDigits(value);
+              return digits && digits.endsWith(phoneTail);
+            });
           });
         }
 
@@ -1227,10 +1151,8 @@ export class WhatsappService implements OnModuleInit {
               data: {
                 tenantId: connection.tenantId,
                 name: pushName || phoneClean || 'Sem Nome',
-                whatsapp: phoneClean || '99 99999999', // Phone é mantido como opcional agora
                 category: isGroup ? 'Grupo' : 'Lead',
                 profilePicUrl: picUrl,
-                email: 'nt@nt.com.br',
                 document: null,
                 notes: `Adicionado automaticamente via WhatsApp Sync.`
               }
@@ -1249,10 +1171,8 @@ export class WhatsappService implements OnModuleInit {
 
             for (const idToReg of identitiesToRegister) {
                 await this.upsertWhatsappIdentity({ 
-                    tenantId: connection.tenantId, 
                     contactId: contact.id, 
                     externalId: idToReg, 
-                    provider: 'EVOLUTION' 
                 });
             }
           }

@@ -33,6 +33,7 @@ import {
   InboxMessage,
   ProcessSummary,
   UserSummary,
+  getAdditionalContactIdentifier,
   getChannelLabel,
   getContactIdentifier,
   getConversationContext,
@@ -165,10 +166,19 @@ const normalizeWhatsappDigits = (value?: string | null) => {
 };
 
 const getContactWhatsappTarget = (contact?: ContactSummary | null) => {
-  const canonicalDigits = normalizeWhatsappDigits(contact?.whatsappE164 || contact?.whatsapp || contact?.phone);
+  const additionalValues = Array.isArray(contact?.additionalContacts)
+    ? contact.additionalContacts.map((item) => item.value)
+    : [];
+  const preferredAdditional =
+    additionalValues.find((value) => /^\d{10,15}$/.test((value || '').replace(/\D/g, '')))
+    || additionalValues.find((value) => value.includes('@s.whatsapp.net'))
+    || additionalValues.find((value) => value.includes('@lid'))
+    || '';
+
+  const canonicalDigits = normalizeWhatsappDigits(preferredAdditional);
   if (canonicalDigits) return canonicalDigits;
 
-  const fullId = (contact?.whatsappFullId || '').trim();
+  const fullId = (preferredAdditional || '').trim();
   return fullId || '';
 };
 
@@ -1376,9 +1386,9 @@ export function AtendimentoPage({
                         selectedConversation.title ||
                         'Sem identificacao'}
                     </p>
-                    {selectedConversation.contact?.email && (
+                    {getAdditionalContactIdentifier(selectedConversation.contact, 'EMAIL') && (
                       <p className="mt-1 text-xs text-slate-500">
-                        {selectedConversation.contact.email}
+                        {getAdditionalContactIdentifier(selectedConversation.contact, 'EMAIL')}
                       </p>
                     )}
                     {selectedConversation.connection?.name && (
@@ -1511,7 +1521,9 @@ export function AtendimentoPage({
                       >
                         <p>{contact.name}</p>
                         <p className="text-xs text-slate-400">
-                          {contact.whatsappE164 || contact.whatsapp || contact.phone || contact.email || '-'}
+                          {Array.isArray(contact.additionalContacts) && contact.additionalContacts.length > 0
+                            ? contact.additionalContacts[0]?.value || '-'
+                            : '-'}
                         </p>
                       </button>
                     ))}
