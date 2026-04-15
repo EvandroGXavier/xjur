@@ -863,6 +863,18 @@ export class InboxService {
       const whatsappVariants = isWhatsapp ? buildWhatsappThreadIdVariants(rawThreadId) : [rawThreadId];
       const normalizedWhatsappVariants = isWhatsapp ? whatsappVariants.map(v => v.includes('@') ? v : normalizarDigitosDDI(v)) : whatsappVariants;
 
+      // Include senderLid so a conversation stored with a LID identifier is found even
+      // when the incoming externalThreadId is a phone JID (and vice versa).
+      const lidVariants: string[] = [];
+      if (isWhatsapp && input.senderLid?.trim()) {
+        const normalizedLid = input.senderLid.trim().replace(/:[0-9]+(?=@)/, '');
+        if (normalizedLid.includes('@lid')) {
+          lidVariants.push(normalizedLid);
+        }
+      }
+
+      const allSearchVariants = Array.from(new Set([...whatsappVariants, ...normalizedWhatsappVariants, ...lidVariants]));
+
       const byThread = await this.prisma.agentConversation.findFirst({
         where: {
           tenantId: input.tenantId,
@@ -873,8 +885,8 @@ export class InboxService {
           ...(isWhatsapp
             ? {
                 OR: [
-                  { externalThreadId: { in: Array.from(new Set([...whatsappVariants, ...normalizedWhatsappVariants])) } },
-                  { externalParticipantId: { in: Array.from(new Set([...whatsappVariants, ...normalizedWhatsappVariants])) } },
+                  { externalThreadId: { in: allSearchVariants } },
+                  { externalParticipantId: { in: allSearchVariants } },
                 ],
               }
             : { externalThreadId: rawThreadId }),
@@ -911,11 +923,24 @@ export class InboxService {
     const preview = this.buildPreview(input.content, input.contentType);
 
     if (existing) {
+      // Preserve the LID in metadata so future cross-format lookups work even when
+      // externalThreadId alternates between phone JID and LID across messages.
+      const existingMeta = this.asObject(existing.metadata as Record<string, any>);
+      const incomingMeta = this.asObject(input.metadata);
+      const knownLids = Array.from(
+        new Set([
+          ...(Array.isArray(existingMeta.knownLids) ? existingMeta.knownLids : []),
+          ...(input.senderLid?.includes('@lid') ? [input.senderLid.trim().replace(/:[0-9]+(?=@)/, '')] : []),
+        ]),
+      );
+
       return this.prisma.agentConversation.update({
         where: { id: existing.id },
         data: {
           title: input.title ?? existing.title,
-          contactId: input.contactId ?? existing.contactId,
+          // Do NOT overwrite an existing contactId with a potentially wrong new one;
+          // only assign if the conversation has no contact yet.
+          contactId: existing.contactId ?? input.contactId ?? null,
           connectionId: input.connectionId ?? existing.connectionId,
           processId: input.processId ?? existing.processId,
           externalThreadId: input.externalThreadId ?? existing.externalThreadId,
@@ -929,8 +954,9 @@ export class InboxService {
           lastMessagePreview: preview,
           lastMessageAt: input.createdAt || new Date(),
           metadata: {
-            ...this.asObject(existing.metadata as Record<string, any>),
-            ...this.asObject(input.metadata),
+            ...existingMeta,
+            ...incomingMeta,
+            ...(knownLids.length > 0 ? { knownLids } : {}),
           },
         },
       });
