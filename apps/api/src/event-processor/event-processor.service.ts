@@ -531,6 +531,9 @@ export class EventProcessorService {
     resolvedPhoneDigits?: string | null;
     canonicalJidHint?: string | null;
     additionalIdentities?: Array<string | null | undefined>;
+    /** Fallback contact ID from an existing conversation — used when the LID cannot be
+     *  resolved to a phone and is not yet stored in additionalContacts. */
+    preferredContactId?: string | null;
   }) {
     const identities = Array.from(
       new Set(
@@ -595,6 +598,23 @@ export class EventProcessorService {
             targetContactId: contact.id,
           });
         }
+      }
+    }
+
+    // Fallback: when LID cannot be resolved to a phone number and is not yet stored in
+    // additionalContacts, use the preferred contact found via an existing conversation.
+    // This prevents creating a duplicate contact on the first inbound reply.
+    if (!contact && params.preferredContactId) {
+      const preferred = await this.prisma.contact.findFirst({
+        where: { id: params.preferredContactId, tenantId: params.tenantId },
+        include: { additionalContacts: true },
+      });
+      if (preferred) {
+        contact = preferred;
+        this.logger.log(
+          `Contato WhatsApp resolvido via conversa existente: ` +
+          `${identities.join(', ')} -> ${preferred.name} (${preferred.id})`,
+        );
       }
     }
 
@@ -751,6 +771,40 @@ export class EventProcessorService {
     const canonicalParticipantId = resolvedPhoneDigits || participantId || canonicalThreadId;
 
     const { type, text, quotedId, contentType } = this.buildWhatsappContent(realContent);
+    // When the LID cannot be resolved to a phone number, attempt to find the correct
+    // contact through an existing AgentConversation on the same connection.
+    // This prevents creating a duplicate contact when the first inbound reply arrives
+    // with only a LID identifier that hasn't been stored in additionalContacts yet.
+    let preferredContactId: string | null = null;
+    if (!resolvedPhoneDigits) {
+      const lidJids = [remoteJid, participantId, event.externalLid]
+        .filter((v): v is string => Boolean(v && v.includes('@lid')))
+        .map((v) => this.normalizeWhatsappIdentity(v)!)
+        .filter(Boolean);
+
+      if (lidJids.length > 0) {
+        const existingConvForLid = await this.prisma.agentConversation.findFirst({
+          where: {
+            tenantId: event.tenantId,
+            contactId: { not: null },
+            status: { notIn: ['CLOSED', 'ARCHIVED'] },
+            OR: [
+              { externalThreadId: { in: lidJids } },
+              { externalParticipantId: { in: lidJids } },
+            ],
+          },
+          select: { contactId: true },
+          orderBy: { updatedAt: 'desc' },
+        });
+        if (existingConvForLid?.contactId) {
+          preferredContactId = existingConvForLid.contactId;
+          this.logger.log(
+            `LID ${lidJids.join(', ')} mapeado ao contato existente via conversa: ${preferredContactId}`,
+          );
+        }
+      }
+    }
+
     const { contact, phoneDigits } = await this.findOrCreateWhatsappContact({
       tenantId: event.tenantId,
       remoteJid,
@@ -759,6 +813,7 @@ export class EventProcessorService {
       resolvedPhoneDigits,
       canonicalJidHint: canonicalJid,
       additionalIdentities: [event.externalFullId, event.externalLid],
+      preferredContactId,
     });
 
     const occurredAt = new Date(
