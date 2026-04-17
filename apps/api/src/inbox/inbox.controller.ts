@@ -148,6 +148,15 @@ export class InboxController {
     return this.inboxService.sendMessage(id, user.tenantId, user.userId, dto, file);
   }
 
+  @Post('conversations/:id/assign-contact')
+  assignContact(
+    @Param('id') id: string,
+    @Body('contactId') contactId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.inboxService.assignContactToConversation(id, contactId, user.tenantId);
+  }
+
   @Post('conversations/:id/read')
   markRead(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.inboxService.markConversationRead(id, user.tenantId);

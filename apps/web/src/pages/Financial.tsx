@@ -837,6 +837,7 @@ export function Financial(props: FinancialProps = {}) {
     Record<string, string>
   >({});
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [filters, setFilters] = useState({
     type: "",
@@ -902,6 +903,16 @@ export function Financial(props: FinancialProps = {}) {
     },
     [revokeSavedAttachmentUrls],
   );
+
+  useEffect(() => {
+    if (view === "records") {
+      // Pequeno delay para garantir que o componente terminou de renderizar e nenhum outro elemento roubou o foco
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 400); 
+      return () => clearTimeout(timer);
+    }
+  }, [view]);
 
   const [tagFilters, setTagFilters] = useState<{
     included: string[];
@@ -3056,77 +3067,60 @@ export function Financial(props: FinancialProps = {}) {
   }
 
   return (
-    <div className={clsx("flex flex-col h-full space-y-4 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30 animate-in fade-in duration-700", isEmbeddedInProcess ? "p-2" : "p-4 md:p-6")}>
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className={clsx("flex flex-col h-full space-y-1 antialiased text-rendering-optimizeLegibility selection:bg-indigo-500/30 animate-in fade-in duration-700", isEmbeddedInProcess ? "p-1" : "p-2")}>
+      {/* Header - ULTRA SLIM */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-1 border-b border-slate-800/40 pb-1">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3 tracking-tight">
-            <DollarSign className="text-emerald-500" size={28} />
-            {isEmbeddedInProcess ? "Financeiro do Processo" : "Módulo Financeiro"}
+          <h1 className="text-base font-black text-white flex items-center gap-1.5 tracking-tighter">
+            <DollarSign className="text-emerald-500" size={16} />
+            {isEmbeddedInProcess ? "Financeiro" : "Módulo Financeiro"}
           </h1>
-          {isEmbeddedInProcess ? (
-            <p className="text-slate-400 mt-1">
-              {props.processContext?.title ||
-                "Lançamentos vinculados ao processo em tela"}
-              {props.processContext?.cnj ? ` • ${props.processContext.cnj}` : ""}
-              {props.processContext?.code ? ` • ${props.processContext.code}` : ""}
-            </p>
-          ) : (
-            <p className="text-slate-400 mt-1">
-              Gestão completa de receitas, despesas e contas bancárias
+          {!isEmbeddedInProcess && (
+            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest leading-none opacity-80">
+              Operacional
             </p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2 p-1 bg-slate-900 border border-slate-800 rounded-lg">
+
+        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-lg">
           <button
             onClick={() => setView("records")}
-            className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
+            className={`h-7 px-2 font-bold transition-all text-[10px] rounded flex items-center gap-1 ${
               view === "records"
                 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                 : "text-slate-400 hover:text-white hover:bg-slate-800"
             }`}
           >
-            <FileText size={13} />
+            <FileText size={12} />
             Transações
           </button>
           {!isEmbeddedInProcess && (
             <>
               <button
                 onClick={() => setView("accounts")}
-                className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
+                className={`h-7 px-2 font-bold transition-all text-[10px] rounded flex items-center gap-1 ${
                   view === "accounts"
                     ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
-                <Building2 size={13} />
+                <Building2 size={12} />
                 Contas
               </button>
               <button
                 onClick={() => setView("banking")}
-                className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
+                className={`h-7 px-2 font-bold transition-all text-[10px] rounded flex items-center gap-1 ${
                   view === "banking"
                     ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
-                <Globe size={13} />
+                <Globe size={12} />
                 Banking
-              </button>
-              <button
-                onClick={() => setView("conditions")}
-                className={`h-8 px-2.5 font-bold transition-all text-xs rounded flex items-center gap-1.5 ${
-                  view === "conditions"
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <CreditCard size={13} />
-                Condições
               </button>
             </>
           )}
-          <div className="w-px h-5 bg-slate-800 mx-1 hidden sm:block" />
+          <div className="w-px h-4 bg-slate-800 mx-0.5 hidden sm:block" />
           <button
             onClick={() =>
               view === "accounts"
@@ -3135,9 +3129,9 @@ export function Financial(props: FinancialProps = {}) {
                   ? handleOpenIntegrationModal()
                   : handleOpenModal()
             }
-            className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition-colors flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
+            className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold transition-colors flex items-center gap-1 shadow-md shadow-emerald-500/10"
           >
-            <Plus size={14} />
+            <Plus size={12} />
             <span>{view === "banking" ? "Integração" : "Novo"}</span>
           </button>
         </div>
@@ -3147,76 +3141,75 @@ export function Financial(props: FinancialProps = {}) {
       {view === "dashboard" && dashboard && (
         <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-emerald-500/30 transition-all group">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Receitas</span>
-                <div className="p-2 bg-emerald-500/10 rounded-lg group-hover:bg-emerald-500/20 transition-colors">
-                  <TrendingUp className="text-emerald-400" size={20} />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 shadow-xl shadow-black/5 hover:border-emerald-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Receitas</span>
+                <div className="p-1.5 bg-emerald-500/10 rounded-lg group-hover:bg-emerald-500/20 transition-colors">
+                  <TrendingUp className="text-emerald-400" size={16} />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
+              <p className="text-xl font-bold text-white tracking-tight tabular-nums">
                 {formatCurrency(dashboard.summary.totalIncome)}
               </p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase">Pendente</span>
-                <span className="text-sm font-medium text-slate-400">
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase">Pendente</span>
+                <span className="text-xs font-medium text-slate-500">
                   {formatCurrency(dashboard.summary.pendingIncome)}
                 </span>
               </div>
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-red-500/30 transition-all group">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Despesas</span>
-                <div className="p-2 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors">
-                  <TrendingDown className="text-red-400" size={20} />
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 shadow-xl shadow-black/5 hover:border-red-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Despesas</span>
+                <div className="p-1.5 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors">
+                  <TrendingDown className="text-red-400" size={16} />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
+              <p className="text-xl font-bold text-white tracking-tight tabular-nums">
                 {formatCurrency(dashboard.summary.totalExpense)}
               </p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 uppercase">Pendente</span>
-                <span className="text-sm font-medium text-slate-400">
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 uppercase">Pendente</span>
+                <span className="text-xs font-medium text-slate-500">
                   {formatCurrency(dashboard.summary.pendingExpense)}
                 </span>
               </div>
             </div>
 
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 shadow-xl shadow-black/5 hover:border-indigo-500/30 transition-all group">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Fluxo</span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Saldo Contas</span>
                 <div className="p-1.5 bg-indigo-500/10 rounded group-hover:bg-indigo-500/20 transition-colors">
                   <DollarSign className="text-indigo-400" size={16} />
                 </div>
               </div>
               <p
-                className={`text-xl sm:text-2xl font-bold tracking-tight tabular-nums break-words ${dashboard.summary.balance >= 0 ? "text-white" : "text-red-400"}`}
+                className={`text-xl font-bold tracking-tight tabular-nums ${dashboard.summary.totalBalance >= 0 ? "text-white" : "text-red-400"}`}
               >
-                {formatCurrency(dashboard.summary.balance)}
+                {formatCurrency(dashboard.summary.totalBalance)}
               </p>
-              <div className="flex items-center gap-2 mt-1.5">
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 uppercase">Contas</span>
-                <span className="text-xs font-medium text-slate-400">
-                  {formatCurrency(dashboard.summary.totalBalance)}
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 uppercase">Líquido</span>
+                <span className="text-xs font-medium text-slate-500">
+                  {formatCurrency(dashboard.summary.balance)}
                 </span>
               </div>
             </div>
 
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/5 hover:border-orange-500/30 transition-all group">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Alertas</span>
-                <div className="p-2 bg-orange-500/10 rounded-lg group-hover:bg-orange-500/20 transition-colors">
-                  <Calendar className="text-orange-400" size={20} />
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 shadow-xl shadow-black/5 hover:border-orange-500/30 transition-all group">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Alertas</span>
+                <div className="p-1.5 bg-orange-500/10 rounded-lg group-hover:bg-orange-500/20 transition-colors">
+                  <AlertTriangle className="text-orange-400" size={16} />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight tabular-nums break-words">
+              <p className="text-xl font-bold text-white tracking-tight tabular-nums">
                 {dashboard.summary.overdueCount}
               </p>
-              <div className="flex items-center gap-2 mt-2 font-medium text-slate-400 text-sm">
-                <AlertTriangle size={14} className="text-orange-400" />
-                Registros Vencidos
+              <div className="flex items-center gap-2 mt-1 font-medium text-slate-500 text-xs">
+                Atrasados no total
               </div>
             </div>
           </div>
@@ -3260,47 +3253,70 @@ export function Financial(props: FinancialProps = {}) {
       {/* Records View */}
       {view === "records" && (
         <div className="space-y-6">
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl shadow-black/5 flex flex-col gap-6 antialiased">
-            <div className="flex flex-col lg:flex-row gap-4 items-center">
-              <div className="relative flex-1 w-full">
-                <Search
-                  className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"
-                  size={20}
-                />
-                <input
-                  type="text"
-                  placeholder="Buscar por descrição, contato, conta, categoria ou etiqueta..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
-                />
+          <div className="bg-slate-900/30 border border-slate-800/60 rounded-lg p-1.5 shadow-sm space-y-1.5 antialiased">
+            {/* Linha 1: Métricas Pretas Mini */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
+              <div className="bg-slate-950/40 border border-slate-800 rounded px-2 py-0.5 flex flex-col justify-center">
+                <p className="text-[7px] font-black uppercase tracking-wider text-slate-500 leading-tight">Resultados</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[11px] font-bold text-white tabular-nums">{filteredRecords.length}</span>
+                  <span className="text-[7px] font-bold text-slate-600 uppercase italic">regs</span>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+
+              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded px-2 py-0.5 flex flex-col justify-center">
+                <p className="text-[7px] font-black uppercase tracking-wider text-emerald-500/70 leading-tight">Receita</p>
+                <span className="text-[11px] font-bold text-emerald-400 tracking-tighter tabular-nums truncate">
+                  {formatCurrency(filteredSummary.income)}
+                </span>
+              </div>
+
+              <div className="bg-red-500/5 border border-red-500/10 rounded px-2 py-0.5 flex flex-col justify-center">
+                <p className="text-[7px] font-black uppercase tracking-wider text-red-500/70 leading-tight">Despesa</p>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-bold text-red-400 tracking-tighter tabular-nums truncate">
+                    {formatCurrency(filteredSummary.expense)}
+                  </span>
+                  <span className="text-[7px] font-bold text-red-500/40 uppercase whitespace-nowrap">
+                    {filteredSummary.overdueCount} atr.
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-indigo-500/5 border border-indigo-500/10 rounded px-2 py-0.5 relative overflow-hidden flex flex-col justify-center">
+                <p className="text-[7px] font-black uppercase tracking-wider text-indigo-400/70 leading-tight">IA Insights</p>
+                <p className="text-[9px] text-slate-500 italic truncate tracking-tight">Análise preditiva...</p>
+              </div>
+
+              <div className="bg-emerald-500/5 border border-emerald-500/10 rounded px-2 py-0.5 relative overflow-hidden flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-[7px] font-black uppercase tracking-wider text-emerald-400/70 leading-tight">Open Hub</p>
+                  <p className="text-[9px] text-slate-500 italic truncate tracking-tight">Sync Ativo</p>
+                </div>
+                <button className="px-1.5 py-0.5 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-500 hover:text-white text-[7px] font-black uppercase tracking-widest rounded border border-emerald-500/20 transition-all shrink-0">
+                  Sync
+                </button>
+              </div>
+            </div>
+
+            {/* Linha 2: Toolbar Unificada (Selects + Busca) */}
+            <div className="flex flex-wrap items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <select
                   value={filters.type}
-                  onChange={(e) =>
-                    setFilters((current) => ({
-                      ...current,
-                      type: e.target.value,
-                    }))
-                  }
-                  className="min-h-[38px] px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[130px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
+                  onChange={(e) => setFilters((current) => ({ ...current, type: e.target.value }))}
+                  className="h-6 px-1 bg-slate-950 border border-slate-800 rounded text-[9px] font-black text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-[70px] hover:border-slate-600 transition-all uppercase tracking-tighter"
                 >
-                  <option value="">Todos os tipos</option>
+                  <option value="">Tipo</option>
                   <option value="INCOME">Receitas</option>
                   <option value="EXPENSE">Despesas</option>
                 </select>
                 <select
                   value={filters.status}
-                  onChange={(e) =>
-                    setFilters((current) => ({
-                      ...current,
-                      status: e.target.value,
-                    }))
-                  }
-                  className="min-h-[38px] px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[130px] appearance-none cursor-pointer hover:border-slate-600 transition-all"
+                  onChange={(e) => setFilters((current) => ({ ...current, status: e.target.value }))}
+                  className="h-6 px-1 bg-slate-950 border border-slate-800 rounded text-[9px] font-black text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 w-[75px] hover:border-slate-600 transition-all uppercase tracking-tighter"
                 >
-                  <option value="">Todos os status</option>
+                  <option value="">Status</option>
                   <option value="PENDING">Pendente</option>
                   <option value="PAID">Pago</option>
                   <option value="PARTIAL">Parcial</option>
@@ -3309,244 +3325,49 @@ export function Financial(props: FinancialProps = {}) {
                 </select>
                 <button
                   onClick={openAdvancedFilterModal}
-                  className="min-h-[38px] px-4 py-2 bg-slate-900 border border-indigo-500/30 text-indigo-300 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 hover:border-indigo-500 transition-all shadow-lg shadow-indigo-500/5 group"
+                  className="h-6 px-1.5 bg-slate-900 border border-indigo-500/30 text-indigo-300 rounded font-black text-[9px] flex items-center justify-center gap-1 hover:bg-slate-800 hover:border-indigo-500 transition-all shadow-sm uppercase tracking-tighter"
                 >
-                  <Filter size={16} className="group-hover:scale-110 transition-transform" />
-                  <span>Filtros Avançados</span>
+                  <Filter size={10} />
+                  <span>Tags</span>
                   {activeAdvancedFilterCount > 0 && (
-                    <span className="flex items-center justify-center min-w-[18px] h-4.5 px-1 text-[9px] font-black rounded-full bg-indigo-500 text-white shadow-sm">
+                    <span className="flex items-center justify-center w-2.5 h-2.5 text-[7px] font-black rounded-full bg-indigo-500 text-white">
                       {activeAdvancedFilterCount}
                     </span>
                   )}
                 </button>
-                {totalActiveFilterCount > 0 && (
-                  <button
-                    onClick={resetAllFilters}
-                    className="min-h-[38px] min-w-[38px] grid place-items-center bg-slate-900 border border-slate-800 text-slate-400 rounded-lg font-bold hover:bg-slate-800 hover:text-white transition-all"
-                    title="Limpar filtros"
-                  >
-                    <RefreshCw size={16} />
-                  </button>
-                )}
+              </div>
+
+              <div className="relative flex-1 min-w-[120px]">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-slate-600" size={10} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Busca rápida..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full h-6 pl-6 pr-2 bg-slate-950 border border-slate-800 rounded text-[9px] text-white placeholder-slate-700 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all uppercase tracking-tight"
+                />
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">
-                  Resultados Filtro
-                </p>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-xl sm:text-2xl font-bold text-white tracking-tighter tabular-nums break-words">
-                    {filteredRecords.length}
-                  </span>
-                  <span className="text-xs font-bold text-slate-500 uppercase">
-                    registros
-                  </span>
-                </div>
-              </div>
-              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-5 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500/70 mb-2">
-                  Receitas Filtradas
-                </p>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-xl sm:text-2xl font-bold text-emerald-400 tracking-tighter tabular-nums break-words">
-                    {formatCurrency(filteredSummary.income)}
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-500/50 uppercase">parcial</span>
-                </div>
-              </div>
-              <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-5 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500/70 mb-2">
-                  Despesas Filtradas
-                </p>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-xl sm:text-2xl font-bold text-red-400 tracking-tighter tabular-nums break-words">
-                    {formatCurrency(filteredSummary.expense)}
-                  </span>
-                  <span className="text-[10px] font-bold text-red-500/50 uppercase">
-                    {filteredSummary.overdueCount} atrasadas
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-              <button
-                onClick={() => handleCardFilterChange("INCOME_ALL")}
-                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
-                  activeCardFilter === "INCOME_ALL"
-                    ? "bg-green-500/10 border-green-500/50 shadow-lg"
-                    : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="p-1.5 rounded-lg bg-green-500/20 text-green-400 shrink-0">
-                    <TrendingUp size={16} />
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                    {cardMetrics.INCOME_ALL.count} registros
-                  </div>
-                </div>
-                <div className="mb-1">
-                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
-                    {formatCurrency(cardMetrics.INCOME_ALL.amount)}
-                  </div>
-                </div>
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
-                  Receitas (Tudo)
-                </span>
-                {activeCardFilter === "INCOME_ALL" && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-green-500 w-full" />
-                )}
-              </button>
-
-              <button
-                onClick={() => handleCardFilterChange("INCOME_PENDING")}
-                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
-                  activeCardFilter === "INCOME_PENDING"
-                    ? "bg-blue-500/10 border-blue-500/50 shadow-lg"
-                    : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 shrink-0">
-                    <Clock size={16} />
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                    {cardMetrics.INCOME_PENDING.count} pendentes
-                  </div>
-                </div>
-                <div className="mb-1">
-                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
-                    {formatCurrency(cardMetrics.INCOME_PENDING.amount)}
-                  </div>
-                </div>
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
-                  Receitas Abertas
-                </span>
-                {activeCardFilter === "INCOME_PENDING" && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-blue-500 w-full" />
-                )}
-              </button>
-
-              <button
-                onClick={() => handleCardFilterChange("INCOME_OVERDUE")}
-                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
-                  activeCardFilter === "INCOME_OVERDUE"
-                    ? "bg-orange-500/10 border-orange-500/50 shadow-lg"
-                    : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="p-1.5 rounded-lg bg-orange-500/20 text-orange-400 shrink-0">
-                    <AlertTriangle size={16} />
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                    {cardMetrics.INCOME_OVERDUE.count} vencidas
-                  </div>
-                </div>
-                <div className="mb-1">
-                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
-                    {formatCurrency(cardMetrics.INCOME_OVERDUE.amount)}
-                  </div>
-                </div>
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
-                  Receitas em Atraso
-                </span>
-                {activeCardFilter === "INCOME_OVERDUE" && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-orange-500 w-full" />
-                )}
-              </button>
-
-              <button
-                onClick={() => handleCardFilterChange("EXPENSE_ALL")}
-                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
-                  activeCardFilter === "EXPENSE_ALL"
-                    ? "bg-red-500/10 border-red-500/50 shadow-lg"
-                    : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="p-1.5 rounded-lg bg-red-500/20 text-red-400 shrink-0">
-                    <TrendingDown size={16} />
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                    {cardMetrics.EXPENSE_ALL.count} registros
-                  </div>
-                </div>
-                <div className="mb-1">
-                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
-                    {formatCurrency(cardMetrics.EXPENSE_ALL.amount)}
-                  </div>
-                </div>
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
-                  Despesas (Tudo)
-                </span>
-                {activeCardFilter === "EXPENSE_ALL" && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-red-500 w-full" />
-                )}
-              </button>
-
-              <button
-                onClick={() => handleCardFilterChange("EXPENSE_PENDING")}
-                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
-                  activeCardFilter === "EXPENSE_PENDING"
-                    ? "bg-purple-500/10 border-purple-500/50 shadow-lg"
-                    : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 shrink-0">
-                    <Clock size={16} />
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                    {cardMetrics.EXPENSE_PENDING.count} pendentes
-                  </div>
-                </div>
-                <div className="mb-1">
-                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
-                    {formatCurrency(cardMetrics.EXPENSE_PENDING.amount)}
-                  </div>
-                </div>
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
-                  Despesas Abertas
-                </span>
-                {activeCardFilter === "EXPENSE_PENDING" && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-purple-500 w-full" />
-                )}
-              </button>
-
-              <button
-                onClick={() => handleCardFilterChange("ALL")}
-                className={`p-3.5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group h-full flex flex-col justify-between ${
-                  activeCardFilter === "ALL"
-                    ? "bg-indigo-500/10 border-indigo-500/50 shadow-lg"
-                    : "bg-slate-900 border-slate-800 hover:bg-slate-800"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 shrink-0">
-                    <DollarSign size={16} />
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                    {cardMetrics.ALL.count} registros
-                  </div>
-                </div>
-                <div className="mb-1">
-                  <div className="text-base sm:text-lg font-black text-white tracking-tighter tabular-nums leading-none">
-                    {formatCurrency(cardMetrics.ALL.amount)}
-                  </div>
-                </div>
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
-                  Todas Transações
-                </span>
-                {activeCardFilter === "ALL" && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-indigo-500 w-full" />
-                )}
-              </button>
+            <div className="flex flex-wrap items-center gap-1 mt-0.5 pb-0.5 border-b border-slate-800/20">
+              {[ 
+                { id: "INCOME_ALL", label: "Rec. Tudo", icon: "TrendingUp", color: "green", key: "INCOME_ALL" },
+                { id: "INCOME_PENDING", label: "Rec. Aberto", icon: "Clock", color: "blue", key: "INCOME_PENDING" },
+                { id: "INCOME_OVERDUE", label: "Rec. Atraso", icon: "AlertTriangle", color: "orange", key: "INCOME_OVERDUE" },
+                { id: "EXPENSE_ALL", label: "Desp. Tudo", icon: "TrendingDown", color: "red", key: "EXPENSE_ALL" },
+                { id: "EXPENSE_PENDING", label: "Desp. Aberto", icon: "Clock", color: "indigo", key: "EXPENSE_PENDING" },
+                { id: "EXPENSE_OVERDUE", label: "Desp. Atraso", icon: "AlertTriangle", color: "rose", key: "EXPENSE_OVERDUE" }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleCardFilterChange(item.id as any)}
+                  className={`h-6 px-1.5 flex items-center gap-1 rounded border transition-all ${activeCardFilter === item.id ? `bg-${item.color}-500/20 border-${item.color}-500/50 text-white` : "bg-slate-900/40 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                >
+                  <span className={`text-${item.color}-400 shrink-0`}>{item.id.includes("INCOME") ? <TrendingUp size={9}/> : <TrendingDown size={9}/>}</span>
+                  <span className="text-[8px] font-black uppercase tracking-tighter whitespace-nowrap">{item.label}</span>
+                  <span className="text-[9px] font-bold tabular-nums opacity-60">({cardMetrics[item.key as keyof typeof cardMetrics].count})</span>
+                </button>
+              ))}
             </div>
 
             {totalActiveFilterCount > 0 && (
@@ -3573,6 +3394,7 @@ export function Financial(props: FinancialProps = {}) {
                 )}
               </div>
             )}
+          </div>
 
           
 
@@ -3931,64 +3753,64 @@ export function Financial(props: FinancialProps = {}) {
           )}
 
           {/* Records Table */}
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl antialiased">
-            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] relative">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden shadow-xl antialiased">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] relative">
               <table className="min-w-[1100px] w-full border-collapse">
               <thead className="sticky top-0 z-20">
                 <tr className="bg-slate-950 border-b border-slate-800">
-                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                    Contatos & Contas
+                  <th className="px-2 py-1 text-left text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                    Contatos
                   </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                    Etiquetas
+                  <th className="px-2 py-1 text-left text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                    Categorias
                   </th>
                   <th
                     onClick={() => handleSort("description")}
-                    className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] cursor-pointer hover:text-indigo-400 transition-colors group"
+                    className="px-2 py-1 text-left text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-indigo-400 transition-colors group"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       Descrição
                       <div className="flex flex-col opacity-20 group-hover:opacity-100 transition-opacity">
-                        <ChevronUp size={10} className={sortConfig.key === "description" && sortConfig.direction === "asc" ? "text-indigo-400 opacity-100" : ""} />
-                        <ChevronDown size={10} className={sortConfig.key === "description" && sortConfig.direction === "desc" ? "text-indigo-400 opacity-100" : ""} />
+                        <ChevronUp size={7} className={sortConfig.key === "description" && sortConfig.direction === "asc" ? "text-indigo-400 opacity-100" : ""} />
+                        <ChevronDown size={7} className={sortConfig.key === "description" && sortConfig.direction === "desc" ? "text-indigo-400 opacity-100" : ""} />
                       </div>
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                    Datas Cronograma
+                  <th className="px-2 py-1 text-left text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                    Agenda
                   </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                  <th className="px-2 py-1 text-left text-[8px] font-black text-slate-500 uppercase tracking-widest">
                     Status
                   </th>
                   <th
                     onClick={() => handleSort("amount")}
-                    className="px-6 py-4 text-right text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] cursor-pointer hover:text-indigo-400 transition-colors group"
+                    className="px-2 py-1 text-right text-[8px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-indigo-400 transition-colors group"
                   >
-                    <div className="flex items-center justify-end gap-2">
-                      Valor Final
+                    <div className="flex items-center justify-end gap-1">
+                      Valor
                       <div className="flex flex-col opacity-20 group-hover:opacity-100 transition-opacity text-left">
-                        <ChevronUp size={10} className={sortConfig.key === "amount" && sortConfig.direction === "asc" ? "text-indigo-400 opacity-100" : ""} />
-                        <ChevronDown size={10} className={sortConfig.key === "amount" && sortConfig.direction === "desc" ? "text-indigo-400 opacity-100" : ""} />
+                        <ChevronUp size={7} className={sortConfig.key === "amount" && sortConfig.direction === "asc" ? "text-indigo-400 opacity-100" : ""} />
+                        <ChevronDown size={7} className={sortConfig.key === "amount" && sortConfig.direction === "desc" ? "text-indigo-400 opacity-100" : ""} />
                       </div>
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-right text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                  <th className="px-2 py-1 text-right text-[8px] font-black text-slate-500 uppercase tracking-widest">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800 bg-slate-900/10">
-                {sortedRecords.map((record) => (
+              <tbody className="divide-y divide-slate-800/50">
+                {records.map((record) => (
                   <Fragment key={record.id}>
                     <tr
                       className="hover:bg-indigo-500/[0.03] transition-colors cursor-pointer group/row"
                       onDoubleClick={() => handleOpenModal(record)}
                     >
                       <td
-                        className="px-6 py-5 align-top"
+                        className="px-2 py-1 align-top"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-0.5">
                           {record.parties
                             ?.filter((party) => party.contact)
                             .sort(
@@ -4002,14 +3824,14 @@ export function Financial(props: FinancialProps = {}) {
                               return (
                                 <div
                                   key={`${record.id}-${party.contactId}-${party.role}`}
-                                  className="flex items-center justify-between gap-2 p-1.5 bg-slate-950/40 border border-slate-800/50 rounded-lg group/party hover:border-indigo-500/30 transition-all mb-1"
+                                  className="flex items-center justify-between gap-1 p-1 bg-slate-950/40 border border-slate-800/50 rounded group/party hover:border-indigo-500/30 transition-all mb-0.5"
                                 >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm shrink-0 ${roleMeta.className.replace('text-', 'bg-').replace('vibrant-', 'vibrant-bg-')} ${roleMeta.className}`}>
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className={`text-[8px] font-black uppercase px-1 py-0.25 rounded shadow-sm shrink-0 ${roleMeta.className.replace('text-', 'bg-').replace('vibrant-', 'vibrant-bg-')} ${roleMeta.className}`}>
                                       {roleMeta.short}
                                     </span>
                                     <span
-                                      className="text-[10px] text-slate-300 truncate font-black uppercase tracking-widest cursor-pointer hover:text-indigo-400"
+                                      className="text-[9px] text-slate-300 truncate font-black uppercase tracking-tighter cursor-pointer hover:text-indigo-400"
                                       onClick={() =>
                                         navigate(`/contacts/${party.contact!.id}`)
                                       }
@@ -4019,7 +3841,7 @@ export function Financial(props: FinancialProps = {}) {
                                     </span>
                                   </div>
                                   {party.amount && (
-                                    <span className="text-[9px] font-black text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded shadow-sm shrink-0">
+                                    <span className="text-[8px] font-black text-slate-500 bg-slate-950 px-1 py-0.25 rounded shadow-sm shrink-0">
                                       {formatCurrency(Number(party.amount))}
                                     </span>
                                   )}
@@ -4028,75 +3850,64 @@ export function Financial(props: FinancialProps = {}) {
                             })}
 
                           {record.bankAccount && (
-                            <div className="flex items-center gap-2 mt-1 opacity-70 hover:opacity-100 transition-opacity">
-                              <div className="p-1 bg-blue-500/10 rounded text-blue-400 shrink-0">
-                                <Building2 size={10} />
-                              </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 opacity-60 hover:opacity-100 transition-opacity">
+                              <Building2 size={9} className="text-blue-400 shrink-0" />
                               <span
-                                className="text-[11px] text-slate-400 truncate max-w-[140px] font-medium"
+                                className="text-[10px] text-slate-400 truncate max-w-[120px] font-medium"
                                 title={record.bankAccount.bankName}
                               >
                                 {record.bankAccount.bankName}
                               </span>
                             </div>
                           )}
-
-                            {(!record.parties || record.parties.length === 0) &&
-                              !record.bankAccount && (
-                                <div className="px-1 py-1 flex items-center gap-2 opacity-30">
-                                  <div className="w-1 h-1 rounded-full bg-slate-600" />
-                                  <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">
-                                    Sem Vínculos
-                                  </span>
-                                </div>
-                              )}
                         </div>
                       </td>
 
                       <td
-                        className="px-6 py-5 align-top"
+                        className="px-2 py-1 align-top"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <InlineTags
-                          tags={record.tags || []}
-                          entityId={record.id}
-                          entityType="financial"
-                          onRefresh={fetchData}
-                          className="scale-90 origin-top-left"
-                        />
+                        <div className="scale-75 origin-top-left -ml-1">
+                          <InlineTags
+                            tags={record.tags || []}
+                            entityId={record.id}
+                            entityType="financial"
+                            onRefresh={fetchData}
+                          />
+                        </div>
                       </td>
 
-                      <td className="px-6 py-5 align-top min-w-[280px]">
-                        <div className="flex items-start gap-3">
+                      <td className="px-2 py-1 align-top">
+                        <div className="flex items-start gap-1.5">
                           {record.children && record.children.length > 0 && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toggleRowExpand(record.id);
                               }}
-                              className="mt-1 p-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-500 hover:text-white hover:border-indigo-500 transition-all shadow-lg active:scale-95"
+                              className="mt-0.5 p-0.5 bg-slate-950 border border-slate-800 rounded text-slate-500 hover:text-white hover:border-indigo-500 transition-all shadow-lg active:scale-95"
                             >
                               {expandedRows.has(record.id) ? (
-                                <ChevronDown size={14} />
+                                <ChevronDown size={11} />
                               ) : (
-                                <ChevronRight size={14} />
+                                <ChevronRight size={11} />
                               )}
                             </button>
                           )}
-                          <div className="flex flex-col gap-2 flex-1">
-                            <p className="text-sm font-black text-white leading-tight tracking-tight group-hover/row:text-indigo-300 transition-colors">
+                          <div className="flex flex-col gap-0.5 flex-1">
+                            <p className="text-[13px] font-black text-white leading-none tracking-tight group-hover/row:text-indigo-300 transition-colors">
                               {record.description}
                             </p>
-                            <div className="flex flex-wrap gap-1.5 mt-1">
+                            <div className="flex flex-wrap gap-1 mt-0.5">
                               {record.financialCategory && (
-                                <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border border-slate-800 bg-slate-950 text-slate-500 group-hover/row:border-slate-700 transition-colors">
+                                <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border border-slate-800 bg-slate-950 text-slate-500 group-hover/row:border-slate-700 transition-colors">
                                   {record.financialCategory.name}
                                 </span>
                               )}
                               {record.totalInstallments &&
                                 record.totalInstallments > 1 && (
-                                  <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded-md border border-indigo-500/20 shadow-sm">
-                                    {record.totalInstallments} parcelas
+                                  <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-indigo-500/10 text-indigo-400 rounded border border-indigo-500/20 shadow-sm">
+                                    {record.totalInstallments} parc.
                                   </span>
                                 )}
                             </div>
@@ -4104,41 +3915,41 @@ export function Financial(props: FinancialProps = {}) {
                         </div>
                       </td>
 
-                      <td className="px-6 py-5 align-top whitespace-nowrap">
-                        <div className="flex flex-col gap-2.5">
-                          <div className="flex items-center gap-2 px-2 py-1 bg-slate-950/50 rounded-lg border border-slate-800/40">
-                            <Calendar size={11} className="text-slate-600" />
-                            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-tighter">
+                      <td className="px-2 py-1 align-top whitespace-nowrap">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-950/50 rounded border border-slate-800/40">
+                            <Calendar size={10} className="text-slate-600" />
+                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
                               {record.createdAt ? formatDate(record.createdAt) : "-"}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-950 rounded-lg border border-slate-800 shadow-inner group/venc">
-                            <div className={`w-1.5 h-1.5 rounded-full ${isPast(new Date(record.dueDate)) && !record.paymentDate ? "bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" : "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.3)]"}`} />
-                            <span className="text-[12px] text-white font-black tracking-tight">
-                              VENC: {formatDate(record.dueDate)}
+                          <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-950 rounded border border-slate-800 shadow-inner group/venc">
+                            <div className={`w-1 h-1 rounded-full ${isPast(new Date(record.dueDate)) && !record.paymentDate ? "bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" : "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.3)]"}`} />
+                            <span className="text-[11px] text-white font-black tracking-tight">
+                              VEN: {formatDate(record.dueDate)}
                             </span>
                           </div>
                           {record.paymentDate && (
-                            <div className="flex items-center gap-2 px-2 py-1 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
-                              <CheckCircle2 size={11} className="text-emerald-500" />
-                              <span className="text-[11px] text-emerald-500 font-black uppercase tracking-tighter">
-                                PAGO: {formatDate(record.paymentDate)}
+                            <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-emerald-500/5 rounded border border-emerald-500/20">
+                              <CheckCircle2 size={10} className="text-emerald-500" />
+                              <span className="text-[10px] text-emerald-500 font-black uppercase tracking-tighter">
+                                PAG: {formatDate(record.paymentDate)}
                               </span>
                             </div>
                           )}
                         </div>
                       </td>
 
-                       <td className="px-6 py-5 align-top whitespace-nowrap">
-                        <div className="inline-block scale-110 origin-top-left drop-shadow-md">
+                      <td className="px-2 py-1 align-top whitespace-nowrap">
+                        <div className="inline-block scale-90 origin-top-left">
                           {getStatusBadge(getEffectiveRecordStatus(record))}
                         </div>
                       </td>
 
-                      <td className="px-6 py-5 align-top whitespace-nowrap text-right">
-                        <div className="flex flex-col items-end gap-1">
+                      <td className="px-2 py-1 align-top whitespace-nowrap text-right">
+                        <div className="flex flex-col items-end gap-0.5">
                           <span
-                            className={`text-lg font-black tracking-tighter drop-shadow-sm ${record.type === "INCOME" ? "text-emerald-400" : "text-red-400"}`}
+                            className={`text-base font-black tracking-tighter drop-shadow-sm ${record.type === "INCOME" ? "text-emerald-400" : "text-red-400"}`}
                           >
                             {record.type === "INCOME" ? "+" : "-"}
                             {formatCurrency(
@@ -4149,19 +3960,20 @@ export function Financial(props: FinancialProps = {}) {
                           </span>
                           {record.amountFinal &&
                             Number(record.amountFinal) !== record.amount && (
-                              <div className="px-2 py-0.5 bg-slate-950 rounded border border-slate-800">
-                                <p className="text-[10px] text-slate-600 line-through font-black italic tracking-tighter">
+                              <div className="px-1 py-0.25 bg-slate-950 rounded border border-slate-800">
+                                <p className="text-[9px] text-slate-600 line-through font-black italic tracking-tighter">
                                   {formatCurrency(record.amount)}
                                 </p>
                               </div>
                             )}
                         </div>
                       </td>
-                        <td
-                          className="px-6 py-5 whitespace-nowrap text-right align-top"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex gap-1.5 justify-end">
+
+                      <td
+                        className="px-2 py-1 whitespace-nowrap text-right align-top"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                          <div className="flex gap-1 justify-end">
                             {/* Boleto existente — abre painel flutuante */}
                             {(() => {
                               const existingBoleto = bankCharges.find(
@@ -4171,126 +3983,74 @@ export function Financial(props: FinancialProps = {}) {
                               );
                               if (!existingBoleto) return null;
                               return (
-                                <BoletoFloatingPanel
-                                  charge={existingBoleto}
-                                >
+                                <BoletoFloatingPanel charge={existingBoleto}>
                                   <button
-                                    className="p-2.5 rounded-xl border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500 hover:text-white transition-all active:scale-90 shadow-sm"
-                                    title="Visualizar / Imprimir Boleto"
+                                    className="p-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-white transition-all active:scale-90 shadow-sm"
+                                    title="Visualizar Boleto"
                                   >
-                                    <Receipt size={14} />
+                                    <Receipt size={12} />
                                   </button>
                                 </BoletoFloatingPanel>
                               );
                             })()}
+                            
                             {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
-                              <button
-                                onClick={() => handleOpenChargeModal(record)}
-                                disabled={!!getChargeDisabledReason(
-                                  record,
-                                  bankIntegrations.some(
-                                    (integration) =>
-                                      integration.provider === "INTER" &&
-                                      integration.isActive,
-                                  ),
-                                )}
-                                className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
-                                  !getChargeDisabledReason(
-                                    record,
-                                    bankIntegrations.some(
-                                      (integration) =>
-                                        integration.provider === "INTER" &&
-                                        integration.isActive,
-                                    ),
-                                  )
-                                    ? "bg-amber-500/10 border-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-white"
-                                    : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
-                                }`}
-                                title={
-                                  getChargeDisabledReason(
-                                    record,
-                                    bankIntegrations.some(
-                                      (integration) =>
-                                        integration.provider === "INTER" &&
-                                        integration.isActive,
-                                    ),
-                                  ) || "Gerar cobrança bancária"
-                                }
-                              >
-                                <FileText size={14} />
-                              </button>
-                            )}
-                            {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
-                              <button
-                                onClick={() => handleOpenPixPaymentModal(record)}
-                                disabled={!!getPixPaymentDisabledReason(
-                                  record,
-                                  bankIntegrations.some(
-                                    (integration) =>
-                                      integration.provider === "INTER" &&
-                                      integration.isActive,
-                                  ),
-                                )}
-                                className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
-                                  !getPixPaymentDisabledReason(
-                                    record,
-                                    bankIntegrations.some(
-                                      (integration) =>
-                                        integration.provider === "INTER" &&
-                                        integration.isActive,
-                                    ),
-                                  )
-                                    ? "bg-sky-500/10 border-sky-500/20 text-sky-300 hover:bg-sky-500 hover:text-white"
-                                    : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
-                                }`}
-                                title={
-                                  getPixPaymentDisabledReason(
-                                    record,
-                                    bankIntegrations.some(
-                                      (integration) =>
-                                        integration.provider === "INTER" &&
-                                        integration.isActive,
-                                    ),
-                                  ) || "Pagar via PIX direto"
-                                }
-                              >
-                                <ArrowUp size={14} />
-                              </button>
-                            )}
-                            {isOpenRecord(record) && !(record.children && record.children.length > 0) && (
-                              <button
-                                onClick={() => handleOpenSettleModal(record)}
-                                disabled={!hasPartiesToSettle(record)}
-                                className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${
-                                  hasPartiesToSettle(record)
-                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white"
-                                    : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
-                                }`}
-                                title={
-                                  hasPartiesToSettle(record)
-                                    ? "Liquidar Lançamento"
-                                    : "Defina Credor e Devedor para liquidar"
-                                }
-                              >
-                                <Calculator size={14} />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleOpenChargeModal(record)}
+                                  disabled={!!getChargeDisabledReason(record, bankIntegrations.some(i => i.provider === "INTER" && i.isActive))}
+                                  className={`p-1 rounded border transition-all active:scale-90 shadow-sm ${
+                                    !getChargeDisabledReason(record, bankIntegrations.some(i => i.provider === "INTER" && i.isActive))
+                                      ? "bg-amber-500/10 border-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-white"
+                                      : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
+                                  }`}
+                                  title={getChargeDisabledReason(record, bankIntegrations.some(i => i.provider === "INTER" && i.isActive)) || "Cobrança"}
+                                >
+                                  <FileText size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenPixPaymentModal(record)}
+                                  disabled={!!getPixPaymentDisabledReason(record, bankIntegrations.some(i => i.provider === "INTER" && i.isActive))}
+                                  className={`p-1 rounded border transition-all active:scale-90 shadow-sm ${
+                                    !getPixPaymentDisabledReason(record, bankIntegrations.some(i => i.provider === "INTER" && i.isActive))
+                                      ? "bg-sky-500/10 border-sky-500/20 text-sky-300 hover:bg-sky-500 hover:text-white"
+                                      : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
+                                  }`}
+                                  title={getPixPaymentDisabledReason(record, bankIntegrations.some(i => i.provider === "INTER" && i.isActive)) || "Pagar PIX"}
+                                >
+                                  <ArrowUp size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenSettleModal(record)}
+                                  disabled={!hasPartiesToSettle(record)}
+                                  className={`p-1 rounded border transition-all active:scale-90 shadow-sm ${
+                                    hasPartiesToSettle(record)
+                                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white"
+                                      : "bg-slate-950 border-slate-800 text-slate-700 cursor-not-allowed opacity-50"
+                                  }`}
+                                  title={hasPartiesToSettle(record) ? "Liquidar" : "Defina partes"}
+                                >
+                                  <Calculator size={12} />
+                                </button>
+                              </>
                             )}
                             <button
                               onClick={() => handleOpenModal(record)}
-                              className="p-2.5 bg-slate-950 border border-slate-800 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-xl transition-all active:scale-90 shadow-sm"
-                              title="Editar Detalhes"
+                              className="p-1 bg-slate-950 border border-slate-800 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded transition-all active:scale-90 shadow-sm"
+                              title="Editar"
                             >
-                              <Edit size={14} />
+                              <Edit size={12} />
                             </button>
                             <button
                               onClick={() => handleDelete(record.id)}
-                              className="p-2.5 bg-slate-950 border border-slate-800 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all active:scale-90 shadow-sm"
-                              title="Excluir Registro"
+                              className="p-1 bg-slate-950 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded transition-all active:scale-90 shadow-sm"
+                              title="Excluir"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
                             </button>
                           </div>
-                        </td>
+                      </td>
+
                     </tr>
                     {/* Parcelas expandidas */}
                     {expandedRows.has(record.id) &&
@@ -4302,12 +4062,12 @@ export function Financial(props: FinancialProps = {}) {
                             handleOpenModal(child as FinancialRecord)
                           }
                         >
-                          <td className="px-6 py-2 pl-14 whitespace-nowrap text-[10px] text-slate-500 italic">
-                            Parcela {child.installmentNumber}/
+                          <td className="px-2 py-0.5 pl-10 whitespace-nowrap text-[8px] text-slate-500 italic">
+                            Parc {child.installmentNumber}/
                             {record.totalInstallments}
                           </td>
                           <td
-                            className="px-6 py-2"
+                            className="px-2 py-0.5"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <InlineTags
@@ -4317,25 +4077,25 @@ export function Financial(props: FinancialProps = {}) {
                               onRefresh={fetchData}
                             />
                           </td>
-                          <td className="px-6 py-2">
-                            <p className="text-xs text-slate-300 truncate max-w-[200px]">
+                          <td className="px-2 py-0.5">
+                            <p className="text-[9px] text-slate-300 truncate max-w-[150px]">
                               {child.description}
                             </p>
                           </td>
-                          <td className="px-6 py-2 whitespace-nowrap">
+                          <td className="px-2 py-0.5 whitespace-nowrap">
                             <div className="flex flex-col">
-                              <span className="text-[10px] text-orange-400 font-bold">
+                              <span className="text-[8px] text-orange-400 font-bold">
                                 V: {formatDate(child.dueDate)}
                               </span>
                               {child.paymentDate && (
-                                <span className="text-[10px] text-green-400 font-bold">
+                                <span className="text-[8px] text-green-400 font-bold">
                                   P: {formatDate(child.paymentDate)}
                                 </span>
                               )}
                             </div>
                           </td>
                           <td
-                            className="px-6 py-2"
+                            className="px-2 py-0.5"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <InlineTags
@@ -4345,20 +4105,20 @@ export function Financial(props: FinancialProps = {}) {
                               onRefresh={fetchData}
                             />
                           </td>
-                          <td className="px-6 py-2 whitespace-nowrap text-xs">
+                          <td className="px-2 py-0.5 whitespace-nowrap text-[8px]">
                             {getStatusBadge(
                               getEffectiveRecordStatus(
                                 child as FinancialRecord,
                               ),
                             )}
                           </td>
-                          <td className="px-6 py-2 whitespace-nowrap text-right">
-                            <span className="text-xs font-bold text-slate-300">
+                          <td className="px-2 py-0.5 whitespace-nowrap text-right">
+                            <span className="text-[9px] font-bold text-slate-300">
                               {formatCurrency(Number(child.amount))}
                             </span>
                           </td>
                           <td
-                            className="px-6 py-2 whitespace-nowrap text-right"
+                            className="px-2 py-0.5 whitespace-nowrap text-right"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {isOpenRecord(child as FinancialRecord) && (
@@ -4374,7 +4134,7 @@ export function Financial(props: FinancialProps = {}) {
                                       integration.isActive,
                                   ),
                                 )}
-                                className={`p-1.5 rounded transition-colors ${
+                                className={`p-1 rounded transition-colors ${
                                   !getChargeDisabledReason(
                                     child as FinancialRecord,
                                     bankIntegrations.some(
@@ -4397,7 +4157,7 @@ export function Financial(props: FinancialProps = {}) {
                                   ) || "Gerar cobrança bancária"
                                 }
                               >
-                                <FileText size={14} />
+                                <FileText size={12} />
                               </button>
                             )}
                             {isOpenRecord(child as FinancialRecord) && (
@@ -4415,7 +4175,7 @@ export function Financial(props: FinancialProps = {}) {
                                       integration.isActive,
                                   ),
                                 )}
-                                className={`p-1.5 rounded transition-colors ${
+                                className={`p-1 rounded transition-colors ${
                                   !getPixPaymentDisabledReason(
                                     child as FinancialRecord,
                                     bankIntegrations.some(
@@ -4438,7 +4198,7 @@ export function Financial(props: FinancialProps = {}) {
                                   ) || "Pagar via PIX direto"
                                 }
                               >
-                                <ArrowUp size={14} />
+                                <ArrowUp size={12} />
                               </button>
                             )}
                             {isOpenRecord(child as FinancialRecord) && (
@@ -4449,7 +4209,7 @@ export function Financial(props: FinancialProps = {}) {
                                   )
                                 }
                                 disabled={!hasPartiesToSettle(child as FinancialRecord)}
-                                className={`p-1.5 rounded transition-colors ${
+                                className={`p-1 rounded transition-colors ${
                                   hasPartiesToSettle(child as FinancialRecord)
                                     ? "text-green-400 hover:bg-green-500/10"
                                     : "text-slate-600 cursor-not-allowed opacity-50"
@@ -4460,15 +4220,15 @@ export function Financial(props: FinancialProps = {}) {
                                     : "Defina Credor e Devedor para liquidar"
                                 }
                               >
-                                <Calculator size={14} />
+                                <Calculator size={12} />
                               </button>
                             )}
                             <button
                               onClick={() => handleDelete(child.id)}
-                              className="p-1.5 text-red-400 hover:bg-red-500/10 rounded transition-colors ml-1"
+                              className="p-1 text-red-400 hover:bg-red-500/10 rounded transition-colors ml-1"
                               title="Excluir parcela"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
                             </button>
                           </td>
                         </tr>
@@ -4480,51 +4240,10 @@ export function Financial(props: FinancialProps = {}) {
             </div>
           </div>
 
-          {/* AI & Open Finance Preview */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-            <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/30 rounded-xl p-6 relative overflow-hidden group shadow-lg shadow-indigo-500/5 transition-all hover:border-indigo-500/50">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <Target size={80} className="text-indigo-400" />
-              </div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2">
-                <Target className="text-indigo-400" size={20} />
-                IA Financial Insights (Em Breve)
-              </h3>
-              <p className="text-sm text-slate-400 mb-4">
-                O Dr.X está analisando seu fluxo de caixa. Em breve você terá
-                previsões de inadimplência e sugestões de redução de custos
-                automáticas.
-              </p>
-              <div className="flex gap-2">
-                <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded border border-indigo-500/20 uppercase">
-                  Projeção 2026
-                </span>
-                <span className="px-2 py-1 bg-purple-500/10 text-purple-400 text-[10px] font-bold rounded border border-purple-500/20 uppercase">
-                  Risk Analysis
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-emerald-900/20 to-teal-900/20 border border-emerald-500/30 rounded-xl p-6 relative overflow-hidden group shadow-lg shadow-emerald-500/5 transition-all hover:border-emerald-500/50">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                <Building2 size={80} className="text-emerald-400" />
-              </div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2">
-                <Building2 className="text-emerald-400" size={20} />
-                Open Finance Hub
-              </h3>
-              <p className="text-sm text-slate-400 mb-4">
-                Conecte suas contas bancárias reais para conciliação automática
-                via Open Finance. Sincronização em tempo real com os principais
-                bancos.
-              </p>
-              <button className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2">
-                <Plus size={14} /> Conectar Banco
-              </button>
-            </div>
-          </div>
+          {/* Espaço extra para scroll no final da tabela se necessário */}
+          <div className="h-4" />
         </div>
-      )}
+    )}
 
       {/* Bank Accounts View */}
       {view === "banking" && (
@@ -4542,55 +4261,59 @@ export function Financial(props: FinancialProps = {}) {
               return (
                 <div
                   key={integration.id}
-                  className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl shadow-black/10 space-y-4"
+                  className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 shadow-xl shadow-black/10 space-y-4"
                 >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-bold uppercase tracking-wider">
-                          <Building2 size={12} />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 text-[8px] font-black uppercase tracking-wider">
+                          <Building2 size={10} />
                           {integration.provider}
                         </span>
-                        <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[8px] font-bold uppercase">
                           {integration.environment}
                         </span>
                       </div>
-                      <h3 className="text-xl font-bold text-white mt-3">
+                      <h3 className="text-sm font-bold text-white mt-1">
                         {integration.displayName}
                       </h3>
-                      <p className="text-sm text-slate-400 mt-1 break-words">
+                      <p className="text-[10px] text-slate-500 mt-0.5 break-words">
                         {integration.bankAccount
                           ? `${integration.bankAccount.title} • ${integration.bankAccount.bankName}`
-                          : "Sem conta interna vinculada"}
+                          : "Sem conta vinculada"}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         onClick={() => handleHealthcheckIntegration(integration)}
-                        className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold flex items-center gap-2"
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold flex items-center gap-1.5"
                       >
-                        <CheckCircle2 size={15} />
+                        <CheckCircle2 size={12} />
                         Testar
                       </button>
                       <button
                         onClick={() => handleSyncIntegration(integration)}
-                        className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold flex items-center gap-2"
+                        className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-semibold flex items-center gap-1.5"
                       >
-                        <RefreshCw size={15} />
-                        Sincronizar
+                        <RefreshCw size={12} />
+                        Sync
                       </button>
-                      <button
-                        onClick={() => handleOpenIntegrationModal(integration)}
-                        className="p-2 rounded-lg text-indigo-300 hover:bg-indigo-500/10"
-                      >
-                        <Edit size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteIntegration(integration.id)}
-                        className="p-2 rounded-lg text-red-300 hover:bg-red-500/10"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex gap-1 ml-1 pl-1 border-l border-slate-800">
+                        <button
+                          onClick={() => handleOpenIntegrationModal(integration)}
+                          className="p-1 px-1.5 rounded bg-slate-800/50 text-indigo-300 hover:bg-indigo-500 hover:text-white transition-all"
+                          title="Editar"
+                        >
+                          <Edit size={12} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteIntegration(integration.id)}
+                          className="p-1 px-1.5 rounded bg-slate-800/50 text-red-300 hover:bg-red-500 hover:text-white transition-all"
+                          title="Excluir"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
                   </div>
 

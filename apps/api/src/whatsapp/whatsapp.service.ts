@@ -596,12 +596,34 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async getConnectionStatus(connectionId: string) {
-    const evolutionConfig = await this.getEvolutionConfig(connectionId);
-    const status = await this.evolutionService.getInstanceStatus(connectionId, evolutionConfig);
-    return { 
-      status: status.instance?.state === 'open' ? 'CONNECTED' : 'DISCONNECTED',
-      sessionName: connectionId
-    };
+    try {
+      const config = await this.getEvolutionConfig(connectionId);
+      const status = await this.evolutionService.getInstanceStatus(connectionId, config);
+      
+      const payloadStr = JSON.stringify(status);
+      this.logger.error(`[SYNC] Evolution raw for ${connectionId}: ${payloadStr}`);
+      
+      // Mapeia o estado da Evolution para o padrão do Xjur
+      const rawState = status?.instance?.state || status?.state || status?.status || 'DISCONNECTED';
+      const state = String(rawState).toLowerCase();
+      
+      let statusResult = 'DISCONNECTED';
+      if (state === 'open' || state === 'connected') {
+        statusResult = 'CONNECTED';
+      } else if (state === 'connecting' || state === 'qrcode' || state === 'pairing') {
+        statusResult = 'PAIRING';
+      }
+
+      this.logger.error(`[SYNC] Final mapped state for ${connectionId}: ${statusResult} (from raw: ${rawState})`);
+
+      return {
+        status: statusResult,
+        rawState
+      };
+    } catch (error) {
+      this.logger.error(`[SYNC] Critical error in getConnectionStatus for ${connectionId}: ${error.message}`);
+      return { status: 'DISCONNECTED', error: error.message };
+    }
   }
 
   // ==========================================
@@ -1190,4 +1212,6 @@ export class WhatsappService implements OnModuleInit {
   async getDetailedDiagnostics() {
     return { engine: 'Evolution API', version: '2.1.1' };
   }
+
+
 }

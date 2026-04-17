@@ -6,7 +6,7 @@ export class FileLogger {
   private logPath: string;
 
   constructor() {
-    this.logPath = path.resolve(process.cwd(), 'whatsapp-debug.log');
+    this.logPath = 'C:\\.Sistemas\\Xjur\\apps\\api\\whatsapp-debug.log';
   }
 
   log(message: string) {

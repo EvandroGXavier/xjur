@@ -38,7 +38,15 @@ export function extrairDigitosIdentificador(value: unknown): string {
 }
 
 export function ehTelefoneProvavel(value: unknown): value is string {
-  return typeof value === 'string' && /^\d{8,15}$/.test(value);
+  if (typeof value !== 'string') return false;
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) return false;
+  
+  // Ignorar números fictícios (ex: 999999999, 000000000, etc)
+  const isAllSameDigit = /^(.)\1+$/.test(digits);
+  const isFictitious99 = digits.includes('99999999');
+  
+  return !isAllSameDigit && !isFictitious99;
 }
 
 function construirVariantesTelefoneWhatsapp(digits: string): string[] {
@@ -47,12 +55,45 @@ function construirVariantesTelefoneWhatsapp(digits: string): string[] {
 
   variants.add(digits);
 
+  // Se for brasileiro (55 + DDD + Numero)
   if (digits.startsWith('55') && digits.length >= 12 && digits.length <= 13) {
-    variants.add(digits.slice(2));
+    const ddi = '55';
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+
+    // No Brasil, o primeiro dígito após o DDD indica o tipo:
+    // 2, 3, 4, 5 -> Fixo (Landline) - Sempre 8 dígitos
+    // 6, 7, 8, 9 -> Celular (Mobile) - Atualmente 9 dígitos, mas pode vir com 8 em caches antigos
+    
+    const primeiroDigito = rest.length === 9 ? rest[1] : rest[0];
+    const ehCelularProvavel = ['6', '7', '8', '9'].includes(primeiroDigito);
+    // const ehFixoProvavel = ['2', '3', '4', '5'].includes(primeiroDigito);
+
+    if (ehCelularProvavel) {
+      if (rest.length === 9 && rest.startsWith('9')) {
+        // Se tem 13 dígitos (com o 9), adiciona a versão com 12 (sem o 9) para compatibilidade
+        variants.add(ddi + ddd + rest.slice(1));
+      } else if (rest.length === 8) {
+        // Se tem 12 dígitos (sem o 9), adiciona a versão com 13 (com o 9)
+        variants.add(ddi + ddd + '9' + rest);
+      }
+    }
+    
+    // Se for FIXO, NÃO mexemos no 9. 
+    // Mantemos apenas a variante original (já adicionada no início).
+    
+    // Versão sem DDI (sempre útil para busca)
+    variants.add(digits.slice(2)); 
+    
+    // Se for celular e geramos a variante com 9, adiciona ela sem DDI também
+    if (ehCelularProvavel && rest.length === 8) {
+       variants.add(ddd + '9' + rest);
+    }
   }
 
   return Array.from(variants);
 }
+
 
 export function construirValoresBuscaIdentificadores(
   channel: string,
@@ -113,7 +154,7 @@ export function construirContatosAdicionaisPorCanal(
         push('WHATSAPP_JID', normalized, 'WhatsApp JID');
       }
 
-      if (digits) {
+      if (digits && ehTelefoneProvavel(digits)) {
         push('WHATSAPP', digits, 'WhatsApp');
         // Adiciona também a versão JID canônica
         push('WHATSAPP_JID', `${digits}@s.whatsapp.net`, 'WhatsApp JID');
@@ -126,7 +167,7 @@ export function construirContatosAdicionaisPorCanal(
       if (normalized) {
         push('TELEGRAM_ID', normalized, 'Telegram ID');
       }
-      if (digits) {
+      if (digits && ehTelefoneProvavel(digits)) {
         push('TELEGRAM', digits, 'Telegram');
       }
       continue;

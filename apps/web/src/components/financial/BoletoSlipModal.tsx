@@ -49,7 +49,7 @@ function BarcodeDisplay({ barcode }: { barcode: string }) {
   const cleaned = barcode.replace(/\D/g, '');
   if (!cleaned) return null;
 
-  // Simple bar representation: 0 → thin bar gap, 1 → thick bar
+  // Simple bar representation: 0 -> thin bar gap, 1 -> thick bar
   // For visual purposes only (not scannable)
   const bars: Array<{ width: number; isBar: boolean }> = [];
   for (let i = 0; i < cleaned.length; i++) {

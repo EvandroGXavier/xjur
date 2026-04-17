@@ -278,6 +278,9 @@ export function AtendimentoPage({
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [contactResults, setContactResults] = useState<ContactSummary[]>([]);
+  const [associateSearch, setAssociateSearch] = useState('');
+  const [associateResults, setAssociateResults] = useState<ContactSummary[]>([]);
+  const [assigningContact, setAssigningContact] = useState(false);
   const [processSearch, setProcessSearch] = useState('');
   const [processResults, setProcessResults] = useState<ProcessSummary[]>([]);
   const [queueDraft, setQueueDraft] = useState('');
@@ -289,6 +292,15 @@ export function AtendimentoPage({
     initialMessage: '',
     externalThreadId: '',
   });
+
+  const filteredConnectionsModal = useMemo(() => {
+    if (!newConversation.channel) return connections;
+    return connections.filter(
+      (connection) =>
+        connection.type.toUpperCase() === newConversation.channel.toUpperCase(),
+    );
+  }, [connections, newConversation.channel]);
+
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const { on } = useInboxSocket();
 
@@ -439,12 +451,7 @@ export function AtendimentoPage({
       const all = Array.isArray(connectionsResponse.value.data)
         ? connectionsResponse.value.data
         : [];
-      setConnections(
-        all.filter(
-          (connection: ConnectionSummary) =>
-            connection.type === 'WHATSAPP' || connection.type === 'TELEGRAM',
-        ),
-      );
+      setConnections(all);
     }
   };
 
@@ -473,12 +480,6 @@ export function AtendimentoPage({
       requestEndpoint: string,
       mode: SendDiagnostics['mode'],
     ) => {
-      const requestDiagnostics: SendDiagnostics = {
-        endpoint: requestEndpoint,
-        mode,
-        ...baseDiagnostics,
-      };
-      setSendDiagnostics(requestDiagnostics);
 
       try {
         const response =
@@ -628,6 +629,61 @@ export function AtendimentoPage({
     }
   };
 
+  const handleAssignContact = async (contactId: string) => {
+    if (!selectedConversationId) return;
+    setAssigningContact(true);
+    try {
+      const response = await api.post(
+        `/inbox/conversations/${selectedConversationId}/assign-contact`,
+        { contactId },
+      );
+      upsertConversation(response.data);
+      setAssociateSearch('');
+      setAssociateResults([]);
+      toast.success('Contato associado com sucesso.');
+    } catch {
+      toast.error('Falha ao associar o contato.');
+    } finally {
+      setAssigningContact(false);
+    }
+  };
+
+  const handleCreateAndAssignContact = async () => {
+    if (!selectedConversationId || !selectedConversation) return;
+    const meta = selectedConversation.metadata || {};
+    const name = (meta.pushName as string | undefined)?.trim() || 'Contato WhatsApp';
+    const rawId =
+      (meta.rawParticipantId as string | undefined) ||
+      (meta.rawRemoteJid as string | undefined) ||
+      '';
+
+    setAssigningContact(true);
+    try {
+      const contactResponse = await api.post('/contacts', { name });
+      const newContactId = contactResponse.data?.id;
+      if (!newContactId) throw new Error('ID do contato não retornado');
+
+      if (rawId) {
+        await api.post(`/contacts/${newContactId}/additional-contacts`, {
+          type: rawId.includes('@lid') ? 'WHATSAPP_LID' : 'WHATSAPP_JID',
+          value: rawId,
+          nomeContatoAdicional: 'WhatsApp',
+        }).catch(() => undefined);
+      }
+
+      const response = await api.post(
+        `/inbox/conversations/${selectedConversationId}/assign-contact`,
+        { contactId: newContactId },
+      );
+      upsertConversation(response.data);
+      toast.success(`Contato "${name}" criado e associado.`);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Falha ao criar e associar o contato.');
+    } finally {
+      setAssigningContact(false);
+    }
+  };
+
   const handleDeleteConversation = async () => {
     if (!selectedConversationId || !selectedConversation) return;
     if (
@@ -734,6 +790,8 @@ export function AtendimentoPage({
     if (!selectedConversationId) return;
     fetchConversation(selectedConversationId);
     api.post(`/inbox/conversations/${selectedConversationId}/read`).catch(() => undefined);
+    setAssociateSearch('');
+    setAssociateResults([]);
   }, [selectedConversationId]);
 
   useEffect(() => {
@@ -771,6 +829,22 @@ export function AtendimentoPage({
     }, 250);
     return () => clearTimeout(timer);
   }, [contactSearch, showNewConversation]);
+
+  useEffect(() => {
+    if (!associateSearch.trim()) {
+      setAssociateResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const response = await api.get('/contacts', { params: { search: associateSearch.trim() } });
+        setAssociateResults(Array.isArray(response.data) ? response.data.slice(0, 8) : []);
+      } catch {
+        setAssociateResults([]);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [associateSearch]);
 
   useEffect(() => {
     if (!selectedConversation || !processSearch.trim()) {
@@ -1376,27 +1450,90 @@ export function AtendimentoPage({
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Contato</p>
-                    <p className="mt-3 text-sm font-medium">
-                      {getConversationDisplayName(selectedConversation)}
-                    </p>
-                    <p className="mt-2 text-xs text-slate-400">
-                      {getContactIdentifier(selectedConversation.contact) ||
-                        selectedConversation.title ||
-                        'Sem identificacao'}
-                    </p>
-                    {getAdditionalContactIdentifier(selectedConversation.contact, 'EMAIL') && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        {getAdditionalContactIdentifier(selectedConversation.contact, 'EMAIL')}
+                  {selectedConversation.contact ? (
+                    <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Contato</p>
+                      <p className="mt-3 text-sm font-medium">
+                        {getConversationDisplayName(selectedConversation)}
                       </p>
-                    )}
-                    {selectedConversation.connection?.name && (
-                      <p className="mt-4 text-xs text-slate-500">
-                        Conexão ativa: {selectedConversation.connection.name}
+                      <p className="mt-2 text-xs text-slate-400">
+                        {getContactIdentifier(selectedConversation.contact) ||
+                          selectedConversation.title ||
+                          'Sem identificacao'}
                       </p>
-                    )}
-                  </div>
+                      {getAdditionalContactIdentifier(selectedConversation.contact, 'EMAIL') && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {getAdditionalContactIdentifier(selectedConversation.contact, 'EMAIL')}
+                        </p>
+                      )}
+                      {selectedConversation.connection?.name && (
+                        <p className="mt-4 text-xs text-slate-500">
+                          Conexão ativa: {selectedConversation.connection.name}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-3xl border border-amber-500/30 bg-amber-500/5 p-4">
+                      <p className="text-xs uppercase tracking-[0.25em] text-amber-400">
+                        Contato não identificado
+                      </p>
+                      {selectedConversation.metadata?.pushName && (
+                        <p className="mt-2 text-sm font-medium text-slate-300">
+                          {selectedConversation.metadata.pushName as string}
+                        </p>
+                      )}
+                      {(selectedConversation.metadata?.rawLid ||
+                        selectedConversation.metadata?.rawRemoteJid) && (
+                        <p className="mt-1 text-xs text-slate-500 break-all">
+                          {(selectedConversation.metadata.rawLid ||
+                            selectedConversation.metadata.rawRemoteJid) as string}
+                        </p>
+                      )}
+                      <p className="mt-2 text-xs text-slate-500">
+                        Nenhum cadastro encontrado para esta identidade. Associe manualmente.
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={handleCreateAndAssignContact}
+                          disabled={assigningContact}
+                          className="flex-1 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                        >
+                          {assigningContact ? 'Aguarde...' : 'Criar Contato'}
+                        </button>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                        <Search size={14} className="shrink-0 text-slate-500" />
+                        <input
+                          value={associateSearch}
+                          onChange={(e) => setAssociateSearch(e.target.value)}
+                          placeholder="Associar a contato existente..."
+                          className="w-full bg-transparent text-xs outline-none placeholder:text-slate-500"
+                        />
+                      </div>
+                      {associateResults.map((result) => (
+                        <button
+                          key={result.id}
+                          onClick={() => handleAssignContact(result.id)}
+                          disabled={assigningContact}
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10 disabled:opacity-50"
+                        >
+                          <p className="text-xs font-medium">{result.name}</p>
+                          <p className="text-xs text-slate-400">
+                            {getContactIdentifier(result) ||
+                              result.whatsapp ||
+                              result.phone ||
+                              result.email ||
+                              ''}
+                          </p>
+                        </button>
+                      ))}
+                      {selectedConversation.connection?.name && (
+                        <p className="mt-3 text-xs text-slate-500">
+                          Conexão ativa: {selectedConversation.connection.name}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
@@ -1464,10 +1601,11 @@ export function AtendimentoPage({
                 }
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none"
               >
-                <option value="WHATSAPP">WhatsApp</option>
-                <option value="EMAIL">E-mail</option>
-                <option value="TELEGRAM">Telegram</option>
-                <option value="WEBCHAT">Webchat</option>
+                <option value="WHATSAPP" className="text-slate-900">WhatsApp</option>
+                <option value="EMAIL" className="text-slate-900">E-mail</option>
+                <option value="TELEGRAM" className="text-slate-900">Telegram</option>
+                <option value="INSTAGRAM" className="text-slate-900">Instagram</option>
+                <option value="WEBCHAT" className="text-slate-900">Webchat</option>
               </select>
               <select
                 value={newConversation.connectionId}
@@ -1479,12 +1617,15 @@ export function AtendimentoPage({
                 }
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none"
               >
-                <option value="">Escolher instancia depois</option>
-                {connections.map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.name} - {connection.status}
+                <option value="" className="text-slate-900">Escolher instância depois</option>
+                {filteredConnectionsModal.map((connection) => (
+                  <option key={connection.id} value={connection.id} className="text-slate-900">
+                    {connection.name} ({connection.status})
                   </option>
                 ))}
+                {filteredConnectionsModal.length === 0 && (
+                  <option value="" disabled className="text-slate-900 italic">Nenhuma instância de {newConversation.channel.toLowerCase()} encontrada</option>
+                )}
               </select>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 md:col-span-2">
                 <div className="flex items-center gap-2">

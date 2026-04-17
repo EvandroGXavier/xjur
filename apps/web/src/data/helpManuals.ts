@@ -205,7 +205,7 @@ export const helpSettingsMyTenant: HelpSection[] = [
     title: 'Cabeçalho e Rodapé das Peças (por tenant)',
     content:
       'Você pode definir um <b>cabeçalho</b> e um <b>rodapé</b> padrão para serem inseridos automaticamente em <b>todas as peças</b> geradas a partir de modelos (do sistema ou do escritório).<br/><br/>' +
-      '<b>Onde fica:</b> <b>Configurações</b> → <b>Minha Empresa</b> → <b>Cabeçalho e Rodapé das Peças</b>.<br/><br/>' +
+      '<b>Onde fica:</b> <b>Configurações</b> > <b>Minha Empresa</b> > <b>Cabeçalho e Rodapé das Peças</b>.<br/><br/>' +
       '<b>Como usar:</b><ol>' +
       '<li>Preencha o editor do <b>Cabeçalho</b> com identificação do escritório e dados essenciais.</li>' +
       '<li>Preencha o editor do <b>Rodapé</b> com contato, data e assinatura.</li>' +

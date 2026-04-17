@@ -24,18 +24,18 @@ export function Sidebar({ isOpen, closeSidebar, isCollapsed, toggleCollapsed }: 
     <aside
       className={clsx(
         'w-72 bg-slate-900 border-r border-slate-800 flex flex-col h-screen fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out',
-        isCollapsed ? 'lg:w-16' : 'lg:w-64',
+        isCollapsed ? 'lg:w-16' : 'lg:w-40',
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
       )}
     >
       <div
         className={clsx(
-          'relative p-5 lg:p-6 flex items-center justify-between gap-3 border-b border-slate-800',
+          'relative p-3 lg:p-3.5 flex items-center justify-between gap-3 border-b border-slate-800',
           isCollapsed && 'lg:px-3 lg:justify-center',
         )}
       >
         <div className={clsx('flex items-center gap-3', isCollapsed && 'lg:gap-0')}>
-          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white text-xl">
+          <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center font-bold text-white text-lg">
             X
           </div>
           <div className={clsx(isCollapsed && 'lg:hidden')}>
@@ -64,7 +64,7 @@ export function Sidebar({ isOpen, closeSidebar, isCollapsed, toggleCollapsed }: 
 
       <nav
         className={clsx(
-          'flex-1 p-3 lg:p-4 space-y-1.5 lg:space-y-2 overflow-y-auto custom-scrollbar',
+          'flex-1 p-2 space-y-1 overflow-y-auto custom-scrollbar',
           isCollapsed && 'lg:px-2',
         )}
       >
@@ -93,7 +93,7 @@ export function Sidebar({ isOpen, closeSidebar, isCollapsed, toggleCollapsed }: 
                 className={({ isActive }) =>
                   clsx(
                     'flex items-center rounded-lg text-sm font-medium transition-all duration-200 relative',
-                    isCollapsed ? 'justify-center px-2 py-2.5 lg:py-3' : 'justify-between px-3 py-2.5 lg:px-4 lg:py-3',
+                    isCollapsed ? 'justify-center px-2 py-2' : 'justify-between px-2 py-1',
                     (hasSubItems ? isItemActive : isActive)
                       ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-600/20'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white',
@@ -102,7 +102,7 @@ export function Sidebar({ isOpen, closeSidebar, isCollapsed, toggleCollapsed }: 
                 aria-label={item.label}
               >
                 <div className={clsx('flex items-center', isCollapsed ? 'justify-center' : 'gap-3')}>
-                  <item.icon size={20} className={clsx(!isItemActive && 'opacity-80')} />
+                  <item.icon size={18} className={clsx(!isItemActive && 'opacity-80')} />
                   {!isCollapsed && item.label}
                 </div>
 
@@ -131,7 +131,7 @@ export function Sidebar({ isOpen, closeSidebar, isCollapsed, toggleCollapsed }: 
               </NavLink>
 
               {hasSubItems && !isCollapsed && isMenuOpen && (
-                <div className="mt-1 flex flex-col space-y-1 pl-10">
+                <div className="mt-0.5 flex flex-col space-y-0.5 pl-8">
                   {item.subItems!.map(sub => (
                     <NavLink
                       key={sub.to}

@@ -338,14 +338,26 @@ export class InboxService {
       this.extractResolvedWhatsappPhone(conversation),
       conversation?.externalParticipantId,
       conversation?.externalThreadId,
+      contact?.whatsapp,
+      contact?.whatsappE164,
     ]
       .map((candidate) => this.extractWhatsappDigits(candidate))
       .filter((candidate): candidate is string => this.isPlausibleWhatsappDigits(candidate));
 
+    const numbers = Array.from(new Set(numberCandidates));
+    const expandedNumbers = [...numbers];
+
+    // Autocorreção para o Brasil: se o número tem 10 ou 11 dígitos e não tem 55, adiciona o candidato com 55.
+    for (const num of numbers) {
+      if ((num.length === 10 || num.length === 11) && !num.startsWith('55')) {
+        expandedNumbers.push('55' + num);
+      }
+    }
+
     return {
       explicitPhoneJids,
       explicitLids,
-      numbers: Array.from(new Set(numberCandidates)),
+      numbers: Array.from(new Set(expandedNumbers)),
     };
   }
 
@@ -430,7 +442,7 @@ export class InboxService {
     identifiers: (string | null | undefined)[];
     provider?: string | null;
   }) {
-    const channel = params.channel.toUpperCase();
+    const channel = params.channel?.toUpperCase() || 'WHATSAPP';
     const validIdentifiers = Array.from(
       new Set(
         params.identifiers
@@ -441,12 +453,50 @@ export class InboxService {
 
     if (validIdentifiers.length === 0) return;
 
+    // 1. Persistir na tabela global de identidades (lookup rápido)
+    for (const extId of validIdentifiers) {
+        try {
+            await this.prisma.contactChannelIdentity.upsert({
+                where: {
+                    tenantId_channel_externalId: {
+                        tenantId: params.tenantId,
+                        channel,
+                        externalId: extId
+                    }
+                },
+                update: { updatedAt: new Date() },
+                create: {
+                    tenantId: params.tenantId,
+                    contactId: params.contactId,
+                    channel,
+                    provider: params.provider || null,
+                    externalId: extId
+                }
+            });
+        } catch (e) {
+            // Ignore unique constraint errors or race conditions
+        }
+    }
+
+    // 2. Se for WhatsApp e tivermos um @lid ou @s.whatsapp.net, atualizar whatsappFullId no contato principal
+    const priorityId = validIdentifiers.find(id => id.includes('@lid')) || 
+                       validIdentifiers.find(id => id.includes('@s.whatsapp.net'));
+    
+    if (channel === 'WHATSAPP' && priorityId) {
+        await this.prisma.contact.update({
+            where: { id: params.contactId },
+            data: { whatsappFullId: priorityId }
+        });
+    }
+
+    // 3. Persistir nos contatos adicionais (visualização no form)
     await this.ensureAdditionalContactIdentifiers({
       contactId: params.contactId,
       channel,
       identifiers: validIdentifiers,
     });
   }
+
 
   private async ensureAdditionalContactIdentifiers(params: {
     contactId: string;
@@ -489,14 +539,34 @@ export class InboxService {
       return null;
     }
 
+    // 1. Tenta buscar via identidades registradas (novo fluxo unificado de aliases)
+    const channelIdentities = await this.prisma.contactChannelIdentity.findMany({
+      where: {
+        tenantId,
+        channel: normalizedChannel,
+        externalId: { in: lookupValues },
+      },
+      select: { contactId: true },
+    });
+
+    const foundIds = channelIdentities.map((ci) => ci.contactId);
+
     return this.prisma.contact.findFirst({
       where: {
         tenantId,
-        additionalContacts: {
-          some: {
-            value: { in: lookupValues },
+        OR: [
+          { id: { in: foundIds } },
+          { whatsapp: { in: lookupValues } },
+          { whatsappE164: { in: lookupValues } },
+          { whatsappFullId: { in: lookupValues } },
+          {
+            additionalContacts: {
+              some: {
+                value: { in: lookupValues },
+              },
+            },
           },
-        },
+        ],
       },
       include: {
         additionalContacts: true,
@@ -606,6 +676,19 @@ export class InboxService {
     const candidates = new Set<string>();
 
     if (normalizedChannel === 'WHATSAPP') {
+      const { explicitPhoneJids, explicitLids, numbers } = this.getWhatsappAddressCandidates(
+        contact,
+        conversation,
+      );
+
+      // PRIORIDADE: Primeiro os números extraídos explicitamente do contato principal
+      numbers.forEach(v => {
+        candidates.add(v);
+        candidates.add(`${v}@s.whatsapp.net`);
+      });
+      explicitPhoneJids.forEach(v => candidates.add(v));
+      explicitLids.forEach(v => candidates.add(v));
+
       const additionalValues = construirValoresBuscaIdentificadores(
         'WHATSAPP',
         Array.isArray(contact?.additionalContacts)
@@ -613,27 +696,19 @@ export class InboxService {
           : [],
       );
 
+      // Depois os valores adicionais (secundários)
       additionalValues.forEach(v => candidates.add(v));
 
-      const { explicitPhoneJids, explicitLids, numbers } = this.getWhatsappAddressCandidates(
-        contact,
-        conversation,
-      );
+      const mergedPhoneJids = Array.from(new Set([...explicitPhoneJids, ...additionalValues.filter(v => v.endsWith('@s.whatsapp.net'))]));
+      const mergedNumbersList = Array.from(new Set([...numbers, ...additionalValues.filter(v => /^\d{8,15}$/.test(v))]));
+      const mergedLids = Array.from(new Set([...explicitLids, ...additionalValues.filter(v => v.endsWith('@lid'))]));
 
-      explicitPhoneJids.forEach(v => candidates.add(v));
-      explicitLids.forEach(v => candidates.add(v));
-      numbers.forEach(v => {
-        candidates.add(v);
-        candidates.add(`${v}@s.whatsapp.net`);
-      });
-
-      const mergedPhoneJids = Array.from(new Set([...additionalValues.filter(v => v.endsWith('@s.whatsapp.net')), ...explicitPhoneJids]));
-      const mergedNumbers = Array.from(new Set([...additionalValues.filter(v => /^\d{8,15}$/.test(v)), ...numbers]));
-      const mergedLids = Array.from(new Set([...additionalValues.filter(v => v.endsWith('@lid')), ...explicitLids]));
-
+      // Prioridade para o formato de 12 dígitos (Brasil) se existirem as duas variantes, 
+      // pois JIDs de contas antigas frequentemente omitem o 9º dígito.
       const preferredNumber =
-        mergedNumbers.find((value) => value.startsWith('55') && /^\d{12,13}$/.test(value)) ||
-        mergedNumbers[0];
+        mergedNumbersList.find((value) => value.startsWith('55') && value.length === 12) ||
+        mergedNumbersList.find((value) => value.startsWith('55') && value.length === 13) ||
+        mergedNumbersList[0];
       if (preferredNumber) {
         return {
           destination: preferredNumber,
@@ -641,8 +716,8 @@ export class InboxService {
         };
       }
 
-      if (mergedLids.length > 0) return { destination: mergedLids[0], candidates: Array.from(candidates) };
       if (mergedPhoneJids.length > 0) return { destination: mergedPhoneJids[0], candidates: Array.from(candidates) };
+      if (mergedLids.length > 0) return { destination: mergedLids[0], candidates: Array.from(candidates) };
       
       return { destination: null, candidates: Array.from(candidates) };
     }
@@ -934,16 +1009,22 @@ export class InboxService {
         ]),
       );
 
+      // Manter o JID de telefone como externalThreadId principal se disponível, 
+      // pois é mais robusto para envios de volta via Evolution API do que o LID.
+      const isIncomingPhone = input.externalThreadId?.endsWith('@s.whatsapp.net');
+      const isExistingPhone = existing.externalThreadId?.endsWith('@s.whatsapp.net');
+      const finalThreadId = (isIncomingPhone || !isExistingPhone) 
+        ? (input.externalThreadId || existing.externalThreadId) 
+        : existing.externalThreadId;
+
       return this.prisma.agentConversation.update({
         where: { id: existing.id },
         data: {
           title: input.title ?? existing.title,
-          // Do NOT overwrite an existing contactId with a potentially wrong new one;
-          // only assign if the conversation has no contact yet.
           contactId: existing.contactId ?? input.contactId ?? null,
           connectionId: input.connectionId ?? existing.connectionId,
           processId: input.processId ?? existing.processId,
-          externalThreadId: input.externalThreadId ?? existing.externalThreadId,
+          externalThreadId: finalThreadId,
           externalParticipantId: input.externalParticipantId ?? existing.externalParticipantId,
           status: existing.status,
           waitingReply: this.normalizeDirection(input.direction) === 'INBOUND',
@@ -957,6 +1038,8 @@ export class InboxService {
             ...existingMeta,
             ...incomingMeta,
             ...(knownLids.length > 0 ? { knownLids } : {}),
+            // Preserva o LID explicitamente caso o threadId principal seja o telefone
+            ...(input.senderLid?.includes('@lid') ? { lastKnownLid: input.senderLid } : {}),
           },
         },
       });
@@ -1302,6 +1385,56 @@ export class InboxService {
     return payload;
   }
 
+  async assignContactToConversation(
+    conversationId: string,
+    contactId: string,
+    tenantId: string,
+  ) {
+    const conversation = await this.getConversationOrThrow(conversationId, tenantId);
+
+    const contact = await this.prisma.contact.findFirst({
+      where: { id: contactId, tenantId },
+    });
+    if (!contact) {
+      throw new NotFoundException('Contato não encontrado');
+    }
+
+    const existingMeta = this.asObject(conversation.metadata as Record<string, any>);
+    const updatedMeta = { ...existingMeta, unresolved: false, manuallyAssignedContactId: contactId };
+
+    const updated = await this.prisma.agentConversation.update({
+      where: { id: conversationId },
+      data: {
+        contactId,
+        metadata: updatedMeta,
+      },
+    });
+
+    // Registra os identificadores brutos da conversa no contato para rastreabilidade futura
+    const rawIdentifiers = [
+      existingMeta.rawRemoteJid,
+      existingMeta.rawLid,
+      existingMeta.rawParticipantId,
+      conversation.externalThreadId,
+      conversation.externalParticipantId,
+    ].filter((v): v is string => typeof v === 'string' && v.length > 0);
+
+    if (rawIdentifiers.length > 0) {
+      await this.ensureContactChannelIdentities({
+        tenantId,
+        contactId,
+        channel: conversation.channel,
+        provider: null,
+        identifiers: rawIdentifiers,
+      });
+    }
+
+    await this.syncLegacyTicketProjection(updated);
+    const payload = await this.loadConversationDetails(conversationId);
+    this.inboxGateway.emitConversationUpdated(tenantId, payload);
+    return payload;
+  }
+
   async deleteConversation(id: string, tenantId: string) {
     const conversation = await this.getConversationOrThrow(id, tenantId);
 
@@ -1527,22 +1660,103 @@ export class InboxService {
           externalMessageId,
           destination: resolvedDestination,
         });
-      } catch (error) {
-        finalMessage = await this.prisma.agentMessage.update({
-          where: { id: message.id },
-          data: {
-            status: 'FAILED',
-            metadata: {
-              ...this.asObject(message.metadata as Record<string, any>),
-              errorMessage: error.message,
-            },
-          },
-        });
+       } catch (error) {
+         // Lógica de "Auto-healing" para WhatsApp: Se o destino selecionado não possui WhatsApp,
+         // tenta os outros candidatos disponíveis para o contato.
+         if (error.message?.includes('destino nao possui WhatsApp')) {
+            this.logger.warn(`Destination ${resolvedDestination} has no WhatsApp. Searching for candidates...`);
+            const otherCandidates = [...resolution.candidates];
 
-        await this.appendMessageEvent(tenantId, message.id, 'PROVIDER_ERROR', {
-          channel: 'WHATSAPP',
-          message: error.message,
-        });
+            if (resolvedDestination.endsWith('@lid')) {
+                try {
+                    this.logger.log(`Resolving real phone for LID ${resolvedDestination} via active search...`);
+                    const result = await this.whatsappService.checkNumber(connection.id, resolvedDestination);
+                    if (result && result.exists && result.jid && result.jid !== resolvedDestination) {
+                        this.logger.log(`Active resolution success: ${resolvedDestination} -> ${result.jid}`);
+                        otherCandidates.unshift(result.jid); 
+                    }
+                } catch (err) {
+                    this.logger.warn(`Active LID resolution failed for ${resolvedDestination}: ${err.message}`);
+                }
+            }
+
+            const filteredCandidates = otherCandidates.filter(c => c !== resolvedDestination);
+            
+            for (const candidate of filteredCandidates) {
+                try {
+                    this.logger.log(`Trying alternative WhatsApp candidate: ${candidate}`);
+                    const altExternalMessageId = contentType === 'TEXT'
+                        ? await this.whatsappService.sendText(connection.id, candidate, content)
+                        : await this.whatsappService.sendMedia(
+                            connection.id,
+                            candidate,
+                            contentType === 'IMAGE' ? 'image' : contentType === 'AUDIO' ? 'audio' : contentType === 'VIDEO' ? 'video' : 'document',
+                            mediaUrl!,
+                            content || '',
+                            file?.mimetype || undefined,
+                            file?.originalname || undefined,
+                          );
+
+                    if (altExternalMessageId) {
+                        this.logger.log(`Success with alternative candidate: ${candidate}. Updating conversation...`);
+                        
+                        const altPhone = this.extractWhatsappDigits(candidate);
+                        const altCanonical = altPhone ? `${altPhone}@s.whatsapp.net` : candidate;
+
+                        await this.prisma.agentMessage.update({
+                            where: { id: message.id },
+                            data: {
+                                externalMessageId: altExternalMessageId,
+                                senderAddress: candidate,
+                                status: 'SENT',
+                                metadata: {
+                                    ...this.asObject(message.metadata as Record<string, any>),
+                                    connectionId: connection.id,
+                                    destination: candidate,
+                                    healedFrom: resolvedDestination
+                                },
+                            },
+                        });
+
+                        await this.prisma.agentConversation.update({
+                            where: { id: conversationId },
+                            data: {
+                                externalThreadId: altCanonical,
+                                externalParticipantId: altPhone || candidate,
+                                metadata: {
+                                    ...this.asObject(conversation.metadata as Record<string, any>),
+                                    lastResolvedDestination: candidate,
+                                }
+                            }
+                        });
+
+                        // Emitir atualização para o Front-end
+                        const updatedPayload = await this.loadConversationDetails(conversationId);
+                        this.inboxGateway.emitConversationUpdated(tenantId, updatedPayload);
+
+                        return; // Sucesso!
+                    }
+                } catch (altErr) {
+                    this.logger.debug(`Alternative candidate ${candidate} failed: ${altErr.message}`);
+                }
+            }
+         }
+
+         finalMessage = await this.prisma.agentMessage.update({
+           where: { id: message.id },
+           data: {
+             status: 'FAILED',
+             metadata: {
+               ...this.asObject(message.metadata as Record<string, any>),
+               errorMessage: error.message,
+             },
+           },
+         });
+
+         await this.appendMessageEvent(tenantId, message.id, 'PROVIDER_ERROR', {
+           channel: 'WHATSAPP',
+           message: error.message,
+         });
 
         this.inboxGateway.emitConversationError(tenantId, {
           conversationId,
@@ -1684,11 +1898,13 @@ export class InboxService {
       direction,
     });
 
-    if (input.contactId || input.externalParticipantId || input.senderAddress) {
+    const effectiveContactId = input.contactId || conversation.contactId;
+
+    if (effectiveContactId || input.externalParticipantId || input.senderAddress) {
       await this.ensureConversationParticipant({
         tenantId: input.tenantId,
         conversationId: conversation.id,
-        contactId: input.contactId || null,
+        contactId: effectiveContactId || null,
         role: direction === 'OUTBOUND' ? 'OPERATOR' : 'CONTACT',
         label: input.senderName || undefined,
         externalAddress: input.senderAddress || input.externalParticipantId || input.externalThreadId || null,
@@ -1698,10 +1914,10 @@ export class InboxService {
 
     // Persiste todos os identificadores externos no contato para garantir rastreabilidade futura.
     // Isso permite que mensagens futuras (com diferentes JIDs/LIDs) sejam mapeadas ao mesmo contato.
-    if (input.contactId) {
+    if (effectiveContactId) {
       await this.ensureContactChannelIdentities({
         tenantId: input.tenantId,
-        contactId: input.contactId,
+        contactId: effectiveContactId,
         channel: input.channel,
         provider: (input.metadata as any)?.provider || null,
         identifiers: [

@@ -42,7 +42,7 @@ services:
   # ACESSO DIRETO A EVOLUTION DA VPS: http://185.202.223.115:8081/manager - ServerUrl= http://185.202.223.115:8081 - key= JaJyX0tc3DvmPScDDRojSsguMSddVGeO   
    # ACESSO DIRETO A EVOLUTION LOCAL: http://localhost:8080/manager - ServerUrl= http://localhost:8080 key= JaJyX0tc3DvmPScDDRojSsguMSddVGeO   
   evolution:
-    image: atendai/evolution-api:v2.2.1
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: drx_evolution_local
     restart: always
     ports:
@@ -77,7 +77,7 @@ services:
       
       # Webhook (Desativado para isolamento)
       WEBHOOK_GLOBAL_ENABLED: "true"
-      WEBHOOK_GLOBAL_URL: "https://statute-bat-aid-swap.trycloudflare.com/api/evolution/webhook"
+      WEBHOOK_GLOBAL_URL: "http://host.docker.internal:3000/api/evolution/webhook"
       WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
       WEBHOOK_EVENTS_QRCODE_UPDATED: "true"
       WEBHOOK_EVENTS_MESSAGES_SET: "true"

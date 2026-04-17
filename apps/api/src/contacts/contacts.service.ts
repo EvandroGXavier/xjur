@@ -11,7 +11,7 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 import { CreateAdditionalContactDto } from './dto/create-additional-contact.dto';
 import { UpdateAdditionalContactDto } from './dto/update-additional-contact.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
-import { construirContatosAdicionaisPorCanal, construirValoresBuscaIdentificadores } from '../common/contact-identifiers';
+import { construirContatosAdicionaisPorCanal, construirValoresBuscaIdentificadores, ehTelefoneProvavel } from '../common/contact-identifiers';
 
 @Injectable()
 export class ContactsService {
@@ -202,7 +202,6 @@ export class ContactsService {
       const dueDayA = Number(a.dueDay || 0);
       const dueDayB = Number(b.dueDay || 0);
       if (dueDayA !== dueDayB) return dueDayA - dueDayB;
-
       const updatedA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const updatedB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return updatedB - updatedA;
@@ -233,7 +232,9 @@ export class ContactsService {
 
     await this.validateCoreContactInfo(tenantId, data);
 
-    const duplicate = await this.findDuplicateContact(tenantId, data);
+    const whatsappE164 = this.normalizeDigits(data.whatsapp) || undefined;
+    
+    const duplicate = await this.findDuplicateContact(tenantId, { ...data, whatsappE164 });
     if (duplicate) {
       throw new ConflictException(`Já existe um contato cadastrado (${duplicate.name}) com este ${duplicate.matchedField}.`);
     }
@@ -334,6 +335,7 @@ export class ContactsService {
         ...commonData,
         personType,
         tenantId,
+        whatsappE164,
         pfDetails: pfCreate ? { create: pfCreate } : undefined,
         pjDetails: pjCreate ? { create: pjCreate } : undefined,
         addresses: addresses?.length ? { create: addresses } : undefined,
@@ -390,10 +392,8 @@ export class ContactsService {
   ) {
     const where: any = { tenantId };
 
-    // Active/Inactive filter
     if (active === 'true') where.active = true;
     else if (active === 'false') where.active = false;
-
 
     if (birthDateStart || birthDateEnd || pfFilters) {
       where.pfDetails = where.pfDetails || {};
@@ -416,7 +416,6 @@ export class ContactsService {
         });
       }
 
-      // Cleanup if empty
       if (Object.keys(where.pfDetails).length === 0) {
         delete where.pfDetails;
       }
@@ -434,7 +433,6 @@ export class ContactsService {
       }
     }
 
-    // Address Filters
     if (extraFilters?.address) {
       const addr = extraFilters.address;
       const addrConditions = Object.entries(addr)
@@ -446,7 +444,6 @@ export class ContactsService {
       }
     }
 
-    // Additional Contact Filters
     if (extraFilters?.additionalContact) {
       const ac = extraFilters.additionalContact;
       const acConditions: any[] = [];
@@ -457,10 +454,9 @@ export class ContactsService {
         where.additionalContacts = { some: { AND: acConditions } };
       }
     }
-    // Collective ID collection for complex filters
+    
     let requiredIds: string[] | null = null;
 
-    // Handle Month filter (Postgres specific extraction)
     if (extraFilters?.birthMonth) {
       const monthContacts = await this.prisma.$queryRawUnsafe<{ contactId: string }[]>(
         `SELECT "contactId" FROM "person_details_pf" WHERE EXTRACT(MONTH FROM "birthDate") = $1`,
@@ -470,13 +466,10 @@ export class ContactsService {
       requiredIds = requiredIds === null ? monthIds : requiredIds.filter(id => monthIds.includes(id));
     }
 
-    // Contract Filters - searching inside JSON metadata
     if (extraFilters?.contract?.description?.trim() || extraFilters?.contract?.counterparty?.trim()) {
        const desc = extraFilters.contract.description?.trim() || '';
        const counter = extraFilters.contract.counterparty?.trim() || '';
        
-       // Search in the whole metadata text for simplicity and performance of a single query
-       // casting to text is fast for ILIKE
        const contractContacts = await this.prisma.$queryRawUnsafe<{ id: string }[]>(
          `SELECT id FROM contacts WHERE metadata::text ilike $1 AND metadata::text ilike $2`,
          `%${desc}%`,
@@ -511,7 +504,6 @@ export class ContactsService {
        
        if (includedTags) {
           const incArray = includedTags.split(',');
-          // Must have AT LEAST ONE of the included tags (OR logic for inclusion)
           where.AND.push({
              tags: {
                 some: { tagId: { in: incArray } }
@@ -521,7 +513,6 @@ export class ContactsService {
 
        if (excludedTags) {
           const excArray = excludedTags.split(',');
-          // Must NOT have ANY of the excluded tags
           where.AND.push({
              tags: {
                 none: { tagId: { in: excArray } }
@@ -572,6 +563,7 @@ export class ContactsService {
 
     return this.flattenContact(contact);
   }
+
   async update(id: string, updateContactDto: UpdateContactDto, tenantId: string) {
     const data: any = updateContactDto;
     const existingContact = await this.getContactOrThrow(id, tenantId, {
@@ -585,9 +577,6 @@ export class ContactsService {
 
     await this.validateCoreContactInfo(tenantId, data, existingContact);
 
-    // --- Optimized Duplicate Check ---
-    // Only check for duplicates when one of the unique fields (email, phones, document, etc.)
-    // is actually being changed to a new value.
     const existingFlat = this.flattenContact(existingContact);
     const keysToCheck = ['email', 'name', 'whatsapp', 'phone', 'document', 'cpf', 'cnpj'];
     const fieldsWithNewUniqueValues: any = {};
@@ -717,33 +706,32 @@ export class ContactsService {
       pjQsa,
     };
 
+    const whatsappE164 = data.whatsapp !== undefined ? this.normalizeDigits(data.whatsapp) : undefined;
+
     const contact = await this.prisma.contact.update({
       where: { id },
       data: {
         ...commonData,
         personType,
+        whatsappE164,
         pfDetails:
           personType === 'PF'
             ? {
                 upsert: {
-                  create: pfUpdate,
-                  update: pfUpdate,
+                  create: pfUpdate as any,
+                  update: pfUpdate as any,
                 },
               }
-            : existingContact.pfDetails
-              ? { delete: true }
-              : undefined,
+            : undefined,
         pjDetails:
           personType === 'PJ'
             ? {
                 upsert: {
-                  create: pjUpdate,
-                  update: pjUpdate,
+                  create: pjUpdate as any,
+                  update: pjUpdate as any,
                 },
               }
-            : existingContact.pjDetails
-              ? { delete: true }
-              : undefined,
+            : undefined,
         addresses: addresses ? {
           deleteMany: {},
           create: addresses.map((a: any) => ({
@@ -830,6 +818,12 @@ export class ContactsService {
 
     const conditions: any[] = [];
     if (name) conditions.push({ name: { equals: name, mode: 'insensitive' } });
+    
+    // Busca prioritária por whatsappE164
+    if (whatsapp) {
+      conditions.push({ whatsappE164: whatsapp });
+    }
+
     if (whatsappMatch) {
       conditions.push(buildAdditionalPhoneCondition(whatsappMatch));
     }
@@ -959,9 +953,6 @@ export class ContactsService {
         where: { id },
       });
     } catch (error: any) {
-      // Quando o contato possui vínculos obrigatórios (processos, financeiro, etc),
-      // o Prisma lança erro de FK/relação requerida e o DELETE vira 500.
-      // Para o usuário, "excluir" deve ao menos remover da operação: inativamos.
       if (error?.code === 'P2003' || error?.code === 'P2014') {
         return this.prisma.contact.update({
           where: { id },
@@ -972,7 +963,7 @@ export class ContactsService {
       throw error;
     }
   }
-  // Address management methods
+
   async addAddress(contactId: string, createAddressDto: CreateAddressDto, tenantId: string) {
     await this.getContactOrThrow(contactId, tenantId);
 
@@ -1014,7 +1005,6 @@ export class ContactsService {
     });
   }
 
-  // Additional Contact management methods
   async addAdditionalContact(
     contactId: string,
     createAdditionalContactDto: CreateAdditionalContactDto,
@@ -1218,7 +1208,6 @@ export class ContactsService {
     return this.flattenContact(contact);
   }
 
-  // Relations Management
   async getRelationTypes(tenantId: string) {
     return this.prisma.relationType.findMany({
       where: { tenantId },
@@ -1333,8 +1322,6 @@ export class ContactsService {
       where: { id: relationId },
     });
   }
-
-  // --- Assets Management ---
 
   async getAssetTypes(tenantId: string) {
     return this.prisma.assetType.findMany({
@@ -1598,8 +1585,6 @@ export class ContactsService {
     };
   }
 
-  // --- Contracts Management ---
-
   async getContactContracts(contactId: string, tenantId: string) {
     const { metadata } = await this.getContactMetadataRecord(contactId, tenantId);
     return this.sortContracts(this.getStoredContracts(metadata));
@@ -1707,8 +1692,6 @@ export class ContactsService {
     return updatedMetadata.contracts;
   }
 
-  // --- Financial Records by Contact ---
-
   async getContactFinancialRecords(contactId: string, tenantId: string) {
     await this.getContactMetadataRecord(contactId, tenantId);
 
@@ -1776,11 +1759,10 @@ export class ContactsService {
     });
   }
 
-  // --- Manutenção e Limpeza de Contatos ---
   async cleanupContacts(tenantId: string) {
     const contacts = await this.prisma.contact.findMany({
       where: { tenantId },
-      orderBy: { createdAt: 'asc' } // Manter os mais antigos
+      orderBy: { createdAt: 'asc' } 
     });
 
     const toDelete = new Set<string>();
@@ -1794,12 +1776,10 @@ export class ContactsService {
     for (const contact of contacts) {
       let isIrregular = false;
 
-      // 1. Verificar se Celular, Email, e Telefone estão TODOS simultaneamente em branco
       if (!contact.whatsapp?.trim() && !contact.phone?.trim() && !contact.email?.trim()) {
         isIrregular = true;
       }
 
-      // 2. Com letras no lugar do número de celular/telefone
       if (!isIrregular && contact.whatsapp && hasLetterRegex.test(contact.whatsapp)) {
         isIrregular = true;
       }
@@ -1807,15 +1787,12 @@ export class ContactsService {
         isIrregular = true;
       }
 
-      // 3. Com e-mail inválido
       if (!isIrregular && contact.email && contact.email.trim() && !emailRegex.test(contact.email.trim())) {
         isIrregular = true;
       }
 
-      // 4. Repetidos (mesmo nome OU mesmo celular/telefone OU mesmo email, mas só marcamos como duplicado se já vimos antes)
       if (!isIrregular) {
         const nameKey = contact.name?.toLowerCase().trim();
-        // Pega os últimos 8 dígitos do whatsapp ou phone (como no findDuplicateContact)
         const waClean = contact.whatsapp ? contact.whatsapp.replace(/\D/g, '') : '';
         const phClean = contact.phone ? contact.phone.replace(/\D/g, '') : '';
         const phoneKey = waClean ? waClean.slice(-8) : (phClean ? phClean.slice(-8) : null);
@@ -1825,17 +1802,13 @@ export class ContactsService {
         const isPlaceholderPhone = (val: string) => this.normalizeDigits(val) === '9999999999';
         const isPlaceholderEmail = (val: string) => val.toLowerCase().trim() === 'nt@nt.com.br';
 
-        // Trata como duplicado se o mesmo nome já ocorreu
         if (nameKey && seenNames.has(nameKey)) isDuplicate = true;
-        // Ou se o mesmo celular (últimos 8 dígitos) ocorrer (e não for placeholder)
         if (phoneKey && !isPlaceholderPhone(phoneKey) && seenPhones.has(phoneKey)) isDuplicate = true;
-        // Ou se o mesmo email ocorrer (e não for placeholder)
         if (emailKey && !isPlaceholderEmail(emailKey) && seenEmails.has(emailKey)) isDuplicate = true;
 
         if (isDuplicate) {
           isIrregular = true;
         } else {
-          // Marca como visto
           if (nameKey) seenNames.add(nameKey);
           if (phoneKey) seenPhones.add(phoneKey);
           if (emailKey) seenEmails.add(emailKey);
@@ -1857,16 +1830,13 @@ export class ContactsService {
     return { deletedCount };
   }
 
-  // --- Bulk Actions ---
   async bulkAction(tenantId: string, dto: any) {
     const { action, tagId, category, contactIds, search, includedTags, excludedTags } = dto;
     const whereClause: any = { tenantId };
     
-    // If specific IDs provided, only act on them
     if (contactIds && contactIds.length > 0) {
       whereClause.id = { in: contactIds };
     } else {
-      // Use the same filtering logic as findAll
       if (search) {
         whereClause.OR = [
           { name: { contains: search, mode: 'insensitive' } },
@@ -1957,7 +1927,6 @@ export class ContactsService {
 
     if (!contact) throw new NotFoundException('Contato nao encontrado');
 
-    // Se ja tem dados e nao eh force, retorna o atual
     if (!force && contact.pjDetails?.mainActivity && (contact.pjDetails.mainActivity as any)?.code) {
       return this.flattenContact(contact);
     }
@@ -1969,7 +1938,6 @@ export class ContactsService {
       const statusDate = this.parseBrDate(enriched.data_situacao);
       const cleanCapital = this.parseNumericValue(enriched.capital_social);
 
-      // Atualiza o nome do contato se o nome fantasia for mais especifico
       const betterName = enriched.nome_fantasia || enriched.fantasia || contact.name;
       if (betterName && betterName !== contact.name) {
         await this.prisma.contact.update({
@@ -2025,7 +1993,7 @@ export class ContactsService {
       if (dateStr.includes('-') && dateStr.split('-')[0].length === 4) return new Date(dateStr);
       if (dateStr.includes('/')) {
         const p = dateStr.split('/');
-        return new Date(`${p[2]}-${p[1]}-${p[0]}`);
+        return new Date(`${p[2]}-${p[0]}-${p[1]}`);
       }
       return new Date(dateStr);
     } catch { return undefined; }
@@ -2043,7 +2011,6 @@ export class ContactsService {
       const currentValues = new Set(contact.additionalContacts.map(ac => ac.value.trim().toLowerCase()));
       const toCreate: { type: string; value: string; nomeContatoAdicional: string }[] = [];
 
-      // Check primary fields
       if (contact.email && contact.email.trim() && !currentValues.has(contact.email.trim().toLowerCase())) {
         toCreate.push({ type: 'EMAIL', value: contact.email, nomeContatoAdicional: 'E-mail Principal' });
       }
@@ -2052,7 +2019,7 @@ export class ContactsService {
           toCreate.push({ type: 'WHATSAPP', value: contact.whatsapp, nomeContatoAdicional: 'WhatsApp Principal' });
       }
 
-      if (contact.phone && contact.phone.trim() && !currentValues.has(contact.phone.trim().toLowerCase())) {
+      if (contact.phone && contact.phone.trim() && !currentValues.has(contact.phone.trim().toLowerCase()) && ehTelefoneProvavel(contact.phone)) {
           toCreate.push({ type: 'TELEFONE', value: contact.phone, nomeContatoAdicional: 'Telefone Principal' });
       }
 
@@ -2077,7 +2044,16 @@ export class ContactsService {
         });
       }
 
-      // Automatically trigger WhatsApp presence check if we have a connection
+      if (contact.whatsapp && !contact.whatsappE164) {
+        const cleanWhatsapp = this.normalizeDigits(contact.whatsapp);
+        if (cleanWhatsapp) {
+          await this.prisma.contact.update({
+            where: { id: contactId },
+            data: { whatsappE164: cleanWhatsapp }
+          });
+        }
+      }
+
       this.triggerWhatsAppCheck(contactId, tenantId).catch(err => {
           console.warn(`WhatsApp check failed for contact ${contactId}: ${err.message}`);
       });
@@ -2087,11 +2063,7 @@ export class ContactsService {
     }
   }
 
-  /**
-   * Triggers an asynchronous check for WhatsApp presence for all numbers in the contact.
-   * Updates contact metadata with the result.
-   */
-  private async triggerWhatsAppCheck(contactId: string, tenantId: string) {
+  async triggerWhatsAppCheck(contactId: string, tenantId: string) {
     const contact = await this.prisma.contact.findUnique({
       where: { id: contactId },
       include: { additionalContacts: true }
@@ -2099,7 +2071,6 @@ export class ContactsService {
     
     if (!contact) return;
 
-    // Find an active connection for this tenant
     const connections = await this.prisma.connection.findMany({
         where: { tenantId, type: 'WHATSAPP', status: 'CONNECTED' }
     });
@@ -2122,13 +2093,56 @@ export class ContactsService {
 
         try {
             const check = await this.whatsappService.checkNumber(connectionId, cleanNum);
+            
             results[cleanNum] = check.exists;
+            
+            if (check.exists && check.jid) {
+                const normalizedJid = check.jid.replace(/:[0-9]+(?=@)/, '');
+                
+                try {
+                    await this.prisma.contactChannelIdentity.upsert({
+                        where: {
+                            tenantId_channel_externalId: {
+                                tenantId,
+                                channel: 'WHATSAPP',
+                                externalId: normalizedJid
+                            }
+                        },
+                        update: { updatedAt: new Date() },
+                        create: {
+                            tenantId,
+                            contactId,
+                            channel: 'WHATSAPP',
+                            provider: 'EVOLUTION',
+                            externalId: normalizedJid
+                        }
+                    });
+                } catch (e) {}
+
+                if (normalizedJid.includes('@lid') || normalizedJid.includes('@s.whatsapp.net')) {
+                    await this.prisma.contact.update({
+                        where: { id: contactId },
+                        data: { whatsappFullId: normalizedJid }
+                    });
+                }
+
+                const existingIdentities = contact.additionalContacts.map(ac => ac.value.trim().toLowerCase());
+                if (!existingIdentities.includes(normalizedJid.toLowerCase())) {
+                    await this.prisma.additionalContact.create({
+                        data: {
+                            contactId,
+                            type: normalizedJid.includes('@lid') ? 'WHATSAPP_LID' : 'WHATSAPP_JID',
+                            value: normalizedJid,
+                            nomeContatoAdicional: `WhatsApp ID (${cleanNum})`
+                        }
+                    });
+                }
+            }
         } catch (e) {
             console.warn(`Failed to check WhatsApp for ${cleanNum}: ${e.message}`);
         }
     }
 
-    // Update contact metadata with WhatsApp presence info
     const currentMetadata = this.parseContactMetadata(contact.metadata);
     await this.prisma.contact.update({
         where: { id: contactId },
@@ -2152,4 +2166,3 @@ export class ContactsService {
     } catch { return 0; }
   }
 }
-

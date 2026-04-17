@@ -98,6 +98,7 @@ export interface AtendimentoConversation {
   messages?: InboxMessage[];
   lastMessagePreview?: string | null;
   lastMessageAt?: string | null;
+  metadata?: Record<string, any> | null;
 }
 
 export const ATENDIMENTO_STATUS_OPTIONS = ['OPEN', 'WAITING', 'RESOLVED', 'CLOSED'] as const;

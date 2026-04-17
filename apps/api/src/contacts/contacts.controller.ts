@@ -172,6 +172,12 @@ export class ContactsController {
     return this.contactsService.bulkAction(this.getTenantId(user), dto);
   }
 
+  @Get(':id/whatsapp-sync')
+  async whatsappSync(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    await this.contactsService.triggerWhatsAppCheck(id, this.getTenantId(user));
+    return this.contactsService.findOne(id, this.getTenantId(user));
+  }
+
   @Get(':id/insights')
   getInsights(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.contactsService.getContactInsights(id, this.getTenantId(user));

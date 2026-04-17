@@ -85,9 +85,10 @@ export class EvolutionService {
     const baseURL = config?.apiUrl || this.defaultApiUrl;
     const apikey = config?.apiKey || this.defaultApiKey;
 
+    this.logger.error(`[EVOLUTION] Client Config: baseURL=${baseURL}, apikey=${apikey ? 'PRESENT' : 'MISSING'}`);
     return axios.create({
       baseURL,
-      timeout: 30000,
+      timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
         apikey,
@@ -445,6 +446,17 @@ export class EvolutionService {
     } catch (error) {
       this.logger.error(`Error finding contacts via "${instanceName}": ${error.message}`);
       throw error;
+    }
+  }
+
+  async fetchProfile(instanceName: string, number: string, config?: EvolutionConfig) {
+    try {
+      const client = this.getClient(config);
+      const response = await client.post(`/chat/fetchProfile/${instanceName}`, { number });
+      return response.data;
+    } catch (err) {
+      this.logger.debug(`Erro ao buscar perfil para ${number}: ${err.message}`);
+      return null;
     }
   }
 

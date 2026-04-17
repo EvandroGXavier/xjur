@@ -209,7 +209,22 @@ export class ConnectionsService implements OnModuleInit {
           };
       }
 
-      if (connection.type === ConnectionType.WHATSAPP) {
+          if (connection.type === ConnectionType.WHATSAPP) {
+              let currentStatus = connection.status;
+              try {
+                  const evolutionStatus = await this.whatsappService.getConnectionStatus(connection.id);
+                  if (evolutionStatus.status === 'CONNECTED' && currentStatus !== 'CONNECTED') {
+                      currentStatus = 'CONNECTED';
+                      // Atualiza o banco silenciosamente se estiver dessincronizado
+                      await this.prisma.connection.update({
+                          where: { id: connection.id },
+                          data: { status: 'CONNECTED', qrCode: null }
+                      });
+                  }
+              } catch (e) {
+                  // Erro já logado pelo WhatsappService.getConnectionStatus
+              }
+
           const [contactRefs, chatsCount, messagesCount] = await Promise.all([
               this.prisma.agentConversation.findMany({
                   where: {
@@ -241,8 +256,8 @@ export class ConnectionsService implements OnModuleInit {
 
           return {
               id: connection.id,
-              status: connection.status,
-              qrCode: connection.qrCode,
+              status: currentStatus,
+              qrCode: currentStatus === 'CONNECTED' ? null : connection.qrCode,
               updatedAt: connection.updatedAt,
               contactsCount: contactRefs.length,
               chatsCount,

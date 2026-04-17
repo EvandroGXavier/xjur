@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search, HelpCircle, Download, Upload, ExternalLink, Printer, CheckCircle2, XCircle } from 'lucide-react';
+﻿import { useState, useEffect, useMemo, useRef } from 'react';
+import { ArrowLeft, Phone, Calendar, MessageSquare, Briefcase, FileText, Settings, Users, DollarSign, Paperclip, Home, Lock, Plus, Edit, Trash2, MapPin, Search, HelpCircle, Download, Upload, ExternalLink, Printer, CheckCircle2, XCircle, ShieldAlert, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
@@ -11,11 +11,9 @@ import { helpContacts, helpSigilo } from '../../data/helpManuals';
 import { getUser } from '../../auth/authStorage';
 import { useHotkeys } from '../../hooks/useHotkeys';
 import { AttachmentPreview } from '../../components/ui/AttachmentPreview';
-
-import { PJTab } from './PJTab';
+import { PJTab } from './PJTab'; // TEST: If you see this in error, it means file is updated
 import { useSigilo } from '../../contexts/SigiloContext';
 import { SecurityTab } from '../../components/ui/SecurityTab';
-import { ShieldAlert } from 'lucide-react';
 
 // Interface matching Backend DTO
 interface ContactData {
@@ -23,33 +21,33 @@ interface ContactData {
   name: string;
   personType: string; // 'LEAD' | 'PF' | 'PJ'
   
-  // Pessoa Física
+  // Pessoa FÃ­sica
   cpf?: string;
   rg?: string;
   rgIssuer?: string;
   rgIssueDate?: string;
   birthDate?: string; // Data Nascimento
   
-  nis?: string; // Nº NIS
-  pis?: string; // Nº PIS
-  ctps?: string; // Nº CTPS
-  motherName?: string; // Nome da Mãe
+  nis?: string; // NÂº NIS
+  pis?: string; // NÂº PIS
+  ctps?: string; // NÂº CTPS
+  motherName?: string; // Nome da MÃ£e
   fatherName?: string; // Nome do Pai
-  profession?: string; // Profissão
+  profession?: string; // ProfissÃ£o
   nationality?: string; // Nacionalidade
   naturality?: string; // Naturalidade
-  gender?: string; // Gênero
+  gender?: string; // GÃªnero
   civilStatus?: string; // Estado Civil
   
   // CNH
   fullName?: string; // Nome Completo Legal
-  cnh?: string; // CNH Nº
-  cnhIssuer?: string; // Órgão Emissor
-  cnhIssueDate?: string; // Data Emissão
+  cnh?: string; // CNH NÂº
+  cnhIssuer?: string; // Ã“rgÃ£o Emissor
+  cnhIssueDate?: string; // Data EmissÃ£o
   cnhExpirationDate?: string; // Validade
   cnhCategory?: string; // Categoria (A, B, AB, etc)
   
-  // Pessoa Jurídica
+  // Pessoa JurÃ­dica
   cnpj?: string;
   companyName?: string;
   stateRegistration?: string;
@@ -63,13 +61,14 @@ interface ContactData {
   shareCapital?: string; // or number, keeping basic for form
   status?: string;
   statusDate?: string;
-  statusReason?: string; // Motivo da Situação
+  statusReason?: string; // Motivo da SituaÃ§Ã£o
   specialStatus?: string;
   specialStatusDate?: string;
   pjQsa?: any[];
   // Campos Gerais
   document?: string;
   email?: string;
+  whatsapp?: string;
   phone: string; // Telefone
   whatsappE164?: string;
   whatsappFullId?: string; // ID do WhatsApp
@@ -84,9 +83,6 @@ interface ContactData {
   active?: boolean;
 }
 
-// ... (Address, AdditionalContact, RelationType interfaces remain same)
-
-// ...
 interface Address {
   id?: string;
   type: string;
@@ -278,9 +274,9 @@ interface ContactInsights {
 const CATEGORIES = [
   'Cliente',
   'Fornecedor',
-  'Parte Contrária',
+  'Parte ContrÃ¡ria',
   'Perito',
-  'Funcionário',
+  'FuncionÃ¡rio',
   'Advogado',
   'Juiz',
   'Testemunha',
@@ -356,22 +352,12 @@ export function ContactForm() {
       baseTabs.push({ id: 'pj_details', label: 'PJ', icon: Briefcase });
     }
 
-    // Abas comuns a todos (exceto Lead que pode ter restrições, mas o user disse "Lead... aba PF e PJ ocultas", implying others are fine or default)
-    // "Lead= Cadastro básico... para este a ABA PF e a aba PJ estarão ocultas." -> Implies others might be visible?
-    // "PF... exibe todas as demais."
-    // "PJ... exibe todas as demais."
-    // Let's assume common tabs are visible for everyone including Lead, unless specified.
-    // Spec says: "Lead... Normalmente este cadastro estará com nome, Whatsapp, preenchidos, já que são obrigatórios, para este a ABA PF e a aba PJ estarão ocultas."
-    // It doesn't explicitly hide "Addresses", "Financial", etc. for Leads. I'll keep them visible or maybe hide complex ones?
-    // Usually Leads might not have Financials yet. But strict reading: "PF... exibe todas as demais" -> implies Lead might NOT show all?
-    // Re-reading: "Lead... para este a ABA PF e a aba PJ estarão ocultas." -> That's the only exclusion mentioned.
-    
     const commonTabs = [
-        { id: 'relations', label: 'Vínculos', icon: Lock },
+        { id: 'relations', label: 'VÃ­nculos', icon: Lock },
         { id: 'contacts', label: 'Contatos', icon: Users },
-        { id: 'addresses', label: 'Endereços', icon: Home },
+        { id: 'addresses', label: 'EndereÃ§os', icon: Home },
         { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
-        { id: 'assets', label: 'Patrimônio', icon: Briefcase },
+        { id: 'assets', label: 'PatrimÃ´nio', icon: Briefcase },
         { id: 'agenda', label: 'Agenda', icon: Calendar },
         { id: 'processes', label: 'Processos', icon: Settings },
         { id: 'attachments', label: 'Anexos', icon: Paperclip },
@@ -557,12 +543,11 @@ export function ContactForm() {
       tickets: [],
     },
   });
-
   const fetchRelations = async () => {
-      try {
-          const response = await api.get(`/contacts/${id}/relations`);
-          setRelations(response.data);
-      } catch (err) {
+    try {
+      const response = await api.get(`/contacts/${id}/relations`);
+      setRelations(response.data);
+    } catch (err) {
           console.error("Failed to fetch relations", err);
       }
   };
@@ -672,7 +657,7 @@ export function ContactForm() {
           }
 
           if (!typeId) {
-              toast.warning('Selecione ou crie um tipo de vínculo');
+              toast.warning('Selecione ou crie um tipo de vÃ­nculo');
               setLoading(false);
               return;
           }
@@ -692,25 +677,25 @@ export function ContactForm() {
           setShowRelationForm(false);
           setRelationForm({ toContactId: '', relationTypeId: '', newTypeName: '', isBilateral: false });
           setCreatingType(false);
-          toast.success('Vínculo criado com sucesso!');
+          toast.success('VÃ­nculo criado com sucesso!');
       } catch (err) {
           console.error(err);
-          toast.error('Erro ao criar vínculo');
+          toast.error('Erro ao criar vÃ­nculo');
       } finally {
           setLoading(false);
       }
   };
 
   const  handleDeleteRelation = async (relationId: string) => {
-      if(!confirm('Deseja remover este vínculo?')) return;
+      if(!confirm('Deseja remover este vÃ­nculo?')) return;
       try {
           setLoading(true);
           await api.delete(`/contacts/${id}/relations/${relationId}`);
           await fetchRelations();
-          toast.success('Vínculo removido!');
+          toast.success('VÃ­nculo removido!');
       } catch (err) {
           console.error(err);
-          toast.error('Erro ao remover vínculo');
+          toast.error('Erro ao remover vÃ­nculo');
       } finally {
           setLoading(false);
       }
@@ -730,13 +715,13 @@ export function ContactForm() {
           }
 
           if (!typeId) {
-              toast.warning('Selecione ou crie um tipo de patrimônio');
+              toast.warning('Selecione ou crie um tipo de patrimÃ´nio');
               setLoading(false);
               return;
           }
 
           if (!assetForm.description || !assetForm.acquisitionDate || !assetForm.value) {
-              toast.warning('Preencha os campos obrigatórios (Descrição, Data Aquisição, Valor)');
+              toast.warning('Preencha os campos obrigatÃ³rios (DescriÃ§Ã£o, Data AquisiÃ§Ã£o, Valor)');
               setLoading(false);
               return;
           }
@@ -752,32 +737,32 @@ export function ContactForm() {
 
           if (editingAsset) {
               await api.patch(`/contacts/${id}/assets/${editingAsset.id}`, payload);
-              toast.success('Patrimônio atualizado!');
+              toast.success('PatrimÃ´nio atualizado!');
           } else {
               await api.post(`/contacts/${id}/assets`, payload);
-              toast.success('Patrimônio adicionado!');
+              toast.success('PatrimÃ´nio adicionado!');
           }
 
           await fetchAssets();
           cancelAssetForm();
       } catch (err) {
           console.error(err);
-          toast.error('Erro ao salvar patrimônio');
+          toast.error('Erro ao salvar patrimÃ´nio');
       } finally {
           setLoading(false);
       }
   };
 
   const handleDeleteAsset = async (assetId: string) => {
-      if(!confirm('Deseja remover este item do patrimônio?')) return;
+      if(!confirm('Deseja remover este item do patrimÃ´nio?')) return;
       try {
           setLoading(true);
           await api.delete(`/contacts/${id}/assets/${assetId}`);
           await fetchAssets();
-          toast.success('Patrimônio removido!');
+          toast.success('PatrimÃ´nio removido!');
       } catch (err) {
           console.error(err);
-          toast.error('Erro ao remover patrimônio');
+          toast.error('Erro ao remover patrimÃ´nio');
       } finally {
           setLoading(false);
       }
@@ -843,7 +828,7 @@ export function ContactForm() {
           return;
       }
       if (!contractForm.description.trim()) {
-          toast.warning('Informe a descrição do contrato');
+          toast.warning('Informe a descriÃ§Ã£o do contrato');
           return;
       }
       if (!contractForm.firstDueDate) {
@@ -851,7 +836,7 @@ export function ContactForm() {
           return;
       }
       if (!contractForm.counterpartyName.trim()) {
-          toast.warning('Informe quem é a outra parte do contrato');
+          toast.warning('Informe quem Ã© a outra parte do contrato');
           return;
       }
 
@@ -957,12 +942,38 @@ export function ContactForm() {
         data.openingDate = toDateInput(data.openingDate);
         data.statusDate = toDateInput(data.statusDate);
         data.specialStatusDate = toDateInput(data.specialStatusDate);
+        
+        const additional = data.additionalContacts ?? [];
+        
+        // Populate virtual fields from additional contacts using tags or heuristics
+        const findVirtual = (type: string, tag: string, isFixedHeuristic: boolean) => {
+          // Priority 1: Exact Tag
+          const tagged = additional.find((c: any) => c.nomeContatoAdicional === tag);
+          if (tagged) return tagged.value;
+          
+          // Priority 2: Heuristic based on number format
+          const match = additional.find((c: any) => {
+            if (c.type !== type) return false;
+            // Tag check to avoid stealing other virtuals or manual entries
+            if (c.nomeContatoAdicional && c.nomeContatoAdicional.startsWith('[VIRTUAL:')) return false;
+            
+            const digits = (c.value || '').replace(/\D/g, '');
+            const clean = digits.length > 11 && digits.startsWith('55') ? digits.slice(2) : digits;
+            const isFixed = clean.length === 10 || (clean.length === 11 && (clean[2] === '2' || clean[2] === '3' || clean[2] === '4' || clean[2] === '5'));
+            return isFixedHeuristic ? isFixed : !isFixed;
+          });
+          return match?.value || '';
+        };
 
-        setFormData({
-          ...data,
-          addresses: data.addresses ?? [],
-          additionalContacts: data.additionalContacts ?? [],
-          metadata: data.metadata ?? { attachments: [] },
+        setFormData(() => {
+          return {
+            ...data,
+            whatsapp: data.whatsapp || '',
+            phone: data.phone || '',
+addresses: data.addresses ?? [],
+            additionalContacts: additional,
+            metadata: data.metadata ?? { attachments: [] },
+          };
         });
         setContracts(Array.isArray(data.metadata?.contracts) ? data.metadata.contracts : []);
     } catch(err) {
@@ -996,7 +1007,7 @@ export function ContactForm() {
     fetchAssetTypes();
     fetchAvailableContacts();
 
-    // Buscar configurações do Tenant
+    // Buscar configuraÃ§Ãµes do Tenant
     api.get('/saas/my-tenant')
       .then(res => setRequireOneInfo(res.data.contactRequireOneInfo ?? true))
       .catch(err => console.error("Failed to fetch tenant settings", err));
@@ -1109,7 +1120,7 @@ export function ContactForm() {
     }
     
     if (filesArray.length > 0) {
-        // Atualiza a fila e inicia o upload automático
+        // Atualiza a fila e inicia o upload automÃ¡tico
         setPendingAttachments(filesArray); 
         // Pequeno delay para garantir que o state foi atualizado antes de ler a fila no upload
         setTimeout(() => {
@@ -1212,26 +1223,26 @@ export function ContactForm() {
   const handleSubmit = async (e?: React.FormEvent, shouldClose: boolean = false) => {
     if (e) e.preventDefault();
 
-    // Validação
+    // ValidaÃ§Ã£o
     if (requireOneInfo) {
       const hasPhone = !!formData.phone?.trim();
       const hasWhatsapp = !!formData.whatsapp?.trim();
       const hasEmail = !!formData.email?.trim();
       
       if (!hasPhone && !hasWhatsapp && !hasEmail) {
-        toast.warning('Você deve preencher pelo menos um meio de contato: Celular, Telefone ou E-mail.');
+        toast.warning('VocÃª deve preencher pelo menos um meio de contato: Celular, Telefone ou E-mail.');
         return;
       }
     }
 
     // CPF/CNPJ Validation (Allow blank, but if filled must be valid)
     if (formData.cpf && formData.cpf.trim() !== '' && !isValidCpf(formData.cpf)) {
-        toast.error('O CPF informado é inválido.');
+        toast.error('O CPF informado Ã© invÃ¡lido.');
         return;
     }
 
     if (formData.cnpj && formData.cnpj.trim() !== '' && !isValidCnpj(formData.cnpj)) {
-        toast.error('O CNPJ informado é inválido.');
+        toast.error('O CNPJ informado Ã© invÃ¡lido.');
         return;
     }
 
@@ -1239,13 +1250,13 @@ export function ContactForm() {
     if (formData.document && formData.document.trim() !== '') {
         const cleanDoc = formData.document.replace(/\D/g, '');
         if (cleanDoc.length === 11 && !isValidCpf(cleanDoc)) {
-            toast.error('O CPF informado no campo documento é inválido.');
+            toast.error('O CPF informado no campo documento Ã© invÃ¡lido.');
             return;
         } else if (cleanDoc.length === 14 && !isValidCnpj(cleanDoc)) {
-            toast.error('O CNPJ informado no campo documento é inválido.');
+            toast.error('O CNPJ informado no campo documento Ã© invÃ¡lido.');
             return;
         } else if (cleanDoc.length !== 11 && cleanDoc.length !== 14) {
-             toast.error('O documento informado deve ser um CPF (11 dígitos) ou CNPJ (14 dígitos).');
+             toast.error('O documento informado deve ser um CPF (11 dÃ­gitos) ou CNPJ (14 dÃ­gitos).');
              return;
         }
     }
@@ -1316,7 +1327,26 @@ export function ContactForm() {
             }
         }
 
-        if (id && id !== 'new') {
+        // Sync virtual phone fields back to additionalContacts
+        const syncVirtual = (virtualValue: string | undefined, type: string, tag: string) => {
+            const currentAdditionals = [...(payload.additionalContacts || [])];
+            const existingIndex = currentAdditionals.findIndex(c => c.nomeContatoAdicional === tag);
+            
+            if (virtualValue && virtualValue.trim()) {
+                const cleanValue = virtualValue.trim();
+                if (existingIndex >= 0) {
+                    currentAdditionals[existingIndex] = { ...currentAdditionals[existingIndex], value: cleanValue };
+                } else {
+                    currentAdditionals.push({ type, value: cleanValue, nomeContatoAdicional: tag });
+                }
+            } else if (existingIndex >= 0) {
+                // Remove if cleared in form
+                currentAdditionals.splice(existingIndex, 1);
+            }
+            payload.additionalContacts = currentAdditionals;
+        };
+
+if (id && id !== 'new') {
             const response = await api.patch(`/contacts/${id}`, payload);
             setFormData(response.data);
             toast.success('Contato atualizado com sucesso!');
@@ -1392,7 +1422,7 @@ export function ContactForm() {
       const response = await api.get(`/contacts/enrich/cnpj?cnpj=${formData.cnpj}`);
       const data = response.data;
       
-      // ReceitaWS returns 'nome' (Razão Social) and 'fantasia' (Nome Fantasia)
+      // ReceitaWS returns 'nome' (RazÃ£o Social) and 'fantasia' (Nome Fantasia)
       const companyName = data.nome || data.razao_social || formData.companyName;
       const tradeName = data.fantasia || data.nome_fantasia || companyName || formData.name;
 
@@ -1452,13 +1482,13 @@ export function ContactForm() {
         });
         
         if (enrichedAddress) {
-             toast.success('Dados da empresa e endereço carregados com sucesso!');
+             toast.success('Dados da empresa e endereÃ§o carregados com sucesso!');
         } else {
              toast.success('Dados da empresa carregados com sucesso!');
         }
     } catch (err: any) {
       console.error(err);
-      const message = err.response?.data?.message || 'CNPJ não encontrado';
+      const message = err.response?.data?.message || 'CNPJ nÃ£o encontrado';
       toast.error(`Erro: ${message}`);
     } finally {
       setEnriching(false);
@@ -1466,7 +1496,7 @@ export function ContactForm() {
   };
 
   const handleBlurLookup = async (field: keyof ContactData, value: string | undefined) => {
-      // Somente valida se preencheu algo, e ignoramos se já estiver salvo e o valor encontrado for de outro? 
+      // Somente valida se preencheu algo, e ignoramos se jÃ¡ estiver salvo e o valor encontrado for de outro? 
       // Se encontrarmos, redirecionamos.
       if (!value || !value.trim()) return;
 
@@ -1480,7 +1510,7 @@ export function ContactForm() {
       if ((field === 'whatsapp' || field === 'phone') && isPlaceholderPhone(value)) return;
       if (field === 'email' && isPlaceholderEmail(value)) return;
 
-      if (id !== 'new') return; // Se já estamos editando um contato existente, evitar redirecionamentos surpresa (ou podemos redirecionar se for diferente do id atual). A regra faz mais sentido na criação.
+      if (id !== 'new') return; // Se jÃ¡ estamos editando um contato existente, evitar redirecionamentos surpresa (ou podemos redirecionar se for diferente do id atual). A regra faz mais sentido na criaÃ§Ã£o.
       
       try {
           // Send only the current field being typed to check specifically
@@ -1490,7 +1520,7 @@ export function ContactForm() {
                navigate(`/contacts/${res.data.id}`);
           }
       } catch (err) {
-          // Ignora abertamente, se falhar ou não achar só segue a vida
+          // Ignora abertamente, se falhar ou nÃ£o achar sÃ³ segue a vida
       }
   };
 
@@ -1516,7 +1546,7 @@ export function ContactForm() {
           state: data.uf || prev.state,
           district: data.bairro || prev.district,
         }));
-        toast.success('Endereço carregado via CEP!');
+        toast.success('EndereÃ§o carregado via CEP!');
     } catch (err: any) {
       console.error(err);
       // Quiet fail if automatic
@@ -1528,7 +1558,7 @@ export function ContactForm() {
   // Address management functions
   const handleAddAddress = async () => {
     if (!id || id === 'new') {
-      toast.warning('Salve o contato antes de adicionar endereços');
+      toast.warning('Salve o contato antes de adicionar endereÃ§os');
       return;
     }
 
@@ -1540,7 +1570,7 @@ export function ContactForm() {
     );
 
     if (isDuplicate) {
-      toast.warning('Este endereço já está cadastrado para este contato.');
+      toast.warning('Este endereÃ§o jÃ¡ estÃ¡ cadastrado para este contato.');
       return;
     }
 
@@ -1551,10 +1581,10 @@ export function ContactForm() {
       await fetchContact();
       setAddressForm({ type: 'Principal', street: '', number: '', city: '', state: '', zipCode: '', complement: '', district: '' });
       setShowAddressForm(false);
-      toast.success('Endereço adicionado!');
+      toast.success('EndereÃ§o adicionado!');
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao adicionar endereço');
+      toast.error('Erro ao adicionar endereÃ§o');
     } finally {
       setLoading(false);
     }
@@ -1571,10 +1601,10 @@ export function ContactForm() {
       setAddressForm({ type: 'Principal', street: '', number: '', city: '', state: '', zipCode: '', complement: '', district: '' });
       setEditingAddress(null);
       setShowAddressForm(false);
-      toast.success('Endereço atualizado!');
+      toast.success('EndereÃ§o atualizado!');
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao atualizar endereço');
+      toast.error('Erro ao atualizar endereÃ§o');
     } finally {
       setLoading(false);
     }
@@ -1582,17 +1612,17 @@ export function ContactForm() {
 
   const handleDeleteAddress = async (addressId: string) => {
     if (!id || id === 'new') return;
-    if (!confirm('Deseja realmente excluir este endereço?')) return;
+    if (!confirm('Deseja realmente excluir este endereÃ§o?')) return;
 
     try {
       setLoading(true);
       await api.delete(`/contacts/${id}/addresses/${addressId}`);
 
       await fetchContact();
-      toast.success('Endereço removido!');
+      toast.success('EndereÃ§o removido!');
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao excluir endereço');
+      toast.error('Erro ao excluir endereÃ§o');
     } finally {
       setLoading(false);
     }
@@ -1600,7 +1630,7 @@ export function ContactForm() {
 
   const handlePrimaryAddressAction = () => {
     if (!id || id === 'new') {
-      toast.warning('Salve o contato antes de adicionar endereços');
+      toast.warning('Salve o contato antes de adicionar endereÃ§os');
       return;
     }
 
@@ -1651,11 +1681,11 @@ export function ContactForm() {
 
   const contractTypeOptions = useMemo(() => {
     const defaults = [
-      'Honorários',
-      'Prestação de Serviços',
-      'Locação',
+      'HonorÃ¡rios',
+      'PrestaÃ§Ã£o de ServiÃ§os',
+      'LocaÃ§Ã£o',
       'Mensalidade',
-      'Manutenção',
+      'ManutenÃ§Ã£o',
       'Licenciamento',
       'Assinatura',
       'Parceria',
@@ -1919,12 +1949,12 @@ export function ContactForm() {
                          
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                              <div className="space-y-2 md:col-span-2">
-                                 <label className="text-sm font-medium text-slate-400">Razão Social</label>
+                                 <label className="text-sm font-medium text-slate-400">RazÃ£o Social</label>
                                  <input 
                                     value={formData.companyName || ''}
                                     onChange={e => setFormData({...formData, companyName: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                    placeholder="Razão Social da Empresa"
+                                    placeholder="RazÃ£o Social da Empresa"
                                  />
                              </div>
 
@@ -1950,7 +1980,7 @@ export function ContactForm() {
                              </div>
 
                              <div className="space-y-2">
-                                 <label className="text-sm font-medium text-slate-400">Inscrição Estadual</label>
+                                 <label className="text-sm font-medium text-slate-400">InscriÃ§Ã£o Estadual</label>
                                  <input 
                                     value={formData.stateRegistration || ''}
                                     onChange={e => setFormData({...formData, stateRegistration: e.target.value})}
@@ -1962,7 +1992,7 @@ export function ContactForm() {
 
                      <div className="flex justify-end">
                         <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
-                            Salvar Alterações
+                            Salvar AlteraÃ§Ãµes
                         </button>
                      </div>
                 </div>
@@ -1974,7 +2004,7 @@ export function ContactForm() {
                      {/* General Information */}
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                             <FileText size={20} className="text-indigo-400" /> Informações Principais
+                             <FileText size={20} className="text-indigo-400" /> InformaÃ§Ãµes Principais
                          </h3>
                          
                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1994,7 +2024,8 @@ export function ContactForm() {
                                  />
                              </div>
 
-                             {/* Celular / WhatsApp */}
+                             {/* Row 1: Top Logic (Fixed / Mobile / ID) */}
+                             {/* Col 1: Celular / WhatsApp */}
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400">
                                      Celular / WhatsApp {requireOneInfo ? '*' : ''}
@@ -2010,31 +2041,25 @@ export function ContactForm() {
                                      />
                                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                                          {formData.whatsapp && (
-                                             formData.metadata?.whatsappPresence?.[formData.whatsapp.replace(/\D/g, '')] === true ? (
-                                                 <button
-                                                     type="button"
-                                                     onClick={(e) => {
-                                                         e.stopPropagation();
-                                                         const num = formData.whatsapp.replace(/\D/g, '');
-                                                         const waNum = num.length > 11 || num.startsWith('55') ? num : `55${num}`;
-                                                         window.open(`https://wa.me/${waNum}`, '_blank');
-                                                     }}
-                                                     className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 rounded text-emerald-500 transition-all"
-                                                     title="Chamar no WhatsApp"
-                                                 >
-                                                     <MessageSquare size={16} />
-                                                 </button>
-                                             ) : (
-                                                 <div className="p-1.5 text-slate-500">
-                                                     <Phone size={16} className={formData.metadata?.whatsappPresence?.[formData.whatsapp.replace(/\D/g, '')] === false ? "text-red-500/50" : ""} title={formData.metadata?.whatsappPresence?.[formData.whatsapp.replace(/\D/g, '')] === false ? "Não possui WhatsApp" : "Telefone"} />
-                                                 </div>
-                                             )
+                                             <button
+                                                 type="button"
+                                                 onClick={(e) => {
+                                                     e.stopPropagation();
+                                                     const num = formData.whatsapp!.replace(/\D/g, '');
+                                                     const waNum = num.length > 11 || num.startsWith('55') ? num : `55${num}`;
+                                                     window.open(`https://wa.me/${waNum}`, '_blank');
+                                                 }}
+                                                 className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 rounded text-emerald-500 transition-all"
+                                                 title="Chamar no WhatsApp"
+                                             >
+                                                 <MessageSquare size={16} />
+                                             </button>
                                          )}
                                      </div>
                                  </div>
                              </div>
 
-                             {/* Telefone */}
+                             {/* Col 2: Telefone Fixo */}
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400">Telefone Fixo</label>
                                  <div className="relative group">
@@ -2048,45 +2073,62 @@ export function ContactForm() {
                                      />
                                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                                          {formData.phone && (
-                                             formData.metadata?.whatsappPresence?.[formData.phone.replace(/\D/g, '')] === true ? (
-                                                 <button
-                                                     type="button"
-                                                     onClick={(e) => {
-                                                         e.stopPropagation();
-                                                         const num = formData.phone.replace(/\D/g, '');
-                                                         const waNum = num.length > 11 || num.startsWith('55') ? num : `55${num}`;
-                                                         window.open(`https://wa.me/${waNum}`, '_blank');
-                                                     }}
-                                                     className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 rounded text-emerald-500 transition-all"
-                                                     title="Chamar no WhatsApp"
-                                                 >
-                                                     <MessageSquare size={16} />
-                                                 </button>
-                                             ) : (
-                                                 <div className="p-1.5 text-slate-500">
-                                                     <Phone size={16} className={formData.metadata?.whatsappPresence?.[formData.phone.replace(/\D/g, '')] === false ? "text-red-500/50" : ""} title={formData.metadata?.whatsappPresence?.[formData.phone.replace(/\D/g, '')] === false ? "Não possui WhatsApp" : "Telefone"} />
-                                                 </div>
-                                             )
+                                             <button
+                                                 type="button"
+                                                 onClick={(e) => {
+                                                     e.stopPropagation();
+                                                     const num = formData.phone!.replace(/\D/g, '');
+                                                     window.open(`tel:${num}`, '_self');
+                                                 }}
+                                                 className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition-all"
+                                                 title="Ligar"
+                                             >
+                                                 <Phone size={16} />
+                                             </button>
                                          )}
                                      </div>
                                  </div>
                              </div>
 
-                             {/* WhatsApp Full ID */}
+                             {/* Col 3: WhatsApp ID */}
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400 flex items-center gap-1">
                                      WhatsApp ID (Sistema)
                                      <HelpCircle size={12} className="text-slate-500" title="Identificador técnico do WhatsApp (ex: 55... @s.whatsapp.net)" />
                                   </label>
-                                 <input 
-                                    value={formData.whatsappFullId || ''}
-                                    onChange={e => setFormData({...formData, whatsappFullId: e.target.value})}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                    placeholder="Identificador do WhatsApp"
-                                 />
+                                 <div className="relative">
+                                     <input 
+                                        value={formData.whatsappFullId || ''}
+                                        onChange={e => setFormData({...formData, whatsappFullId: e.target.value})}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 pr-10"
+                                        placeholder="Identificador do WhatsApp"
+                                     />
+                                     <button
+                                         type="button"
+                                         onClick={async () => {
+                                             if (!id || id === 'new') {
+                                                 toast.error('Salve o contato antes de sincronizar');
+                                                 return;
+                                             }
+                                             const promise = async () => {
+                                                 const res = await api.get(`/contacts/${id}/whatsapp-sync`);
+                                                 setFormData(res.data);
+                                             };
+                                             toast.promise(promise(), {
+                                                 loading: 'Sincronizando com WhatsApp...',
+                                                 success: 'Identidades atualizadas!',
+                                                 error: 'Erro na sincronizacao'
+                                             });
+                                         }}
+                                         className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-400 transition-all"
+                                         title="Sincronizar identidades com WhatsApp agora"
+                                     >
+                                         <RefreshCw size={14} />
+                                     </button>
+                                 </div>
                              </div>
 
-                             {/* E-mail */}
+                             {/* Col 3, Row 2: E-mail */}
                              <div className="space-y-2">
                                  <label className="text-sm font-medium text-slate-400">E-mail</label>
                                  <input 
@@ -2175,15 +2217,15 @@ export function ContactForm() {
                                 </div>
                              </div>
 
-                             {/* Observações */}
+                             {/* ObservaÃ§Ãµes */}
                              <div className="space-y-2 md:col-span-3">
-                                 <label className="text-sm font-medium text-slate-400">Observações</label>
+                                 <label className="text-sm font-medium text-slate-400">ObservaÃ§Ãµes</label>
                                  <textarea 
                                     rows={4}
                                     value={formData.notes || ''}
                                     onChange={e => setFormData({...formData, notes: e.target.value})}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                    placeholder="Observações gerais sobre o contato..."
+                                    placeholder="ObservaÃ§Ãµes gerais sobre o contato..."
                                  />
                              </div>
                          </div>
@@ -2227,7 +2269,7 @@ export function ContactForm() {
                 <div className="space-y-6 w-full min-w-0">
                      <div className="flex justify-end">
                         <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium mb-4">
-                            Salvar Alterações
+                            Salvar AlteraÃ§Ãµes
                         </button>
                      </div>
 
@@ -2279,9 +2321,9 @@ export function ContactForm() {
                                   </div>
                               </div>
 
-                              {/* Row 3: CNH (Substitui Email Secundário + Extras) */}
+                              {/* Row 3: CNH (Substitui Email SecundÃ¡rio + Extras) */}
                               <div className="space-y-2">
-                                  <label className="text-sm font-medium text-slate-400">CNH Nº</label>
+                                  <label className="text-sm font-medium text-slate-400">CNH NÂº</label>
                                   <input 
                                      value={formData.cnh || ''}
                                      onChange={e => setFormData({...formData, cnh: e.target.value})}
@@ -2298,7 +2340,7 @@ export function ContactForm() {
                                   />
                               </div>
                               <div className="space-y-2">
-                                  <label className="text-sm font-medium text-slate-400">Data CNH (Emissão)</label>
+                                  <label className="text-sm font-medium text-slate-400">Data CNH (EmissÃ£o)</label>
                                   <input 
                                      type="date"
                                      value={formData.cnhIssueDate || ''}
@@ -2316,7 +2358,7 @@ export function ContactForm() {
                                   />
                               </div>
                               <div className="space-y-2">
-                                   <label className="text-sm font-medium text-slate-400">Órgão Emissor CNH</label>
+                                   <label className="text-sm font-medium text-slate-400">Ã“rgÃ£o Emissor CNH</label>
                                   <input 
                                      value={formData.cnhIssuer || ''}
                                      onChange={e => setFormData({...formData, cnhIssuer: e.target.value})}
@@ -2353,13 +2395,13 @@ export function ContactForm() {
                                      value={formData.nationality || 'Brasileira'}
                                      onChange={e => setFormData({...formData, nationality: e.target.value})}
                                      className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                     placeholder="País"
+                                     placeholder="PaÃ­s"
                                   />
                               </div>
 
                               {/* Row 5: NIS, PIS, CTPS */}
                               <div className="space-y-2">
-                                  <label className="text-sm font-medium text-slate-400">Nº NIS</label>
+                                  <label className="text-sm font-medium text-slate-400">NÂº NIS</label>
                                   <input 
                                      value={formData.nis || ''}
                                      onChange={e => setFormData({...formData, nis: e.target.value})}
@@ -2367,7 +2409,7 @@ export function ContactForm() {
                                   />
                               </div>
                               <div className="space-y-2">
-                                  <label className="text-sm font-medium text-slate-400">Nº PIS</label>
+                                  <label className="text-sm font-medium text-slate-400">NÂº PIS</label>
                                   <input 
                                      value={formData.pis || ''}
                                      onChange={e => setFormData({...formData, pis: e.target.value})}
@@ -2375,7 +2417,7 @@ export function ContactForm() {
                                   />
                               </div>
                               <div className="space-y-2">
-                                  <label className="text-sm font-medium text-slate-400">Nº CTPS</label>
+                                  <label className="text-sm font-medium text-slate-400">NÂº CTPS</label>
                                   <input 
                                      value={formData.ctps || ''}
                                      onChange={e => setFormData({...formData, ctps: e.target.value})}
@@ -2383,10 +2425,10 @@ export function ContactForm() {
                                   />
                               </div>
 
-                              {/* Row 6: Filiação */}
+                              {/* Row 6: FiliaÃ§Ã£o */}
                               <div className="space-y-2 md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
                                   <div className="space-y-2">
-                                      <label className="text-sm font-medium text-slate-400">Nome da Mãe</label>
+                                      <label className="text-sm font-medium text-slate-400">Nome da MÃ£e</label>
                                       <input 
                                          value={formData.motherName || ''}
                                          onChange={e => setFormData({...formData, motherName: e.target.value})}
@@ -2403,9 +2445,9 @@ export function ContactForm() {
                                   </div>
                               </div>
 
-                              {/* Row 7: Profissão, Gênero, Estado Civil */}
+                              {/* Row 7: ProfissÃ£o, GÃªnero, Estado Civil */}
                               <div className="space-y-2">
-                                  <label className="text-sm font-medium text-slate-400">Profissão</label>
+                                  <label className="text-sm font-medium text-slate-400">ProfissÃ£o</label>
                                   <input 
                                      value={formData.profession || ''}
                                      onChange={e => setFormData({...formData, profession: e.target.value})}
@@ -2413,7 +2455,7 @@ export function ContactForm() {
                                   />
                               </div>
                               <div className="space-y-2">
-                                  <label className="text-sm font-medium text-slate-400">Gênero</label>
+                                  <label className="text-sm font-medium text-slate-400">GÃªnero</label>
                                   <select 
                                      value={formData.gender || ''}
                                      onChange={e => setFormData({...formData, gender: e.target.value})}
@@ -2436,8 +2478,8 @@ export function ContactForm() {
                                       <option value="SOLTEIRO">Solteiro(a)</option>
                                       <option value="CASADO">Casado(a)</option>
                                       <option value="DIVORCIADO">Divorciado(a)</option>
-                                      <option value="VIUVO">Viúvo(a)</option>
-                                      <option value="UNIAO_ESTAVEL">União Estável</option>
+                                      <option value="VIUVO">ViÃºvo(a)</option>
+                                      <option value="UNIAO_ESTAVEL">UniÃ£o EstÃ¡vel</option>
                                   </select>
                               </div>
 
@@ -2445,7 +2487,7 @@ export function ContactForm() {
                      </div>
                      <div className="flex justify-end">
                         <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium">
-                            Salvar Alterações
+                            Salvar AlteraÃ§Ãµes
                         </button>
                      </div>
                 </div>
@@ -2462,7 +2504,7 @@ export function ContactForm() {
                 <div className="space-y-6 w-full min-w-0">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                            <MapPin size={20} className="text-indigo-400" /> Endereços Cadastrados
+                            <MapPin size={20} className="text-indigo-400" /> EndereÃ§os Cadastrados
                         </h3>
                         <button
                             onClick={handlePrimaryAddressAction}
@@ -2472,17 +2514,17 @@ export function ContactForm() {
                             <Plus size={16} />
                             {showAddressForm
                               ? editingAddress
-                                ? 'Atualizar Endereço'
+                                ? 'Atualizar EndereÃ§o'
                                 : hasFilledAddress(addressForm)
-                                  ? 'Salvar Endereço'
-                                  : 'Adicionar Endereço'
-                              : 'Adicionar Endereço'}
+                                  ? 'Salvar EndereÃ§o'
+                                  : 'Adicionar EndereÃ§o'
+                              : 'Adicionar EndereÃ§o'}
                         </button>
                     </div>
 
                     {!id || id === 'new' ? (
                         <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
-                            <p className="text-slate-400">Salve o contato antes de adicionar endereços</p>
+                            <p className="text-slate-400">Salve o contato antes de adicionar endereÃ§os</p>
                         </div>
                     ) : (
                         <>
@@ -2490,10 +2532,10 @@ export function ContactForm() {
                             {showAddressForm && (
                                 <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800 animate-fadeIn">
                                     <h4 className="text-md font-semibold text-white mb-4">
-                                        {editingAddress ? 'Editar Endereço' : 'Novo Endereço'}
+                                        {editingAddress ? 'Editar EndereÃ§o' : 'Novo EndereÃ§o'}
                                     </h4>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        {/* Linha 1: CEP, Número, Complemento */}
+                                        {/* Linha 1: CEP, NÃºmero, Complemento */}
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-slate-400 flex items-center gap-2">
                                                 <a
@@ -2521,7 +2563,7 @@ export function ContactForm() {
                                             <p className="text-[11px] text-slate-500">Nao sabe o CEP? Use a lupa para pesquisar nos Correios.</p>
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-slate-400">Número</label>
+                                            <label className="text-sm font-medium text-slate-400">NÃºmero</label>
                                             <input
                                                 id="addr-number"
                                                 value={addressForm.number}
@@ -2576,7 +2618,7 @@ export function ContactForm() {
                                                 onChange={e => setAddressForm({...addressForm, city: e.target.value})}
                                                 onKeyDown={e => handleAddressKeyDown(e, 'addr-state')}
                                                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                                                placeholder="Ex: São Paulo"
+                                                placeholder="Ex: SÃ£o Paulo"
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -2593,7 +2635,7 @@ export function ContactForm() {
                                         </div>
 
                                         <div className="space-y-2 md:col-span-3">
-                                            <label className="text-sm font-medium text-slate-400">Tipo de Endereço</label>
+                                            <label className="text-sm font-medium text-slate-400">Tipo de EndereÃ§o</label>
                                             {!creatingAddressType ? (
                                                 <select
                                                     id="addr-type"
@@ -2610,7 +2652,7 @@ export function ContactForm() {
                                                     <option value="Principal">Principal</option>
                                                     <option value="Residencial">Residencial</option>
                                                     <option value="Comercial">Comercial</option>
-                                                    <option value="Cobrança">Cobrança</option>
+                                                    <option value="CobranÃ§a">CobranÃ§a</option>
                                                     <option value="Outro">Outro</option>
                                                     <option value="NEW">+ Adicionar Novo Tipo...</option>
                                                 </select>
@@ -2717,7 +2759,7 @@ export function ContactForm() {
                                     ))
                                 ) : (
                                     <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
-                                        <p className="text-slate-400">Nenhum endereço cadastrado</p>
+                                        <p className="text-slate-400">Nenhum endereÃ§o cadastrado</p>
                                     </div>
                                 )}
                             </div>
@@ -2730,26 +2772,26 @@ export function ContactForm() {
                 <div className="space-y-6 w-full min-w-0">
                      <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                            <Lock size={20} className="text-indigo-400" /> Vínculos e Relacionamentos
+                            <Lock size={20} className="text-indigo-400" /> VÃ­nculos e Relacionamentos
                         </h3>
                         <button
                             onClick={() => setShowRelationForm(true)}
                             disabled={!id || id === 'new'}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <Plus size={16} /> Adicionar Vínculo
+                            <Plus size={16} /> Adicionar VÃ­nculo
                         </button>
                     </div>
 
                     {!id || id === 'new' ? (
                         <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
-                            <p className="text-slate-400">Salve o contato antes de adicionar vínculos</p>
+                            <p className="text-slate-400">Salve o contato antes de adicionar vÃ­nculos</p>
                         </div>
                     ) : (
                         <>
                             {showRelationForm && (
                                 <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800 animate-fadeIn">
-                                    <h4 className="text-md font-semibold text-white mb-4">Novo Vínculo</h4>
+                                    <h4 className="text-md font-semibold text-white mb-4">Novo VÃ­nculo</h4>
                                     
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-2 md:col-span-2">
@@ -2767,7 +2809,7 @@ export function ContactForm() {
                                         </div>
 
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-slate-400">Tipo de Vínculo</label>
+                                            <label className="text-sm font-medium text-slate-400">Tipo de VÃ­nculo</label>
                                             <div className="flex gap-2">
                                                 {!creatingType ? (
                                                     <select
@@ -2788,7 +2830,7 @@ export function ContactForm() {
                                                     <div className="flex-1 flex gap-2">
                                                         <input 
                                                             autoFocus
-                                                            placeholder="Nome do novo vínculo"
+                                                            placeholder="Nome do novo vÃ­nculo"
                                                             value={relationForm.newTypeName}
                                                             onChange={e => setRelationForm({...relationForm, newTypeName: e.target.value})}
                                                             className="flex-1 bg-slate-950 border border-indigo-500 rounded px-3 py-2 text-white focus:outline-none"
@@ -2807,7 +2849,7 @@ export function ContactForm() {
 
                                         {creatingType && (
                                             <div className="space-y-2">
-                                                <label className="text-sm font-medium text-slate-400">Opções do Tipo</label>
+                                                <label className="text-sm font-medium text-slate-400">OpÃ§Ãµes do Tipo</label>
                                                 <div className="flex items-center gap-2 h-10">
                                                     <label className="flex items-center gap-2 cursor-pointer">
                                                         <input 
@@ -2816,7 +2858,7 @@ export function ContactForm() {
                                                             onChange={e => setRelationForm({...relationForm, isBilateral: e.target.checked})}
                                                             className="w-4 h-4 text-indigo-600 rounded"
                                                         />
-                                                        <span className="text-white text-sm">É Bilateral? (Recíproco)</span>
+                                                        <span className="text-white text-sm">Ã‰ Bilateral? (RecÃ­proco)</span>
                                                     </label>
                                                 </div>
                                             </div>
@@ -2829,7 +2871,7 @@ export function ContactForm() {
                                             disabled={loading}
                                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
                                         >
-                                            {loading ? 'Salvando...' : 'Criar Vínculo'}
+                                            {loading ? 'Salvando...' : 'Criar VÃ­nculo'}
                                         </button>
                                         <button
                                             onClick={() => { setShowRelationForm(false); setCreatingType(false); }}
@@ -2851,7 +2893,7 @@ export function ContactForm() {
                                             </div>
                                             <div>
                                                 <span className="text-slate-400 text-sm block">
-                                                    {rel.isInverse ? 'É vinculado como:' : 'Tem como vínculo:'}
+                                                    {rel.isInverse ? 'Ã‰ vinculado como:' : 'Tem como vÃ­nculo:'}
                                                 </span>
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-semibold text-white text-lg">
@@ -2870,7 +2912,7 @@ export function ContactForm() {
                                         <button 
                                             onClick={() => handleDeleteRelation(rel.id)}
                                             className="p-2 text-slate-500 hover:text-red-400 hover:bg-slate-700/50 rounded transition"
-                                            title="Remover vínculo"
+                                            title="Remover vÃ­nculo"
                                         >
                                             <Trash2 size={18} />
                                         </button>
@@ -2880,7 +2922,7 @@ export function ContactForm() {
                                 {relations.length === 0 && !showRelationForm && (
                                     <div className="text-center py-12 text-slate-500">
                                         <Lock size={48} className="mx-auto mb-4 opacity-20" />
-                                        <p>Nenhum vínculo cadastrado para este contato.</p>
+                                        <p>Nenhum vÃ­nculo cadastrado para este contato.</p>
                                     </div>
                                 )}
                             </div>
@@ -3046,7 +3088,7 @@ export function ContactForm() {
                                         <p className="text-white font-medium">Upload multiplo</p>
                                         <p className="text-sm text-slate-400 mt-1">
                                             Aceita PDF, imagens, Word, Excel e outros arquivos. 
-                                            <strong> O salvamento é automático ao selecionar.</strong>
+                                            <strong> O salvamento Ã© automÃ¡tico ao selecionar.</strong>
                                         </p>
                                     </div>
                                     <label 
@@ -3140,7 +3182,7 @@ export function ContactForm() {
                                                             <span>{attachment.mimeType || 'arquivo'}</span>
                                                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                                                                 <CheckCircle2 size={12} />
-                                                                Upload concluído
+                                                                Upload concluÃ­do
                                                             </span>
                                                             {attachment.uploadedAt && (
                                                                 <span>{new Date(attachment.uploadedAt).toLocaleString('pt-BR')}</span>
@@ -3303,7 +3345,7 @@ export function ContactForm() {
                                                         </div>
                                                         <p className="text-sm text-slate-400 mt-1">
                                                             {conversation.connection?.name || 'Sem conexao identificada'}
-                                                            {conversation.queue ? ` • Fila ${conversation.queue}` : ''}
+                                                            {conversation.queue ? ` â€¢ Fila ${conversation.queue}` : ''}
                                                         </p>
                                                     </div>
                                                     <div className="text-sm text-slate-500">
@@ -3364,8 +3406,8 @@ export function ContactForm() {
                                                 </div>
                                                 <p className="text-xs text-slate-500">
                                                     Prioridade {ticket.priority}
-                                                    {ticket.queue ? ` • Fila ${ticket.queue}` : ''}
-                                                    {ticket.waitingReply ? ' • aguardando resposta' : ''}
+                                                    {ticket.queue ? ` â€¢ Fila ${ticket.queue}` : ''}
+                                                    {ticket.waitingReply ? ' â€¢ aguardando resposta' : ''}
                                                 </p>
                                                 <p className="text-xs text-slate-500">Ultima atividade: {formatDateTime(ticket.lastMessageAt || ticket.updatedAt)}</p>
                                             </div>
@@ -3430,7 +3472,7 @@ export function ContactForm() {
                                             </p>
                                             <p className="text-sm text-slate-500 mt-1">
                                                 Papel: {appointment.participantRole || 'Participante'}
-                                                {appointment.confirmed ? ' • confirmado' : ' • pendente'}
+                                                {appointment.confirmed ? ' â€¢ confirmado' : ' â€¢ pendente'}
                                             </p>
                                         </div>
                                         {appointment.process?.id && (
@@ -3520,15 +3562,15 @@ export function ContactForm() {
                                             </div>
                                             <p className="text-sm text-slate-400 mt-2">
                                                 {process.cnj || 'Sem CNJ'}
-                                                {process.class ? ` • ${process.class}` : ''}
-                                                {process.area ? ` • ${process.area}` : ''}
+                                                {process.class ? ` â€¢ ${process.class}` : ''}
+                                                {process.area ? ` â€¢ ${process.area}` : ''}
                                             </p>
                                         </div>
                                         <ExternalLink size={18} className="text-slate-500" />
                                     </div>
                                     <div className="mt-4 text-sm text-slate-500 space-y-1">
                                         {(process.court || process.district) && (
-                                            <p>{[process.court, process.district].filter(Boolean).join(' • ')}</p>
+                                            <p>{[process.court, process.district].filter(Boolean).join(' â€¢ ')}</p>
                                         )}
                                         <p>Ultima atualizacao: {formatDateTime(process.updatedAt)}</p>
                                     </div>
@@ -3544,7 +3586,7 @@ export function ContactForm() {
                     <div className="flex items-center justify-between">
                         <div>
                             <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                                <Briefcase size={20} className="text-indigo-400" /> Gestão de Patrimônio
+                                <Briefcase size={20} className="text-indigo-400" /> GestÃ£o de PatrimÃ´nio
                             </h3>
                             <p className="text-sm text-slate-400 mt-1">Pesquise e gerencie os bens vinculados a este contato sem sair da aba.</p>
                         </div>
@@ -3553,13 +3595,13 @@ export function ContactForm() {
                             disabled={!id || id === 'new'}
                             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <Plus size={16} /> Adicionar Patrimônio
+                            <Plus size={16} /> Adicionar PatrimÃ´nio
                         </button>
                     </div>
 
                     {!id || id === 'new' ? (
                         <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 text-center">
-                            <p className="text-slate-400">Salve o contato antes de adicionar patrimônios</p>
+                            <p className="text-slate-400">Salve o contato antes de adicionar patrimÃ´nios</p>
                         </div>
                     ) : (
                         <>
@@ -3583,12 +3625,12 @@ export function ContactForm() {
                              {showAssetForm && (
                                 <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800 animate-fadeIn mb-6">
                                     <h4 className="text-md font-semibold text-white mb-4">
-                                        {editingAsset ? 'Editar Patrimônio' : 'Novo Item de Patrimônio'}
+                                        {editingAsset ? 'Editar PatrimÃ´nio' : 'Novo Item de PatrimÃ´nio'}
                                     </h4>
                                     
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-slate-400">Tipo de Patrimônio</label>
+                                            <label className="text-sm font-medium text-slate-400">Tipo de PatrimÃ´nio</label>
                                             <div className="flex gap-2">
                                                 {!creatingAssetType ? (
                                                     <select
@@ -3627,7 +3669,7 @@ export function ContactForm() {
                                         </div>
 
                                         <div className="space-y-2 md:col-span-2">
-                                            <label className="text-sm font-medium text-slate-400">Descrição</label>
+                                            <label className="text-sm font-medium text-slate-400">DescriÃ§Ã£o</label>
                                             <input 
                                                 value={assetForm.description}
                                                 onChange={e => setAssetForm({...assetForm, description: e.target.value})}
@@ -3649,7 +3691,7 @@ export function ContactForm() {
                                         </div>
 
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-slate-400">Data de Aquisição</label>
+                                            <label className="text-sm font-medium text-slate-400">Data de AquisiÃ§Ã£o</label>
                                             <input 
                                                 type="date"
                                                 value={assetForm.acquisitionDate}
@@ -3669,7 +3711,7 @@ export function ContactForm() {
                                         </div>
 
                                         <div className="space-y-2 md:col-span-3">
-                                            <label className="text-sm font-medium text-slate-400">Observações</label>
+                                            <label className="text-sm font-medium text-slate-400">ObservaÃ§Ãµes</label>
                                             <textarea 
                                                 rows={3}
                                                 value={assetForm.notes}
@@ -3686,7 +3728,7 @@ export function ContactForm() {
                                             disabled={loading}
                                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition disabled:opacity-50"
                                         >
-                                            {loading ? 'Salvando...' : editingAsset ? 'Atualizar Patrimônio' : 'Salvar Patrimônio'}
+                                            {loading ? 'Salvando...' : editingAsset ? 'Atualizar PatrimÃ´nio' : 'Salvar PatrimÃ´nio'}
                                         </button>
                                         <button
                                             onClick={cancelAssetForm}
@@ -3706,18 +3748,18 @@ export function ContactForm() {
                                     <thead>
                                         <tr className="bg-slate-800/50 border-b border-slate-700 text-slate-400 text-sm">
                                             <th className="p-4 font-medium">Tipo</th>
-                                            <th className="p-4 font-medium">Descrição</th>
-                                            <th className="p-4 font-medium">Data Aquisição</th>
+                                            <th className="p-4 font-medium">DescriÃ§Ã£o</th>
+                                            <th className="p-4 font-medium">Data AquisiÃ§Ã£o</th>
                                             <th className="p-4 font-medium">Valor</th>
                                             <th className="p-4 font-medium">Status</th>
-                                            <th className="p-4 font-medium text-right">Ações</th>
+                                            <th className="p-4 font-medium text-right">AÃ§Ãµes</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800">
                                         {filteredAssets.length === 0 ? (
                                             <tr>
                                                 <td colSpan={6} className="p-8 text-center text-slate-500">
-                                                    {assetSearch ? 'Nenhum patrimônio encontrado para a busca informada.' : 'Nenhum patrimônio cadastrado.'}
+                                                    {assetSearch ? 'Nenhum patrimÃ´nio encontrado para a busca informada.' : 'Nenhum patrimÃ´nio cadastrado.'}
                                                 </td>
                                             </tr>
                                         ) : (
@@ -4123,7 +4165,7 @@ export function ContactForm() {
                                     <div>
                                         <p className="text-xs uppercase tracking-wide text-slate-400">PIX do Contato</p>
                                         <p className="text-sm text-slate-300 mt-1">
-                                            Esta chave será sugerida no pagamento PIX direto das despesas vinculadas ao contato.
+                                            Esta chave serÃ¡ sugerida no pagamento PIX direto das despesas vinculadas ao contato.
                                         </p>
                                     </div>
                                     {!canEditContactPix && (
@@ -4146,7 +4188,7 @@ export function ContactForm() {
                                             <option value="CNPJ">CNPJ</option>
                                             <option value="EMAIL">E-mail</option>
                                             <option value="PHONE">Telefone</option>
-                                            <option value="EVP">Aleatória (EVP)</option>
+                                            <option value="EVP">AleatÃ³ria (EVP)</option>
                                         </select>
                                     </div>
                                     <div className="space-y-2 md:col-span-2">
@@ -4156,7 +4198,7 @@ export function ContactForm() {
                                             onChange={e => setContactPixField('key', e.target.value)}
                                             disabled={!canEditContactPix}
                                             className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60"
-                                            placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                                            placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatÃ³ria"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -4178,7 +4220,7 @@ export function ContactForm() {
                                         onChange={e => setContactPixField('holderName', e.target.value)}
                                         disabled={!canEditContactPix}
                                         className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 disabled:opacity-60"
-                                        placeholder="Nome que receberá o PIX"
+                                        placeholder="Nome que receberÃ¡ o PIX"
                                     />
                                 </div>
                             </div>
@@ -4251,7 +4293,7 @@ export function ContactForm() {
                                                                 <p className="text-white">{record.description}</p>
                                                                 <p className="text-xs text-slate-500 mt-1">
                                                                     {record.paymentMethod || 'Sem forma definida'}
-                                                                    {record.contactRole ? ` • ${record.contactRole}` : ''}
+                                                                    {record.contactRole ? ` â€¢ ${record.contactRole}` : ''}
                                                                 </p>
                                                             </div>
                                                         </td>
@@ -4297,13 +4339,13 @@ export function ContactForm() {
                 <div className="space-y-6 w-full min-w-0 animate-fadeIn px-4 py-6 md:px-0 md:py-0">
                      <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-800">
                          <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                             <Settings size={20} className="text-indigo-400" /> Configurações Administrativas
+                             <Settings size={20} className="text-indigo-400" /> ConfiguraÃ§Ãµes Administrativas
                          </h3>
                          
                          <div className="flex items-center justify-between p-4 bg-slate-900 rounded-lg border border-slate-800">
                              <div>
                                  <p className="font-medium text-white">Status do Contato</p>
-                                 <p className="text-sm text-slate-400">Contatos inativos não aparecem nas buscas padrão</p>
+                                 <p className="text-sm text-slate-400">Contatos inativos nÃ£o aparecem nas buscas padrÃ£o</p>
                              </div>
                              
                              <label className="relative inline-flex items-center cursor-pointer">
@@ -4323,7 +4365,7 @@ export function ContactForm() {
                      
                      <div className="flex justify-end pt-4">
                         <button onClick={handleSubmit} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium shadow-lg hover:shadow-green-900/20 transition-all">
-                            Salvar Alterações
+                            Salvar AlteraÃ§Ãµes
                         </button>
                      </div>
                 </div>
@@ -4332,10 +4374,10 @@ export function ContactForm() {
             {activeTab === 'sigilo' && isSigiloActive && id && id !== 'new' && (
                 <div className="animate-in fade-in zoom-in-95 duration-500 w-full min-w-0">
                     <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-slate-300">
-                      <div className="font-semibold text-white">Integrações bancárias migradas para a conta bancária</div>
+                      <div className="font-semibold text-white">IntegraÃ§Ãµes bancÃ¡rias migradas para a conta bancÃ¡ria</div>
                       <p className="mt-2 text-slate-400">
-                        O sigilo do contato continua disponível para guardar credenciais e observações gerais,
-                        mas a conexão com banco agora deve ser configurada em <span className="text-amber-200">Financeiro &gt; Contas Bancárias &gt; Sigilo</span>.
+                        O sigilo do contato continua disponÃ­vel para guardar credenciais e observaÃ§Ãµes gerais,
+                        mas a conexÃ£o com banco agora deve ser configurada em <span className="text-amber-200">Financeiro &gt; Contas BancÃ¡rias &gt; Sigilo</span>.
                       </p>
                     </div>
                     <SecurityTab entityType="CONTACT" entityId={id} />
@@ -4344,7 +4386,7 @@ export function ContactForm() {
         </div>
       </div>
 
-      {/* Botão Flutuante de Retorno */}
+      {/* BotÃ£o Flutuante de Retorno */}
       {returnTo && (
         <button
           onClick={() => navigate(decodeURIComponent(returnTo))}
@@ -4358,5 +4400,7 @@ export function ContactForm() {
     </div>
   );
 }
+
+
 
 
