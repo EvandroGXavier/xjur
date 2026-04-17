@@ -92,7 +92,7 @@ services:
 
   # 5. Evolution API (Motor WhatsApp)
   evolution:
-    image: atendai/evolution-api:v2.2.1
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: drx_evolution_prod
     restart: always
     depends_on:
