@@ -30,6 +30,21 @@ export class EvolutionController {
     // Emitir raw target data para o painel de testes (DEBUG)
     this.whatsappService.emitRawWebhookEvent(instance, data);
 
+    // Evolution v2.x: Se o payload vier codificado em Base64, decodificamos para garantir 
+    // a integridade de emojis e caracteres de 4 bytes que podem ser corrompidos no JSON simplificado.
+    if (data.data?.base64) {
+      try {
+        const decodedString = Buffer.from(data.data.base64, 'base64').toString('utf-8');
+        const decodedData = JSON.parse(decodedString);
+        
+        // Substituímos o dado "simplificado" pelo dado íntegro decodificado
+        data.data = decodedData;
+        this.logger.debug(`[Base64] Payload decodificado com sucesso para a instancia ${instance}`);
+      } catch (e) {
+        this.logger.error(`[Base64] Erro ao decodificar payload: ${e.message}`);
+      }
+    }
+
     switch (event) {
       case 'qrcode.updated':
         await this.handleQrCodeUpdated(data);
