@@ -301,13 +301,29 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                     )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-slate-900/60 p-4 md:p-6">
-                    <div className="mx-auto w-full max-w-[980px] rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.18)]">
-                        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 text-xs text-slate-500">
-                            <div className="flex items-center gap-2"><Type size={14} /> Documento editável</div>
-                            <div className="flex items-center gap-3"><span>{words} palavras</span><span>{characters} caracteres</span><span className="hidden md:inline">Atalhos: Ctrl+B, Ctrl+I, Ctrl+U</span></div>
+                <div className="flex-1 overflow-y-auto bg-slate-900/40 p-4 md:p-10 custom-scrollbar relative">
+                    {/* Shadow/Glow behind the paper for depth */}
+                    <div className="mx-auto w-full max-w-[980px] relative">
+                         <div className="absolute -inset-4 bg-indigo-500/5 blur-3xl opacity-50 pointer-events-none" />
+                         <div className="relative rounded-[32px] border border-slate-200 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.25)] overflow-hidden">
+                            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                    <Type size={14} className="text-indigo-500/60" /> 
+                                    <span>Documento em Edição</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span>{words} palavras</span>
+                                    <span>{characters} caracteres</span>
+                                    <span className="hidden md:inline bg-slate-50 px-2 py-0.5 rounded border border-slate-100">Draft Auto-save</span>
+                                </div>
+                            </div>
+                            <EditorContent 
+                                editor={editor} 
+                                className="rich-text-editor focus:outline-none" 
+                                style={{ ['--editor-min-height' as string]: `${minHeight}px` }} 
+                            />
                         </div>
-                        <EditorContent editor={editor} className="rich-text-editor" style={{ ['--editor-min-height' as string]: `${minHeight}px` }} />
                     </div>
                 </div>
             </div>

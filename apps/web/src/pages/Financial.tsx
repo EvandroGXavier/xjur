@@ -3800,7 +3800,7 @@ export function Financial(props: FinancialProps = {}) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
-                {records.map((record) => (
+                {sortedRecords.map((record) => (
                   <Fragment key={record.id}>
                     <tr
                       className="hover:bg-indigo-500/[0.03] transition-colors cursor-pointer group/row"

@@ -15,7 +15,7 @@ import {
     Edit,
     ChevronDown,
     ChevronUp,
-
+    Settings,
     MapPin,
     FileText,
     XCircle
@@ -370,8 +370,9 @@ export function ContactList() {
         })}
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-4">
-            <div className="flex flex-col md:flex-row gap-3 items-center">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-4 shadow-sm">
+            <div className="flex flex-col xl:flex-row gap-4 items-center">
+                {/* 1. Busca */}
                 <div className="relative flex-1 w-full md:max-w-md">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input 
@@ -383,62 +384,78 @@ export function ContactList() {
                     />
                     {searchTerm && (
                         <button 
-                            onClick={() => {
-                                setSearchTerm('');
-                                const filters = JSON.parse(sessionStorage.getItem('xjur_contact_filters') || '{}');
-                                filters.searchTerm = '';
-                                sessionStorage.setItem('xjur_contact_filters', JSON.stringify(filters));
-                            }}
+                            onClick={() => setSearchTerm('')}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
-                            title="Limpar busca"
                         >
                             <XCircle size={16} />
                         </button>
                     )}
                 </div>
-                {(searchTerm || statusFilter !== 'true' || includedTags.length > 0 || excludedTags.length > 0 || activeCardFilter !== 'ALL') && (
+
+                {/* 2. Grid/Cards Switcher (Conforme Imagem) */}
+                <div className="flex bg-slate-800 p-0.5 rounded-lg border border-slate-700 w-full sm:w-auto shrink-0 shadow-inner">
                     <button 
-                        onClick={clearAllFilters}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-bold transition whitespace-nowrap"
+                        onClick={() => setViewMode('LIST')} 
+                        className={clsx(
+                            "flex items-center gap-2 px-4 py-1.5 rounded-md transition-all duration-300 text-xs font-bold whitespace-nowrap",
+                            viewMode === 'LIST' 
+                                ? "bg-indigo-600 text-white shadow-lg scale-100" 
+                                : "text-slate-400 hover:text-slate-200 bg-transparent"
+                        )}
                     >
-                        <Trash2 size={14} /> Limpar Tudo
+                        <List size={14} /> Grid
                     </button>
-                )}
-                <div className="flex items-center gap-2 w-full md:w-auto">
+                    <button 
+                        onClick={() => setViewMode('CARD')} 
+                        className={clsx(
+                            "flex items-center gap-2 px-4 py-1.5 rounded-md transition-all duration-300 text-xs font-bold whitespace-nowrap",
+                            viewMode === 'CARD' 
+                                ? "bg-indigo-600 text-white shadow-lg scale-100" 
+                                : "text-slate-400 hover:text-slate-200 bg-transparent"
+                        )}
+                    >
+                        <LayoutGrid size={14} /> Cards
+                    </button>
+                </div>
+
+                {/* 3. Status e Ações */}
+                <div className="flex items-center gap-2 w-full xl:w-auto ml-auto">
                     <select 
                         value={statusFilter} 
                         onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="bg-slate-800 border border-slate-700 rounded-lg text-slate-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition font-medium"
+                        className="bg-slate-800 border border-slate-700 rounded-lg text-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 transition font-bold"
                     >
-                        <option value="ALL">Todos</option>
+                        <option value="ALL">TodosStatus</option>
                         <option value="true">Ativos</option>
                         <option value="false">Inativos</option>
                     </select>
-                    
+
                     <button 
                         onClick={() => setShowFilters(!showFilters)}
                         className={clsx(
-                            "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition text-xs font-bold shadow-lg border",
-                            showFilters ? "bg-indigo-600 text-white border-indigo-500" : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
+                            "px-3 py-1.5 h-[34px] rounded-lg flex items-center gap-1.5 transition text-xs font-bold border",
+                            showFilters ? "bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-900/20" : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white shadow-sm"
                         )}
                     >
                         <Filter size={14} /> Filtros
                     </button>
-                    
-                    <div className="flex bg-slate-800 p-0.5 rounded-lg border border-slate-700">
+
+                    <button 
+                        onClick={() => navigate('/contacts/config')}
+                        className="flex items-center gap-2 px-4 py-1.5 h-[34px] bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition font-black text-xs uppercase"
+                    >
+                        <Settings size={14} /> Configurar
+                    </button>
+
+                    {(searchTerm || statusFilter !== 'true' || includedTags.length > 0 || excludedTags.length > 0 || activeCardFilter !== 'ALL') && (
                         <button 
-                            onClick={() => setViewMode('CARD')} 
-                            className={clsx("p-1 rounded-md transition", viewMode === 'CARD' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
+                            onClick={clearAllFilters}
+                            className="flex items-center justify-center w-[34px] h-[34px] bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/20 rounded-lg transition-all"
+                            title="Limpar Tudo"
                         >
-                            <LayoutGrid size={16} />
+                            <Trash2 size={14} />
                         </button>
-                        <button 
-                            onClick={() => setViewMode('LIST')} 
-                            className={clsx("p-1 rounded-md transition", viewMode === 'LIST' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300")}
-                        >
-                            <List size={16} />
-                        </button>
-                    </div>
+                    )}
                 </div>
             </div>
 

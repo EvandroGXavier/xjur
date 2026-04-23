@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
-import { FileText, Loader2, Save, X, RefreshCw } from 'lucide-react';
+import { FileText, Loader2, Save, X, RefreshCw, Cloud } from 'lucide-react';
 import { RichTextEditor } from '../ui/RichTextEditor';
+import { clsx } from 'clsx';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
@@ -165,89 +166,130 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className={`bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${step === 'SELECT' ? 'max-w-md w-full' : 'max-w-5xl w-full h-[90vh]'}`}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 backdrop-blur-xl animate-in fade-in duration-500">
+            {/* Background Gradient for Studio Look */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/5 via-transparent to-emerald-500/5 pointer-events-none" />
+
+            <div className={`relative bg-slate-900 border border-slate-700/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-700 ease-in-out ${
+                step === 'SELECT' 
+                    ? 'max-w-xl w-full mx-4 max-h-[85vh] scale-in-center' 
+                    : 'w-full h-full sm:m-4 m-0 rounded-none sm:rounded-2xl border-none sm:border shadow-none sm:shadow-2xl'
+            }`}>
                 {/* Header */}
-                <div className="bg-slate-900 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
-                             <FileText size={20} />
+                <div className="relative z-10 bg-slate-900/80 backdrop-blur-md px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-5 flex-1 max-w-4xl">
+                        <div className="hidden sm:flex p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/5">
+                             <FileText size={22} />
                         </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-white">
-                                {mode === 'M365' ? 'Gerar via Template M365' : (generatePdf ? 'Gerar PDF Local' : 'Salvar Documento do Processo')}
-                            </h3>
-                            {step === 'EDIT' && (
-                                <input 
-                                    type="text"
-                                    value={docTitle}
-                                    onChange={e => setDocTitle(e.target.value)}
-                                    className="bg-transparent border-b border-indigo-500/30 text-xs text-indigo-400 font-bold focus:border-indigo-400 outline-none w-full"
-                                    placeholder="Título do Documento"
-                                />
+                        <div className="flex-1">
+                            {step === 'SELECT' ? (
+                                <div>
+                                    <h3 className="text-xl font-black text-white tracking-tight">Biblioteca DrX</h3>
+                                    <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">Document Designer</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-black bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full uppercase tracking-tighter border border-indigo-500/30">Studio</span>
+                                        <h3 className="text-sm font-bold text-slate-300">Editando Documento</h3>
+                                    </div>
+                                    <input 
+                                        type="text"
+                                        value={docTitle}
+                                        onChange={e => setDocTitle(e.target.value)}
+                                        className="bg-transparent border-0 text-lg sm:text-2xl font-black text-white focus:ring-0 outline-none w-full placeholder:text-slate-700 transition-all p-0"
+                                        placeholder="Título do Documento..."
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-slate-500 hover:text-white transition p-2">
-                        <X size={20} />
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                        {step === 'EDIT' && (
+                            <button 
+                                onClick={() => setStep('SELECT')}
+                                className="hidden md:flex flex-col items-center justify-center w-10 h-10 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                                title="Voltar para seleção"
+                            >
+                                <RefreshCw size={18} />
+                            </button>
+                        )}
+                        <button 
+                            onClick={onClose} 
+                            className="flex items-center justify-center w-10 h-10 rounded-xl border border-slate-800 bg-slate-900 text-slate-500 hover:text-white hover:border-slate-700 transition-all"
+                        >
+                            <X size={22} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 overflow-hidden relative">
                     {step === 'SELECT' ? (
-                        <div className="p-6 space-y-4">
+                        <div className="p-8 space-y-6">
                             {loading ? (
-                                <div className="flex flex-col items-center py-10 gap-3">
-                                    <Loader2 className="animate-spin text-indigo-500" size={32} />
-                                    <p className="text-sm text-slate-500">Buscando modelos na biblioteca...</p>
+                                <div className="flex flex-col items-center py-20 gap-4">
+                                    <div className="relative">
+                                        <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 animate-pulse" />
+                                        <Loader2 className="animate-spin text-indigo-500 relative" size={48} />
+                                    </div>
+                                    <p className="text-sm text-slate-400 font-medium tracking-wide">Buscando modelos na biblioteca inteligente...</p>
                                 </div>
                             ) : templates.length === 0 ? (
-                                <div className="text-center py-10 space-y-2">
-                                    <p className="text-slate-400">Nenhum modelo encontrado na biblioteca.</p>
-                                    <p className="text-xs text-slate-600">Certifique-se de que os modelos estão cadastrados no módulo Biblioteca.</p>
+                                <div className="text-center py-20 space-y-4">
+                                    <div className="mx-auto w-16 h-16 bg-slate-800/50 rounded-2xl flex items-center justify-center text-slate-600">
+                                        <FileText size={32} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-slate-300 font-bold">Nenhum modelo encontrado</p>
+                                        <p className="text-xs text-slate-500 max-w-xs mx-auto">Certifique-se de que os modelos estão cadastrados no módulo Biblioteca.</p>
+                                    </div>
                                 </div>
                             ) : (
                                 <>
-                                    <label className="block text-sm font-medium text-slate-400">Selecione o Modelo</label>
-                                    <select 
-                                        value={selectedTemplateId}
-                                        onChange={e => setSelectedTemplateId(e.target.value)}
-                                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:border-indigo-500 outline-none transition-colors"
-                                    >
-                                        <option value="">-- Selecione um modelo --</option>
-                                        {templates.map(t => (
-                                            <option key={t.id} value={t.id}>{t.title}</option>
-                                        ))}
-                                    </select>
+                                    <div className="space-y-2">
+                                        <label className="block text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Selecione o Modelo</label>
+                                        <select 
+                                            value={selectedTemplateId}
+                                            onChange={e => setSelectedTemplateId(e.target.value)}
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-4 text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all appearance-none cursor-pointer text-lg font-medium"
+                                        >
+                                            <option value="">-- Escolha um modelo da lista --</option>
+                                            {templates.map(t => (
+                                                <option key={t.id} value={t.id}>{t.title}</option>
+                                            ))}
+                                        </select>
+                                    </div>
 
-                                    <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-800">
-                                        <p className="text-xs text-slate-400 leading-relaxed italic">
-                                            O DrX irá preencher automaticamente as variáveis (Nome, CPF, Endereço, etc) com base nos dados do cliente e do processo. Você poderá revisar e editar o texto antes de confirmar.
+                                    <div className="bg-indigo-500/5 p-6 rounded-2xl border border-indigo-500/10 relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-indigo-500/20" />
+                                        <p className="text-sm text-slate-300 leading-relaxed relative z-10">
+                                            <span className="text-indigo-400 font-black">Inteligência DrX:</span> As variáveis serão preenchidas automaticamente com base nos dados do cliente e do processo vinculado. Você poderá revisar cada detalhe antes de finalizar.
                                         </p>
                                     </div>
 
                                     <button 
                                         onClick={handleRender}
                                         disabled={rendering || !selectedTemplateId}
-                                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-900/20"
+                                        className="group w-full py-5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-950/40 active:scale-[0.98]"
                                     >
-                                        {rendering ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
-                                        Renderizar & Continuar
+                                        {rendering ? <Loader2 className="animate-spin" size={24} /> : <RefreshCw size={24} className="group-hover:rotate-180 transition-transform duration-700" />}
+                                        Renderizar & Abrir Studio
                                     </button>
                                 </>
                             )}
                         </div>
                     ) : (
-                        <div className="flex flex-col h-full bg-white">
+                        <div className="flex flex-col h-full bg-slate-950">
                              <div className="flex-1 overflow-hidden">
                                 <RichTextEditor 
                                     value={generatedContent}
                                     onChange={setGeneratedContent}
-                                    showVariables={false}
-                                    minHeight={760}
+                                    showVariables={true}
+                                    minHeight={900}
                                     placeholder="Revise o documento gerado antes de salvar."
-                                    className="h-full"
+                                    className="h-full border-0 rounded-none shadow-none"
                                 />
                              </div>
                         </div>
@@ -256,32 +298,32 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
 
                 {/* Footer (Only for Edit step) */}
                 {step === 'EDIT' && (
-                    <div className="bg-slate-900 px-6 py-4 border-t border-slate-800 flex justify-between items-center">
-                        <button 
-                            onClick={() => setStep('SELECT')}
-                            className="text-slate-400 hover:text-white text-sm font-medium"
-                        >
-                            Voltar para seleção
-                        </button>
-                        <div className="flex gap-4">
+                    <div className="relative z-10 bg-slate-900/90 backdrop-blur-md px-6 py-5 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div className="flex items-center gap-4 text-slate-500 italic text-[11px] font-medium sm:block hidden">
+                            <span className="flex items-center gap-1.5"><FileText size={12} /> O documento será anexado automaticamente à linha do tempo após a confirmação.</span>
+                        </div>
+                        
+                        <div className="flex w-full sm:w-auto gap-4">
                             <button 
                                 onClick={onClose}
-                                className="px-4 py-2 text-slate-400 hover:text-white text-sm font-medium"
+                                className="flex-1 sm:flex-none px-6 py-3 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-bold transition-all active:scale-95"
                             >
-                                Cancelar
+                                Descartar
                             </button>
                             <button 
                                 onClick={handleSave}
                                 disabled={rendering}
-                                className={mode === 'M365' 
-                                    ? "px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-blue-900/20"
-                                    : "px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-900/20"
-                                }
+                                className={clsx(
+                                    "flex-1 sm:flex-none px-8 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl",
+                                    mode === 'M365' 
+                                        ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/40"
+                                        : "bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-900/40"
+                                )}
                             >
-                                {rendering ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                                {rendering ? <Loader2 className="animate-spin" size={18} /> : (mode === 'M365' ? <Cloud size={18} /> : <Save size={18} />)}
                                 {rendering 
-                                    ? (mode === 'M365' ? 'Gerando M365...' : (generatePdf ? 'Gerando PDF...' : 'Salvando...')) 
-                                    : (mode === 'M365' ? 'Gerar M365 e Abrir Online' : (generatePdf ? 'Confirmar & Anexar PDF' : 'Salvar no Processo'))}
+                                    ? (mode === 'M365' ? 'ENVIANDO PARA NUVEM...' : (generatePdf ? 'GERANDO PDF...' : 'SALVANDO...')) 
+                                    : (mode === 'M365' ? 'GERAR M365 & ABRIR' : (generatePdf ? 'CONFIRMAR & ANEXAR PDF' : 'SALVAR NO PROCESSO'))}
                             </button>
                         </div>
                     </div>
