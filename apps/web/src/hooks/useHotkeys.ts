@@ -4,18 +4,22 @@ interface HotkeyOptions {
     onNew?: () => void;
     onCancel?: () => void;
     onPrint?: () => void;
+    onSave?: () => void;
     enableNew?: boolean;
     enableCancel?: boolean;
     enablePrint?: boolean;
+    enableSave?: boolean;
 }
 
 export function useHotkeys({
     onNew,
     onCancel,
     onPrint,
+    onSave,
     enableNew = true,
     enableCancel = true,
     enablePrint = true,
+    enableSave = true,
 }: HotkeyOptions) {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -46,9 +50,15 @@ export function useHotkeys({
                 e.preventDefault();
                 onPrint();
             }
+
+            // Salvar (Ctrl + S)
+            if ((e.ctrlKey || e.metaKey) && e.key === 's' && enableSave && onSave) {
+                e.preventDefault();
+                onSave();
+            }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onNew, onCancel, onPrint, enableNew, enableCancel, enablePrint]);
+    }, [onNew, onCancel, onPrint, onSave, enableNew, enableCancel, enablePrint, enableSave]);
 }

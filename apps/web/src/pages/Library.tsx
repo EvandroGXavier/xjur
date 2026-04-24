@@ -9,6 +9,7 @@ import {
   Archive,
   Save,
   ArrowLeft,
+  Book,
   Tag as TagIcon,
   X,
   Settings2,
@@ -188,7 +189,8 @@ export function Library() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [editorMetadataText, setEditorMetadataText] = useState("");
   const [editorReadOnly, setEditorReadOnly] = useState(false);
-  const [editorAction, setEditorAction] = useState<"EDIT" | "COPY">("EDIT");
+  const [isVariablesVisible, setIsVariablesVisible] = useState(true);
+  const [editorAction, setEditorAction] = useState<"EDIT" | "COPY" | "NEW">("EDIT");
   const [showEditorConfig, setShowEditorConfig] = useState(false);
 
   // Filter state
@@ -250,6 +252,11 @@ export function Library() {
 
   useHotkeys({
     onNew: () => handleNewTemplate(),
+    onSave: () => {
+      if (isEditorOpen) {
+        handleSaveTemplate({ stayOpen: true });
+      }
+    },
     onCancel: () => {
       if (isEditorOpen) {
         setIsEditorOpen(false);
@@ -261,6 +268,7 @@ export function Library() {
       }
     },
     enableNew: !isEditorOpen,
+    enableSave: isEditorOpen,
   });
 
   useEffect(() => {
@@ -566,7 +574,7 @@ export function Library() {
     }
   };
 
-  const handleSaveTemplate = async () => {
+  const handleSaveTemplate = async (options?: { stayOpen?: boolean }) => {
     if (editorReadOnly) {
       toast.warning(
         'Modelos do sistema não podem ser editados. Use "Personalizar".',
@@ -619,14 +627,17 @@ export function Library() {
           );
           toast.success("Modelo do sistema atualizado!");
         } else {
-          await api.post("/documents/system/templates", {
+          const res = await api.post("/documents/system/templates", {
             ...payload,
             systemKey: editorSystemKey.trim(),
           });
+          setEditingTemplate(res.data);
           toast.success("Modelo do sistema criado!");
         }
 
-        setIsEditorOpen(false);
+        if (!options?.stayOpen) {
+          setIsEditorOpen(false);
+        }
         await refreshCurrentTab();
         return;
       }
@@ -644,10 +655,14 @@ export function Library() {
         await api.put(`/documents/templates/${editingTemplate.id}`, payload);
         toast.success("Modelo atualizado!");
       } else {
-        await api.post("/documents/templates", payload);
+        const res = await api.post("/documents/templates", payload);
+        setEditingTemplate(res.data);
         toast.success("Modelo criado!");
       }
-      setIsEditorOpen(false);
+
+      if (!options?.stayOpen) {
+        setIsEditorOpen(false);
+      }
       await refreshCurrentTab();
     } catch (err) {
       console.error(err);
@@ -982,16 +997,45 @@ export function Library() {
               <div className="h-px w-8 bg-slate-900" />
 
               {((isSystem && canEditSystem) || editorAction === "COPY" || (editorAction === "EDIT" && (!isSystem || canEditSystem))) && (
-                <div className="flex flex-col items-center gap-1 group">
-                  <button
-                    onClick={editorAction === "COPY" ? handleSaveAsCopy : handleSaveTemplate}
-                    className="p-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
-                    title="Salvar Alterações (Ctrl+S)"
-                  >
-                    <Save size={20} />
-                  </button>
-                  <span className="text-[9px] font-bold text-indigo-400/70 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Salvar</span>
-                </div>
+                <>
+                  <div className="flex flex-col items-center gap-1 group">
+                    <button
+                      onClick={() => (editorAction === "COPY" ? handleSaveAsCopy() : handleSaveTemplate({ stayOpen: true }))}
+                      className="p-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
+                      title="Salvar e Continuar (Ctrl+S)"
+                    >
+                      <Save size={20} />
+                    </button>
+                    <span className="text-[9px] font-bold text-indigo-400/70 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Salvar</span>
+                  </div>
+
+                    <div className="flex flex-col items-center gap-1 group">
+                      <button
+                        onClick={() => (editorAction === "COPY" ? handleSaveAsCopy() : handleSaveTemplate({ stayOpen: false }))}
+                        className="p-3 rounded-xl bg-slate-900 text-slate-400 hover:bg-indigo-600 hover:text-white transition-all shadow-lg border border-slate-800"
+                        title="Salvar e Sair"
+                      >
+                        <Archive size={20} />
+                      </button>
+                      <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Sair</span>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1 group">
+                      <button
+                        onClick={() => setIsVariablesVisible(!isVariablesVisible)}
+                        className={clsx(
+                          "p-3 rounded-xl transition-all shadow-lg border",
+                          isVariablesVisible 
+                            ? "bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20" 
+                            : "bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800"
+                        )}
+                        title={isVariablesVisible ? "Ocultar Dicionário" : "Mostrar Dicionário"}
+                      >
+                        <Book size={20} />
+                      </button>
+                      <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Dicionário</span>
+                    </div>
+                  </>
               )}
 
               <div className="flex flex-col items-center gap-1 group mt-auto">
@@ -1009,9 +1053,11 @@ export function Library() {
             <div className="flex-1 flex flex-col min-w-0">
               <div className="flex-1 overflow-hidden p-6 lg:p-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900/20 via-slate-950 to-slate-950">
                 <RichTextEditor
-                  content={editorContent}
+                  value={editorContent}
                   onChange={setEditorContent}
                   readOnly={editorReadOnly}
+                  variablesVisible={isVariablesVisible}
+                  onToggleVariables={() => setIsVariablesVisible(!isVariablesVisible)}
                   className="h-full border-slate-800 shadow-2xl max-w-5xl mx-auto"
                 />
               </div>

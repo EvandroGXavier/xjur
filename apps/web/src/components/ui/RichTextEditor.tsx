@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState, type ReactNode } from 'react';
-import { AlignCenter, AlignLeft, AlignRight, AlignJustify, Bold, Copy, Italic, List, ListOrdered, Plus, Quote, Table, Trash2, Type, Underline, X, RotateCcw } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, AlignJustify, Bold, Copy, Italic, List, ListOrdered, Plus, Quote, Table, Trash2, Type, Underline, X, RotateCcw, Book } from 'lucide-react';
 import { clsx } from 'clsx';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -18,6 +18,8 @@ interface RichTextEditorProps {
     onChange: (value: string) => void;
     placeholder?: string;
     showVariables?: boolean;
+    variablesVisible?: boolean;
+    onToggleVariables?: () => void;
     className?: string;
     readOnly?: boolean;
     minHeight?: number;
@@ -81,13 +83,17 @@ function getSelectedText(editor: Editor | null) {
 }
 
 export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
-    { value, onChange, placeholder = 'Comece a criar seu modelo aqui.', showVariables = false, className, readOnly = false, minHeight = 720 },
+    { value, onChange, placeholder = 'Comece a criar seu modelo aqui.', showVariables = true, variablesVisible: variablesVisibleProp, onToggleVariables, className, readOnly = false, minHeight = 720 },
     ref,
 ) {
     const [variables, setVariables] = useState<VariableMap>({});
     const [variableQuery, setVariableQuery] = useState('');
     const [tableRows, setTableRows] = useState(3);
     const [tableCols, setTableCols] = useState(3);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [internalVariablesVisible, setInternalVariablesVisible] = useState(true);
+
+    const variablesVisible = variablesVisibleProp !== undefined ? variablesVisibleProp : internalVariablesVisible;
 
     const editor = useEditor({
         extensions: [
@@ -163,12 +169,14 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
 
     const variableGroups = useMemo(() => {
         const query = variableQuery.trim().toLowerCase();
-        return Object.entries(variables).map(([category, items]) => [category, items.filter((item) => {
+        return Object.entries(variables)
+            .filter(([category]) => !selectedCategory || category === selectedCategory)
+            .map(([category, items]) => [category, items.filter((item) => {
             const label = String(item?.label || '').toLowerCase();
             const key = String(item?.key || '').toLowerCase();
             return !query || label.includes(query) || key.includes(query);
         })] as const).filter(([, items]) => items.length > 0);
-    }, [variableQuery, variables]);
+    }, [variableQuery, variables, selectedCategory]);
 
     const run = (callback: (currentEditor: Editor) => void) => {
         if (!editor || readOnly) return;
@@ -233,10 +241,70 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     const canEditTable = Boolean(editor?.isActive('table'));
 
     return (
-        <div className={clsx('rich-text-shell flex min-h-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950', className)}>
-            <div className="flex min-w-0 flex-1 flex-col">
-                <div className={clsx('sticky top-0 z-10 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md', readOnly && 'opacity-70')}>
-                    <div className="flex flex-wrap items-end gap-1.5 px-3 py-1.5">
+        <div className={clsx("flex flex-1 overflow-hidden", className)}>
+            {showVariables && variablesVisible && (
+                <aside className="flex w-[280px] shrink-0 flex-col border-r border-slate-800 bg-slate-950 overflow-hidden">
+                    <div className="border-b border-slate-800 px-4 py-4 bg-slate-950/50">
+                        <div className="text-[10px] font-black uppercase tracking-[0.25em] text-indigo-400 mb-1">Dicionário DrX</div>
+                        <div className="text-xs font-bold uppercase tracking-[0.15em] text-slate-300">Variáveis Dinâmicas</div>
+                        <input type="text" value={variableQuery} onChange={(e) => setVariableQuery(e.target.value)} placeholder="Buscar variável..." className="mt-4 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all" />
+                        
+                        <div className="flex flex-wrap gap-1 mt-4 overflow-x-auto no-scrollbar pb-1">
+                            <button
+                                onClick={() => setSelectedCategory(null)}
+                                className={clsx(
+                                    "px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md border transition-all whitespace-nowrap",
+                                    !selectedCategory 
+                                        ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                                        : "bg-slate-900 border-slate-800 text-slate-500 hover:text-white"
+                                )}
+                            >
+                                Todas
+                            </button>
+                            {Object.keys(variables).map((category) => (
+                                <button
+                                    key={category}
+                                    onClick={() => setSelectedCategory(category)}
+                                    className={clsx(
+                                        "px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md border transition-all whitespace-nowrap",
+                                        selectedCategory === category
+                                            ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                                            : "bg-slate-900 border-slate-800 text-slate-500 hover:text-white"
+                                    )}
+                                >
+                                    {category}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 custom-scrollbar">
+                        {variableGroups.length === 0 && <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-5 text-center text-xs text-slate-500">Nenhuma variável encontrada para sua busca.</div>}
+                        {variableGroups.map(([category, items]) => (
+                            <div key={category} className="rounded-2xl border border-slate-800/60 bg-slate-900/30 p-3">
+                                <div className="mb-3 pl-1 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">{category}</div>
+                                <div className="space-y-1.5">
+                                    {items.map((item) => (
+                                        <button key={item.key} type="button" onClick={() => insertVariable(item.key)} className="group flex w-full items-start justify-between gap-3 rounded-xl border border-transparent bg-slate-950/40 px-3 py-2.5 text-left transition-all hover:border-slate-700 hover:bg-slate-900 active:scale-[0.98]" title={item.key}>
+                                            <div className="min-w-0">
+                                                <div className="truncate text-[12px] font-semibold text-slate-200 group-hover:text-white">{item.label}</div>
+                                                <div className="truncate text-[10px] font-mono text-slate-500 group-hover:text-indigo-400">{`{{${item.key}}}`}</div>
+                                            </div>
+                                            <div className="mt-1 flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 group-hover:bg-indigo-600/20">
+                                                <Copy size={12} className="text-slate-600 transition group-hover:text-indigo-400" />
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </aside>
+            )}
+
+            <div className="flex flex-1 flex-col overflow-hidden bg-slate-950">
+                <div className="sticky top-0 z-10 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md">
+                    <div className="flex flex-nowrap items-end gap-2 px-3 py-2 overflow-x-auto no-scrollbar">
                         <ToolbarSelect label="Bloco" value={currentBlock} onChange={applyBlockStyle} disabled={!editor || readOnly} options={BLOCK_OPTIONS as any} />
                         <ToolbarSelect label="Fonte" value={currentFontFamily} onChange={(fontFamily) => run((currentEditor) => fontFamily ? currentEditor.chain().focus().setFontFamily(fontFamily).run() : currentEditor.chain().focus().unsetFontFamily().run())} disabled={!editor || readOnly} options={[{ value: '', label: 'Padrão do documento' }, ...FONT_FAMILIES.map((font) => ({ value: font, label: font }))]} wide />
                         <ToolbarSelect label="Tamanho" value={currentFontSize} onChange={(fontSize) => run((currentEditor) => fontSize ? currentEditor.chain().focus().setFontSize(`${fontSize}px`).run() : currentEditor.chain().focus().unsetFontSize().run())} disabled={!editor || readOnly} options={[{ value: '', label: 'Auto' }, ...FONT_SIZES.map((size) => ({ value: size, label: `${size}px` }))]} />
@@ -327,38 +395,6 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                     </div>
                 </div>
             </div>
-
-            {showVariables && (
-                <aside className="flex w-[280px] shrink-0 flex-col border-l border-slate-800 bg-slate-950 overflow-hidden">
-                    <div className="border-b border-slate-800 px-4 py-4 bg-slate-950/50">
-                        <div className="text-[10px] font-black uppercase tracking-[0.25em] text-indigo-400 mb-1">Dicionário DrX</div>
-                        <div className="text-xs font-bold uppercase tracking-[0.15em] text-slate-300">Variáveis Dinâmicas</div>
-                        <input type="text" value={variableQuery} onChange={(e) => setVariableQuery(e.target.value)} placeholder="Buscar variável..." className="mt-4 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all" />
-                    </div>
-
-                    <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 custom-scrollbar">
-                        {variableGroups.length === 0 && <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-5 text-center text-xs text-slate-500">Nenhuma variável encontrada para sua busca.</div>}
-                        {variableGroups.map(([category, items]) => (
-                            <div key={category} className="rounded-2xl border border-slate-800/60 bg-slate-900/30 p-3">
-                                <div className="mb-3 pl-1 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300/80">{category}</div>
-                                <div className="space-y-1.5">
-                                    {items.map((item) => (
-                                        <button key={item.key} type="button" onClick={() => insertVariable(item.key)} className="group flex w-full items-start justify-between gap-3 rounded-xl border border-transparent bg-slate-950/40 px-3 py-2.5 text-left transition-all hover:border-slate-700 hover:bg-slate-900 active:scale-[0.98]" title={item.key}>
-                                            <div className="min-w-0">
-                                                <div className="truncate text-[12px] font-semibold text-slate-200 group-hover:text-white">{item.label}</div>
-                                                <div className="truncate text-[10px] font-mono text-slate-500 group-hover:text-indigo-400">{`{{${item.key}}}`}</div>
-                                            </div>
-                                            <div className="mt-1 flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 group-hover:bg-indigo-600/20">
-                                                <Copy size={12} className="text-slate-600 transition group-hover:text-indigo-400" />
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </aside>
-            )}
         </div>
     );
 });
@@ -402,8 +438,8 @@ interface ToolbarSelectProps {
 
 function ToolbarSelect({ label, value, onChange, options, disabled = false, wide = false, resetAfterChange = false }: ToolbarSelectProps) {
     return (
-        <label className={clsx('flex flex-col gap-1', wide ? 'min-w-[220px]' : 'min-w-[140px]')}>
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">{label}</span>
+        <label className={clsx('flex flex-col gap-0.5', wide ? 'min-w-[150px] flex-1' : 'min-w-[90px]')}>
+            <span className="text-[8px] font-black uppercase tracking-[0.15em] text-slate-500 whitespace-nowrap">{label}</span>
             <select
                 value={value}
                 disabled={disabled}
@@ -411,7 +447,7 @@ function ToolbarSelect({ label, value, onChange, options, disabled = false, wide
                     onChange(event.target.value);
                     if (resetAfterChange) event.target.value = '';
                 }}
-                className="h-8 rounded-lg border border-slate-800 bg-slate-900/50 px-2 text-[11px] text-white outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-7 w-full rounded-md border border-slate-800 bg-slate-900/50 px-1.5 text-[10px] text-white outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 {options.map((option) => (
                     <option key={`${label}-${option.value || 'empty'}`} value={option.value}>
@@ -433,13 +469,13 @@ interface ToolbarColorFieldProps {
 
 function ToolbarColorField({ label, value, disabled = false, onChange, onClear }: ToolbarColorFieldProps) {
     return (
-        <div className="flex min-w-[138px] flex-col gap-1">
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">{label}</span>
-            <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-2">
-                <input type="color" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="h-6 w-7 cursor-pointer rounded border-0 bg-transparent p-0 disabled:cursor-not-allowed" title={`Cor de ${label.toLowerCase()}`} />
-                <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{value.toUpperCase()}</span>
-                <button type="button" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={onClear} className="rounded p-1 text-slate-500 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40" title={`Limpar cor de ${label.toLowerCase()}`}>
-                    <X size={14} />
+        <div className="flex min-w-[100px] flex-col gap-0.5">
+            <span className="text-[8px] font-black uppercase tracking-[0.15em] text-slate-500 whitespace-nowrap">{label}</span>
+            <div className="flex h-7 items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/50 px-1.5">
+                <input type="color" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="h-4 w-5 cursor-pointer rounded border-0 bg-transparent p-0 disabled:cursor-not-allowed" title={`Cor de ${label.toLowerCase()}`} />
+                <span className="min-w-0 flex-1 truncate text-[10px] font-mono text-slate-400">{value.toUpperCase()}</span>
+                <button type="button" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={onClear} className="rounded p-0.5 text-slate-600 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40" title={`Limpar cor de ${label.toLowerCase()}`}>
+                    <X size={12} />
                 </button>
             </div>
         </div>
