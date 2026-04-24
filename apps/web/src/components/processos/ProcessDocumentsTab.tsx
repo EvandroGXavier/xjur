@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
-import { ArrowLeft, ExternalLink, FileText, Loader2, Pencil, Plus, Save, Sparkles, Trash2, Printer, Download, MessageCircle } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileText, Loader2, Pencil, Plus, Save, Sparkles, Trash2, Printer, Download, MessageCircle, Archive, BookOpen, Book, Settings, Info, X } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { clsx } from 'clsx';
 import { RichTextEditor, RichTextEditorHandle } from '../ui/RichTextEditor';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 import { embeddedContentColor } from '../../utils/themeColors';
+import { useHotkeys } from '../../hooks/useHotkeys';
 
 interface ProcessDocument {
     id: string;
@@ -73,6 +74,7 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
         'Aprimore a redação jurídica (clareza, coesão, persuasão), corrija português, mantenha estrutura Visual Law e preserve o sentido. Retorne apenas HTML pronto para Word Online.',
     );
     const [aiLoading, setAiLoading] = useState(false);
+    const [showAiConfig, setShowAiConfig] = useState(false);
 
     const fetchProcessContext = async (signal?: AbortSignal) => {
         try {
@@ -119,7 +121,15 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
         setIsEditorOpen(true);
     };
 
-    const handleSaveDoc = async () => {
+    useHotkeys({
+        onSave: () => {
+            if (isEditorOpen) {
+                handleSaveDoc(true);
+            }
+        }
+    });
+
+    const handleSaveDoc = async (stayOpen = false) => {
         if (!editingDoc?.id) return;
         if (!editorTitle.trim()) {
             toast.warning('Informe um título');
@@ -132,7 +142,9 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                 content: editorContent,
             });
             toast.success('Documento atualizado');
-            setIsEditorOpen(false);
+            if (!stayOpen) {
+                setIsEditorOpen(false);
+            }
             await fetchDocuments();
         } catch (err) {
             console.error(err);
@@ -302,104 +314,225 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
 
     if (isEditorOpen) {
         return (
-            <div className="flex min-h-[70vh] w-full flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 lg:min-h-[calc(100vh-220px)]">
-                <div className="flex flex-col gap-4 border-b border-slate-800 bg-slate-900 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
-                        <button
-                            onClick={() => setIsEditorOpen(false)}
-                            className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition"
-                        >
-                            <ArrowLeft size={20} />
-                        </button>
-                        <div className="min-w-0 flex-1">
-                            <input
-                                value={editorTitle}
-                                onChange={(e) => setEditorTitle(e.target.value)}
-                                placeholder="Título do Documento"
-                                className="w-full max-w-full bg-transparent text-base font-bold text-white placeholder-slate-600 focus:outline-none sm:text-lg lg:max-w-[70vw]"
-                                autoFocus
-                            />
-                            <div className="text-xs text-slate-500 mt-1">
-                                {editingDoc?.template?.title ? `Modelo: ${editingDoc.template.title}` : 'Documento do processo'}
-                                {editingDoc?.timelineId ? ' • Vinculado a um andamento' : ''}
+            <div className="fixed inset-0 z-[110] flex flex-col bg-slate-950 animate-in fade-in zoom-in duration-300">
+                {/* Background Decor */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/5 via-transparent to-emerald-500/5 pointer-events-none" />
+                
+                {/* Top Header - Slim & Premium */}
+                <header className="relative z-20 h-16 shrink-0 bg-slate-900/80 backdrop-blur-md border-b border-slate-800/60 px-6 flex items-center justify-between shadow-xl">
+                    <div className="flex items-center gap-6 flex-1 max-w-5xl">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/5">
+                                <FileText size={20} />
+                            </div>
+                            <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[9px] font-black bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full uppercase tracking-tighter border border-indigo-500/30">Studio</span>
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Editor de Processo</span>
+                                </div>
+                                <input
+                                    value={editorTitle}
+                                    onChange={(e) => setEditorTitle(e.target.value)}
+                                    placeholder="Título do Documento"
+                                    className="bg-transparent border-0 text-xl font-black text-white focus:ring-0 outline-none w-full placeholder:text-slate-700 p-0"
+                                    autoFocus
+                                />
                             </div>
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+
+                    <div className="flex items-center gap-3">
                         {editingDoc?.msFileUrl && (
                             <button
                                 onClick={() => window.open(String(editingDoc.msFileUrl), '_blank')}
-                                className="px-3 py-2 bg-blue-600/15 hover:bg-blue-600/25 text-blue-200 border border-blue-500/25 rounded-lg text-sm font-bold inline-flex items-center gap-2"
-                                title="Abrir no Word Online"
+                                className="px-4 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold flex items-center gap-2 transition-all"
                             >
-                                <ExternalLink size={16} /> Word Online
+                                <ExternalLink size={14} /> Word Online
                             </button>
                         )}
+                        <div className="h-8 w-px bg-slate-800 mx-2" />
                         <button
-                            onClick={handleSaveDoc}
-                            disabled={saving}
-                            className={clsx(
-                                "px-4 py-2 rounded-lg font-bold inline-flex items-center gap-2 transition",
-                                saving ? "bg-indigo-600/60 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white",
-                            )}
+                            onClick={() => setIsEditorOpen(false)}
+                            className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-800 text-slate-500 hover:text-white hover:border-slate-700 transition-all"
                         >
-                            <Save size={16} /> {saving ? 'Salvando...' : 'Salvar'}
+                            <X size={20} />
                         </button>
                     </div>
-                </div>
+                </header>
 
-                <div className="p-4 border-b border-slate-800 bg-slate-950">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        <div className="lg:col-span-2">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                IA (Aprimorar peça)
-                            </label>
-                            <textarea
-                                value={aiInstruction}
-                                onChange={(e) => setAiInstruction(e.target.value)}
-                                rows={2}
-                                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                placeholder="Instruções para a IA (ex: reforçar fundamentos, ajustar pedidos, revisar coesão)."
+                <div className="flex-1 flex overflow-hidden relative">
+                    {/* Sidebar de Ações (Esquerda) */}
+                    <aside className="w-16 shrink-0 flex flex-col items-center py-6 gap-6 border-r border-slate-900 bg-slate-950 z-20">
+                        <div className="flex flex-col items-center gap-1 group">
+                            <button
+                                onClick={() => setIsEditorOpen(false)}
+                                className="p-3 rounded-xl bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white transition-all shadow-lg border border-slate-800"
+                                title="Voltar"
+                            >
+                                <ArrowLeft size={20} />
+                            </button>
+                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Sair</span>
+                        </div>
+
+                        <div className="h-px w-8 bg-slate-900" />
+
+                        <div className="flex flex-col items-center gap-1 group">
+                            <button
+                                onClick={() => handleSaveDoc(true)}
+                                disabled={saving}
+                                className="p-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                                title="Salvar e Continuar (Ctrl+S)"
+                            >
+                                {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                            </button>
+                            <span className="text-[9px] font-bold text-indigo-400/70 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Salvar</span>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-1 group">
+                            <button
+                                onClick={() => handleSaveDoc(false)}
+                                disabled={saving}
+                                className="p-3 rounded-xl bg-slate-900 text-slate-400 hover:bg-indigo-600 hover:text-white transition-all shadow-lg border border-slate-800"
+                                title="Salvar e Sair"
+                            >
+                                <Archive size={20} />
+                            </button>
+                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Arquivar</span>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-1 group">
+                            <button
+                                onClick={() => setVariablesVisible(!variablesVisible)}
+                                className={clsx(
+                                    "p-3 rounded-xl transition-all shadow-lg border",
+                                    variablesVisible 
+                                        ? "bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20" 
+                                        : "bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800"
+                                )}
+                                title="Dicionário de Variáveis"
+                            >
+                                <Book size={20} />
+                            </button>
+                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Dicionário</span>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-1 group mt-auto">
+                            <button
+                                className="p-3 rounded-xl bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white transition-all shadow-lg border border-slate-800"
+                                title="Ajuda"
+                            >
+                                <BookOpen size={20} />
+                            </button>
+                            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Ajuda</span>
+                        </div>
+                    </aside>
+
+                    {/* Main Area */}
+                    <main className="flex-1 flex flex-col min-w-0 bg-slate-950 relative">
+                        {/* AI & Quick Settings Bar */}
+                        <div className="h-14 shrink-0 bg-slate-900/30 border-b border-slate-900/50 flex items-center px-6 justify-between gap-4">
+                            <div className="flex items-center gap-4 flex-1">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles size={16} className="text-violet-400" />
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Copiloto IA</span>
+                                </div>
+                                <div className="h-8 w-px bg-slate-800" />
+                                <div className="flex-1 flex items-center gap-2">
+                                    <input
+                                        value={aiInstruction}
+                                        onChange={(e) => setAiInstruction(e.target.value)}
+                                        className="flex-1 bg-transparent border-0 text-xs text-slate-300 placeholder:text-slate-600 focus:ring-0 outline-none"
+                                        placeholder="Instruções para a IA (ex: aprimorar redação, revisar coesão)..."
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={improveSelectionWithAi}
+                                            disabled={aiLoading}
+                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-[10px] font-bold text-slate-300 flex items-center gap-1.5 transition-all"
+                                        >
+                                            {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                            Trecho
+                                        </button>
+                                        <button
+                                            onClick={improveAllWithAi}
+                                            disabled={aiLoading}
+                                            className="px-3 py-1.5 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/20 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all"
+                                        >
+                                            {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                            Full Doc
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => setShowAiConfig(!showAiConfig)}
+                                    className={clsx(
+                                        "p-2 rounded-lg transition-all",
+                                        showAiConfig ? "bg-indigo-500/20 text-indigo-400" : "text-slate-500 hover:text-slate-300"
+                                    )}
+                                >
+                                    <Settings size={18} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Editor Canvas */}
+                        <div className="flex-1 overflow-hidden">
+                            <RichTextEditor
+                                ref={editorRef}
+                                value={editorContent}
+                                onChange={setEditorContent}
+                                className="h-full"
+                                showVariables={true}
+                                variablesVisible={variablesVisible}
+                                onToggleVariables={() => setVariablesVisible(!variablesVisible)}
+                                minHeight={860}
+                                placeholder="Edite aqui o documento do processo com qualidade de peça final."
                             />
                         </div>
-                        <div className="flex items-end gap-2">
-                            <button
-                                onClick={improveSelectionWithAi}
-                                disabled={aiLoading}
-                                className="flex-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 inline-flex items-center justify-center gap-2"
-                                title="Substitui o trecho selecionado"
-                            >
-                                <Sparkles size={14} /> Trecho
-                            </button>
-                            <button
-                                onClick={improveAllWithAi}
-                                disabled={aiLoading}
-                                className="flex-1 px-3 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-xs font-bold text-white inline-flex items-center justify-center gap-2"
-                                title="Substitui o documento inteiro"
-                            >
-                                <Sparkles size={14} /> Documento
-                            </button>
-                        </div>
-                    </div>
-                    {aiLoading && (
-                        <div className="mt-2 text-xs text-slate-500 inline-flex items-center gap-2">
-                            <Loader2 className="animate-spin" size={14} /> IA processando...
-                        </div>
-                    )}
-                </div>
+                    </main>
 
-                <div className="flex-1 overflow-hidden bg-white">
-                    <RichTextEditor
-                        ref={editorRef}
-                        value={editorContent}
-                        onChange={setEditorContent}
-                        className="h-full"
-                        showVariables={true}
-                        variablesVisible={variablesVisible}
-                        onToggleVariables={() => setVariablesVisible(!variablesVisible)}
-                        minHeight={860}
-                        placeholder="Edite aqui o documento do processo com qualidade de peça final."
-                    />
+                    {/* Right Panel - Config / AI Details */}
+                    {showAiConfig && (
+                        <aside className="w-80 shrink-0 border-l border-slate-900 bg-slate-950 flex flex-col animate-in slide-in-from-right duration-300">
+                            <div className="p-6 border-b border-slate-900 flex items-center justify-between">
+                                <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                    <Info size={14} className="text-indigo-400" /> Detalhes do Documento
+                                </h4>
+                                <button onClick={() => setShowAiConfig(false)} className="text-slate-600 hover:text-white transition">
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Metadata</label>
+                                    <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-4 space-y-3">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-500 font-medium">Modelo Original</span>
+                                            <span className="text-slate-300 font-bold truncate max-w-[120px]">{editingDoc?.template?.title || 'Personalizado'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-500 font-medium">Criado em</span>
+                                            <span className="text-slate-300 font-bold">{editingDoc?.createdAt ? new Date(editingDoc.createdAt).toLocaleDateString() : '-'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-500 font-medium">Processo ID</span>
+                                            <span className="text-slate-300 font-mono text-[10px]">{processId}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Status de Operação</label>
+                                    <div className="flex items-center gap-3 p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <span className="text-xs text-emerald-400 font-bold">Online & Pronto para salvar</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </aside>
+                    )}
                 </div>
             </div>
         );

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { toast } from 'sonner';
-import { FileText, Loader2, Save, X, RefreshCw, Cloud } from 'lucide-react';
+import { FileText, Loader2, Save, X, RefreshCw, Cloud, Archive, ArrowLeft, BookOpen, Book, Settings, Info } from 'lucide-react';
 import { RichTextEditor } from '../ui/RichTextEditor';
 import { clsx } from 'clsx';
+import { useHotkeys } from '../../hooks/useHotkeys';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
@@ -32,6 +33,7 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
     const [docTitle, setDocTitle] = useState('');
     const [step, setStep] = useState<'SELECT' | 'EDIT'>('SELECT');
     const [variablesVisible, setVariablesVisible] = useState(true);
+    const [showInfo, setShowInfo] = useState(false);
 
     useEffect(() => {
         fetchTemplates();
@@ -73,6 +75,14 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
             setRendering(false);
         }
     };
+
+    useHotkeys({
+        onSave: () => {
+            if (step === 'EDIT') {
+                handleSave();
+            }
+        }
+    });
 
     const handleSave = async () => {
         if (!generatedContent) {
@@ -248,7 +258,7 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                 {/* Content */}
                 <div className="flex-1 overflow-hidden relative">
                     {step === 'SELECT' ? (
-                        <div className="p-8 space-y-6">
+                        <div className="p-8 space-y-6 bg-slate-900/50">
                             {loading ? (
                                 <div className="flex flex-col items-center py-20 gap-4">
                                     <div className="relative">
@@ -302,55 +312,150 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                             )}
                         </div>
                     ) : (
-                        <div className="flex flex-col h-full bg-slate-950">
-                             <div className="flex-1 overflow-hidden">
-                                <RichTextEditor 
-                                    value={generatedContent}
-                                    onChange={setGeneratedContent}
-                                    showVariables={true}
-                                    variablesVisible={variablesVisible}
-                                    onToggleVariables={() => setVariablesVisible(!variablesVisible)}
-                                    minHeight={900}
-                                    placeholder="Revise o documento gerado antes de salvar."
-                                    className="h-full border-0 rounded-none shadow-none"
-                                />
-                             </div>
+                        <div className="fixed inset-0 z-[120] flex flex-col bg-slate-950 animate-in fade-in zoom-in duration-300">
+                            {/* Immersive Background */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-emerald-500/5 pointer-events-none" />
+
+                            {/* Header Slim */}
+                            <header className="relative z-20 h-16 shrink-0 bg-slate-900/80 backdrop-blur-md border-b border-slate-800/60 px-6 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+                                        <FileText size={20} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full uppercase tracking-tighter border border-emerald-500/30">Studio Gen</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Geração de Documento</span>
+                                        </div>
+                                        <input
+                                            value={docTitle}
+                                            onChange={(e) => setDocTitle(e.target.value)}
+                                            placeholder="Dê um título ao documento gerado..."
+                                            className="bg-transparent border-0 text-xl font-black text-white focus:ring-0 outline-none w-[400px] placeholder:text-slate-700 p-0"
+                                            autoFocus
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={rendering}
+                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-all"
+                                    >
+                                        {rendering ? <Loader2 size={14} className="animate-spin" /> : <Cloud size={14} />} Gerar PDF
+                                    </button>
+                                    <div className="h-8 w-px bg-slate-800 mx-2" />
+                                    <button
+                                        onClick={onClose}
+                                        className="w-10 h-10 flex items-center justify-center rounded-xl border border-slate-800 text-slate-500 hover:text-white hover:border-slate-700 transition-all"
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </div>
+                            </header>
+
+                            <div className="flex-1 flex overflow-hidden relative">
+                                {/* Sidebar de Atalhos (Esquerda) */}
+                                <aside className="w-16 shrink-0 flex flex-col items-center py-6 gap-6 border-r border-slate-900 bg-slate-950 z-20 shadow-2xl">
+                                    <div className="flex flex-col items-center gap-1 group">
+                                        <button
+                                            onClick={() => setStep('SELECT')}
+                                            className="p-3 rounded-xl bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white transition-all shadow-lg border border-slate-800"
+                                            title="Voltar para seleção"
+                                        >
+                                            <ArrowLeft size={20} />
+                                        </button>
+                                        <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Voltar</span>
+                                    </div>
+
+                                    <div className="h-px w-8 bg-slate-900" />
+
+                                    <div className="flex flex-col items-center gap-1 group">
+                                        <button
+                                            onClick={handleSave}
+                                            disabled={rendering || !docTitle.trim()}
+                                            className="p-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                                            title="Finalizar e Anexar"
+                                        >
+                                            {rendering ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                                        </button>
+                                        <span className="text-[9px] font-bold text-indigo-400/70 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Finalizar</span>
+                                    </div>
+
+                                    <div className="flex flex-col items-center gap-1 group">
+                                        <button
+                                            onClick={() => setVariablesVisible(!variablesVisible)}
+                                            className={clsx(
+                                                "p-3 rounded-xl transition-all shadow-lg border",
+                                                variablesVisible 
+                                                    ? "bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20" 
+                                                    : "bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800"
+                                            )}
+                                            title="Dicionário de Variáveis"
+                                        >
+                                            <Book size={20} />
+                                        </button>
+                                        <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Dicionário</span>
+                                    </div>
+
+                                    <div className="flex flex-col items-center gap-1 group mt-auto">
+                                        <button
+                                            onClick={() => setShowInfo(!showInfo)}
+                                            className={clsx(
+                                                "p-3 rounded-xl transition-all shadow-lg border",
+                                                showInfo ? "bg-slate-800 text-white" : "bg-slate-900 text-slate-400"
+                                            )}
+                                            title="Informações"
+                                        >
+                                            <Settings size={20} />
+                                        </button>
+                                        <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Ajustes</span>
+                                    </div>
+                                </aside>
+
+                                {/* Editor Area */}
+                                <main className="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden">
+                                    <div className="flex-1 overflow-hidden">
+                                        <RichTextEditor 
+                                            value={generatedContent}
+                                            onChange={setGeneratedContent}
+                                            showVariables={true}
+                                            variablesVisible={variablesVisible}
+                                            onToggleVariables={() => setVariablesVisible(!variablesVisible)}
+                                            minHeight={900}
+                                            placeholder="Revise o documento gerado antes de salvar."
+                                            className="h-full border-0 rounded-none shadow-none"
+                                        />
+                                    </div>
+                                </main>
+
+                                {/* Right Panel */}
+                                {showInfo && (
+                                    <aside className="w-80 shrink-0 border-l border-slate-900 bg-slate-950 flex flex-col animate-in slide-in-from-right">
+                                        <div className="p-6 border-b border-slate-900 flex items-center justify-between">
+                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                                <Info size={14} className="text-indigo-400" /> Detalhes da Geração
+                                            </h4>
+                                            <button onClick={() => setShowInfo(false)} className="text-slate-600 hover:text-white">
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                        <div className="p-6 space-y-6">
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fluxo DrX</label>
+                                                <div className="p-4 bg-slate-900/50 rounded-2xl border border-slate-800 text-xs text-slate-400 leading-relaxed">
+                                                    Este documento foi gerado a partir do modelo <span className="text-indigo-400 font-bold">{templates.find(t => t.id === selectedTemplateId)?.title}</span>.
+                                                    Todas as variáveis detectadas foram processadas em tempo real.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </aside>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
-
-                {/* Footer (Only for Edit step) */}
-                {step === 'EDIT' && (
-                    <div className="relative z-10 bg-slate-900/90 backdrop-blur-md px-6 py-5 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <div className="flex items-center gap-4 text-slate-500 italic text-[11px] font-medium sm:block hidden">
-                            <span className="flex items-center gap-1.5"><FileText size={12} /> O documento será anexado automaticamente à linha do tempo após a confirmação.</span>
-                        </div>
-                        
-                        <div className="flex w-full sm:w-auto gap-4">
-                            <button 
-                                onClick={onClose}
-                                className="flex-1 sm:flex-none px-6 py-3 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-bold transition-all active:scale-95"
-                            >
-                                Descartar
-                            </button>
-                            <button 
-                                onClick={handleSave}
-                                disabled={rendering}
-                                className={clsx(
-                                    "flex-1 sm:flex-none px-8 py-3 rounded-xl font-black text-sm flex items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl",
-                                    mode === 'M365' 
-                                        ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/40"
-                                        : "bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-900/40"
-                                )}
-                            >
-                                {rendering ? <Loader2 className="animate-spin" size={18} /> : (mode === 'M365' ? <Cloud size={18} /> : <Save size={18} />)}
-                                {rendering 
-                                    ? (mode === 'M365' ? 'ENVIANDO PARA NUVEM...' : (generatePdf ? 'GERANDO PDF...' : 'SALVANDO...')) 
-                                    : (mode === 'M365' ? 'GERAR M365 & ABRIR' : (generatePdf ? 'CONFIRMAR & ANEXAR PDF' : 'SALVAR NO PROCESSO'))}
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );
