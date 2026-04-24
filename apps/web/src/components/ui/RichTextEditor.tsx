@@ -349,6 +349,12 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                         </div>
 
                         <div className="ml-auto flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 p-1">
+                            <ToolbarButton 
+                                label={<Book size={14} />} 
+                                title="Dicionário de Variáveis" 
+                                active={variablesVisible} 
+                                onClick={() => onToggleVariables ? onToggleVariables() : setInternalVariablesVisible(!internalVariablesVisible)} 
+                            />
                             <ToolbarButton label={<RotateCcw size={14} />} title="Desfazer" disabled={!editor || readOnly || !editor?.can().undo()} onClick={() => run((currentEditor) => currentEditor.chain().focus().undo().run())} />
                             <ToolbarButton label="Limpar" title="Limpar formatação" disabled={!editor || readOnly} onClick={clearFormatting} />
                         </div>

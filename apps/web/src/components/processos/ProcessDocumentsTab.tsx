@@ -41,9 +41,12 @@ const buildRenderableDocumentHtml = (content?: string | null) => {
         return `<div class="document-print-root" style="white-space: pre-wrap;">${escapeHtml(raw)}</div>`;
     }
 
+    // Replace empty paragraphs or paragraphs with only a BR with a non-breaking space
+    // and ensure they have some content to maintain layout height
     return raw
         .replace(/<p>\s*<\/p>/gi, '<p>&nbsp;</p>')
-        .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '<p>&nbsp;</p>');
+        .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '<p>&nbsp;</p>')
+        .replace(/<br\s*\/?>/gi, '<br />&nbsp;');
 };
 
 export function ProcessDocumentsTab({ processId }: { processId: string }) {
@@ -61,6 +64,7 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
     const [editorTitle, setEditorTitle] = useState('');
     const [editorContent, setEditorContent] = useState('');
     const [saving, setSaving] = useState(false);
+    const [variablesVisible, setVariablesVisible] = useState(false);
 
     const editorRef = useRef<RichTextEditorHandle>(null);
 
@@ -241,11 +245,23 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
 
     const handleSavePdf = async (doc: ProcessDocument) => {
         const element = document.createElement('div');
-        element.innerHTML = buildRenderableDocumentHtml(doc.content);
+        element.innerHTML = `
+            <style>
+                body { font-family: 'Calibri', 'Arial', sans-serif; }
+                p { margin: 0; min-height: 1.2em; line-height: 1.5; }
+                p:empty::before { content: "\\00a0"; }
+                .document-print-root p:empty::before { content: "\\00a0"; }
+                .rich-text-table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+                .rich-text-table td, .rich-text-table th { border: 1px solid #cbd5e1; padding: 8px; }
+            </style>
+            <div class="document-print-root">
+                ${buildRenderableDocumentHtml(doc.content)}
+            </div>
+        `;
         element.style.padding = '20mm';
         element.style.color = 'black';
         element.style.backgroundColor = 'white';
-        element.className = 'document-print-root';
+        element.style.width = '800px';
 
         const opt = {
             margin: 0,
@@ -378,7 +394,9 @@ export function ProcessDocumentsTab({ processId }: { processId: string }) {
                         value={editorContent}
                         onChange={setEditorContent}
                         className="h-full"
-                        showVariables={false}
+                        showVariables={true}
+                        variablesVisible={variablesVisible}
+                        onToggleVariables={() => setVariablesVisible(!variablesVisible)}
                         minHeight={860}
                         placeholder="Edite aqui o documento do processo com qualidade de peça final."
                     />

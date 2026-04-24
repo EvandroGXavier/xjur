@@ -31,6 +31,7 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
     const [generatedContent, setGeneratedContent] = useState('');
     const [docTitle, setDocTitle] = useState('');
     const [step, setStep] = useState<'SELECT' | 'EDIT'>('SELECT');
+    const [variablesVisible, setVariablesVisible] = useState(true);
 
     useEffect(() => {
         fetchTemplates();
@@ -133,10 +134,30 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
 
                 // Create a temporary container for rendering
                 const element = document.createElement('div');
-                element.innerHTML = generatedContent;
+                
+                // Pre-process content to ensure blank lines are preserved
+                // html2pdf can collapse empty paragraphs
+                const processedContent = generatedContent
+                    .replace(/<p>\s*<\/p>/gi, '<p>&nbsp;</p>')
+                    .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '<p>&nbsp;</p>');
+
+                element.innerHTML = `
+                    <style>
+                        body { font-family: 'Calibri', 'Arial', sans-serif; }
+                        p { margin: 0; min-height: 1em; line-height: 1.5; }
+                        p:empty::before { content: "\\00a0"; }
+                        .rich-text-table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+                        .rich-text-table td, .rich-text-table th { border: 1px solid #cbd5e1; padding: 8px; }
+                        .visual-law-box { page-break-inside: avoid; }
+                    </style>
+                    <div class="document-pdf-root">
+                        ${processedContent}
+                    </div>
+                `;
                 element.style.padding = '40px';
                 element.style.color = 'black';
                 element.style.backgroundColor = 'white';
+                element.style.width = '800px'; // Force a reasonable width for layout calculations
                 
                 // PDF Options
                 const opt = {
@@ -287,6 +308,8 @@ export function DocumentGeneratorModal({ processId, contactId, onClose, onSucces
                                     value={generatedContent}
                                     onChange={setGeneratedContent}
                                     showVariables={true}
+                                    variablesVisible={variablesVisible}
+                                    onToggleVariables={() => setVariablesVisible(!variablesVisible)}
                                     minHeight={900}
                                     placeholder="Revise o documento gerado antes de salvar."
                                     className="h-full border-0 rounded-none shadow-none"
