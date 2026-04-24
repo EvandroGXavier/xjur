@@ -18,6 +18,9 @@ import {
   Copy,
   Grid,
   List,
+  Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../services/api";
@@ -186,6 +189,7 @@ export function Library() {
   const [editorMetadataText, setEditorMetadataText] = useState("");
   const [editorReadOnly, setEditorReadOnly] = useState(false);
   const [editorAction, setEditorAction] = useState<"EDIT" | "COPY">("EDIT");
+  const [showEditorConfig, setShowEditorConfig] = useState(false);
 
   // Filter state
   const [includedTags, setIncludedTags] = useState<string[]>(
@@ -211,6 +215,7 @@ export function Library() {
     "asc" | "desc"
   >(persistedState.historySortDirection || "desc");
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
+  const [showTagFilters, setShowTagFilters] = useState(false);
 
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   const systemAccentStyle = getLibraryAccentStyles(themeColor.amber500, {
@@ -453,18 +458,30 @@ export function Library() {
     setIsEditorOpen(true);
   };
 
-  const handleEditTemplate = (tpl: Template, action: "EDIT" | "COPY") => {
-    setEditorAction(action);
-    setEditorFromTemplate(tpl);
-    if (action === "COPY") {
-      setEditorMode("TENANT"); // Force to tenant mode to allow editing before saving copy
-      setEditorReadOnly(false);
-      setEditorTags((prev) => prev.filter((tag) => !tag.isInternal));
-      if (!tpl.title.endsWith("(Cópia)")) {
-        setEditorTitle(tpl.title + " (Cópia)");
+  const handleEditTemplate = async (tpl: Template, action: "EDIT" | "COPY") => {
+    try {
+      setIsRefreshing(true);
+      const res = await api.get(`/documents/templates/${tpl.id}`);
+      const fullTpl = res.data;
+
+      setEditorAction(action);
+      setEditorFromTemplate(fullTpl);
+      
+      if (action === "COPY") {
+        setEditorMode("TENANT"); // Force to tenant mode to allow editing before saving copy
+        setEditorReadOnly(false);
+        setEditorTags((prev) => prev.filter((tag) => !tag.isInternal));
+        if (!fullTpl.title.endsWith("(Cópia)")) {
+          setEditorTitle(fullTpl.title + " (Cópia)");
+        }
       }
+      setIsEditorOpen(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao carregar conteúdo real do modelo.");
+    } finally {
+      setIsRefreshing(false);
     }
-    setIsEditorOpen(true);
   };
 
   const isTagSelected = (id: string) => editorTags.some((t) => t.id === id);
@@ -899,378 +916,204 @@ export function Library() {
       : [];
     return (
       <>
-        <div className="h-full flex flex-col bg-slate-950 animate-in fade-in slide-in-from-bottom-4">
-          <div className="border-b border-slate-800 p-4 flex justify-between items-center bg-slate-900 gap-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setIsEditorOpen(false)}
-                className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition"
-              >
-                <ArrowLeft size={24} />
-              </button>
-              <div className="flex-1 max-w-2xl group">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-2xl animate-in fade-in duration-500 p-4 lg:p-6">
+        <div className="flex h-full w-full max-w-7xl flex-col bg-slate-950 shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-500 overflow-hidden rounded-2xl border border-slate-900">
+          {/* Header do Editor (Studio Slim) */}
+          <div className="border-b border-slate-900 px-6 py-3 flex justify-between items-center bg-slate-950/50 backdrop-blur-md gap-4 z-30">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="flex-1 min-w-0 group">
                 <div className="flex items-center gap-2">
                   <input
                     value={editorTitle}
                     onChange={(e) => setEditorTitle(e.target.value)}
-                    placeholder="Título do Modelo (Ex: Procuração Ad Judicia)"
+                    placeholder="Título do Modelo..."
                     className={clsx(
-                      "bg-transparent text-xl font-bold text-white focus:outline-none placeholder-slate-600 w-full px-2 py-1 transition-colors rounded",
+                      "bg-transparent text-lg font-black text-white focus:outline-none placeholder-slate-700 w-full px-2 py-1 transition-all rounded-lg",
                       editorReadOnly
-                        ? "opacity-80"
-                        : "hover:bg-slate-800 focus:bg-slate-800 border-b border-dashed border-slate-600 focus:border-indigo-500 hover:border-indigo-400",
+                        ? "opacity-60"
+                        : "hover:bg-slate-900 focus:bg-slate-900 border-b border-dashed border-slate-800 focus:border-indigo-500",
                     )}
                     autoFocus
                     disabled={editorReadOnly}
-                    title={
-                      editorReadOnly
-                        ? "Modelo do sistema não pode ser renomeado aqui"
-                        : "Clique para alterar o nome do modelo"
-                    }
                   />
                 </div>
-                <div className="flex items-center gap-2 mt-1 px-2">
+                <div className="flex items-center gap-2 mt-0.5 px-2">
                   {isSystem && (
-                    <span
-                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
-                      style={systemAccentStyle}
-                    >
-                      <Sparkles size={14} /> Modelo do Sistema
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                      <Sparkles size={12} /> Sistema
                     </span>
                   )}
                   {!!editingTemplate?.sourceTemplateId && !isSystem && (
-                    <span
-                      className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border"
-                      style={copyAccentStyle}
-                    >
-                      Copiado do Sistema
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      Cópia
                     </span>
                   )}
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsHelpOpen(true)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium flex items-center gap-2 transition border border-slate-700"
-              >
-                <BookOpen size={16} /> Ajuda (F1)
-              </button>
-              {isSystem && canEditSystem && (
-                <>
-                  {!!editingTemplate?.id && (
-                    <button
-                      onClick={() =>
-                        handleDeleteSystemTemplate(editingTemplate.id)
-                      }
-                      className="px-4 py-2 bg-red-500/15 hover:bg-red-500/25 text-red-300 rounded-lg font-bold flex items-center gap-2 transition border border-red-500/20"
-                      title="Excluir modelo do sistema"
-                    >
-                      <Trash2 size={18} /> Excluir
-                    </button>
-                  )}
-                  <button
-                    onClick={handleSaveTemplate}
-                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
-                    title="Salvar alterações no modelo do sistema"
-                  >
-                    <Save size={18} /> Salvar (Sistema)
-                  </button>
-                </>
-              )}
-              {editorAction === "COPY" && (
+
+            <div className="flex items-center gap-3">
+              <div className="h-6 w-px bg-slate-800 mx-1" />
+              {isSystem && canEditSystem && !!editingTemplate?.id && (
                 <button
-                  onClick={handleSaveAsCopy}
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
-                  title="Salvar como uma Nova Cópia no seu escritório"
+                  onClick={() => handleDeleteSystemTemplate(editingTemplate.id)}
+                  className="h-10 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl font-black text-[10px] uppercase tracking-widest transition border border-red-500/20"
                 >
-                  <Copy size={18} /> Salvar como Cópia
-                </button>
-              )}
-              {editorAction === "EDIT" && (!isSystem || canEditSystem) && (
-                <button
-                  onClick={handleSaveTemplate}
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-2 transition"
-                >
-                  <Save size={18} /> Salvar Modelo
+                  <Trash2 size={16} /> <span className="hidden md:inline">Excluir</span>
                 </button>
               )}
             </div>
           </div>
-          <div className="flex-1 p-6 overflow-hidden flex flex-col gap-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-3">
-                <div className="text-xs font-bold text-slate-300 flex items-center gap-2">
-                  <Settings2 size={16} /> Informações
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {isSystem && (
-                    <div className="md:col-span-2">
-                      <label className="text-xs text-slate-400">
-                        System Key (identificador do modelo do sistema)
-                      </label>
-                      <input
-                        value={editorSystemKey}
-                        onChange={(e) => setEditorSystemKey(e.target.value)}
-                        disabled={
-                          Boolean(editingTemplate?.id) || !canEditSystem
-                        }
-                        placeholder="Ex: CHA_CONTRATO_HONORARIOS"
-                        className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500 disabled:opacity-70"
-                      />
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Use um identificador único e estável. Depois de criado,
-                        não pode ser alterado aqui.
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-xs text-slate-400">
-                      Armazenamento
-                    </label>
-                    <select
-                      value={editorPreferredStorage}
-                      onChange={(e) =>
-                        setEditorPreferredStorage(e.target.value as any)
-                      }
-                      disabled={editorReadOnly}
-                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="WORD_ONLINE">
-                        Word Online (Microsoft 365)
-                      </option>
-                      <option value="GOOGLE_DOCS">
-                        Google Docs (Workspace)
-                      </option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400">
-                    Descrição (orientações jurídicas)
-                  </label>
-                  <textarea
-                    value={editorDescription}
-                    onChange={(e) => setEditorDescription(e.target.value)}
-                    disabled={editorReadOnly}
-                    rows={3}
-                    placeholder="Ex: Baseado no Art. 319 do CPC..."
-                    className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500"
-                  />
-                  {(internalCommentsPreview.length > 0 ||
-                    sectionsPreview.length > 0 ||
-                    metadataPreviewError) && (
-                    <div className="mt-3 space-y-2">
-                      {metadataPreviewError && (
-                        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2">
-                          Metadata (JSON) invÃ¡lido: corrija no modo avanÃ§ado
-                          para visualizar comentÃ¡rios/seÃ§Ãµes.
-                        </div>
-                      )}
-                      {internalCommentsPreview.length > 0 && (
-                        <div
-                          className="rounded p-2 border"
-                          style={internalCommentAccentStyle}
-                        >
-                          <div className="text-[11px] font-bold text-amber-300 mb-1">
-                            ComentÃ¡rios Internos
-                          </div>
-                          <ul className="list-disc pl-4 text-xs text-amber-200/90 space-y-1">
-                            {internalCommentsPreview.map((c) => (
-                              <li key={c}>{c}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {sectionsPreview.length > 0 && (
-                        <div className="bg-slate-950 border border-slate-700 rounded p-2">
-                          <div className="text-[11px] font-bold text-slate-300 mb-1">
-                            SeÃ§Ãµes / Ajuda
-                          </div>
-                          <div className="space-y-1">
-                            {sectionsPreview.map((s: any, idx: number) => (
-                              <div
-                                key={String(s?.title || idx)}
-                                className="text-xs text-slate-300"
-                              >
-                                <span className="font-bold">
-                                  {String(s?.title || "SeÃ§Ã£o")}
-                                </span>
-                                {s?.help ? (
-                                  <span className="text-slate-500">
-                                    {" "}
-                                    - {String(s.help)}
-                                  </span>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-3 lg:col-span-2">
-                <div className="text-xs font-bold text-slate-300 flex items-center gap-2">
-                  <TagIcon size={16} /> Tags da Biblioteca
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== ",") return;
-                      e.preventDefault();
 
-                      const parts = tagInput
-                        .split(",")
-                        .map((x) => x.trim())
-                        .filter(Boolean);
-                      setTagInput("");
-                      if (!parts.length) return;
-
-                      for (const part of parts) {
-                        void handleAddOrCreateTag(part);
-                      }
-                    }}
-                    disabled={isSystem ? !canEditSystem : false}
-                    placeholder={
-                      isSystem
-                        ? "Digite e pressione Enter (ex: Cível, CPC, Contrato)"
-                        : "Digite e pressione Enter (ex: Cível, CPC, Contrato)"
-                    }
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const parts = tagInput
-                        .split(",")
-                        .map((x) => x.trim())
-                        .filter(Boolean);
-                      setTagInput("");
-                      if (!parts.length) return;
-
-                      for (const part of parts) void handleAddOrCreateTag(part);
-                    }}
-                    disabled={isSystem ? !canEditSystem : false}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded border border-slate-700 text-sm"
-                  >
-                    Adicionar
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(availableLibraryTags || [])
-                    .filter((tag) => {
-                      if (!isSystem && tag.isInternal) return false;
-                      const q = tagInput.trim().toLowerCase();
-                      if (!q) return true;
-                      return (tag.name || "").toLowerCase().includes(q);
-                    })
-                    .slice(0, 14)
-                    .map((tag) => (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => handleToggleTag(tag)}
-                        disabled={isSystem ? !canEditSystem : false}
-                        className={clsx(
-                          "px-2 py-1 rounded-full text-xs font-bold border transition",
-                          isTagSelected(tag.id)
-                            ? "bg-slate-800 border-slate-600"
-                            : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700",
-                        )}
-                        style={{
-                          borderColor: `${tag.color}80`,
-                          color: isTagSelected(tag.id) ? tag.color : undefined,
-                        }}
-                        title={
-                          isTagSelected(tag.id) ? "Remover tag" : "Adicionar tag"
-                        }
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <span
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: tag.color }}
-                          />
-                          {tag.name}
-                        </span>
-                      </button>
-                    ))}
-                  {loadingLibraryTags && (
-                    <span className="text-xs text-slate-500">
-                      Carregando tags...
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {editorTags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-xs"
-                      style={{
-                        backgroundColor: `${tag.color}20`,
-                        borderColor: `${tag.color}55`,
-                        color: tag.color,
-                      }}
-                    >
-                      {tag.name}
-                      {(!tag.isInternal && (!isSystem || canEditSystem)) && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTag(tag.id)}
-                          className="ml-1 p-0.5 rounded hover:bg-white/10"
-                          title="Remover"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                  {editorTags.length === 0 && (
-                    <span className="text-xs text-slate-500">Sem tags.</span>
-                  )}
-                </div>
+          <div className="flex-1 flex overflow-hidden bg-slate-950 relative">
+            {/* Sidebar de Atalhos (Esquerda) */}
+            <aside className="w-16 flex flex-col items-center py-6 gap-6 border-r border-slate-900 bg-slate-950 z-20">
+              <div className="flex flex-col items-center gap-1 group">
                 <button
-                  type="button"
-                  onClick={() => setShowAdvanced((v) => !v)}
-                  className="text-xs text-slate-400 hover:text-white inline-flex items-center gap-2 mt-1"
+                  onClick={() => setIsEditorOpen(false)}
+                  className="p-3 rounded-xl bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white transition-all shadow-lg border border-slate-800"
+                  title="Voltar para a Biblioteca"
                 >
-                  <Settings2 size={14} /> {showAdvanced ? "Ocultar" : "Mostrar"}{" "}
-                  avançado (metadata/Visual Law)
+                  <ArrowLeft size={20} />
                 </button>
-                {showAdvanced && (
-                  <div className="mt-2">
-                    <label className="text-xs text-slate-400">
-                      Metadata (JSON)
-                    </label>
-                    <textarea
-                      value={editorMetadataText}
-                      onChange={(e) => setEditorMetadataText(e.target.value)}
-                      disabled={editorReadOnly}
-                      rows={7}
-                      placeholder='{\n  \"sections\": [{\"title\": \"Dos Fatos\", \"help\": \"Descreva o ocorrido.\"}],\n  \"internalComments\": [\"Verificar pedido de Justiça Gratuita\"]\n}'
-                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500"
-                    />
+                <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Voltar</span>
+              </div>
+
+              <div className="h-px w-8 bg-slate-900" />
+
+              {((isSystem && canEditSystem) || editorAction === "COPY" || (editorAction === "EDIT" && (!isSystem || canEditSystem))) && (
+                <div className="flex flex-col items-center gap-1 group">
+                  <button
+                    onClick={editorAction === "COPY" ? handleSaveAsCopy : handleSaveTemplate}
+                    className="p-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
+                    title="Salvar Alterações (Ctrl+S)"
+                  >
+                    <Save size={20} />
+                  </button>
+                  <span className="text-[9px] font-bold text-indigo-400/70 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Salvar</span>
+                </div>
+              )}
+
+              <div className="flex flex-col items-center gap-1 group mt-auto">
+                <button
+                  onClick={() => setIsHelpOpen(true)}
+                  className="p-3 rounded-xl bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white transition-all shadow-lg border border-slate-800"
+                  title="Ajuda (F1)"
+                >
+                  <BookOpen size={20} />
+                </button>
+                <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Ajuda</span>
+              </div>
+            </aside>
+
+            <div className="flex-1 flex flex-col min-w-0">
+              <div className="flex-1 overflow-hidden p-6 lg:p-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900/20 via-slate-950 to-slate-950">
+                <RichTextEditor
+                  content={editorContent}
+                  onChange={setEditorContent}
+                  readOnly={editorReadOnly}
+                  className="h-full border-slate-800 shadow-2xl max-w-5xl mx-auto"
+                />
+              </div>
+            </div>
+
+            {/* Sidebar de Ferramentas (Direita) */}
+            <aside className={clsx(
+              "flex flex-col border-l border-slate-900 bg-slate-950 transition-all duration-300 overflow-hidden",
+              showEditorConfig ? "w-80 opacity-100" : "w-16 opacity-100"
+            )}>
+              <div className="flex flex-col items-center py-6 gap-6 h-full">
+                <div className="flex flex-col items-center gap-1 group">
+                  <button
+                    onClick={() => setShowEditorConfig(!showEditorConfig)}
+                    className={clsx(
+                      "p-3 rounded-xl transition-all shadow-lg border",
+                      showEditorConfig 
+                        ? "bg-indigo-600 border-indigo-500 text-white" 
+                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                    )}
+                    title="Configurações e Metadados"
+                  >
+                    <Settings2 size={20} />
+                  </button>
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Config</span>
+                </div>
+
+                {showEditorConfig && (
+                  <div className="flex-1 flex flex-col gap-6 px-4 pb-6 overflow-y-auto w-80 animate-in slide-in-from-right-4 duration-300">
+                    <div className="space-y-4">
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                          <Settings2 size={14} /> Informações Base
+                        </div>
+                        
+                        {isSystem && (
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">System Key</label>
+                            <input
+                              value={editorSystemKey}
+                              onChange={(e) => setEditorSystemKey(e.target.value)}
+                              disabled={Boolean(editingTemplate?.id) || !canEditSystem}
+                              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase">Armazenamento</label>
+                          <select
+                            value={editorPreferredStorage}
+                            onChange={(e) => setEditorPreferredStorage(e.target.value as any)}
+                            className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="WORD_ONLINE">Word Online</option>
+                            <option value="GOOGLE_DOCS">Google Docs</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase">Descrição</label>
+                          <textarea
+                            value={editorDescription}
+                            onChange={(e) => setEditorDescription(e.target.value)}
+                            rows={3}
+                            className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                          <TagIcon size={14} /> Categorização
+                        </div>
+                        <InlineTags
+                          tags={editorTags}
+                          onChange={setEditorTags}
+                          readOnly={editorReadOnly}
+                        />
+                      </div>
+
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                          <Sparkles size={14} /> Metadados JSON
+                        </div>
+                        <textarea
+                          value={editorMetadataText}
+                          onChange={(e) => setEditorMetadataText(e.target.value)}
+                          className={clsx(
+                            "w-full mt-1 bg-slate-950 border rounded-lg px-3 py-2 text-[10px] font-mono text-indigo-300 h-32",
+                            metadataPreviewError ? "border-red-500" : "border-slate-800"
+                          )}
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <RichTextEditor
-                value={editorContent}
-                onChange={setEditorContent}
-                showVariables={true}
-                minHeight={960}
-                placeholder="Estruture aqui o modelo da Biblioteca com títulos, subtítulos, cláusulas, assinaturas, tabelas e variáveis dinâmicas."
-                readOnly={editorReadOnly}
-                className={editorReadOnly ? "opacity-95" : undefined}
-              />
-            </div>
+            </aside>
           </div>
         </div>
+      </div>
         <HelpModal
           isOpen={isHelpOpen}
           onClose={() => setIsHelpOpen(false)}
@@ -1283,71 +1126,69 @@ export function Library() {
 
   return (
     <>
-      <div className="p-8 space-y-6 h-full flex flex-col bg-slate-950">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-3">
-            <div>
-              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                <BookOpen className="text-indigo-400" size={32} />
-                Biblioteca de Modelos
-              </h1>
-              <p className="text-slate-400 mt-1">
-                Gerencie minutas, contratos e documentos padrão com busca, grid,
-                tags e configurações do escritório.
-              </p>
+    <div className="p-5 space-y-4 h-full flex flex-col bg-slate-950">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col xl:flex-row xl:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <BookOpen className="text-indigo-400" size={24} />
+              Biblioteca
+            </h1>
+          </div>
+          <div className="flex items-center gap-3 bg-slate-900/40 border border-slate-800/50 rounded-lg px-3 py-1.5 w-fit">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                Modelos:
+              </span>
+              <span className="text-sm font-bold text-white">
+                {templates.length}
+              </span>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 min-w-[140px]">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Modelos
-                </div>
-                <div className="text-xl font-semibold text-white mt-1">
-                  {templates.length}
-                </div>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 min-w-[140px]">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Tags
-                </div>
-                <div className="text-xl font-semibold text-white mt-1">
-                  {availableLibraryTags.length}
-                </div>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 min-w-[140px]">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-                  Historico
-                </div>
-                <div className="text-xl font-semibold text-white mt-1">
-                  {history.length}
-                </div>
-              </div>
+            <div className="w-px h-4 bg-slate-800" />
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                Tags:
+              </span>
+              <span className="text-sm font-bold text-white">
+                {availableLibraryTags.length}
+              </span>
+            </div>
+            <div className="w-px h-4 bg-slate-800" />
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                Histórico:
+              </span>
+              <span className="text-sm font-bold text-white">
+                {history.length}
+              </span>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-3 justify-end">
+          <div className="flex flex-wrap items-center gap-2 justify-end">
             <button
               type="button"
               onClick={() => void refreshCurrentTab()}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-lg border border-slate-800 text-sm font-medium inline-flex items-center gap-2 transition"
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-lg border border-slate-800 text-xs font-medium inline-flex items-center gap-1.5 transition"
             >
               <RefreshCw
-                size={16}
+                size={14}
                 className={clsx(isRefreshing && "animate-spin")}
               />
-              {isRefreshing ? "Atualizando..." : "Atualizar"}
+              {isRefreshing ? "..." : "Atualizar"}
             </button>
             <button
               type="button"
               onClick={() => setIsHelpOpen(true)}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-lg border border-slate-800 text-sm font-medium inline-flex items-center gap-2 transition"
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-lg border border-slate-800 text-xs font-medium inline-flex items-center gap-1.5 transition"
             >
-              <BookOpen size={16} /> Ajuda (F1)
+              <BookOpen size={14} /> Ajuda
             </button>
-            <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+            <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800">
               <button
                 onClick={() => setActiveTab("TEMPLATES")}
                 className={clsx(
-                  "px-4 py-2 text-sm font-medium rounded-md transition",
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition",
                   activeTab === "TEMPLATES"
                     ? "bg-slate-800 text-white shadow-sm"
                     : "text-slate-500 hover:text-white",
@@ -1358,7 +1199,7 @@ export function Library() {
               <button
                 onClick={() => setActiveTab("HISTORY")}
                 className={clsx(
-                  "px-4 py-2 text-sm font-medium rounded-md transition",
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition",
                   activeTab === "HISTORY"
                     ? "bg-slate-800 text-white shadow-sm"
                     : "text-slate-500 hover:text-white",
@@ -1369,13 +1210,13 @@ export function Library() {
               <button
                 onClick={() => setActiveTab("SETTINGS")}
                 className={clsx(
-                  "px-4 py-2 text-sm font-medium rounded-md transition inline-flex items-center gap-2",
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition inline-flex items-center gap-1.5",
                   activeTab === "SETTINGS"
                     ? "bg-slate-800 text-white shadow-sm"
                     : "text-slate-500 hover:text-white",
                 )}
               >
-                <Settings2 size={14} /> Configuracoes
+                <Settings2 size={12} /> Config
               </button>
             </div>
           </div>
@@ -1383,28 +1224,99 @@ export function Library() {
 
         {activeTab !== "SETTINGS" && (
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-            <div className="flex flex-col gap-5 flex-1">
-              {/* Barra de Busca - Linha Dedicada */}
-              <div className="relative w-full group">
-                <Search
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-indigo-400"
-                  size={20}
-                />
-                <input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder={
-                    activeTab === "TEMPLATES"
-                      ? "Buscar por título, descrição ou tags do modelo..."
-                      : "Buscar documentos gerados recentemente..."
-                  }
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-12 pr-4 py-4 text-lg text-white font-medium focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition-all shadow-lg placeholder:text-slate-600 focus:bg-slate-900 focus:border-indigo-500/50"
-                />
+            <div className="flex flex-col gap-3 flex-1">
+              <div className="flex flex-col md:flex-row items-stretch gap-2">
+                <div className="relative flex-1 group">
+                  <Search
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-indigo-400"
+                    size={18}
+                  />
+                  <input
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder={
+                      activeTab === "TEMPLATES"
+                        ? "Buscar por título, descrição ou tags..."
+                        : "Buscar documentos..."
+                    }
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white font-medium focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition-all shadow-lg placeholder:text-slate-600 focus:bg-slate-900 focus:border-indigo-500/50"
+                  />
+                </div>
+                {activeTab === "TEMPLATES" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowTagFilters(!showTagFilters)}
+                      className={clsx(
+                        "px-3 rounded-lg border transition-all flex items-center justify-center gap-2 font-bold text-[11px] min-h-[42px]",
+                        showTagFilters
+                          ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                          : "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:border-slate-700",
+                      )}
+                    >
+                      <Filter size={14} />
+                      <span>Etiquetas</span>
+                      {showTagFilters ? (
+                        <ChevronUp size={12} className="opacity-60" />
+                      ) : (
+                        <ChevronDown size={12} className="opacity-60" />
+                      )}
+                    </button>
+
+                    <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5 min-h-[42px]">
+                      <button
+                        type="button"
+                        onClick={() => setTemplateViewMode("LIST")}
+                        className={clsx(
+                          "px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition text-[11px] font-bold",
+                          templateViewMode === "LIST"
+                            ? "bg-slate-800 text-white shadow-sm"
+                            : "text-slate-500 hover:text-white",
+                        )}
+                        title="Visualização em Grid"
+                      >
+                        <List size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTemplateViewMode("CARDS")}
+                        className={clsx(
+                          "px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 transition text-[11px] font-bold",
+                          templateViewMode === "CARDS"
+                            ? "bg-slate-800 text-white shadow-sm"
+                            : "text-slate-500 hover:text-white",
+                        )}
+                        title="Visualização em Cards"
+                      >
+                        <Grid size={14} />
+                      </button>
+                    </div>
+
+                    {(hasTemplateFilters || selectedTemplateIds.length > 0) && (
+                      <div className="flex items-center gap-2 px-2 bg-slate-900/50 border border-slate-800/50 rounded-lg">
+                         {selectedTemplateIds.length > 0 && (
+                            <span className="text-[10px] font-bold text-indigo-400 whitespace-nowrap">
+                              {selectedTemplateIds.length} sel.
+                            </span>
+                          )}
+                          {hasTemplateFilters && (
+                            <button
+                              type="button"
+                              onClick={handleClearTemplateFilters}
+                              className="p-1.5 rounded-md hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition"
+                              title="Limpar filtros"
+                            >
+                              <RefreshCw size={12} />
+                            </button>
+                          )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
-              {/* Tags de Filtro - Linha Dedicada abaixo da busca */}
-              {activeTab === "TEMPLATES" && (
-                <div className="bg-slate-950/20 p-2 rounded-xl border border-slate-900/50">
+              {activeTab === "TEMPLATES" && showTagFilters && (
+                <div className="bg-slate-900/30 p-3 rounded-xl border border-slate-800/50 animate-in fade-in slide-in-from-top-2 duration-300 shadow-inner">
                   <AdvancedTagFilter
                     entityType="library"
                     includedIds={includedTags}
@@ -1413,55 +1325,12 @@ export function Library() {
                       setIncludedTags(inc);
                       setExcludedTags(exc);
                     }}
-                    className="min-h-[48px]"
+                    className="min-h-[30px]"
                   />
                 </div>
               )}
 
-              {activeTab === "TEMPLATES" && (
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                  <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-1">
-                    <button
-                      type="button"
-                      onClick={() => setTemplateViewMode("LIST")}
-                      className={clsx(
-                        "px-3 py-2 rounded-md inline-flex items-center gap-2 transition",
-                        templateViewMode === "LIST"
-                          ? "bg-slate-800 text-white"
-                          : "text-slate-500 hover:text-white",
-                      )}
-                    >
-                      <List size={14} /> Grid
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTemplateViewMode("CARDS")}
-                      className={clsx(
-                        "px-3 py-2 rounded-md inline-flex items-center gap-2 transition",
-                        templateViewMode === "CARDS"
-                          ? "bg-slate-800 text-white"
-                          : "text-slate-500 hover:text-white",
-                      )}
-                    >
-                      <Grid size={14} /> Cards
-                    </button>
-                  </div>
-                  {selectedTemplateIds.length > 0 && (
-                    <span className="px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-200">
-                      {selectedTemplateIds.length} selecionado(s)
-                    </span>
-                  )}
-                  {hasTemplateFilters && (
-                    <button
-                      type="button"
-                      onClick={handleClearTemplateFilters}
-                      className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition"
-                    >
-                      Limpar filtros
-                    </button>
-                  )}
-                </div>
-              )}
+
             </div>
 
             <div className="flex flex-wrap items-center gap-2 justify-end">
@@ -1470,25 +1339,25 @@ export function Library() {
                   <button
                     type="button"
                     onClick={() => setActiveTab("SETTINGS")}
-                    className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-lg flex items-center gap-2 transition border border-slate-800"
+                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition border border-slate-800"
                   >
-                    <Settings2 size={16} /> Configurar
+                    <Settings2 size={14} /> Configurar
                   </button>
                   {isSuperAdmin && (
                     <button
                       onClick={handleNewSystemTemplate}
-                      className="px-5 py-3 font-medium rounded-lg flex items-center gap-2 transition border shadow-sm hover:brightness-95"
+                      className="px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-2 transition border shadow-sm hover:brightness-95"
                       style={systemActionStyle}
                       title="Criar novo modelo do sistema (SuperAdmin)"
                     >
-                      <Shield size={18} /> Novo Sistema
+                      <Shield size={16} /> Novo Sistema
                     </button>
                   )}
                   <button
                     onClick={handleNewTemplate}
-                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg flex items-center gap-2 transition shadow-lg shadow-indigo-500/20"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition shadow-lg shadow-indigo-500/20"
                   >
-                    <Plus size={20} /> Novo Modelo
+                    <Plus size={18} /> Novo Modelo
                   </button>
                 </>
               )}

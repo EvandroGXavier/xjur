@@ -235,8 +235,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     return (
         <div className={clsx('rich-text-shell flex min-h-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950', className)}>
             <div className="flex min-w-0 flex-1 flex-col">
-                <div className={clsx('sticky top-0 z-10 border-b border-slate-800 bg-slate-950/95 backdrop-blur', readOnly && 'opacity-70')}>
-                    <div className="flex flex-wrap items-end gap-2 px-3 py-3">
+                <div className={clsx('sticky top-0 z-10 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md', readOnly && 'opacity-70')}>
+                    <div className="flex flex-wrap items-end gap-1.5 px-3 py-1.5">
                         <ToolbarSelect label="Bloco" value={currentBlock} onChange={applyBlockStyle} disabled={!editor || readOnly} options={BLOCK_OPTIONS as any} />
                         <ToolbarSelect label="Fonte" value={currentFontFamily} onChange={(fontFamily) => run((currentEditor) => fontFamily ? currentEditor.chain().focus().setFontFamily(fontFamily).run() : currentEditor.chain().focus().unsetFontFamily().run())} disabled={!editor || readOnly} options={[{ value: '', label: 'Padrão do documento' }, ...FONT_FAMILIES.map((font) => ({ value: font, label: font }))]} wide />
                         <ToolbarSelect label="Tamanho" value={currentFontSize} onChange={(fontSize) => run((currentEditor) => fontSize ? currentEditor.chain().focus().setFontSize(`${fontSize}px`).run() : currentEditor.chain().focus().unsetFontSize().run())} disabled={!editor || readOnly} options={[{ value: '', label: 'Auto' }, ...FONT_SIZES.map((size) => ({ value: size, label: `${size}px` }))]} />
@@ -245,7 +245,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
                         <ToolbarColorField label="Destaque" value={currentBackgroundColor} disabled={!editor || readOnly} onChange={(color) => run((currentEditor) => currentEditor.chain().focus().setBackgroundColor(color).run())} onClear={() => run((currentEditor) => currentEditor.chain().focus().unsetBackgroundColor().run())} />
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-900 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-1 border-t border-slate-900/50 px-3 py-1.5">
                         <div className="flex items-center gap-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-1 shadow-inner">
                             <ToolbarButton label="B" title="Negrito" active={Boolean(editor?.isActive('bold'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleBold().run())} />
                             <ToolbarButton label="I" title="Itálico" active={Boolean(editor?.isActive('italic'))} disabled={!editor || readOnly} onClick={() => run((currentEditor) => currentEditor.chain().focus().toggleItalic().run())} />
@@ -380,9 +380,9 @@ function ToolbarButton({ label, title, onClick, active = false, disabled = false
             onMouseDown={(event) => event.preventDefault()}
             onClick={onClick}
             className={clsx(
-                'inline-flex min-h-[36px] items-center justify-center rounded-lg border px-2.5 py-1.5 text-sm font-semibold transition',
-                active ? 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600 hover:text-white',
-                disabled && 'cursor-not-allowed opacity-45 hover:border-slate-700 hover:text-slate-300',
+                'inline-flex min-h-[30px] items-center justify-center rounded-lg border px-2 py-1 text-[11px] font-bold transition',
+                active ? 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100' : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-600 hover:text-white',
+                disabled && 'cursor-not-allowed opacity-30',
             )}
         >
             {label}
@@ -403,7 +403,7 @@ interface ToolbarSelectProps {
 function ToolbarSelect({ label, value, onChange, options, disabled = false, wide = false, resetAfterChange = false }: ToolbarSelectProps) {
     return (
         <label className={clsx('flex flex-col gap-1', wide ? 'min-w-[220px]' : 'min-w-[140px]')}>
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">{label}</span>
             <select
                 value={value}
                 disabled={disabled}
@@ -411,7 +411,7 @@ function ToolbarSelect({ label, value, onChange, options, disabled = false, wide
                     onChange(event.target.value);
                     if (resetAfterChange) event.target.value = '';
                 }}
-                className="h-10 rounded-xl border border-slate-800 bg-slate-900 px-3 text-sm text-white outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-8 rounded-lg border border-slate-800 bg-slate-900/50 px-2 text-[11px] text-white outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 {options.map((option) => (
                     <option key={`${label}-${option.value || 'empty'}`} value={option.value}>
@@ -434,8 +434,8 @@ interface ToolbarColorFieldProps {
 function ToolbarColorField({ label, value, disabled = false, onChange, onClear }: ToolbarColorFieldProps) {
     return (
         <div className="flex min-w-[138px] flex-col gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</span>
-            <div className="flex h-10 items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3">
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">{label}</span>
+            <div className="flex h-8 items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-2">
                 <input type="color" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="h-6 w-7 cursor-pointer rounded border-0 bg-transparent p-0 disabled:cursor-not-allowed" title={`Cor de ${label.toLowerCase()}`} />
                 <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{value.toUpperCase()}</span>
                 <button type="button" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={onClear} className="rounded p-1 text-slate-500 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40" title={`Limpar cor de ${label.toLowerCase()}`}>
