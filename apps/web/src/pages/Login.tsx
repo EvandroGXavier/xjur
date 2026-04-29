@@ -7,6 +7,8 @@ import {
   setDeviceToken,
   setToken,
   setUser,
+  getTrustDevicePreference,
+  setTrustDevicePreference,
   type AuthPersistence,
 } from '../auth/authStorage';
 import { applyThemePreference, getStoredThemePreference, setStoredThemePreference, type ThemePreference } from '../utils/theme';
@@ -52,7 +54,7 @@ export function Login() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [trustDevice, setTrustDevice] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(() => getTrustDevicePreference());
 
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -182,7 +184,11 @@ export function Login() {
                   <input
                     type="checkbox"
                     checked={trustDevice}
-                    onChange={(e) => setTrustDevice(e.target.checked)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setTrustDevice(checked);
+                      setTrustDevicePreference(checked);
+                    }}
                     className="accent-indigo-600"
                   />
                   <span className="flex items-center gap-2">

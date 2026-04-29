@@ -1,6 +1,7 @@
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
 const DEVICE_TOKEN_KEY = 'device_token';
+const TRUST_DEVICE_KEY = 'trust_device_preference';
 
 export type AuthPersistence = 'persistent' | 'session';
 
@@ -63,6 +64,14 @@ export function setDeviceToken(token: string) {
 
 export function clearDeviceToken() {
   localStorage.removeItem(DEVICE_TOKEN_KEY);
+}
+
+export function getTrustDevicePreference(): boolean {
+  return localStorage.getItem(TRUST_DEVICE_KEY) === 'true';
+}
+
+export function setTrustDevicePreference(trust: boolean) {
+  localStorage.setItem(TRUST_DEVICE_KEY, trust.toString());
 }
 
 export function logoutLocal() {

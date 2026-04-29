@@ -217,12 +217,12 @@ export function Layout() {
   const lastModulePersistedRef = useRef<string | null>(null);
 
   useIdleLogout({
-    timeoutMs: 5 * 60 * 1000,
+    timeoutMs: 20 * 60 * 1000,
     onIdle: () => {
       logoutLocal();
       navigate('/login', {
         replace: true,
-        state: { message: 'Sessão encerrada por inatividade (5 minutos).' },
+        state: { message: 'Sessão encerrada por inatividade (20 minutos).' },
       });
     },
   });
