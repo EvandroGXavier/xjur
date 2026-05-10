@@ -463,6 +463,10 @@ model Process {
 
   @@unique([tenantId, code])
   @@unique([tenantId, cnj])
+  // Performance indexes for common filter/sort patterns
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, responsibleLawyer])
   @@map("processes")
 }
 
@@ -554,6 +558,7 @@ model ProcessTimeline {
   createdAt   DateTime @default(now())
 
   // New Fields for DR.X
+  externalKey         String? // Chave de deduplicação para imports externos (CNJ/PDF). Ex: "DATAJUD::1234567-00.2020::código"
   displayId           String? // Evento/ID original do tribunal
   internalSequence    Int? // Sequência 1, 2, 3 do DR.X
   origin              String? // TRIBUNAL_PJE, TRIBUNAL_EPROC, INTERNO, IA
@@ -587,7 +592,11 @@ model ProcessTimeline {
   workflowStep   WorkflowStep?        @relation(fields: [workflowStepId], references: [id], onDelete: SetNull)
   tags           ProcessTimelineTag[]
 
+  @@unique([processId, externalKey])   // Garante deduplicação de imports no banco — substitui a lógica em memória
   @@index([processId, date])
+  @@index([processId, status])
+  @@index([processId, source])
+  @@index([externalKey])
   @@index([workflowStepId])
   @@map("process_timelines")
 }
