@@ -70,7 +70,13 @@ export function HelpModal({ isOpen, onClose, title, sections }: HelpModalProps) 
           <div className="mt-8 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-start gap-3">
             <AlertCircle className="text-blue-400 shrink-0 mt-0.5" size={18} />
             <p className="text-sm text-blue-200">
-              <strong>Dica de Atalho:</strong> Pressione <kbd className="bg-slate-700 px-1.5 py-0.5 rounded text-xs text-white border border-slate-600">F1</kbd> em qualquer tela para abrir o manual correspondente a ela.
+              <strong>Dica de Atalho:</strong> Pressione{' '}
+              <kbd className="bg-slate-700 px-1.5 py-0.5 rounded text-xs text-white border border-slate-600">F1</kbd>
+              {' '}ou{' '}
+              <kbd className="bg-slate-700 px-1.5 py-0.5 rounded text-xs text-white border border-slate-600">Ctrl</kbd>
+              {' + '}
+              <kbd className="bg-slate-700 px-1.5 py-0.5 rounded text-xs text-white border border-slate-600">F1</kbd>
+              {' '}em qualquer tela para abrir o manual do módulo atual.
             </p>
           </div>
         </div>
@@ -79,13 +85,13 @@ export function HelpModal({ isOpen, onClose, title, sections }: HelpModalProps) 
   );
 }
 
-// Hook Reutilizável para interceptar o F1
+// Hook Reutilizável para interceptar F1 e CTRL+F1
 export function useHelpModal() {
   const [isHelpOpen, setIsHelpOpen] = React.useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Previne que o F1 padrão do browser abra
+      // F1 simples ou CTRL+F1 — ambos abrem a ajuda do módulo atual
       if (e.key === 'F1') {
         e.preventDefault();
         e.stopPropagation();
