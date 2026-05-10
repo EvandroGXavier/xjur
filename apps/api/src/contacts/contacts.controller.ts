@@ -95,6 +95,9 @@ export class ContactsController {
     @Query('companyName') companyName?: string,
     @Query('stateRegistration') stateRegistration?: string,
     @Query('birthMonth') birthMonth?: string,
+    // Pagination
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
     // Address Filters
     @Query('city') city?: string,
     @Query('state') state?: string,
@@ -142,6 +145,10 @@ export class ContactsController {
         address: { city, state, district, zipCode, street },
         additionalContact: { value: additionalValue, name: additionalName },
         contract: { description: contractDescription, counterparty: contractCounterparty },
+      },
+      {
+        page: page ? Math.max(1, parseInt(page, 10)) : 1,
+        limit: limit ? Math.min(200, Math.max(1, parseInt(limit, 10))) : 50,
       },
     );
   }

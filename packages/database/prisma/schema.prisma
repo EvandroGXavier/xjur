@@ -223,6 +223,11 @@ model Contact {
   @@index([whatsappFullId])
   @@index([personType])
   @@index([category])
+  // Índices compostos com tenantId para filtros do findAll (adicionados 2026-05-10)
+  @@index([tenantId, createdAt(sort: Desc)]) // Ordenação padrão da grid
+  @@index([tenantId, active])               // Filtro de ativos/inativos
+  @@index([tenantId, personType])           // Filtro PF/PJ
+  @@index([tenantId, name])                 // Busca por nome
   @@map("contacts")
 }
 
