@@ -2350,6 +2350,7 @@ export class ProcessesService {
         updatedFrom?: string,
         updatedTo?: string,
     }) {
+        console.log(`[ProcessesService.findAll] Chamado - TenantId: ${params.tenantId}, Status: ${params.status}, Search: ${params.search}`);
         if (!params.tenantId) {
             throw new BadRequestException('Tenant ID is required');
         }
