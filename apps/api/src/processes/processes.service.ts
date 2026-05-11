@@ -9,127 +9,14 @@ import { DrxClawService } from '../drx-claw/drx-claw.service';
 import { PROCESS_PDF_SKILL_ID } from '../drx-claw/drx-skill.constants';
 import { ProcessTimelinesService } from './process-timelines.service';
 import { buildAdvancedProcessWhere } from './process-advanced-filter';
-
-interface CreateProcessDto {
-    tenantId?: string;
-    contactId?: string;
-    cnj?: string;
-    category: 'JUDICIAL' | 'EXTRAJUDICIAL' | 'ADMINISTRATIVO';
-    title?: string;
-    code?: string;
-    description?: string;
-    folder?: string;
-    localFolder?: string;
-    subject?: string;
-    value?: number | string;
-    status?: string;
-    court?: string;
-    courtSystem?: string;
-    vars?: string;
-    district?: string;
-    area?: string;
-    class?: string;
-    distributionDate?: string | Date;
-    judge?: string;
-    responsibleLawyer?: string;
-    parties?: any;
-    metadata?: any;
-    workflowId?: string;
-}
-
-interface ImportedProcessPartyInput {
-    name: string;
-    type?: string;
-    document?: string | null;
-    rg?: string | null;
-    birthDate?: string | null;
-    motherName?: string | null;
-    fatherName?: string | null;
-    profession?: string | null;
-    nationality?: string | null;
-    civilStatus?: string | null;
-    address?: string | null;
-    qualificationText?: string | null;
-    phone?: string | null;
-    email?: string | null;
-    oab?: string | null;
-    representedNames?: string[] | null;
-    isClient?: boolean;
-    isOpposing?: boolean;
-}
-
-interface ImportedPartySyncRef {
-    id: string;
-    contactId: string;
-    roleName: string;
-    normalizedName: string;
-    normalizedDocument?: string | null;
-    representedNames: string[];
-    pole: 'ACTIVE' | 'PASSIVE' | null;
-    isClient: boolean;
-    isOpposing: boolean;
-}
-
-type TimelineImportReasonCode =
-    | 'READY'
-    | 'PROCESS_NOT_FOUND'
-    | 'PROCESS_NOT_JUDICIAL'
-    | 'CNJ_MISSING'
-    | 'CNJ_INVALID'
-    | 'DATAJUD_DISABLED'
-    | 'API_KEY_MISSING'
-    | 'PROCESS_UNDER_SEAL'
-    | 'PROCESS_NOT_FOUND_AT_CNJ'
-    | 'CNJ_UNAVAILABLE';
-
-type TimelineImportStatus = {
-    canImport: boolean;
-    reasonCode: TimelineImportReasonCode;
-    message: string;
-    actionLabel: string;
-    checkedAt: string;
-    cnj: string | null;
-    totalAvailableCount: number;
-    importedTimelineCount: number;
-    newMovementCount: number;
-    lastSourceUpdateAt: string | null;
-    sourceSystem: string | null;
-    sourceCourt: string | null;
-    isProcessSaved: boolean;
-};
-
-type PdfDossierImportResult = {
-    success: boolean;
-    processId: string;
-    originalFileName: string | null;
-    importedCount: number;
-    skippedCount: number;
-    totalCandidateCount: number;
-    deadlineCount: number;
-    explicitFatalDateCount: number;
-    cnjMovementCount: number;
-    cnjImportStatus: TimelineImportStatus | null;
-    drxSummary: {
-        mode: string | null;
-        provider: string | null;
-        model: string | null;
-        answer: string | null;
-        error: string | null;
-        matchedSkills: Array<{
-            id: string;
-            name: string;
-        }>;
-    };
-    analysis: {
-        cnj: string | undefined;
-        pageCount: number;
-        textLength: number;
-        ocrStatus: string;
-        documentCount: number;
-        proceduralActCount: number;
-    };
-    message: string;
-};
+import { CreateProcessDto } from './dto/create-process.dto';
+import type {
+    ImportedProcessPartyInput,
+    ImportedPartySyncRef,
+    TimelineImportReasonCode,
+    TimelineImportStatus,
+    PdfDossierImportResult,
+} from './dto/process-types';
 
 @Injectable()
 export class ProcessesService {
@@ -204,6 +91,7 @@ export class ProcessesService {
         return !!exists;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private normalizeText(value?: string | null) {
         return String(value || '')
             .normalize('NFD')
@@ -212,16 +100,19 @@ export class ProcessesService {
             .toUpperCase();
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private normalizeDocument(value?: string | null) {
         const digits = String(value || '').replace(/\D/g, '');
         return digits || null;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private normalizeCnj(value?: string | null) {
         const digits = String(value || '').replace(/\D/g, '');
         return digits || null;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private normalizeLifecycleStatus(value?: string | null, fallback = 'ATIVO') {
         const normalized = this.normalizeText(value).replace(/[\s-]+/g, '_');
         const statusMap: Record<string, string> = {
@@ -265,6 +156,7 @@ export class ProcessesService {
         return metadata;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private isLawyerRole(roleName?: string | null) {
         const normalized = this.normalizeText(roleName);
         return ['ADVOGADO', 'PROCURADOR', 'DEFENSOR'].some(term => normalized.includes(term));
@@ -359,6 +251,7 @@ export class ProcessesService {
         };
     }
 
+    // TODO: delegado para ProcessCnjImportService
     private mapTimelineImportReason(code: TimelineImportReasonCode) {
         const messages: Record<TimelineImportReasonCode, string> = {
             READY: 'Consulta CNJ liberada para importar os andamentos do processo.',
@@ -376,6 +269,7 @@ export class ProcessesService {
         return messages[code];
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private buildImportedTimelineKey(processCnj: string, movement: any) {
         const normalizedCnj = this.normalizeCnj(processCnj) || 'SEM_CNJ';
         const movementDate = String(movement?.dataHora || '').trim();
@@ -410,6 +304,7 @@ export class ProcessesService {
         ].join('::');
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private getExistingTimelineKey(processCnj: string, timeline: any) {
         const metadata = timeline?.metadata && typeof timeline.metadata === 'object'
             ? timeline.metadata
@@ -428,6 +323,7 @@ export class ProcessesService {
         });
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private buildMovementTimelineDescription(movement: any) {
         const details: string[] = [];
         const orgaoNome = String(movement?.orgaoJulgador?.nome || '').trim();
@@ -465,12 +361,14 @@ export class ProcessesService {
         return details.join('\n');
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private inferTimelineOrigin(systemName?: string | null) {
         const normalized = this.normalizeText(systemName);
         if (normalized.includes('EPROC')) return 'TRIBUNAL_EPROC';
         return 'TRIBUNAL_PJE';
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private resolvePdfImportSource(analysis?: Partial<FullProcessPdfAnalysis> | null) {
         const importSource = String(analysis?.importSource || '').trim();
         if (importSource) return importSource;
@@ -481,6 +379,7 @@ export class ProcessesService {
         return 'TRIBUNAL_PROCESS_PDF';
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private buildPdfImportedTimelineKey(processCnj: string | null, document: PdfProcessDocument, analysis?: Partial<FullProcessPdfAnalysis> | null) {
         const normalizedCnj = this.normalizeCnj(processCnj) || 'SEM_CNJ';
         const importSource = this.resolvePdfImportSource(analysis);
@@ -502,6 +401,7 @@ export class ProcessesService {
         return `${importSource}::${normalizedCnj}::${signedAt}::${docType}::${label}`;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private buildPdfTimelineTitle(document: PdfProcessDocument) {
         const type = String(document?.documentType || '').trim();
         if (type) return type;
@@ -512,6 +412,7 @@ export class ProcessesService {
         return label.length > 120 ? `${label.slice(0, 117)}...` : label;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private buildPdfTimelineDescription(document: PdfProcessDocument) {
         const sections: string[] = [];
         const content = String(document?.contentText || '').trim();
@@ -596,6 +497,7 @@ export class ProcessesService {
         return `${referenceType} ${referenceValue}${document?.referenceCode ? ` (${document.referenceCode})` : ''}`;
     }
 
+    // TODO: delegado para ProcessCnjImportService
     private async getOptionalCnjTimelineStatus(id: string, tenantId: string) {
         try {
             return await this.getCnjTimelineImportStatus(id, tenantId);
@@ -604,6 +506,7 @@ export class ProcessesService {
         }
     }
 
+    // TODO: delegado para ProcessPdfImportService
     private async buildPdfDrxSummary(tenantId: string, process: { title?: string | null; cnj?: string | null }, analysis: FullProcessPdfAnalysis, cnjStatus: TimelineImportStatus | null) {
         try {
             const openItems = this.resolvePdfTimelineCandidates(analysis)
@@ -677,6 +580,7 @@ export class ProcessesService {
         }
     }
 
+    // TODO: delegado para ProcessCnjImportService
     private buildTimelineImportActionLabel(status: {
         canImport: boolean;
         newMovementCount: number;
@@ -697,6 +601,7 @@ export class ProcessesService {
         return 'Buscar andamentos no CNJ';
     }
 
+    // TODO: delegado para ProcessCnjImportService
     private buildBlockedTimelineImportStatus(
         cnj: string | null,
         importedTimelineCount: number,
@@ -719,7 +624,8 @@ export class ProcessesService {
         };
     }
 
-    private async getTimelineImportProcessContext(id: string, tenantId: string) {
+    /** Busca apenas os dados do processo necessários para importação. Não carrega timelines. */
+    private async getProcessForImport(id: string, tenantId: string) {
         const process = await this.prisma.process.findFirst({
             where: { id, tenantId },
             select: {
@@ -739,6 +645,40 @@ export class ProcessesService {
             throw new NotFoundException(`Processo nao encontrado (ID: ${id})`);
         }
 
+        return process;
+    }
+
+    /** Conta timelines importadas do DataJud usando COUNT no banco — sem carregar registros em memória. */
+    private async getImportedTimelineCount(processId: string): Promise<number> {
+        return this.prisma.processTimeline.count({
+            where: {
+                processId,
+                metadata: {
+                    path: ['importSource'],
+                    equals: 'DATAJUD',
+                },
+            },
+        });
+    }
+
+    /** Carrega apenas os campos necessários para construir o Set de chaves de deduplicação. */
+    private async getExistingTimelineKeySet(processId: string, cnj: string): Promise<Set<string>> {
+        const timelines = await this.prisma.processTimeline.findMany({
+            where: { processId },
+            select: {
+                id: true,
+                title: true,
+                date: true,
+                displayId: true,
+                metadata: true,
+            },
+        });
+        return new Set(timelines.map((item) => this.getExistingTimelineKey(cnj, item)));
+    }
+
+    /** @deprecated Use getProcessForImport() + getImportedTimelineCount() + getExistingTimelineKeySet() separadamente. */
+    private async getTimelineImportProcessContext(id: string, tenantId: string) {
+        const process = await this.getProcessForImport(id, tenantId);
         const existingTimelines = await this.prisma.processTimeline.findMany({
             where: { processId: id },
             select: {
@@ -749,23 +689,15 @@ export class ProcessesService {
                 metadata: true,
             },
         });
-
         return { process, existingTimelines };
     }
 
     async getCnjTimelineImportStatus(id: string, tenantId: string): Promise<TimelineImportStatus> {
-        const { process, existingTimelines } = await this.getTimelineImportProcessContext(id, tenantId);
+        const process = await this.getProcessForImport(id, tenantId);
         const normalizedCnj = this.normalizeCnj(process.cnj);
-        const importedTimelineCount = existingTimelines.filter((item) => {
-            const metadata =
-                item?.metadata &&
-                typeof item.metadata === 'object' &&
-                !Array.isArray(item.metadata)
-                    ? (item.metadata as Record<string, any>)
-                    : {};
 
-            return metadata.importSource === 'DATAJUD';
-        }).length;
+        // COUNT no banco — zero carregamento de registros em memória para este check
+        const importedTimelineCount = await this.getImportedTimelineCount(id);
 
         if (process.category !== 'JUDICIAL') {
             return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'PROCESS_NOT_JUDICIAL');
@@ -800,9 +732,8 @@ export class ProcessesService {
                 return this.buildBlockedTimelineImportStatus(normalizedCnj, importedTimelineCount, 'PROCESS_UNDER_SEAL');
             }
 
-            const existingKeys = new Set(
-                existingTimelines.map((item) => this.getExistingTimelineKey(normalizedCnj, item)),
-            );
+            // Carrega chaves apenas quando há movimentos a comparar
+            const existingKeys = await this.getExistingTimelineKeySet(id, normalizedCnj);
             const newMovementCount = rawMovements.filter(
                 (movement: any) => !existingKeys.has(this.buildImportedTimelineKey(normalizedCnj, movement)),
             ).length;
@@ -841,7 +772,8 @@ export class ProcessesService {
     }
 
     async importCnjTimelines(id: string, tenantId: string) {
-        const { process, existingTimelines } = await this.getTimelineImportProcessContext(id, tenantId);
+        // Valida processo e CNJ sem carregar timelines ainda
+        const process = await this.getProcessForImport(id, tenantId);
         const normalizedCnj = this.normalizeCnj(process.cnj);
 
         if (!normalizedCnj || normalizedCnj.length !== 20) {
@@ -858,28 +790,25 @@ export class ProcessesService {
             ? imported.metadata.raw
             : {};
         const rawMovements = Array.isArray(raw?.movimentos) ? raw.movimentos : [];
-        const existingKeys = new Set(
-            existingTimelines.map((item) => this.getExistingTimelineKey(normalizedCnj, item)),
-        );
+
+        // Carrega chaves de deduplicação somente quando há movimentos a processar
+        const existingKeys = rawMovements.length > 0
+            ? await this.getExistingTimelineKeySet(id, normalizedCnj)
+            : new Set<string>();
+
         const timelineOrigin = this.inferTimelineOrigin(
             String(raw?.sistema?.nome || imported?.courtSystem || process.courtSystem || ''),
         );
         const nowIso = new Date().toISOString();
 
-        const newTimelineEntries = rawMovements
+        // Mapeia todos os movimentos para payload — inclui o campo externalKey como coluna
+        // O banco garante a deduplicação via @@unique([processId, externalKey]) + skipDuplicates
+        const allTimelineEntries = rawMovements
             .slice()
             .sort((a: any, b: any) => {
                 const left = new Date(String(a?.dataHora || '')).getTime();
                 const right = new Date(String(b?.dataHora || '')).getTime();
                 return left - right;
-            })
-            .filter((movement: any) => {
-                const key = this.buildImportedTimelineKey(normalizedCnj, movement);
-                if (existingKeys.has(key)) {
-                    return false;
-                }
-                existingKeys.add(key);
-                return true;
             })
             .map((movement: any) => {
                 const externalKey = this.buildImportedTimelineKey(normalizedCnj, movement);
@@ -887,6 +816,7 @@ export class ProcessesService {
 
                 return {
                     processId: id,
+                    externalKey,                   // coluna para deduplicação via constraint @@unique
                     title: String(movement?.nome || 'Movimento CNJ').trim() || 'Movimento CNJ',
                     description: this.buildMovementTimelineDescription(movement),
                     date: eventDate,
@@ -914,11 +844,12 @@ export class ProcessesService {
                 };
             });
 
-        if (newTimelineEntries.length > 0) {
-            await this.prisma.processTimeline.createMany({
-                data: newTimelineEntries,
-            });
-        }
+        // skipDuplicates delega a deduplicação ao banco — sem filtro em memória
+        const createResult = await this.prisma.processTimeline.createMany({
+            data: allTimelineEntries,
+            skipDuplicates: true,
+        });
+        const newTimelineEntries = { length: createResult.count };
 
         const currentMetadata =
             process.metadata && typeof process.metadata === 'object' && !Array.isArray(process.metadata)
@@ -961,6 +892,7 @@ export class ProcessesService {
         };
     }
 
+    // TODO: delegado para ProcessPdfImportService
     private async upsertProcessFromPdfAnalysis(
         tenantId: string,
         analysis: FullProcessPdfAnalysis,
@@ -1061,6 +993,7 @@ export class ProcessesService {
         };
     }
 
+    // TODO: delegado para ProcessPdfImportService
     private async upsertPdfDrxGuidanceTimeline(
         processId: string,
         process: { responsibleLawyer?: string | null },
@@ -1128,6 +1061,7 @@ export class ProcessesService {
         });
     }
 
+    // TODO: delegado para ProcessPdfImportService
     private async importProcessPdfDossierFromAnalysis(
         id: string,
         tenantId: string,
@@ -1297,6 +1231,7 @@ export class ProcessesService {
         };
     }
 
+    // TODO: delegado para ProcessPdfImportService (via ProcessImportOrchestrationService)
     async importProcessPdfAndUpsertProcess(
         tenantId: string,
         fileBuffer: Buffer,
@@ -1318,6 +1253,7 @@ export class ProcessesService {
         };
     }
 
+    // TODO: delegado para ProcessPdfImportService (via ProcessImportOrchestrationService)
     async importProcessPdfDossier(
         id: string,
         tenantId: string,
@@ -1328,6 +1264,7 @@ export class ProcessesService {
         return this.importProcessPdfDossierFromAnalysis(id, tenantId, analysis, originalFileName);
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private parseDate(value: any) {
         if (!value) return undefined;
         if (value instanceof Date) {
@@ -1355,6 +1292,7 @@ export class ProcessesService {
         return undefined;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private parseMoneyValue(value: any) {
         if (value === undefined || value === null || value === '') {
             return undefined;
@@ -1372,6 +1310,7 @@ export class ProcessesService {
         return Number.isNaN(parsed) ? undefined : parsed;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private isInformativeJudgeName(value?: string | null) {
         const normalized = this.normalizeText(value);
         return Boolean(
@@ -1386,6 +1325,7 @@ export class ProcessesService {
         );
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private normalizeImportedRole(rawType?: string | null) {
         const normalized = this.normalizeText(rawType);
         if (!normalized) return 'TERCEIRO';
@@ -2137,6 +2077,7 @@ export class ProcessesService {
         return newTenant.id;
     }
 
+    // TODO: delegado para ProcessNormalizationService
     private cleanOptionalText(value?: string | null) {
         if (typeof value !== 'string') return undefined;
         const trimmed = value.trim();
@@ -2244,43 +2185,53 @@ export class ProcessesService {
                 };
 
                 try {
-                    const process =
-                        data.category === 'JUDICIAL' && data.cnj
-                            ? await this.prisma.process.upsert({
-                                where: {
-                                    tenantId_cnj: {
-                                        tenantId,
-                                        cnj: processData.cnj!,
+                    // TAREFA 5: passos 1-4 envolvidos em transação atômica.
+                    // syncMicrosoftFolder (passo 5) fica FORA da transação por ser I/O externo.
+                    // NOTA: createSystemTimeline e triggerNextWorkflowSteps não aceitam `tx` ainda;
+                    // por isso a transação cobre apenas o upsert/create do processo.
+                    // Os outros passos são executados em sequência logo após a transação.
+                    const process = await this.prisma.$transaction(async (tx) => {
+                        const savedProcess =
+                            data.category === 'JUDICIAL' && data.cnj
+                                ? await tx.process.upsert({
+                                    where: {
+                                        tenantId_cnj: {
+                                            tenantId,
+                                            cnj: processData.cnj!,
+                                        },
                                     },
-                                },
-                                update: {
-                                    cnj: processData.cnj,
-                                    category: processData.category,
-                                    title: processData.title,
-                                    code: processData.code,
-                                    description: processData.description,
-                                    folder: processData.folder,
-                                    localFolder: processData.localFolder,
-                                    court: processData.court,
-                                    courtSystem: processData.courtSystem,
-                                    vars: processData.vars,
-                                    district: processData.district,
-                                    status: processData.status,
-                                    area: processData.area,
-                                    subject: processData.subject,
-                                    class: processData.class,
-                                    distributionDate: processData.distributionDate,
-                                    judge: processData.judge,
-                                    value: processData.value,
-                                    metadata: processData.metadata,
-                                },
-                                create: processData,
-                            })
-                            : await this.prisma.process.create({
-                                data: processData,
-                            });
+                                    update: {
+                                        cnj: processData.cnj,
+                                        category: processData.category,
+                                        title: processData.title,
+                                        code: processData.code,
+                                        description: processData.description,
+                                        folder: processData.folder,
+                                        localFolder: processData.localFolder,
+                                        court: processData.court,
+                                        courtSystem: processData.courtSystem,
+                                        vars: processData.vars,
+                                        district: processData.district,
+                                        status: processData.status,
+                                        area: processData.area,
+                                        subject: processData.subject,
+                                        class: processData.class,
+                                        distributionDate: processData.distributionDate,
+                                        judge: processData.judge,
+                                        value: processData.value,
+                                        metadata: processData.metadata,
+                                    },
+                                    create: processData,
+                                })
+                                : await tx.process.create({
+                                    data: processData,
+                                });
+
+                        return savedProcess;
+                    });
 
         // Registrar andamento automático de criação
+        // (fora da transação: createSystemTimeline e triggerNextWorkflowSteps não aceitam tx ainda)
         await this.timelineService.createSystemTimeline(
             process.id,
             'Abertura do Processo',
@@ -2309,6 +2260,7 @@ export class ProcessesService {
                 );
             }
 
+            // Passo 5: syncMicrosoftFolder fica FORA da transação (I/O externo)
             await this.syncMicrosoftFolder(tenantId, process.id);
             return this.findOne(process.id, tenantId);
                 } catch (error: any) {
@@ -2349,12 +2301,17 @@ export class ProcessesService {
         advancedFilter?: string,
         updatedFrom?: string,
         updatedTo?: string,
+        page?: number,
+        limit?: number,
     }) {
         console.log(`[ProcessesService.findAll] Chamado - TenantId: ${params.tenantId}, Status: ${params.status}, Search: ${params.search}`);
         if (!params.tenantId) {
             throw new BadRequestException('Tenant ID is required');
         }
         const { tenantId, search, includedTags, excludedTags, status, advancedFilter, updatedFrom, updatedTo } = params;
+        const page = Math.max(1, params.page ?? 1);
+        const limit = Math.min(200, Math.max(1, params.limit ?? 50));
+        const skip = (page - 1) * limit;
 
         const where: any = { tenantId };
 
@@ -2459,40 +2416,53 @@ export class ProcessesService {
             }
         }
 
-        const rawProcesses = await this.prisma.process.findMany({
-            where,
-            include: {
-                tags: { include: { tag: true } },
-                processParties: {
-                    include: {
-                        contact: {
-                            select: {
-                                id: true,
-                                name: true,
-                                email: true,
-                                phone: true,
-                                whatsapp: true,
+        const [rawProcesses, total] = await Promise.all([
+            this.prisma.process.findMany({
+                where,
+                include: {
+                    tags: { include: { tag: true } },
+                    processParties: {
+                        include: {
+                            contact: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    email: true,
+                                    phone: true,
+                                    whatsapp: true,
+                                },
                             },
+                            role: true,
+                            qualification: true,
                         },
-                        role: true,
-                        qualification: true,
+                    },
+                    timeline: {
+                        orderBy: { date: 'desc' },
+                        take: 1,
                     },
                 },
-                timeline: {
-                    orderBy: { date: 'desc' },
-                    take: 1,
-                },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.process.count({ where }),
+        ]);
 
-        return rawProcesses.map(p => {
-            const clientParty = p.processParties.find(cp => cp.isClient) || p.processParties[0];
-            return {
-                ...p,
-                client: clientParty?.contact?.name || 'S/ CLIENTE',
-            };
-        });
+        return {
+            data: rawProcesses.map(p => {
+                const clientParty = p.processParties.find(cp => cp.isClient) || p.processParties[0];
+                return {
+                    ...p,
+                    client: clientParty?.contact?.name || 'S/ CLIENTE',
+                };
+            }),
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 
     async findOne(id: string, tenantId: string) {

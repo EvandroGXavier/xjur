@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
-    Plus, 
-    List, 
-    Search, 
-    Filter, 
+    Plus,
+    List,
+    Search,
+    Filter,
     Kanban,
     FileText,
     Gavel,
@@ -14,6 +14,7 @@ import {
     Trash,
     ExternalLink,
     Settings,
+    HelpCircle,
     MessageCircle,
     Phone as PhoneIcon,
     Mail,
@@ -256,21 +257,28 @@ export function ProcessList() {
                     </h1>
                     <p className="text-slate-400 mt-1">Gerencie a esteira jurídica, prazos e andamentos do escritório.</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-center">
                     <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1">
                         <button onClick={() => setViewMode('KANBAN')} className={clsx("p-2 rounded-md transition-all", viewMode === 'KANBAN' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-white")} title="Visualização Kanban"><Kanban size={18} /></button>
                         <button onClick={() => setViewMode('LIST')} className={clsx("p-2 rounded-md transition-all", viewMode === 'LIST' ? "bg-slate-800 text-white shadow-sm" : "text-slate-500 hover:text-white")} title="Visualização em Lista"><List size={18} /></button>
                     </div>
+                    <button
+                        onClick={() => setIsHelpOpen(true)}
+                        className="flex items-center gap-1.5 h-9 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg font-medium transition border border-slate-700 text-sm"
+                        title="Ajuda (Ctrl+F1 ou F1)"
+                    >
+                        <HelpCircle size={15} /> Ajuda
+                    </button>
                     <button onClick={() => navigate('/processes/new')} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 whitespace-nowrap"><Plus size={20} /> Novo Processo</button>
-                    <button 
-                        onClick={() => navigate('/processes/config', { 
-                            state: { 
-                                filters: { 
-                                    search: searchTerm 
-                                } 
-                            } 
-                        })} 
-                        className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition" 
+                    <button
+                        onClick={() => navigate('/processes/config', {
+                            state: {
+                                filters: {
+                                    search: searchTerm
+                                }
+                            }
+                        })}
+                        className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition"
                         title="Configurações de Processos"
                     >
                         <Settings size={20} />

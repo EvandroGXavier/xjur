@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma.service';
 import { EnrichmentService } from './enrichment.service';
+import { ContactNormalizationService } from './contact-normalization.service';
+import { ContactDeduplicationService } from './contact-deduplication.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
@@ -18,6 +20,8 @@ export class ContactsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly enrichmentService: EnrichmentService,
+    private readonly normalization: ContactNormalizationService,
+    private readonly deduplication: ContactDeduplicationService,
     @Inject(forwardRef(() => WhatsappService))
     private readonly whatsappService: WhatsappService,
   ) {}
@@ -136,10 +140,12 @@ export class ContactsService {
     }
   }
 
+  // TODO: delegado para ContactNormalizationService
   private normalizeDigits(value?: string | null) {
-    return (value || '').replace(/\D/g, '');
+    return this.normalization.normalizeDigits(value);
   }
 
+  // TODO: delegado para ContactNormalizationService
   private isValidCpf(value?: string | null) {
     const digits = this.normalizeDigits(value);
     if (!digits || digits.length !== 11) return false;
@@ -178,8 +184,9 @@ export class ContactsService {
     return digits.endsWith(`${d1}${d2}`);
   }
 
+  // TODO: delegado para ContactNormalizationService
   private normalizeText(value?: string | null) {
-    return (value || '').trim().toLowerCase();
+    return this.normalization.normalizeText(value);
   }
 
   private parseContactMetadata(metadata: any) {
@@ -233,8 +240,9 @@ export class ContactsService {
     await this.validateCoreContactInfo(tenantId, data);
 
     const whatsappE164 = this.normalizeDigits(data.whatsapp) || undefined;
-    
-    const duplicate = await this.findDuplicateContact(tenantId, { ...data, whatsappE164 });
+
+    // TODO: delegado para ContactDeduplicationService
+    const duplicate = await this.deduplication.findDuplicate(tenantId, { ...data, whatsappE164 });
     if (duplicate) {
       throw new ConflictException(`Já existe um contato cadastrado (${duplicate.name}) com este ${duplicate.matchedField}.`);
     }
@@ -355,9 +363,9 @@ export class ContactsService {
   }
 
   async findAll(
-    tenantId: string, 
-    search?: string, 
-    includedTags?: string, 
+    tenantId: string,
+    search?: string,
+    includedTags?: string,
     excludedTags?: string,
     active?: string,
     birthDateStart?: string,
@@ -388,7 +396,8 @@ export class ContactsService {
       address?: { city?: string; state?: string; district?: string; zipCode?: string; street?: string };
       additionalContact?: { value?: string; name?: string };
       contract?: { description?: string; counterparty?: string };
-    }
+    },
+    pagination?: { page: number; limit: number }
   ) {
     const where: any = { tenantId };
 
@@ -521,25 +530,35 @@ export class ContactsService {
        }
     }
 
-    const contacts = await this.prisma.contact.findMany({
-      where,
-      include: {
-        pfDetails: true,
-        pjDetails: true,
-        tags: {
-          include: {
-            tag: true
-          }
-        },
-        addresses: true,
-        additionalContacts: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const page = pagination?.page ?? 1;
+    const limit = pagination?.limit ?? 50;
+    const skip = (page - 1) * limit;
 
-    return contacts.map(c => this.flattenContact(c));
+    const [contacts, total] = await this.prisma.$transaction([
+      this.prisma.contact.findMany({
+        where,
+        include: {
+          pfDetails: { select: { cpf: true, birthDate: true, rg: true, profession: true } },
+          pjDetails: { select: { cnpj: true, companyName: true } },
+          tags: { include: { tag: true } },
+          // Não inclui addresses/additionalContacts na listagem — apenas no findOne
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.contact.count({ where }),
+    ]);
+
+    return {
+      data: contacts.map(c => this.flattenContact(c)),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: string, tenantId: string) {
@@ -600,7 +619,8 @@ export class ContactsService {
       }
     }
 
-    const duplicate = await this.findDuplicateContact(tenantId, fieldsWithNewUniqueValues, id);
+    // TODO: delegado para ContactDeduplicationService
+    const duplicate = await this.deduplication.findDuplicate(tenantId, fieldsWithNewUniqueValues, id);
     if (duplicate) {
       throw new ConflictException(`Já existe um contato cadastrado (${duplicate.name}) com este ${duplicate.matchedField}.`);
     }

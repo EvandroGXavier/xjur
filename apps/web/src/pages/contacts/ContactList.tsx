@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
-import { 
+import {
     Search, Plus, Filter, Users,
     Building2, Clock, HelpCircle, LayoutGrid, List,
     Target,
@@ -8,6 +8,7 @@ import {
     Phone,
     MessageSquare,
     ChevronRight,
+    ChevronLeft,
     User,
     Trash2,
     CheckCircle2,
@@ -28,7 +29,8 @@ import { DataGrid } from '../../components/ui/DataGrid';
 import { AdvancedTagFilter } from '../../components/ui/AdvancedTagFilter';
 import { InlineTags } from '../../components/ui/InlineTags';
 import { HelpModal, useHelpModal } from '../../components/HelpModal';
-import { helpContacts, helpSigilo } from '../../data/helpManuals';
+import { helpContacts } from '../../data/helpContacts';
+import { helpSigilo } from '../../data/helpManuals';
 import { getUser } from '../../auth/authStorage';
 import { clsx } from 'clsx';
 import { useHotkeys } from '../../hooks/useHotkeys';
@@ -88,6 +90,10 @@ export function ContactList() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCardFilter, setActiveCardFilter] = useState<CardFilter>('ALL');
+  const [page, setPage] = useState(1);
+  const [totalContacts, setTotalContacts] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_LIMIT = 50;
   const [sortConfig, setSortConfig] = useState<{ key: keyof Contact | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   const { isHelpOpen, setIsHelpOpen } = useHelpModal();
   const manualSections = useMemo(() => {
@@ -136,14 +142,24 @@ export function ContactList() {
     sessionStorage.setItem('xjur_contact_filters', JSON.stringify(filters));
   }, [searchTerm, statusFilter, includedTags, excludedTags, activeCardFilter, showFilters]);
 
+  // Quando filtros mudam, volta para página 1
   useEffect(() => {
-     fetchContacts();
+    setPage(1);
   }, [includedTags, excludedTags, statusFilter, searchTerm, birthDateStart, birthDateEnd, pfFilters, pjFilters, addressFilters, contractFilters, birthMonth]);
 
-  const fetchContacts = async () => {
+  // Dispara fetch quando página ou filtros mudam
+  useEffect(() => {
+    fetchContacts();
+  }, [includedTags, excludedTags, statusFilter, searchTerm, birthDateStart, birthDateEnd, pfFilters, pjFilters, addressFilters, contractFilters, birthMonth, page]);
+
+  const fetchContacts = useCallback(async () => {
     try {
         setLoading(true);
-        const params: any = { search: searchTerm };
+        const params: any = {
+            search: searchTerm,
+            page,
+            limit: PAGE_LIMIT,
+        };
         if (includedTags.length > 0) params.includedTags = includedTags.join(',');
         if (excludedTags.length > 0) params.excludedTags = excludedTags.join(',');
         if (statusFilter !== 'ALL') params.active = statusFilter;
@@ -173,7 +189,18 @@ export function ContactList() {
         if (birthMonth) params.birthMonth = birthMonth;
 
         const response = await api.get('/contacts', { params });
-        setContacts(Array.isArray(response.data) ? response.data : []);
+        // Backend retorna { data: Contact[], meta: { total, page, limit, totalPages } }
+        const payload = response.data;
+        if (payload && typeof payload === 'object' && 'data' in payload) {
+            setContacts(Array.isArray(payload.data) ? payload.data : []);
+            setTotalContacts(payload.meta?.total ?? 0);
+            setTotalPages(payload.meta?.totalPages ?? 1);
+        } else {
+            // Fallback para resposta legada (array simples)
+            setContacts(Array.isArray(payload) ? payload : []);
+            setTotalContacts(Array.isArray(payload) ? payload.length : 0);
+            setTotalPages(1);
+        }
     } catch (err: any) {
         if (axios.isCancel(err)) return;
         console.error(err);
@@ -181,7 +208,7 @@ export function ContactList() {
     } finally {
         setLoading(false);
     }
-  };
+  }, [includedTags, excludedTags, statusFilter, searchTerm, birthDateStart, birthDateEnd, pfFilters, pjFilters, addressFilters, contractFilters, birthMonth, page]);
 
   const handleDeleteContact = async (id: string, name: string) => {
     if (!window.confirm(`Tem certeza que deseja excluir o contato ${name}?`)) return;
@@ -205,9 +232,7 @@ export function ContactList() {
   };
 
   const stats = useMemo(() => {
-    const defaultStats = { total: 0, leads: 0, pj: 0, pf: 0, recent: 0 };
-    if (!contacts.length) return defaultStats;
-
+    // total vem do servidor via meta; demais são contagem da página atual (indicativo)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -218,7 +243,7 @@ export function ContactList() {
 
     contacts.forEach(c => {
       const cleanDoc = getCleanDoc(c);
-      
+
       if (!cleanDoc) leads++;
       else if (c.type === 'PJ' || cleanDoc.length > 11) pj++;
       else if (c.type === 'PF' || cleanDoc.length <= 11) pf++;
@@ -228,8 +253,8 @@ export function ContactList() {
       }
     });
 
-    return { total: contacts.length, leads, pj, pf, recent };
-  }, [contacts]);
+    return { total: totalContacts, leads, pj, pf, recent };
+  }, [contacts, totalContacts]);
 
   const sortedContacts = useMemo(() => {
       let sortableItems = [...contacts];
@@ -327,7 +352,7 @@ export function ContactList() {
             <button 
                 onClick={() => setIsHelpOpen(true)}
                 className="flex items-center gap-1 h-8 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition border border-slate-700 text-xs"
-                title="Ajuda (F1)"
+                title="Ajuda (Ctrl+F1 ou F1)"
             >
                 <HelpCircle size={14} /> Ajuda
             </button>
@@ -793,6 +818,53 @@ export function ContactList() {
             ]}
           />
       </div>
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-1 py-2 border-t border-slate-800/60">
+          <span className="text-xs text-slate-500">
+            Página <span className="text-slate-300 font-semibold">{page}</span> de{' '}
+            <span className="text-slate-300 font-semibold">{totalPages}</span>
+            {' '}·{' '}
+            <span className="text-slate-300 font-semibold">{totalContacts}</span> contatos
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+              className="flex items-center gap-1 h-8 px-3 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={14} /> Anterior
+            </button>
+            {/* Páginas próximas */}
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+              const p = start + i;
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  disabled={loading}
+                  className={`h-8 w-8 rounded text-xs font-semibold transition border ${
+                    p === page
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow shadow-indigo-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages || loading}
+              className="flex items-center gap-1 h-8 px-3 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Próxima <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} title="Contatos" sections={manualSections} />
     </div>
   );

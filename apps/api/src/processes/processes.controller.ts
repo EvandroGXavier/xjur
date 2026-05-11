@@ -112,7 +112,7 @@ export class ProcessesController {
 
     @Get()
     async findAll(
-        @CurrentUser() user: CurrentUserData, 
+        @CurrentUser() user: CurrentUserData,
         @Query('search') search?: string,
         @Query('includedTags') includedTags?: string,
         @Query('excludedTags') excludedTags?: string,
@@ -120,16 +120,20 @@ export class ProcessesController {
         @Query('advancedFilter') advancedFilter?: string,
         @Query('updatedFrom') updatedFrom?: string,
         @Query('updatedTo') updatedTo?: string,
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
     ) {
-        return this.processesService.findAll({ 
-            tenantId: user.tenantId, 
-            search, 
-            includedTags, 
-            excludedTags, 
+        return this.processesService.findAll({
+            tenantId: user.tenantId,
+            search,
+            includedTags,
+            excludedTags,
             status,
             advancedFilter,
             updatedFrom,
             updatedTo,
+            page: page ? Math.max(1, parseInt(page, 10)) : 1,
+            limit: limit ? Math.min(200, Math.max(1, parseInt(limit, 10))) : 50,
         });
     }
 
