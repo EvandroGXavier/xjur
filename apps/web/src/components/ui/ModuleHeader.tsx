@@ -39,12 +39,12 @@ export function ModuleHeader({
   versionText,
 }: ModuleHeaderProps) {
   return (
-    <div className="flex items-center justify-between gap-2 bg-slate-900 py-1 px-3 border-b border-slate-800 shrink-0">
+    <div className="flex items-center justify-between gap-2 bg-slate-900 py-0.5 px-3 border-b border-slate-800 shrink-0">
       <div className="flex items-center gap-3">
         <div className={clsx("w-7 h-7 rounded flex items-center justify-center border", iconColorClass)}>
           <Icon size={16} />
         </div>
-        <h1 className="text-sm font-bold text-white tracking-tight">{title}</h1>
+        <h1 className="text-[11px] font-black text-white tracking-tight uppercase">{title}</h1>
         
         {tabs && onTabChange && (
           <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700 ml-2">

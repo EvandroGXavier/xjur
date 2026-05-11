@@ -9,7 +9,6 @@ import {
   FileSearch,
   HelpCircle,
   Landmark,
-  Layout,
   Loader2,
   RefreshCcw,
   Save,
@@ -135,6 +134,7 @@ export function ProcessConfig() {
   const [previewData, setPreviewData] = useState<any | null>(null);
   const [partyClassification, setPartyClassification] = useState<Record<string, ImportedPartyClassification>>({});
   const [testResult, setTestResult] = useState<any | null>(null);
+
   const partyReview = useMemo(
     () => buildImportedPartyReview(Array.isArray(previewData?.parties) ? previewData.parties : []),
     [previewData?.parties],
@@ -356,8 +356,7 @@ export function ProcessConfig() {
     {
       id: "integrations",
       title: "Consulta Processual Oficial",
-      description:
-        "Credenciais, teste DataJud, preparo do Eproc MG e importacao por CNJ.",
+      description: "Credenciais, teste DataJud, preparo do Eproc MG e importacao por CNJ.",
       gradient: "from-cyan-500 to-blue-600",
       icon: <Landmark className="w-6 h-6" />,
       action: () => setView("integrations"),
@@ -369,6 +368,14 @@ export function ProcessConfig() {
       gradient: "from-indigo-500 to-blue-600",
       icon: <Zap className="w-6 h-6" />,
       action: () => setView("bulk"),
+    },
+    {
+      id: "tags-global",
+      title: "Gestao de Etiquetas",
+      description: "Crie, edite e exclua etiquetas (tags) do sistema.",
+      gradient: "from-pink-500 to-rose-600",
+      icon: <Tags className="w-6 h-6" />,
+      action: () => navigate("/settings", { state: { tab: "tags" } }),
     },
     {
       id: "workflows",
@@ -514,7 +521,7 @@ export function ProcessConfig() {
           ) : (
             <>
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex items-center gap-3"><ShieldCheck className="h-5 w-5 text-cyan-300" /><div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Provider</p><p className="text-white font-semibold">{config.provider === "DATAJUD" ? "DataJud / CNJ" : "Manual"}</p></div></div></div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex items-center gap-3"><Landmark className="h-5 w-5 text-cyan-300" /><div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Provider</p><p className="text-white font-semibold">{config.provider === "DATAJUD" ? "DataJud / CNJ" : "Manual"}</p></div></div></div>
                 <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex items-center gap-3"><Workflow className="h-5 w-5 text-indigo-300" /><div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Tribunal inicial</p><p className="text-white font-semibold">{config.datajud.tribunalLabel}</p></div></div></div>
                 <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex items-center gap-3">{ready ? <ShieldCheck className="h-5 w-5 text-emerald-300" /> : <AlertTriangle className="h-5 w-5 text-amber-300" />}<div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Prontidao</p><p className="text-white font-semibold">{ready ? "DataJud pronto para consulta" : "Falta completar credenciais"}</p></div></div></div>
               </div>

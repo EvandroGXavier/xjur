@@ -3,7 +3,7 @@ import { api } from "../../services/api";
 import { Check, X, Tag as TagIcon } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "sonner";
-import { defaultTagColor } from "../../utils/themeColors";
+import { defaultTagColor, getAccentUiStyles } from "../../utils/themeColors";
 
 export interface TagData {
   id: string;
@@ -139,13 +139,10 @@ export function AdvancedTagFilter({
             key={tag.id}
             onClick={() => handleTagClick(tag.id)}
             className={clsx(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border",
-              !state &&
-                "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-300",
-              state === "INCLUDED" &&
-                "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-sm",
-              state === "EXCLUDED" &&
-                "bg-red-500/10 border-red-500/30 text-red-400 shadow-sm",
+              "flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold transition-all border",
+              !state && "bg-slate-800/80 border-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200",
+              state === "INCLUDED" && "bg-slate-800 border-emerald-500/50 text-emerald-400 shadow-lg ring-1 ring-emerald-500/20",
+              state === "EXCLUDED" && "bg-slate-800 border-red-500/50 text-red-400 shadow-lg opacity-60",
             )}
             title={
               !state
@@ -155,12 +152,8 @@ export function AdvancedTagFilter({
                   : "Clique para limpar este filtro"
             }
           >
-            {state === "INCLUDED" && (
-              <Check size={12} className="text-emerald-500" />
-            )}
-            {state === "EXCLUDED" && <X size={12} className="text-red-500" />}
-            <div
-              className="w-2 h-2 rounded-full"
+            <div 
+              className="w-1.5 h-1.5 rounded-full shrink-0 shadow-[0_0_5px_rgba(0,0,0,0.3)]" 
               style={{ backgroundColor: tag.color || defaultTagColor }}
             />
             {tag.name}

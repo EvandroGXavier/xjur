@@ -2309,7 +2309,7 @@ export class ProcessesService {
         const limit = Math.min(200, Math.max(1, params.limit ?? 50));
         const skip = (page - 1) * limit;
 
-        const where: any = { tenantId };
+        const whereConditions: any[] = [{ tenantId }];
 
         const parseDateEdge = (raw?: string, edge: 'start' | 'end' = 'start') => {
             const value = String(raw || '').trim();
@@ -2326,63 +2326,71 @@ export class ProcessesService {
         };
 
         if (search) {
-            where.OR = [
-                { cnj: { contains: search, mode: 'insensitive' } },
-                { title: { contains: search, mode: 'insensitive' } },
-                { code: { contains: search, mode: 'insensitive' } },
-                { court: { contains: search, mode: 'insensitive' } },
-                { courtSystem: { contains: search, mode: 'insensitive' } },
-                { vars: { contains: search, mode: 'insensitive' } },
-                { district: { contains: search, mode: 'insensitive' } },
-                { judge: { contains: search, mode: 'insensitive' } },
-                { responsibleLawyer: { contains: search, mode: 'insensitive' } },
-                { subject: { contains: search, mode: 'insensitive' } },
-                { area: { contains: search, mode: 'insensitive' } },
-                { folder: { contains: search, mode: 'insensitive' } },
-                { localFolder: { contains: search, mode: 'insensitive' } },
-                {
-                    processParties: {
-                        some: {
-                            contact: {
-                                name: { contains: search, mode: 'insensitive' },
+            whereConditions.push({
+                OR: [
+                    { cnj: { contains: search, mode: 'insensitive' } },
+                    { title: { contains: search, mode: 'insensitive' } },
+                    { code: { contains: search, mode: 'insensitive' } },
+                    { court: { contains: search, mode: 'insensitive' } },
+                    { courtSystem: { contains: search, mode: 'insensitive' } },
+                    { vars: { contains: search, mode: 'insensitive' } },
+                    { district: { contains: search, mode: 'insensitive' } },
+                    { judge: { contains: search, mode: 'insensitive' } },
+                    { responsibleLawyer: { contains: search, mode: 'insensitive' } },
+                    { subject: { contains: search, mode: 'insensitive' } },
+                    { area: { contains: search, mode: 'insensitive' } },
+                    { folder: { contains: search, mode: 'insensitive' } },
+                    { localFolder: { contains: search, mode: 'insensitive' } },
+                    {
+                        processParties: {
+                            some: {
+                                contact: {
+                                    name: { contains: search, mode: 'insensitive' },
+                                },
                             },
                         },
                     },
-                },
-            ];
+                ],
+            });
         }
 
         if (status && status !== 'ALL') {
             if (status === 'ATIVO') {
-                where.NOT = {
+                whereConditions.push({
+                    NOT: {
+                        status: {
+                            in: ['INATIVO', 'SUSPENSO', 'ARQUIVADO', 'ENCERRADO'],
+                        },
+                    },
+                });
+            } else if (status === 'INATIVO') {
+                whereConditions.push({
                     status: {
                         in: ['INATIVO', 'SUSPENSO', 'ARQUIVADO', 'ENCERRADO'],
                     },
-                };
-            } else if (status === 'INATIVO') {
-                where.status = {
-                    in: ['INATIVO', 'SUSPENSO', 'ARQUIVADO', 'ENCERRADO'],
-                };
+                });
             } else {
-                where.status = this.normalizeLifecycleStatus(status, status);
+                whereConditions.push({
+                    status: this.normalizeLifecycleStatus(status, status),
+                });
             }
         }
 
-        if (includedTags || excludedTags) {
-            if (!where.AND) where.AND = [];
-
-            if (includedTags) {
-                const incArray = includedTags.split(',');
-                where.AND.push({
+        if (includedTags) {
+            const incArray = String(includedTags).split(',').map(s => s.trim()).filter(Boolean);
+            if (incArray.length > 0) {
+                whereConditions.push({
                     tags: {
                         some: { tagId: { in: incArray } },
                     },
                 });
             }
+        }
 
-            if (excludedTags) {
-                const excArray = String(excludedTags).split(',');
-                where.AND.push({
+        if (excludedTags) {
+            const excArray = String(excludedTags).split(',').map(s => s.trim()).filter(Boolean);
+            if (excArray.length > 0) {
+                whereConditions.push({
                     tags: {
                         none: { tagId: { in: excArray } },
                     },
@@ -2393,8 +2401,7 @@ export class ProcessesService {
         if (advancedFilter) {
             const advancedWhere = buildAdvancedProcessWhere(advancedFilter);
             if (advancedWhere) {
-                if (!where.AND) where.AND = [];
-                where.AND.push(advancedWhere);
+                whereConditions.push(advancedWhere);
             }
         }
 
@@ -2402,8 +2409,7 @@ export class ProcessesService {
             const from = parseDateEdge(updatedFrom, 'start');
             const to = parseDateEdge(updatedTo, 'end');
             if (from || to) {
-                if (!where.AND) where.AND = [];
-                where.AND.push({
+                whereConditions.push({
                     updatedAt: {
                         ...(from ? { gte: from } : {}),
                         ...(to ? { lte: to } : {}),
@@ -2412,7 +2418,9 @@ export class ProcessesService {
             }
         }
 
+        const where = { AND: whereConditions };
         console.log(`[ProcessesService.findAll] Query WHERE:`, JSON.stringify(where, null, 2));
+
         const startTime = Date.now();
         const [rawProcesses, total] = await Promise.all([
             this.prisma.process.findMany({
@@ -2427,6 +2435,15 @@ export class ProcessesService {
                                 },
                             },
                         },
+                    },
+                    tags: {
+                        include: {
+                            tag: true,
+                        },
+                    },
+                    timeline: {
+                        orderBy: { date: 'desc' },
+                        take: 1,
                     },
                 },
                 orderBy: { createdAt: 'desc' },

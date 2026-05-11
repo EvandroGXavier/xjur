@@ -31,7 +31,7 @@ export function Processes() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col space-y-0.5">
+    <div className="flex h-full min-h-0 flex-col">
       <ModuleHeader
         title="Processos"
         subtitle="Gestão jurídica e andamentos"

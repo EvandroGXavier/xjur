@@ -262,11 +262,11 @@ export function ProcessList() {
     };
 
     return (
-        <div className="space-y-0.5 h-full flex flex-col animate-in fade-in duration-700">
+        <div className="flex-1 min-h-0 flex flex-col animate-in fade-in duration-700">
             <div className="bg-slate-950/50 border-b border-slate-800/50 p-1 flex flex-col gap-1">
                 {/* Row 1: Search and Main Actions */}
                 <div className="flex flex-wrap items-center gap-1.5">
-                    <div className="relative w-full md:w-[300px]">
+                    <div className="relative w-full md:w-[260px] lg:w-[300px] shrink-0">
                         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                         <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Buscar..." className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 h-7 text-[12px] text-white focus:outline-none focus:border-indigo-500/50 placeholder-slate-600 transition-all" />
                     </div>
@@ -280,7 +280,7 @@ export function ProcessList() {
                             })
                         }
                         placeholder="Atualizados..."
-                        className="w-[160px] h-7 text-[11px]"
+                        className="w-[140px] md:w-[160px] h-7 text-[11px] shrink-0"
                     />
 
                     <select 
@@ -347,7 +347,7 @@ export function ProcessList() {
                 />
             )}
 
-            <div className="flex-1 flex flex-col min-h-[400px]">
+            <div className="flex-1 min-h-0 flex flex-col">
                 {viewMode === 'LIST' ? (
                     <DataGrid<Process>
                         data={sortedProcesses}

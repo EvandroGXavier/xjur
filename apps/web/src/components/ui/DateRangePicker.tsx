@@ -425,25 +425,25 @@ export function DateRangePicker({
   const label = formatRangeLabel(value, placeholder);
 
   return (
-    <div className={clsx('relative', className)}>
+    <div className={clsx('relative inline-flex flex-col', className)}>
       <button
         ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          'flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-white shadow-inner transition-all hover:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+          'flex h-full w-full items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900 px-2.5 transition-all hover:border-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500/30',
           disabled && 'cursor-not-allowed opacity-60',
         )}
         aria-label="Selecionar período"
         title={label}
       >
-        <span className={clsx('flex min-w-0 items-center gap-2 text-sm font-medium', !hasValue && 'text-slate-500')}>
-          <Calendar size={16} className={clsx(hasValue ? 'text-indigo-400' : 'text-slate-500')} />
-          <span className="truncate">{label}</span>
+        <span className={clsx('flex min-w-0 flex-1 items-center gap-1.5 font-medium', !hasValue && 'text-slate-500')}>
+          <Calendar size={14} className={clsx('shrink-0', hasValue ? 'text-indigo-400' : 'text-slate-500')} />
+          <span className="truncate text-[inherit]">{label}</span>
         </span>
 
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="flex shrink-0 items-center gap-1">
           {hasValue && !disabled && (
             <button
               type="button"
@@ -452,13 +452,13 @@ export function DateRangePicker({
                 e.stopPropagation();
                 clear();
               }}
-              className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white"
+              className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white"
               title="Limpar período"
             >
-              <X size={14} />
+              <X size={12} />
             </button>
           )}
-          <ChevronRight size={14} className={clsx('text-slate-600 transition-transform', open && 'rotate-90')} />
+          <ChevronRight size={12} className={clsx('text-slate-600 transition-transform', open && 'rotate-90')} />
         </span>
       </button>
 
@@ -475,16 +475,16 @@ export function DateRangePicker({
             }}
             className="z-[9999] overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-900 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 duration-200"
           >
-            <div className="border-b border-slate-800 bg-slate-900/60 p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
-                  <Clock size={12} className="text-indigo-400" />
+            <div className="border-b border-slate-800 bg-slate-900/60 p-3 md:p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">
+                  <Clock size={12} className="text-indigo-400 shrink-0" />
                   Definir Faixa de Tempo
                 </div>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="self-start rounded-xl p-2 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                  className="rounded-xl p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
                   title="Fechar"
                 >
                   <X size={18} />

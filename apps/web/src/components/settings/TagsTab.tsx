@@ -259,11 +259,19 @@ export function TagsTab() {
                                 >
                                     {tag.name}
                                 </span>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleEdit(tag)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors">
+                                <div className="flex gap-1 transition-opacity">
+                                    <button 
+                                        onClick={() => handleEdit(tag)} 
+                                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+                                        title="Editar etiqueta"
+                                    >
                                         <Edit size={14} />
                                     </button>
-                                    <button onClick={() => handleDelete(tag.id)} className="p-1.5 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors">
+                                    <button 
+                                        onClick={() => handleDelete(tag.id)} 
+                                        className="p-1.5 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                                        title="Excluir etiqueta permanentemente"
+                                    >
                                         <Trash2 size={14} />
                                     </button>
                                 </div>

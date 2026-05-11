@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import { clsx } from "clsx";
 import { api } from "../../services/api";
 import { toast } from "sonner";
+import { defaultTagColor, getAccentUiStyles } from "../../utils/themeColors";
 
 interface Tag {
   id: string;
@@ -40,10 +41,17 @@ const normalizeTagName = (value: string) =>
     .replace(/\s+/g, " ")
     .slice(0, 80);
 
-const normalizeTags = (tags: Array<{ tag: Tag } | Tag>) =>
-  (Array.isArray(tags) ? tags : [])
-    .map((item) => ("tag" in item ? item.tag : item))
-    .filter((item): item is Tag => Boolean(item?.id && item?.name));
+const normalizeTags = (tags: any[]) => {
+  if (!Array.isArray(tags)) return [];
+  return tags
+    .map((item) => {
+      if (item && typeof item === 'object' && 'tag' in item) {
+        return item.tag;
+      }
+      return item;
+    })
+    .filter((tag): tag is Tag => Boolean(tag && tag.id && tag.name));
+};
 
 export function InlineTags({
   tags,
@@ -187,17 +195,16 @@ export function InlineTags({
           <span
             key={tag.id}
             className={clsx(
-              "group relative flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all overflow-hidden",
-              canRemove && "hover:pr-5",
+              "group relative flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800/80 border border-slate-700/50 text-slate-300 transition-all overflow-hidden",
+              canRemove && "hover:pr-6",
             )}
-            style={{
-              backgroundColor: `${tag.color}20`,
-              borderColor: `${tag.color}40`,
-              color: tag.textColor || tag.color,
-            }}
             title={tag.isInternal ? "Tag interna do sistema" : tag.name}
           >
-            {tag.name}
+            <div 
+              className="w-1.5 h-1.5 rounded-full shrink-0 shadow-[0_0_5px_rgba(0,0,0,0.3)]" 
+              style={{ backgroundColor: tag.color || defaultTagColor }}
+            />
+            <span className="truncate">{tag.name}</span>
             {canRemove && (
               <button
                 onClick={(event) => void detachTag(event, tag.id)}
