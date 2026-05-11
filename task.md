@@ -1,0 +1,8 @@
+- [x] Analisar o código do `ProcessesService.findAll` e `ProcessesController`.
+- [x] Verificar o schema do Prisma para a entidade `Process`.
+- [x] Criar script de diagnóstico `diagnose-processes.ts` para verificar integridade de dados e tenants.
+- [x] Obter o resultado do diagnóstico executado na VPS (Banco OK, 4 processos encontrados).
+- [x] Validar se o `tenantId` do usuário na VPS corresponde aos processos cadastrados (Corresponde).
+- [x] Realizar deploy e restart dos serviços na VPS com logs de depuração.
+- [ ] Analisar logs da VPS após acesso do usuário para identificar falha na query.
+- [ ] Aplicar correção final.

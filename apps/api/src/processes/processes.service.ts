@@ -2304,10 +2304,6 @@ export class ProcessesService {
         page?: number,
         limit?: number,
     }) {
-        console.log(`[ProcessesService.findAll] Chamado - TenantId: ${params.tenantId}, Status: ${params.status}, Search: ${params.search}`);
-        if (!params.tenantId) {
-            throw new BadRequestException('Tenant ID is required');
-        }
         const { tenantId, search, includedTags, excludedTags, status, advancedFilter, updatedFrom, updatedTo } = params;
         const page = Math.max(1, params.page ?? 1);
         const limit = Math.min(200, Math.max(1, params.limit ?? 50));
@@ -2416,29 +2412,21 @@ export class ProcessesService {
             }
         }
 
+        console.log(`[ProcessesService.findAll] Query WHERE:`, JSON.stringify(where, null, 2));
+        const startTime = Date.now();
         const [rawProcesses, total] = await Promise.all([
             this.prisma.process.findMany({
                 where,
                 include: {
-                    tags: { include: { tag: true } },
                     processParties: {
                         include: {
                             contact: {
                                 select: {
                                     id: true,
                                     name: true,
-                                    email: true,
-                                    phone: true,
-                                    whatsapp: true,
                                 },
                             },
-                            role: true,
-                            qualification: true,
                         },
-                    },
-                    timeline: {
-                        orderBy: { date: 'desc' },
-                        take: 1,
                     },
                 },
                 orderBy: { createdAt: 'desc' },
@@ -2447,6 +2435,7 @@ export class ProcessesService {
             }),
             this.prisma.process.count({ where }),
         ]);
+        console.log(`[ProcessesService.findAll] Query concluída em ${Date.now() - startTime}ms. Total: ${total}, Retornados: ${rawProcesses.length}`);
 
         return {
             data: rawProcesses.map(p => {
