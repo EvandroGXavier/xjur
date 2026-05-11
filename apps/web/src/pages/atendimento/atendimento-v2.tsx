@@ -854,7 +854,9 @@ export function AtendimentoPage({
     const timer = setTimeout(async () => {
       try {
         const response = await api.get('/processes', { params: { search: processSearch.trim() } });
-        setProcessResults(Array.isArray(response.data) ? response.data.slice(0, 6) : []);
+        const resData = response.data;
+        const processItems = resData && resData.data && Array.isArray(resData.data) ? resData.data : (Array.isArray(resData) ? resData : []);
+        setProcessResults(processItems.slice(0, 6));
       } catch {
         setProcessResults([]);
       }

@@ -134,6 +134,10 @@ export function ProcessList() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const { isHelpOpen, setIsHelpOpen } = useHelpModal();
 
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [limit, setLimit] = useState(50);
+
     const activeAdvancedFilterCount = useMemo(
         () => countActiveProcessAdvancedFilters(advancedFilter),
         [advancedFilter],
@@ -153,7 +157,7 @@ export function ProcessList() {
             controller.abort();
             window.removeEventListener('focus', handleFocus);
         };
-    }, [includedTags, excludedTags, statusFilter, debouncedSearchTerm, advancedFilterPayload, updatedRange.from, updatedRange.to]);
+    }, [includedTags, excludedTags, statusFilter, debouncedSearchTerm, advancedFilterPayload, updatedRange.from, updatedRange.to, page, limit]);
 
     useEffect(() => {
         if (!showAdvancedFilters) return;
@@ -177,7 +181,10 @@ export function ProcessList() {
     const fetchProcesses = async (signal?: AbortSignal) => {
         try {
             setLoading(true);
-            const params: any = {};
+            const params: any = {
+                page,
+                limit
+            };
             if (includedTags.length > 0) params.includedTags = includedTags.join(',');
             if (excludedTags.length > 0) params.excludedTags = excludedTags.join(',');
             if (statusFilter !== 'ALL') params.status = statusFilter;
@@ -188,7 +195,14 @@ export function ProcessList() {
             
             const response = await api.get('/processes', { signal, params });
             console.log('Processos carregados:', response.data);
-            setProcesses(Array.isArray(response.data) ? response.data : []);
+            
+            if (response.data && response.data.data) {
+                setProcesses(Array.isArray(response.data.data) ? response.data.data : []);
+                setTotal(response.data.meta?.total || 0);
+            } else {
+                setProcesses(Array.isArray(response.data) ? response.data : []);
+                setTotal(Array.isArray(response.data) ? response.data.length : 0);
+            }
         } catch (err: any) {
             if (axios.isCancel(err)) return;
             console.error(err);
@@ -364,8 +378,10 @@ export function ProcessList() {
                 {viewMode === 'LIST' ? (
                     <DataGrid<Process>
                         data={sortedProcesses}
-                        totalItems={sortedProcesses.length}
+                        totalItems={total}
+                        pageSize={limit}
                         isLoading={loading}
+                        onPageChange={(p) => setPage(p)}
                         onSort={(key, direction) => setSortConfig({ key: key as keyof Process, direction })}
                         onSelect={setSelectedIds}
                         onRowDoubleClick={(process) => navigate(`/processes/${process.id}`)}

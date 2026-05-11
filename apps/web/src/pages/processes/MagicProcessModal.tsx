@@ -228,7 +228,12 @@ export function MagicProcessModal({ isOpen, onClose, onSuccess }: MagicProcessMo
                 data = official.data;
             } catch {
                 const response = await api.post('/processes/automator/search', { term: cnj });
-                data = Array.isArray(response.data) ? response.data[0] : response.data;
+                const resData = response.data;
+                if (resData && resData.data && Array.isArray(resData.data)) {
+                    data = resData.data[0];
+                } else {
+                    data = Array.isArray(resData) ? resData[0] : resData;
+                }
             }
 
             if (!data) throw new Error('Nenhum processo encontrado');
