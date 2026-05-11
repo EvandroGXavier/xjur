@@ -24,8 +24,8 @@ export function Sidebar({ isOpen, closeSidebar, isCollapsed, toggleCollapsed }: 
     <aside
       className={clsx(
         'w-72 bg-slate-900 border-r border-slate-800 flex flex-col h-screen fixed left-0 top-0 z-50 transition-all duration-300 ease-in-out',
-        isCollapsed ? 'lg:w-16' : 'lg:w-40',
-        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+        isCollapsed ? 'w-16' : 'w-[180px]',
+        isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       )}
     >
       <div

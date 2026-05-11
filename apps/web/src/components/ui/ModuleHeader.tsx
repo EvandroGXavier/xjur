@@ -39,40 +39,37 @@ export function ModuleHeader({
   versionText,
 }: ModuleHeaderProps) {
   return (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg shrink-0">
+    <div className="flex items-center justify-between gap-2 bg-slate-900 py-1 px-3 border-b border-slate-800 shrink-0">
       <div className="flex items-center gap-3">
-        <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center border", iconColorClass)}>
-          <Icon size={22} />
+        <div className={clsx("w-7 h-7 rounded flex items-center justify-center border", iconColorClass)}>
+          <Icon size={16} />
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-white tracking-tight">{title}</h1>
-          {subtitle && <p className="text-slate-500 text-[10px] tracking-wider uppercase font-medium">{subtitle}</p>}
-        </div>
+        <h1 className="text-sm font-bold text-white tracking-tight">{title}</h1>
+        
+        {tabs && onTabChange && (
+          <div className="flex items-center bg-slate-800 p-0.5 rounded-lg border border-slate-700 ml-2">
+            {tabs.map((tab) => {
+              const TabIcon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onTabChange(tab.id)}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold transition-all",
+                    isActive 
+                      ? clsx("text-white", activeTabColorClass || "bg-indigo-600 shadow-lg shadow-indigo-900/20")
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                  )}
+                >
+                  <TabIcon size={12} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      {tabs && (
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 w-full md:w-auto overflow-x-auto no-scrollbar">
-          {tabs.map((tab) => {
-            const TabIcon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange?.(tab.id)}
-                className={clsx(
-                  "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap outline-none",
-                  isActive
-                    ? `${activeTabColorClass} text-white`
-                    : "text-slate-400 hover:text-white hover:bg-slate-800"
-                )}
-              >
-                <TabIcon size={16} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       <div className="flex items-center gap-2">
         {actions}

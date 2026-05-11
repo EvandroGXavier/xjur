@@ -121,7 +121,7 @@ const StatusBar = ({
     <div
       className={clsx(
         'h-10 lg:h-8 bg-emerald-950/30 border-b border-emerald-500/30 flex items-center justify-between lg:justify-end px-4 lg:px-6 text-xs text-emerald-100/80 gap-3 lg:gap-6 fixed top-0 right-0 left-0 z-10 shadow-sm backdrop-blur-sm',
-        isSidebarCollapsed ? 'lg:left-16' : 'lg:left-64',
+        isSidebarCollapsed ? 'left-16' : 'left-[180px]',
       )}
     >
       <button
@@ -297,7 +297,7 @@ export function Layout() {
       <main
         className={clsx(
           'h-full overflow-hidden transition-all duration-300 pt-10 lg:pt-8 w-full flex flex-col',
-          isSidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64',
+          isSidebarCollapsed ? 'pl-16' : 'pl-[180px]',
         )}
       >
         <StatusBar

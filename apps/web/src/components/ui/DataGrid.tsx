@@ -1,6 +1,6 @@
-
 import { useState, useEffect } from 'react';
-import { ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Search } from 'lucide-react';
+import clsx from 'clsx';
 
 interface Column<T> {
   key: string;
@@ -20,6 +20,7 @@ interface DataGridProps<T> {
   onSelect?: (selectedIds: string[]) => void;
   onRowClick?: (item: T) => void;
   onRowDoubleClick?: (item: T) => void;
+  compact?: boolean;
 }
 
 export function DataGrid<T extends { id: string }>({ 
@@ -30,9 +31,10 @@ export function DataGrid<T extends { id: string }>({
   isLoading = false,
   onSort,
   onPageChange,
-  onSelect,
+  onSelect: onRowSelect,
   onRowClick,
-  onRowDoubleClick
+  onRowDoubleClick,
+  compact = false
 }: DataGridProps<T>) {
 
   const [sortField, setSortField] = useState<string | null>(null);
@@ -95,13 +97,13 @@ export function DataGrid<T extends { id: string }>({
     : data;
 
   return (
-    <div className="w-full bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-full shadow-xl">
+    <div className="w-full bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col h-full">
       <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
         <table className="min-w-full w-full text-left text-sm text-slate-400 border-collapse">
           <thead className="bg-slate-950 text-slate-300 font-medium sticky top-0 z-10 shadow-sm border-b border-slate-800">
             <tr>
               {/* Checkbox Column */}
-              <th className="px-6 py-4 w-12">
+              <th className={clsx("px-4 w-12", compact ? "py-1" : "py-4")}>
                 <input 
                   type="checkbox" 
                   className="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500/20"
@@ -114,7 +116,11 @@ export function DataGrid<T extends { id: string }>({
               {columns.map((col) => (
                 <th 
                   key={col.key} 
-                  className={`px-6 py-4 cursor-pointer hover:text-white transition-colors group select-none ${col.sortable ? '' : 'cursor-defaultPointerEventsNone'}`}
+                  className={clsx(
+                    "cursor-pointer hover:text-white transition-colors group select-none",
+                    compact ? "px-2 py-1 text-[10px]" : "px-6 py-4",
+                    !col.sortable && "cursor-default pointer-events-none"
+                  )}
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
                   <div className="flex items-center gap-2">
@@ -157,7 +163,7 @@ export function DataGrid<T extends { id: string }>({
                   onClick={() => onRowClick && onRowClick(item)}
                   onDoubleClick={() => onRowDoubleClick && onRowDoubleClick(item)}
                 >
-                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                  <td className={clsx("px-4", compact ? "py-0.5" : "py-4")} onClick={(e) => e.stopPropagation()}>
                     <input 
                       type="checkbox" 
                       onClick={(e) => e.stopPropagation()}
@@ -168,7 +174,7 @@ export function DataGrid<T extends { id: string }>({
                   </td>
                   
                   {columns.map((col) => (
-                    <td key={col.key} className="px-6 py-4 text-white font-medium">
+                    <td key={col.key} className={clsx("font-medium", compact ? "px-2 py-0.5 text-[11px]" : "px-6 py-4 text-white")}>
                       {col.render ? col.render(item) : (item as any)[col.key]}
                     </td>
                   ))}
@@ -180,7 +186,7 @@ export function DataGrid<T extends { id: string }>({
       </div>
 
       {/* Pagination Footer */}
-      <div className="bg-slate-950 border-t border-slate-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400 select-none">
+      <div className="bg-slate-950 border-t border-slate-800 p-1.5 flex flex-col md:flex-row items-center justify-between gap-2 text-[11px] text-slate-500 select-none">
         
         {/* Page Size Selector */}
         <div className="flex items-center gap-2">
