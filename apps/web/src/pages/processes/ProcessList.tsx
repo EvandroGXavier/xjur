@@ -347,7 +347,7 @@ export function ProcessList() {
                 />
             )}
 
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-auto">
                 {viewMode === 'LIST' ? (
                     <DataGrid<Process>
                         data={sortedProcesses}
